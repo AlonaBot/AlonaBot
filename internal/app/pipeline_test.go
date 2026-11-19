@@ -149,7 +149,7 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 		}
 		// 逆注册顺序同时检验 route_id 的排序。
 		for _, id := range []string{"z", "a"} {
-			p.On(id, sdk.MessageCreated).Priority(int32(priority)).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", id, c) })
+			p.On(sdk.MessageCreated).ID(id).Priority(int32(priority)).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", id, c) })
 		}
 	case "rules":
 		for _, name := range []string{"false", "error"} {
@@ -163,11 +163,11 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 				return false, nil
 			}
 			p.Command(name).Rule(rule).Handle(func(c *sdk.Context) error { return pipelineObserve("unexpected", name, c) })
-			p.Keyword("text."+name, name).Rule(rule).Handle(func(c *sdk.Context) error { return pipelineObserve("unexpected", "text."+name, c) })
-			p.On(name, sdk.MessageCreated).Rule(rule).Handle(func(c *sdk.Context) error { return pipelineObserve("unexpected", name, c) })
+			p.Keyword(name).ID("text." + name).Rule(rule).Handle(func(c *sdk.Context) error { return pipelineObserve("unexpected", "text."+name, c) })
+			p.On(sdk.MessageCreated).ID(name).Rule(rule).Handle(func(c *sdk.Context) error { return pipelineObserve("unexpected", name, c) })
 		}
-		p.Raw("raw").Handle(func(c *sdk.Context) error { return pipelineObserve("raw", "raw", c) })
-		p.On("observe", sdk.MessageCreated).Rule(sdk.ToMe()).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "observe", c) })
+		p.Raw().Handle(func(c *sdk.Context) error { return pipelineObserve("raw", "raw", c) })
+		p.On(sdk.MessageCreated).ID("observe").Rule(sdk.ToMe()).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "observe", c) })
 		p.Command("stop").Handle(func(c *sdk.Context) error {
 			c.StopPropagation()
 			return pipelineObserve("stopped", "cmd.stop", c)
@@ -194,10 +194,10 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 				return message.Text("automatic-after-explicit"), nil
 			})
 		}
-		p.BeforeSend("before").Handle(func(_ *sdk.Context, _ string, chain message.Chain) (message.Chain, error) {
+		p.BeforeSend().ID("before").Handle(func(_ *sdk.Context, _ string, chain message.Chain) (message.Chain, error) {
 			return nil, pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text()})
 		})
-		p.AfterSend("after").Handle(func(_ *sdk.Context, _ string, result *message.SendResult, sendErr error) error {
+		p.AfterSend().ID("after").Handle(func(_ *sdk.Context, _ string, result *message.SendResult, sendErr error) error {
 			if sendErr != nil {
 				return sendErr
 			}
@@ -788,7 +788,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			return pipelineObserve("tick", "pulse", c)
 		})
 		if mode == "job-attack" {
-			p.PreEvent("pre.job", sdk.Scheduled).Handle(func(c *sdk.Context, payload *message.ScheduledPayload) (*message.ScheduledPayload, error) {
+			p.PreEvent(sdk.Scheduled).ID("pre.job").Handle(func(c *sdk.Context, payload *message.ScheduledPayload) (*message.ScheduledPayload, error) {
 				if err := pipelineObserve("pre", "pre.job", c); err != nil {
 					return nil, err
 				}
@@ -797,7 +797,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 				return payload, nil
 			})
 		}
-		p.On("scheduled", sdk.Scheduled).Handle(func(c *sdk.Context) error { return pipelineObserve("scheduled", "scheduled", c) })
+		p.On(sdk.Scheduled).ID("scheduled").Handle(func(c *sdk.Context) error { return pipelineObserve("scheduled", "scheduled", c) })
 		return
 	}
 	if mode == "buttons" || mode == "button-attack" {
@@ -807,7 +807,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			return err
 		})
 		if mode == "button-attack" {
-			p.PreEvent("pre.button", sdk.ButtonClicked).Handle(func(c *sdk.Context, payload *message.ButtonClickedPayload) (*message.ButtonClickedPayload, error) {
+			p.PreEvent(sdk.ButtonClicked).ID("pre.button").Handle(func(c *sdk.Context, payload *message.ButtonClickedPayload) (*message.ButtonClickedPayload, error) {
 				if err := pipelineObserve("pre", "pre.button", c); err != nil {
 					return nil, err
 				}
@@ -823,10 +823,10 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			}
 			return pipelineObserve("button", "button.choose", c)
 		})
-		p.Raw("raw").Handle(func(c *sdk.Context) error { return pipelineObserve("raw", "raw", c) })
+		p.Raw().Handle(func(c *sdk.Context) error { return pipelineObserve("raw", "raw", c) })
 		return
 	}
-	p.PreEvent("pre.message", sdk.MessageCreated).Handle(func(c *sdk.Context, payload *message.CreatedPayload) (*message.CreatedPayload, error) {
+	p.PreEvent(sdk.MessageCreated).ID("pre.message").Handle(func(c *sdk.Context, payload *message.CreatedPayload) (*message.CreatedPayload, error) {
 		if err := pipelineObserve("pre", "pre.message", c); err != nil {
 			return nil, err
 		}
@@ -842,7 +842,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 		}
 		return payload, nil
 	})
-	p.On("observe", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "observe", c) })
+	p.On(sdk.MessageCreated).ID("observe").Handle(func(c *sdk.Context) error { return pipelineObserve("handler", "observe", c) })
 	if mode == "trusted" {
 		return
 	}
@@ -874,7 +874,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			c.StopPropagation()
 			return message.Text("automatic"), nil
 		})
-		p.BeforeSend("before").Handle(func(c *sdk.Context, to string, chain message.Chain) (message.Chain, error) {
+		p.BeforeSend().ID("before").Handle(func(c *sdk.Context, to string, chain message.Chain) (message.Chain, error) {
 			if err := pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text(), Session: to}); err != nil {
 				return nil, err
 			}
@@ -887,7 +887,7 @@ func pipelineHookPlugin(p *sdk.Plugin, mode string) {
 			}
 			return message.Chain{message.Text("before:" + chain.Text())}, nil
 		})
-		p.AfterSend("after").Handle(func(_ *sdk.Context, to string, result *message.SendResult, sendErr error) error {
+		p.AfterSend().ID("after").Handle(func(_ *sdk.Context, to string, result *message.SendResult, sendErr error) error {
 			record := pipelineRecord{Stage: "after", Session: to}
 			if sendErr != nil {
 				record.Code = sendErr.Error()
@@ -1203,9 +1203,9 @@ func pipelineConcurrentPlugin(p *sdk.Plugin, mode string) {
 				return pipelineAudit(pipelineRecord{Stage: "timeout", Code: errcode.Of(err).String()})
 			})
 		})
-		p.On("ordinary", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return pipelineObserve("ordinary", "ordinary", c) })
+		p.On(sdk.MessageCreated).ID("ordinary").Handle(func(c *sdk.Context) error { return pipelineObserve("ordinary", "ordinary", c) })
 	case "control":
-		p.On("slow", sdk.MessageCreated).Rule(func(c *sdk.Context) (bool, error) { return c.Text() == "slow", nil }).Handle(func(c *sdk.Context) error {
+		p.On(sdk.MessageCreated).ID("slow").Rule(func(c *sdk.Context) (bool, error) { return c.Text() == "slow", nil }).Handle(func(c *sdk.Context) error {
 			if err := pipelineObserve("slow-start", "slow", c); err != nil {
 				return err
 			}
@@ -1218,13 +1218,13 @@ func pipelineConcurrentPlugin(p *sdk.Plugin, mode string) {
 				return c.Context().Err()
 			}
 		})
-		p.On("fast", sdk.MessageCreated).Rule(sdk.ToMe(), func(c *sdk.Context) (bool, error) { return c.Text() == "fast", nil }).Handle(func(c *sdk.Context) error {
+		p.On(sdk.MessageCreated).ID("fast").Rule(sdk.ToMe(), func(c *sdk.Context) (bool, error) { return c.Text() == "fast", nil }).Handle(func(c *sdk.Context) error {
 			if _, err := c.Send(message.Text("fast-response")); err != nil {
 				return err
 			}
 			return pipelineObserve("fast", "fast", c)
 		})
-		p.On("cancel", sdk.MessageCreated).Rule(func(c *sdk.Context) (bool, error) { return c.Text() == "cancel", nil }).Handle(func(c *sdk.Context) error {
+		p.On(sdk.MessageCreated).ID("cancel").Rule(func(c *sdk.Context) (bool, error) { return c.Text() == "cancel", nil }).Handle(func(c *sdk.Context) error {
 			if err := pipelineObserve("cancel-start", "cancel", c); err != nil {
 				return err
 			}
@@ -1262,7 +1262,7 @@ func pipelineConcurrentPlugin(p *sdk.Plugin, mode string) {
 			}
 			return pipelineObserve("policy-end", "cmd.secure.hold", c)
 		})
-		p.On("identity", sdk.MessageCreated).Handle(func(c *sdk.Context) error { return pipelineObserve("identity", "identity", c) })
+		p.On(sdk.MessageCreated).ID("identity").Handle(func(c *sdk.Context) error { return pipelineObserve("identity", "identity", c) })
 	}
 }
 

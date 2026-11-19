@@ -117,15 +117,15 @@
 | goal-170 | S-02.1 | 按需唤醒、活动引用与有界等待 | S-01.1、S-01.2、T-05.5、T-06.4、T-07.5 | 已完成（PR #241） |
 | goal-176 | S-02.3 | Core 消息事件过滤与 SDK 注册 | T-04.16、T-08.11、T-09.14 | 已完成（PR #227） |
 | goal-161 | T-04.18 | 配置文件的派发与 SDK | T-04.16、T-08.18 | 已完成（PR #242） |
-| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 待派发 |
+| goal-171 | S-02.2 | 空闲退出与即时休眠策略 | S-02.1 | 已完成（PR #249） |
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
-| goal-162 | T-04.19 | 平台与消息 | T-04.18 | 待派发 |
-| goal-178 | T-04.20 | SDK 用法从简 | T-04.18、T-16.2 | 待派发 |
+| goal-162 | T-04.19 | 平台与消息 | T-04.18 | 已完成（PR #250） |
+| goal-178 | T-04.20 | SDK 用法从简 | T-04.18、T-16.2 | 已完成（PR #251） |
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 已完成（PR #246） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 待派发 |
-| goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 等待前置 |
+| goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 待派发 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
 | goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
 
@@ -8367,7 +8367,7 @@ internal/core/state
 
 ### goal-171 · S-02.2 空闲退出与即时休眠策略
 
-状态：待派发。前置 S-01.1（PR #225，合并提交 `2cc32ff7c7848e03621e356195e045736966e2fd`）、S-01.2（PR #226，合并提交 `413a6fffb47a9d4c774a9585b711fb9671eee150`）、S-02.1（PR #241，合并提交 `e0a38d7c1de9061abc51ba1c82423bfdbbd4805c`）均已合并。已按 main `25eea977561ff2beca5f4569a7e2c227acf68cd1` 核对：`contracts/manifest.Manifest.SleepCapable bool` 已贯通工程与安装包；`internal/core/state` 的 `plugin_runtime` 表及 `(*Store).RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)`、`SetRuntimeStatus(ctx context.Context, pluginID string, status RuntimeStatus) error` 保存六态、原因及最近唤醒/休眠时间；`ActiveRouteSnapshot(ctx context.Context, pluginID string) (RouteSnapshot, error)` 读取已提交路由。`internal/core/supervisor.(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)`、`AcquireActivity(pluginID string, session *wire.Session) (func(), error)`、`Ready(running *Running)` 已装配，活动结束时间、Session 引用与冷启动时刻仍为包内记录；`(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult`、`WaitExit() (abnormal bool, exitState string, err error)` 已处理正常 IDLE 停止及 SUSPENDED 写入。`contracts/proto/alonabot/v1/control.proto` 已有 `STOP_REASON_IDLE = 6`；`internal/core/settings` 尚无 sleep 字段，`internal/core/idle/` 尚未建立，`internal/tune.Values` 尚无 SLEEP_* 参数。`internal/app.(*Core).ReloadSettings(ctx context.Context) error` 经运行循环重读设置，唤醒启动也经同一运行循环。2026-11-18 审查者裁定 D-179：空闲退出复用 CONTRACTS §4 的正常停止，不新增任何协议消息或字段；进入 QUIESCING 后到达的请求等待下一次唤醒。本条按该裁定替代旧的 SDK 回调排空补充及 S-02.1 的 QUIESCING 撤销行为；CONTRACTS §4.5、PLAN S-02 步骤 4 与 V-77 中残留的旧补充由审查者同步。
+状态：已完成（PR #249），合并提交 `18f8af9`。以下保留派发时语句。派发时：前置 S-01.1（PR #225，合并提交 `2cc32ff7c7848e03621e356195e045736966e2fd`）、S-01.2（PR #226，合并提交 `413a6fffb47a9d4c774a9585b711fb9671eee150`）、S-02.1（PR #241，合并提交 `e0a38d7c1de9061abc51ba1c82423bfdbbd4805c`）均已合并。已按 main `25eea977561ff2beca5f4569a7e2c227acf68cd1` 核对：`contracts/manifest.Manifest.SleepCapable bool` 已贯通工程与安装包；`internal/core/state` 的 `plugin_runtime` 表及 `(*Store).RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)`、`SetRuntimeStatus(ctx context.Context, pluginID string, status RuntimeStatus) error` 保存六态、原因及最近唤醒/休眠时间；`ActiveRouteSnapshot(ctx context.Context, pluginID string) (RouteSnapshot, error)` 读取已提交路由。`internal/core/supervisor.(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)`、`AcquireActivity(pluginID string, session *wire.Session) (func(), error)`、`Ready(running *Running)` 已装配，活动结束时间、Session 引用与冷启动时刻仍为包内记录；`(*Running).Stop(t0 time.Time, reason pb.StopReason) host.StopResult`、`WaitExit() (abnormal bool, exitState string, err error)` 已处理正常 IDLE 停止及 SUSPENDED 写入。`contracts/proto/alonabot/v1/control.proto` 已有 `STOP_REASON_IDLE = 6`；`internal/core/settings` 尚无 sleep 字段，`internal/core/idle/` 尚未建立，`internal/tune.Values` 尚无 SLEEP_* 参数。`internal/app.(*Core).ReloadSettings(ctx context.Context) error` 经运行循环重读设置，唤醒启动也经同一运行循环。2026-11-18 审查者裁定 D-179：空闲退出复用 CONTRACTS §4 的正常停止，不新增任何协议消息或字段；进入 QUIESCING 后到达的请求等待下一次唤醒。本条按该裁定替代旧的 SDK 回调排空补充及 S-02.1 的 QUIESCING 撤销行为；CONTRACTS §4.5、PLAN S-02 步骤 4 与 V-77 中残留的旧补充由审查者同步。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-171（切片 S-02.2：空闲退出与即时休眠策略）。goal 目录 goal-171，分支 goal-171，worktree .worktrees/goal-171，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8434,7 +8434,7 @@ internal/core/state
 
 ### goal-162 · T-04.19 平台与消息
 
-状态：待派发。前置 T-04.18（PR #242，合并提交 `b8161272`）已合并；配置文件存储 T-08.18（PR #214，`ab0cd56`）、宽松载入 T-08.16（PR #239，`1a1d12c3`）均已合并。已按 main `9330f399` 核对：`internal/core/profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)`、`(*Service).Resolve(instance, session string) profile.Profile` 与 `Platform(id string) (profile.Platform, error)` 可读平台覆盖，`PutPlatform(ctx context.Context, id string, platform profile.Platform) error` 已支持 default 写回；`internal/core/settings.Settings.Reply` 与 `settings.Reply{MentionSender bool; Quote bool; Prefix string; ForwardThreshold int}` 已实现解析、保存和比较。Router 仍使用 `router.Options.Prefixes func(adapterInstanceID string) []string`，消息管道为 `internal/core/message.(*Service).Send/Edit(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response`，调用根由 `router.Invocation.Root`、`Begin() func()` 与 `AfterFinished(finished func())` 跟踪；平台设置的执行尚待接入。 审查者补充（2026-11-18）：首条回复与原消息的关联只在本 Session 内维持、不持久化；插件重启或换 Session 后不再按关联编辑早先的回复，按新回复处理。
+状态：已完成（PR #250），合并提交 `f3a0645`。以下保留派发时语句。派发时：前置 T-04.18（PR #242，合并提交 `b8161272`）已合并；配置文件存储 T-08.18（PR #214，`ab0cd56`）、宽松载入 T-08.16（PR #239，`1a1d12c3`）均已合并。已按 main `9330f399` 核对：`internal/core/profile.New(ctx context.Context, opt profile.Options) (*profile.Service, error)`、`(*Service).Resolve(instance, session string) profile.Profile` 与 `Platform(id string) (profile.Platform, error)` 可读平台覆盖，`PutPlatform(ctx context.Context, id string, platform profile.Platform) error` 已支持 default 写回；`internal/core/settings.Settings.Reply` 与 `settings.Reply{MentionSender bool; Quote bool; Prefix string; ForwardThreshold int}` 已实现解析、保存和比较。Router 仍使用 `router.Options.Prefixes func(adapterInstanceID string) []string`，消息管道为 `internal/core/message.(*Service).Send/Edit(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response`，调用根由 `router.Invocation.Root`、`Begin() func()` 与 `AfterFinished(finished func())` 跟踪；平台设置的执行尚待接入。 审查者补充（2026-11-18）：首条回复与原消息的关联只在本 Session 内维持、不持久化；插件重启或换 Session 后不再按关联编辑早先的回复，按新回复处理。
 
 与 goal-163 共享 `internal/core/profile/`（profile.go、platform.go、tools.go 的操作快照）、`internal/app/profile.go`、assembly.go、alonabot.go、`internal/core/manage/profile_api.go` 及 `cmd/alonabot/manage_e2e_test.go` 的配置文件测试装配。goal-162 负责平台有效值、前缀与回复，goal-163 负责工具策略；两者可并行，后合并者同步最新 main，保留双方的快照读取、回调注入、固定服务注册、Session 清理和测试断言，重跑两条主路径。与 goal-171 相交的 settings 与 app 文件同时保留 sleep、reply 及 T-08.16 的校正/原文保留行为。
 
@@ -8586,26 +8586,61 @@ internal/core/state
 
 ### goal-172 · S-03.1 Scheduler 唤醒与离线 tick 区分
 
-状态：等待前置（S-02.2、T-07.2）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：待派发。前置 S-02.2（goal-171，PR #249，合并提交 `18f8af95`）、T-07.2（goal-24，PR #107，合并提交 `fc2c2471`）均已合并；S-02.1（goal-170，PR #241，合并提交 `e0a38d7c`）已提供唤醒与活动门禁。已按 main `54ac4f8a` 核对：`internal/core/scheduler` 的 `New(opt Options) *Scheduler`、`(*Scheduler).Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error`、`Drain(pluginID string)`、`Detach(pluginID string)`、`Released(pluginID string)` 已接入生命周期；当前 `Drain` 调用 `Detach`，会停止定时器并清空注册，`tick`、`tickTask` 与 `pump` 依赖旧 `router.Plugin.Activated()`，尚无到期唤醒入口。`internal/core/supervisor.(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)`、`AcquireActivity(pluginID string, session *wire.Session) (func(), error)` 与 `Ready(running *Running)` 已装配；`(*Running).StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult` 经正常停止写入 SUSPENDED，Frozen、detach、release 分别调用 Scheduler 的 Drain、Detach、Released。`internal/core/idle.(*Controller).CanStop(pluginID string, policy Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool` 以 Ready、零引用及实际活动时间判定空闲。`internal/app/assembly.go`、`journal.go`、`wake.go`、`idle.go` 已串起 Scheduler、Waker 与自动空闲停止，`assembly.detach` 仍无条件撤销当前组件的调度注册。`internal/core/state.(*Store).Jobs(ctx context.Context, pluginID string) ([]Job, error)`、`Tasks(ctx context.Context, pluginID, name string) ([]Task, error)` 与 `RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)` 已提供持久调度与六态读取；复用现有表。空闲退出沿用 CONTRACTS §4 的正常停止（D-179）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-172（切片 S-03.1：Scheduler 唤醒与离线 tick 区分）。goal 目录 goal-172，分支 goal-172，worktree .worktrees/goal-172，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：让静态与动态任务在插件正常休眠时按期唤醒执行，维持异常离线跳过、不追补及同一任务不重叠。
 
-依据：PLAN §7 S-03 步骤 1、2；CONTRACTS §4.3～§4.5；WIRE-FORMAT §5；DESIGN §H；D-19、D-53、D-153；V-78 与 V-77 的 schedule 活动分项。
+依据：PLAN §7 S-03 步骤 1、2 及其失败停止条件、spec/plan/core.md 的 S-03.1；CONTRACTS（spec/CONTRACTS-v0.1.md）§4.2～§4.5、§16；WIRE-FORMAT §5；DESIGN §H；DECISIONS D-19、D-53、D-124～D-126、D-153、D-179；TEST-MATRIX V-78 与 V-77 的 schedule 活动分项。
 
-要点：
-- 范围：internal/core/scheduler 的 Attach/Detach/Drain/tick/动态任务队列及状态恢复，supervisor 的空闲退出通知、internal/app 的装配；state 的 job/task 读取沿用原所有者。
-- 正常 IDLE 退出撤销 Session 绑定但保留静态起点、暂停状态、动态实例、路由描述与未来定时器；停用/异常离线仍按原作废与清理规则处理。
-- 到期先占同一运行槽并经 EnsureActive 取得引用，确认 ACTIVATED 后用现有 scheduled REQUEST。保留原 scheduled_at，原 15 分钟绝对 deadline 包含唤醒等待，不因新 Session 重置。
-- 同一静态 job/动态实例不重叠；动态并发名额和排队规则照旧。超时先返回但保持运行槽与活动引用，实际完成或确认进程树退出后释放；失败有日志/计数，不自动重试 callback。
-- 验收要点：12:00/16:00/22:00 独立 cron 与 interval、动态 at/周期实例，休眠唤醒、任务占用时阻止休眠、静态起点不变、异常离线不补跑。复用任务套件和已有时钟入口，不为本切片新造时钟框架；默认一个集成主路径，其余本地自测。
+范围（只新增或修改这些）：
+- internal/core/scheduler/：scheduler.go、tasks.go、trigger.go、jobs.go、services.go 与按职责拆出的休眠调度文件，覆盖 Attach/Drain/Detach/Released、静态 tick、动态到期队列、恢复与统一调用收尾
+- internal/core/supervisor/：supervisor.go、prepare.go 中 Scheduler 的激活、空闲冻结、撤销与旧树退出通知；沿用 wake.go、activity.go、runtime.go 的现有门禁和状态接口
+- internal/app/：assembly.go、journal.go、wake.go、idle.go、alonabot.go 中必要的注入、空闲停止、Session 解绑与退出清理调用点
+- internal/app/scheduler_wake_test.go（新集成测试）；idle_test.go 中既有动态构建宿主的必要复用调整；上述包的 *_local_test.go
+
+允许的依赖：标准库与现有已批准依赖；沿用 scheduler -> contracts/schedule、contracts/pb/alonabotv1、internal/core/router、internal/core/state、internal/wire，supervisor -> scheduler，internal/app 装配。Scheduler 通过函数注入调用同一个 Waker，保持依赖无环；状态读写继续归 state，空闲策略继续归 idle，调优值复用生效的 JOB_TIMEOUT、TASK_CONCURRENCY 与 WAKE_QUEUE_*。不增加依赖或调优参数。
+
+接口（main 上的现有签名保持可用）：
+- scheduler.Options 的 Store *state.Store、TasksPerPlugin int、TaskPayloadBytes int64、TaskConcurrency int、JobTimeout time.Duration、Now func() time.Time；func New(opt Options) *Scheduler
+- (*scheduler.Scheduler).Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error；Drain(pluginID string)；Detach(pluginID string)；Released(pluginID string)；Close()
+- (*scheduler.Scheduler).Stats(pluginID, jobID string) scheduler.JobStats；TasksStats(pluginID string) scheduler.TaskStats；Jobs(pluginID string) []scheduler.StaticJob；SetJobPaused(ctx context.Context, pluginID, jobID string, paused bool) error
+- (*scheduler.Scheduler).Services(m *router.Mux, current func(router.Caller) (router.Plugin, bool))；Trigger(ctx context.Context, pluginID, jobID string, completed func(runID string, response wire.Response, err error)) error；TriggerTask(ctx context.Context, pluginID, taskName, key string, completed func(runID string, response wire.Response, err error)) error
+- (*supervisor.Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)；AcquireActivity(pluginID string, session *wire.Session) (func(), error)；Ready(running *supervisor.Running)；Activity(pluginID string) supervisor.ActivityStatus
+- (*supervisor.Running).StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult；Stop(t0 time.Time, reason pb.StopReason) host.StopResult；WaitExit() (abnormal bool, exitState string, err error)；supervisor.Spec.Detach func()
+- router.WithActivity(p router.Plugin, acquire func() (release func(), err error)) router.Plugin；wire.Request.Deadline time.Time、Late func(wire.Response) 沿用实际响应与迟到响应的收尾规则
+- (*state.Store).Jobs(ctx context.Context, pluginID string) ([]state.Job, error)；SaveJob(ctx context.Context, job state.Job) error；Tasks(ctx context.Context, pluginID, name string) ([]state.Task, error)；DeleteTask(ctx context.Context, pluginID, name, key string) error
+- (*state.Store).Enabled(ctx context.Context, pluginID string) (bool, error)；Active(ctx context.Context, pluginID string) (string, error)；RuntimeStatus(ctx context.Context, pluginID string) (state.RuntimeStatus, error)；ActiveRouteSnapshot(ctx context.Context, pluginID string) (state.RouteSnapshot, error)
+- (*idle.Controller).CanStop(pluginID string, policy idle.Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool；internal/app 的 assembly.ensureActive(ctx context.Context, id string, n int64) (func(), error)、assembly.startWake(context.Context, string) (*supervisor.Running, error) 与 Core.operation 继续负责完整恢复和串行生命周期
+
+接口（本切片新增，以下签名固定）：
+- scheduler.Options 追加 EnsureActive func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)，由 internal/app 注入 assembly.ensureActive；未注入时现有活 Session 调度入口继续可用
+- func (s *Scheduler) Suspend(pluginID string)：在已取得正常 IDLE 停止权后撤销调度的旧 Session 交付绑定，保留计划、路由描述、静态起点、暂停状态、动态实例与未来定时器；与 Drain/Detach 的停用及异常离线清理分开。只调整调度内存状态，运行六态仍由 Supervisor 写入
+
+行为：
+- 正常 IDLE 退出沿用 D-179：StopIdle 在逐插件锁和活动门禁复核后进入 QUIESCING，按同一 STOP_DRAIN/STOP_ONSTOP/STOP_TOTAL 冻结、排空、STOPPING 与确认旧树退出，成功后写 SUSPENDED。Frozen 时通知 Scheduler.Suspend；随后 Supervisor.detach、Spec.Detach 回调、assembly.detach 与 app 的再次收尾只撤销该旧 Session 的 Router/Bus/HTTP 等绑定，保留此次正常休眠的调度计划。停止失败按原路径记录 FAILED 并作异常离线清理；退出观察者按原实例所有权处理，迟到清理保留新 Session。
+- Drain、Detach、Close 继续分别服务管理排空、注册撤销与 Core 停机：停用、卸载、更新切代、异常断链/退出时停止未来定时器、清空到期队列并使旧注册回调失效，持久定义的去留沿用原规则。Core 未运行、停用、STOPPED 或 FAILED 期间到期的触发作废；恢复仅安排下一未来 tick，过期动态 at 删除并记 WARN/Expired，未注册任务名的实例保留但不触发。只有正常休眠保留的本次到期经既有 Waker 唤醒；QUIESCING 中到达时遵循原有界等待，等旧树退出、SUSPENDED 与唯一新 Session 的 Ready。
+- 静态 tick 到期先占 plugin_id/job_id 的同一实际运行槽，动态到期仍按 plugin_id/name/key 去重并取得 TASK_CONCURRENCY 名额；唤醒等待计入运行槽和动态执行数。同一插件多个到期任务复用 Waker 合并启动，其他 job 仍可并发。同一静态 job 或动态实例已有运行槽时跳过本轮；动态名额已满时按原到期顺序排队，周期实例最多保留一次，排队等待名额沿用原规则。
+- 在 Scheduler 锁、逐插件锁与 Core 运行循环之外执行 EnsureActive；等待载荷按实际请求字节占用既有 WAKE_QUEUE_* 与 Core 总预算，取消、期限与满额返回实际错误。静态任务在原 scheduled_at 固定 deadline=scheduled_at+JOB_TIMEOUT；动态任务取得名额后，在线从实际派发起、休眠从开始唤醒等待起固定同一绝对 deadline，排队等待名额保留原语义。期限通过等待 context 与 wire.Request.Deadline 传递，缺省 15 分钟，冷启动消耗原预算，新 Session 保留该截止与原 scheduled_at。
+- EnsureActive 返回后在调度锁内重新取得 Attach 发布的当前注册，核对本次计划、已提交代次、路由、本轮取消状态、运行槽归属与剩余期限，Ready 后才向新 Plugin 发送一次既有 scheduled REQUEST。静态暂停停止后续 tick，已占槽的一轮沿用原执行规则。复用 Waker 的启用、代次与摘要检查，保留独立 run_id、job scope、无 Actor/默认 Admin/默认 Target 及动态任务参数；已取消或过期的等待结束本轮，callback 失败记录完整错误，不自动重试。
+- 同代次 resume 的 Attach 重新绑定新 Session，保留已接纳的到期项、原 scheduled_at/deadline、稳定运行槽及动态并发计数；未来定时器按同一计划继续。避免普通恢复中的“只取未来 tick/删除过期 at”分支清掉本次正常休眠到期项；已为本轮消费的一次性实例在 Attach 重读状态库时仍保持待交付所有权。静态 interval 起点、暂停状态、动态周期起点与实例沿用 state.Jobs/Tasks，首次激活及新版本间隔变化仍按既有规则处理。
+- 动态一次性实例沿用派发前事务删除及失败不重试；创建/替换、取消、缺少任务名、暂停与恢复的既有语义保持。替换实例保留旧在途槽，取消在途实例协作取消，本地结果结束后按实际执行状态释放。Trigger、TriggerTask、SetJobPaused 与插件固定服务继续核对当前 Activated Session，保持既有显式触发和服务准入规则。
+- 唤醒等待与实际交付的引用连续交接，复用当前 router.WithActivity/AcquireActivity 的实际调用包装；任务执行期间 References 保持占用，idle.CanStop 与 StopIdle 沿用原复核。实际响应结束时释放；本地超时/取消先返回而请求已交付时，保留实际运行槽、原调用键与引用，迟到 Response 或确认所属旧树退出才释放。唤醒失败或确认尚未交付的取消/期限结束可以归还本轮等待与槽；Released 只清理归属退出 Session 的实际调用，保留等待下一 Session 的到期项及新 Session 的槽。旧响应与重复收尾只释放自己；失败有日志/计数，沿用现有 Runs/Skipped/TimedOut/Late、动态 Expired 与运行/排队统计。
+
+测试（按 docs/goals/README.md「编写测试段」与编码规范「测试提交规则」）：
+- 提交：internal/app/scheduler_wake_test.go（//go:build unix）的 TestSchedulerWake，一个真实 Core＋声明 sleep_capable 的已安装插件子进程＋SQLite 的集成测试，复用 idle_test.go 的 startIdleProbe 动态构建宿主与现有任务 API。以可控的 interval 和动态 at 依次覆盖自动空闲退出→自然到期唤醒→新 Session 执行一次→完成后再次休眠；核对原 scheduled_at、静态起点、原 generation/config/DB 与暂停状态保留，一次性实例按原规则消费；通过 Handler 同步点确认执行期间阻止休眠。使用真实定时器和正常 StopIdle/Ready 路径，插件源码与生成文件放测试临时目录，不新增 testdata 插件。
+- 本地自测（*_local_test.go，不提交，PR 中写明结果）：12:00、16:00、22:00 三条独立 cron 与 interval 的正常休眠唤醒；动态 at、interval/cron、暂停及缺少任务名；同 job/实例重叠跳过、并发名额与到期队列、等待中替换/取消；多个任务同时到期唯一启动；QUIESCING 到期、旧树退出前保持等待、Ready 前交付门禁、resume Attach 保留已接纳项及已消费 at；静态与动态 deadline 起点、冷启动耗尽期限、取消与条数/字节/Core 预算满额；超时后真实迟到响应、断链后旧树退出才释放、Released 与新槽竞争、各类失败保留完整错误；异常离线/停用/Core 重启期间作废且不补跑、过期 at 的 WARN/Expired、固定起点及暂停状态恢复；显式 Trigger/TriggerTask 与固定服务的原准入、always_on 与开发组件原路径。复用 scheduler.Options.Now、contracts/schedule.Trigger.Next 和现有任务套件，不新建时钟框架；sdk/ 与 supervisor/ 的新增验证均留本地。
+
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./internal/core/scheduler/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/state/... ./internal/app/...；go build ./...。PR 按 TEST-MATRIX §3 写明 V-78 与 V-77 的 schedule 活动分项的测试位置、完整命令、平台、结果及未运行项；正常休眠丢失到期任务、异常离线 tick 被补执行、同任务重叠或唤醒延长原期限时阻止交付。「文档同步」列出由审查者回写的 PLAN/TEST-MATRIX 证据及后继 goal-173 的实际接口。
+
+不做：修改休眠准入、空闲阈值或固定冷却策略；新增唤醒队列、任务持久队列、callback 自动重试或时钟框架；新增协议消息、字段、排空握手或业务 RPC；休眠管理 API/CLI/WebUI、指标扩展与固定机器测量（S-06）；新增依赖或修改状态库 schema；不改 ARCHITECTURE/README/spec，文档同步写进 PR。
 ```
 
 ### goal-178 · T-04.20 SDK 用法从简
 
-状态：待派发。前置 T-04.18（PR #242）、T-16.2（PR #183）均已合并。2026-11-18 按 D-180 新增。已按 main `d7c85b63` 核对：`sdk/plugin.go`、`sdk/subplugin.go`、`sdk/registry.go` 的 `Regex(routeID, expr string)`、`Keyword/StartsWith/EndsWith/FullMatch(routeID string, patterns ...string)`、`Raw(routeID string)`、`On(routeID string, eventType EventType)`，`sdk/hooks.go` 的 `PreEvent(routeID string, event EventType)`、`BeforeSend(routeID string)`、`AfterSend(routeID string)`；`sdk/sdk.go` 的 `(*Context).Reply(text string) error`；`sdk/registry.go` 的 `(*RouteBuilder).Page(title string)`；`sdk/bus/bus.go` 的 `(*Subscription[T]).ID(routeID string)` 是 `.ID` 的现成写法；`contracts/validate/register.go` 拒绝空的与重复的 route_id；`examples/plugins/showcase/main.go` 手动登记四条 `kit.css`/`kit.js` 路由；`plugintest/plugintest.go` 的 `Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`。与 goal-162（T-04.19）都改 `sdk/` 的回复路径，后合并者同步 main 后保留双方改动；与 goal-179 无共享文件。
+状态：已完成（PR #251），合并提交 `43b05989`。以下保留派发时语句。派发时：前置 T-04.18（PR #242）、T-16.2（PR #183）均已合并。2026-11-18 按 D-180 新增。已按 main `d7c85b63` 核对：`sdk/plugin.go`、`sdk/subplugin.go`、`sdk/registry.go` 的 `Regex(routeID, expr string)`、`Keyword/StartsWith/EndsWith/FullMatch(routeID string, patterns ...string)`、`Raw(routeID string)`、`On(routeID string, eventType EventType)`，`sdk/hooks.go` 的 `PreEvent(routeID string, event EventType)`、`BeforeSend(routeID string)`、`AfterSend(routeID string)`；`sdk/sdk.go` 的 `(*Context).Reply(text string) error`；`sdk/registry.go` 的 `(*RouteBuilder).Page(title string)`；`sdk/bus/bus.go` 的 `(*Subscription[T]).ID(routeID string)` 是 `.ID` 的现成写法；`contracts/validate/register.go` 拒绝空的与重复的 route_id；`examples/plugins/showcase/main.go` 手动登记四条 `kit.css`/`kit.js` 路由；`plugintest/plugintest.go` 的 `Result{Sends []Sent; Outcomes []Outcome; Waiting bool}`。与 goal-162（T-04.19）都改 `sdk/` 的回复路径，后合并者同步 main 后保留双方改动；与 goal-179 无共享文件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-178（切片 T-04.20：SDK 用法从简）。goal 目录 goal-178，分支 goal-178，worktree .worktrees/goal-178，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8698,7 +8733,7 @@ internal/core/state
 
 ### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
 
-状态：等待前置（S-02.2、S-03.1）。T-09.14已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待前置（S-03.1）。S-02.2（PR #249，`18f8af9`）已合并。T-09.14已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-173（切片 S-06.1：休眠管理 API、运行诊断与 CLI）。goal 目录 goal-173，分支 goal-173，worktree .worktrees/goal-173，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

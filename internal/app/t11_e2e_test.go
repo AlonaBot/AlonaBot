@@ -104,7 +104,7 @@ func t11Plugin(mode string) *sdk.Plugin {
 			})
 		}
 	} else {
-		p.On("invoke", sdk.MessageCreated).Handle(func(c *sdk.Context) error {
+		p.On(sdk.MessageCreated).ID("invoke").Handle(func(c *sdk.Context) error {
 			var in t11Command
 			if err := json.Unmarshal([]byte(c.Text()), &in); err != nil {
 				return err
@@ -119,7 +119,7 @@ func t11Plugin(mode string) *sdk.Plugin {
 			}
 			return pipelineAudit(pipelineRecord{Stage: "result", Text: in.Key, Value: string(b), Code: out.Code, User: c.User(), Session: c.Session()})
 		})
-		p.BeforeSend("audit").Handle(func(_ *sdk.Context, _ string, chain message.Chain) (message.Chain, error) {
+		p.BeforeSend().ID("audit").Handle(func(_ *sdk.Context, _ string, chain message.Chain) (message.Chain, error) {
 			return chain, pipelineAudit(pipelineRecord{Stage: "before", Text: chain.Text()})
 		})
 	}

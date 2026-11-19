@@ -91,6 +91,19 @@ type Result struct {
 	Waiting  bool
 }
 
+// RequireReply 要求全部 Handler 成功，且恰好发送一条文本为 want 的消息。
+func (r Result) RequireReply(t testing.TB, want string) {
+	t.Helper()
+	for _, outcome := range r.Outcomes {
+		if outcome.Err != nil {
+			t.Fatalf("handler %s/%s: %v", outcome.PluginID, outcome.RouteID, outcome.Err)
+		}
+	}
+	if len(r.Sends) != 1 || r.Sends[0].Text() != want {
+		t.Fatalf("sends = %+v, want one reply %q", r.Sends, want)
+	}
+}
+
 // Harness 持有一次测试的 Core 与 Adapter；事件注入按顺序调用。
 type Harness struct {
 	t         testing.TB

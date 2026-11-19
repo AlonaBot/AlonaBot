@@ -155,6 +155,8 @@ X-Content-Type-Options: nosniff
 | 503 | `UNAVAILABLE` |
 | 500 | `INTERNAL` 及当前映射中其余错误码；保留实际 `code` |
 
+设置提交后的策略应用失败沿用上表错误格式，聚合实际错误并保留已保存设置；调用方重新 GET 核对设置与各插件状态（§24.1）。
+
 需要显式确认时为 HTTP 409，正文为 `{"affected":["受影响对象", "..."]}`。客户端展示全部对象，在管理员同意后重发同一请求并置 `Confirm: true`（install）或 `confirm: true`（动作、实例创建）。它与 `ALREADY_EXISTS` 的 JSON 结构不同。
 
 认证在管理路由查找前执行：未知 `/api/...` 无有效凭证返回 401；有效认证后返回 404、`application/json`、`{"code":"NOT_FOUND","safe_message":"management endpoint not found"}`。当前动作路径上的未登记方法同样落入这一管理 404。GET 列表与图标路由隐式接受 HEAD；POST 写接口按表格方法调用。
@@ -248,6 +250,8 @@ X-Content-Type-Options: nosniff
 5. 插件的 HTML 与全部插件路由响应继续带 `sandbox allow-scripts allow-forms allow-popups`（无 `allow-same-origin`）和 `nosniff`，清除插件设置的 Cookie；WebUI 自身继续使用第 6 节的静态规则。父桥与浏览器联验归 T-09.9。
 
 ### 7.3 SDK 页面客户端
+
+插件声明 `Route(method, path).Page(title)` 后，SDK 自动补齐页面同目录的 `kit.css` 与 `kit.js` GET 路由，继承页面认证；作者已登记的同方法、同路径路由优先。`/page` 的相对资源为 `/kit.css`、`/kit.js`，`/page/` 的相对资源为 `/page/kit.css`、`/page/kit.js`，均位于该插件的 URL 前缀内。资源路由的 `page_title` 为空，组件 `pages` 列表只列页面；手动挂载可继续使用 `sdk/page.Handler()`（CONTRACTS §7.3，D-180）。
 
 `sdk/page` 的 `kit.js` 在 `window.AlonaBot` 上公开 `request(method, path, body?)`、`t(key, args?)`、`onTheme(fn)`、`onLocale(fn)`。嵌入时自动发送 `hello`，把令牌写到 `:root` 并设置 `data-theme`，接收主题与语言事件，转发全局搜索快捷键。两个订阅函数在注册时立即交付当前状态，并返回取消订阅函数。独立打开时使用 `light`、`en-US` 与浅色缺省令牌；`request` 返回拒绝的 Promise，不直接发送 HTTP 请求。
 
@@ -489,6 +493,44 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 应用层的 400（无效输入）、404（找不到配置项）、502（发现上游失败）和 500（读取用量失败）返回 `{"description":"…"}`，说明为受控英文。模型 ID 的推断规则依次匹配 `embed`、`rerank`、`whisper`/`transcribe`、`tts`，其余为 `chat`。测试路由不落账；有效的零 token 响应存为零，缺失用量不建记录。
 
+### 15.2 Agent 插件页面与数据路由（D-170、D-182）
+
+官方 Agent 的实际 ID 为 `alonabot-agent-official`，以下路径相对于 `/plugins/{agent_id}/`。全部路由要求 Core 管理 Cookie，非 GET 请求沿用 Origin 与 `X-Alonabot-CSRF` 校验；鉴权拒绝沿用 Core 代理响应。五个页面通过 `window.AlonaBot.request` 访问本组件接口，标题取 Agent 的 `pages`，文案取 `messages`；父桥及配置读取 messages 见 §7、§12.1。
+
+| 方法与子路径 | 内容 |
+| --- | --- |
+| `GET pages/personas`、`pages/mcp`、`pages/skills`、`pages/data`、`pages/tasks` | 同一嵌入 HTML，分别声明英文标题 Personas、MCP、Skills、Data、User tasks，并提供中英文标题。 |
+| `GET pages/kit.css`、`pages/kit.js` | `sdk/page.Handler()` 套件资源。 |
+| `GET pages/assets/` 前缀 | 嵌入的 `pages.css` 与 `pages.js`；HTML 使用相对路径引用全部资源。 |
+
+数据路由均返回 JSON；下表子路径相对于 `pages/api/`，成功缺省为 200。查询值按 URL 解码一次；JSON 请求拒绝未知字段与额外对象。
+
+| 方法与子路径 | 请求 | 响应 |
+| --- | --- | --- |
+| `GET personas` | 无 | `{"personas":[{"name":"名字","prompt":"完整提示","references":[{"id":"配置文件 ID","name":"配置文件名","sessions":1}]}]}`，按人格名排序。 |
+| `POST personas` / `PUT personas` | `{"name":"名字","prompt":"完整提示"}`；name 去空白后须非空，保存原值；prompt 必须为字符串，允许空字符串 | 新建为 201、编辑为 200，均返回 `{name,prompt}`；PUT 修改现有人格的提示。 |
+| `DELETE personas?name=...` | 指定现有人格 | 成功 `{}`；基础配置、直接覆盖与继承引用按 CONTRACTS §13.7 检查，被引用返回 409 与 `{description,references:[{id,name,sessions}]}`。 |
+| `GET mcp` | 无 | `{servers:[{name,transport,status,tools:[{name,description,effect}],error?}]}`；status 为 disconnected、connected 或 error，tools 为最近成功目录，effect 为 SDK 的数值类别 0～3。 |
+| `POST mcp/reconnect` | `{"name":"已配置服务器名"}` | 返回该服务器同结构对象；建连失败仍返回 200，status 为 error 且带脱敏 error；未知服务器为 404。 |
+| `GET skills` / `POST skills/reload` | reload 无业务字段，接受空请求体或 `{}` | `{skills:[{name,description}],problems:[{path,message}]}`；reload 一次替换技能与问题快照，已开始轮次保留原快照。 |
+| `GET memory` | 无 | `{records:[{target,scope,instance,entries}]}`，按 target、scope、instance 排序，entries 为完整有序字符串数组。 |
+| `PATCH memory` | `{target,scope,instance,operations:[{op,text?,old_text?}]}` | 返回更新后的 `{target,scope,instance,entries}`；op 为 add、patch、remove，patch/remove 的 old_text 子串须恰好匹配一个条目。 |
+| `DELETE memory` | `{target,scope,instance}` | 删除该完整三元键的整份记录，返回 `{}`。 |
+| `GET conversation` | 省略 key 或 key 为空 | `{conversations:[{key}]}`，列出 Agent 自有目录中的完整会话键并按 key 排序；已无正文的目录项在本次查询中清理。 |
+| `GET conversation?key=...&from_seq=...` | 完整会话键；from_seq 省略或为 0 时从头读取，其他值为无符号整数 | `{entries:[{seq,entry}],next_seq,more}`；entry 为 Core 保存的原样 JSON 对象，游标取 SDK 返回值，读完时 `next_seq=0`、`more=false`。 |
+| `GET tasks` | 无 | `{tasks:[{key,creator,target,prompt,created_at,at?,interval_seconds?,cron?,timezone?,next_at}]}`；列出本 Agent 的全部动态任务，使用真实实例 key。 |
+| `DELETE tasks?key=...` | 非空真实实例 key | `agentTask.Cancel` 删除实例并协作取消在途调用，返回 `{}`。 |
+
+无记录时列表字段返回 `[]`。memory 的 target 为 memory 或 user，scope 与 instance 均须非空；管理操作按完整三元键选记录。PATCH 复用 Agent 的原子记忆操作，会话笔记 2200、用户档案 1375 个 Unicode 码点（含换行），失败保留原记录；既有会话笔记冻结、每轮用户档案读取语义保持。
+
+conversation 覆盖普通键、群成员键与 `task/<key>`，逐页保留真实序号、role、kind、speaker、完整 content、memory_snapshot 与 images 编号。目录恢复及清除交错语义见 CONTRACTS §13.7；Core 的摘要与清除入口沿用 §15。
+
+tasks 的 creator 为 `{instance,user}`，target 为 `{instance,chat,thread,text_limit,text_unit}`，使用创建时保存的目标；created_at、at、next_at 为 RFC 3339 时间，未选触发字段省略，未安排 next_at 为 null。插件代码的静态任务沿用宿主「定时任务」入口。
+
+MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通知并显示真实断线，保留最近成功工具目录；重连只操作选中服务器，停止后拒绝重连及首次连接，旧会话通知保留在原会话。服务器配置沿用通用配置标签。人格页维护目录，配置文件页通过 `@agent/personas` 选择人格，保留 `@agent/llm.models` 来源。
+
+应用错误返回 `{description,code?}`，description 为英文：INVALID_ARGUMENT → 400，NOT_FOUND → 404，ALREADY_EXISTS → 409，RESOURCE_EXHAUSTED → 400，其余为 500；有 SDK 错误码时 code 为对应名称，内部失败记录完整错误链并向页面返回受控说明。人格引用冲突使用上表的 409 响应，附 references。
+
 ## 16. 命令权限、启用与命令名
 
 `GET /api/v1/plugins/{id}/policies` 返回：
@@ -604,7 +646,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 
 ## 23. 配置文件
 
-配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；工具目录、调用与操作确认已应用配置文件策略（T-11.6，PR #246）；官方 Agent 已标记六个可覆盖字段并接通配置文件命令（T-12.19，PR #247，CONTRACTS §5.6）；平台设置的运行时应用由 T-04.19 接入。
+配置文件的语义见 CONTRACTS §5.6（D-168）。ID `default` 表示「默认」。管理写入立即保存；`default` 的字段值经 §12 的配置 API 写入 Pending，平台设置写回 `core_config.json`。按会话的插件开关、字段覆盖、SDK 调用视图与消息过滤已接通（T-04.18，PR #242）；工具目录、调用与操作确认已应用配置文件策略（T-11.6，PR #246）；官方 Agent 已标记六个可覆盖字段并接通配置文件命令（T-12.19，PR #247，CONTRACTS §5.6）；命令前缀与回复方式已按会话配置文件生效（T-04.19，PR #250）。
 
 | Method / path | 请求或成功响应 | 操作语义 |
 | --- | --- | --- |
@@ -622,6 +664,8 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 | `PUT /api/v1/profiles/{id}/platform` | 同形对象 → `{}` | 整体替换，省略或 `null` 跟随 `default`；`default` 要求全部键非 `null`，写回 `core_config.json`。前缀数组非空，转发阈值须为非负整数 |
 | `GET /api/v1/profiles/{id}/tools` | `{"items":[{"tool":"weather/subscribe","policy":"allow"},{"operation":{"plugin_id":"agent","name":"mcp/fs/write_file"},"policy":"deny"}]}` | 只列出覆盖了全局策略的工具与操作 |
 | `PUT /api/v1/profiles/{id}/tools` | `{"items":[…]}`，policy 取 allow、confirm、deny 或 inherit → `{}` | 仅更新所列项；每项恰好指定 `tool` 或 `operation`，`inherit` 删除该项覆盖 |
+
+platform 的 GET 返回已保存的覆盖，运行时按键合并当前 `default`；显式 `false`、空字符串和 `0` 保留。PUT 或会话指定更新后，后续命令派发与回复 Send 读取新快照，无需插件 reload。平台命令菜单按实例缺省配置文件读取前缀，在启动及路由、命令策略变化时同步。旧 `GET/PUT /api/v1/core/command-prefixes` 已移除，访问返回 404；磁盘旧键 `command_prefixes_by_instance` 按 Unknown 保留并忽略，经 §13 的 Core settings prune 清理。按账号区分前缀时，先指定实例缺省配置文件，再写该配置文件的平台覆盖。
 
 tools 的写入从下一次工具策略操作生效，在途确认保留已接纳策略。运行时按可信默认 Target 选择配置文件，无 Target 或无父 list 使用 `default`；插件关闭时视为 deny，其余依次读取配置文件覆盖、§18 的全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；`inherit` 恢复全局策略。§18 的全局目录与写入保持原义。
 
@@ -646,17 +690,17 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 | `DELETE /api/v1/plugins/{id}/sleep-policy` | 无正文 → `{}` | 删除覆盖，恢复准入规则及全局时长；CLI 的 `auto` 使用此接口 |
 | `GET /api/v1/plugins/{id}/runtime` | 下文的运行对象 | 返回运行状态、代次与最近变化原因 |
 
-策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时另返回 `warnings` 字符串数组；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
+策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时，逐一检查全部路由并返回 `warnings` 字符串数组（`route <route_id>: <kind> may cause frequent wakeups`）；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
 
 所有插件接口都只接受已安装且未卸载的 `role: plugin` 或 `role: agent` ID；ID 不存在、已卸载或属于其他角色返回 404 / `NOT_FOUND`。无 manifest 可休眠声明时，时长覆盖仍可保存，生效策略保持 `never`，WebUI 锁定时长选项并显示原因。未知模式、`auto` 字面量作为存储值、零/负/非法时长在写入前返回 400 / `INVALID_ARGUMENT`。
 
-写入经 `settings.File.Update` 保存 `sleep`，保留其他字段及未修改的 `${...}` 原文，再向生命周期所有者应用生效策略。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。文件保存失败时返回实际错误；保存成功后唤醒失败时保留已保存设置，仅按 §5 返回实际错误，调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
+写入经共享的 `settings.File.WithPublisher(publish func(change func() error) error) *File` 受管视图执行 Update/Reload，保留其他字段及未修改的 `${...}` 原文；全部管理设置发布（含命令前缀、Prune、BindAdapter 与 PrepareInstances 的内部写回）交给 Core 生命周期循环，与空闲判定串行。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；处于 `QUIESCING` 时先完成正常停止，再按最新策略恢复；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。提交前保存失败时返回实际错误；提交后保留已发布设置并应用策略，持久化错误及各插件唤醒失败聚合后按 §5 返回，健康插件继续恢复。调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
 
 ### 24.2 运行状态
 
 运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
 
-`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；QUIESCING→ACTIVE 的空闲停止撤销保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 已提供底层记录，本文休眠管理端点由 S-06.1 接入；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
+`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；进入 QUIESCING 前撤销空闲决定时保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 已提供底层记录，本文休眠管理端点由 S-06.1 接入；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
 
 组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。
 

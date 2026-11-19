@@ -24,8 +24,8 @@
 | goal-144 | T-12.16 | 预留的五类模型与模型管理路由 | T-12.15 | 已完成（PR #223） |
 | goal-145 | T-12.17 | 对话重试与回退模型、图像转述 | T-12.15 | 已完成（PR #224） |
 | goal-159 | T-12.18 | Agent 的触发方式、唤醒词与成员独立会话 | T-12.17、S-02.3 | 已完成（PR #229） |
-| goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 待派发 |
-| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 待派发 |
+| goal-164 | T-12.19 | Agent 接入配置文件 | T-04.18、T-12.18 | 已完成（PR #247） |
+| goal-167 | T-12.20 | 官方 Agent 的插件页面 | T-04.17、T-12.19 | 已完成（PR #252） |
 
 ## 第 1 波
 
@@ -1193,7 +1193,7 @@ func conversationKey(c *sdk.Context) string
 
 ### goal-164 · T-12.19 Agent 接入配置文件
 
-状态：待派发。前置 T-04.18（PR #242，合并提交 `b8161272fe9c2aacb07560f09ac0294c07a343f0`）、T-12.18（PR #229，合并提交 `f00a55adf7598eaaf4f3efdab2a1072a85bde010`）均已合并；按 main `9330f3992f9d1bdd9566e9e1d6af2b3625349e92` 核对。`github.com/AlonaBot/AlonaBot/sdk` 的 `func (c *Context) Config() config.Values` 已返回本次调用冻结的配置文件视图，`sdk/profile.go` 负责接收覆盖全集；`github.com/AlonaBot/AlonaBot/sdk/service` 已有 `func Proto[In, Out proto.Message](target string) Spec[In, Out]` 与 `func (s Spec[In, Out]) Call(ctx context.Context, in In) (Out, error)`，可直接调用 `core.profile.list`、`current`、`assign`、`set`。请求与响应已由 `contracts/proto/alonabot/v1/profile.proto` 生成到 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`，Core 在 `internal/core/manage/profile_api.go` 登记固定服务并核验父调用与 Core Admin。
+状态：已完成（PR #247），合并提交 `f3959f6`。以下保留派发时语句。派发时：前置 T-04.18（PR #242，合并提交 `b8161272fe9c2aacb07560f09ac0294c07a343f0`）、T-12.18（PR #229，合并提交 `f00a55adf7598eaaf4f3efdab2a1072a85bde010`）均已合并；按 main `9330f3992f9d1bdd9566e9e1d6af2b3625349e92` 核对。`github.com/AlonaBot/AlonaBot/sdk` 的 `func (c *Context) Config() config.Values` 已返回本次调用冻结的配置文件视图，`sdk/profile.go` 负责接收覆盖全集；`github.com/AlonaBot/AlonaBot/sdk/service` 已有 `func Proto[In, Out proto.Message](target string) Spec[In, Out]` 与 `func (s Spec[In, Out]) Call(ctx context.Context, in In) (Out, error)`，可直接调用 `core.profile.list`、`current`、`assign`、`set`。请求与响应已由 `contracts/proto/alonabot/v1/profile.proto` 生成到 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`，Core 在 `internal/core/manage/profile_api.go` 登记固定服务并核验父调用与 Core Admin。
 
 `github.com/AlonaBot/AlonaBot/agent` 的入口仍为 `func New() *sdk.Plugin`；`agent.go` 的 OnStart 从 `p.Config()` 建立 `a.config`，`conversation.go` 仍从 `chatSettings.Model/Persona` 选择模型与人格，从 `a.config.imageCaptionModel` 选择转述模型。`settings.go` 的 `/agent on|off` 仍写 `chatSettings.Enabled`，`/persona`、`/provider` 仍经包内 `updateSettings` 写聊天记录；`scheduled.go` 的 `runScheduled` 也读取该记录。`chatSettings` 另有 `ResetGeneration`、`ImageCount`，供成员历史和图片运行状态使用。goal-159 已把自由对话注册为 `Filter(sdk.MessageFilter{TriggersConfig: "triggers", WakeWordsConfig: "wake_words"}).Rule(sdk.NotCommand())`，`memory.go` 的 `func conversationKey(c *sdk.Context) string` 已读取 `c.Config().Bool("member_sessions")`；本切片承接其命令切换与旧设置删除。
 
@@ -1277,7 +1277,7 @@ func (a *component) selectProfile(c *sdk.Context, name string) error
 
 ### goal-167 · T-12.20 官方 Agent 的插件页面
 
-状态：待派发。前置 T-04.17（PR #218，合并提交 `6d81be3e5b73e949b58b9a2890c8a4ea40c071fe`）、T-12.19（PR #247，合并提交 `f3959f6eb05060ea874544c6a786e114844f2d95`）均已合并；2026-11-18 按 main `f3959f6eb05060ea874544c6a786e114844f2d95` 核对，沿用原语句的目标、依据与要点。
+状态：已完成（PR #252），合并提交 `a413f54c`。以下保留派发时语句。派发时：前置 T-04.17（PR #218，合并提交 `6d81be3e5b73e949b58b9a2890c8a4ea40c071fe`）、T-12.19（PR #247，合并提交 `f3959f6eb05060ea874544c6a786e114844f2d95`）均已合并；2026-11-18 按 main `f3959f6eb05060ea874544c6a786e114844f2d95` 核对，沿用原语句的目标、依据与要点。
 
 `github.com/AlonaBot/AlonaBot/sdk/page` 已提供 `func Handler() http.Handler`，只响应路径末段为 `kit.css`、`kit.js` 的 GET；`github.com/AlonaBot/AlonaBot/sdk` 已有 `func (p *Plugin) Route(method, path string) *RouteBuilder`、`func (b *RouteBuilder) Page(title string) *RouteBuilder`、`func (b *RouteBuilder) Handle(h http.Handler)` 和 `func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request))`，路由缺省要求 Core 管理会话。PR #218 完成套件与页面桥的 SDK 一侧；插件页面宿主、父桥、ADMIN-API §7 的窗口与路径校验、D-177 的配置读取 `messages` 及 `translate` 由进行中的 goal-44（T-09.9）完成。本切片按该契约实现 Agent 页面与路由，浏览器联验依赖 goal-44，保持切片表的直接前置为 T-04.17、T-12.19。
 

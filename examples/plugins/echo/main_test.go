@@ -16,13 +16,9 @@ func TestEcho(t *testing.T) {
 		message.Chain{message.Text("hel"), message.Mention("bob"), message.ImageURL("https://example.com/image.png"), message.Text("lo")},
 	} {
 		result := h.Message(chat, user, content)
-		if len(result.Sends) != 1 || result.Sends[0].Text() != "hello" || len(result.Outcomes) != 2 {
+		result.RequireReply(t, "hello")
+		if len(result.Outcomes) != 2 {
 			t.Fatalf("echo = %+v", result)
-		}
-		for _, outcome := range result.Outcomes {
-			if outcome.Err != nil {
-				t.Fatalf("echo outcome = %+v", outcome)
-			}
 		}
 	}
 }

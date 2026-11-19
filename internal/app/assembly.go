@@ -33,6 +33,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/hook"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
+	"github.com/AlonaBot/AlonaBot/internal/core/idle"
 	"github.com/AlonaBot/AlonaBot/internal/core/journal"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/core/media"
@@ -210,6 +211,7 @@ type assembly struct {
 	buttons      *buttons.Service
 	bus          *bus.Bus
 	broker       *broker.Broker
+	messages     *message.Service
 	scheduler    *scheduler.Scheduler
 	http         *httpproxy.Server
 	global       *wire.Budget
@@ -221,8 +223,9 @@ type assembly struct {
 	tools        *tool.Catalog
 	settings     *settings.File
 	waker        *supervisor.Waker
-	wakeSessions sync.Map     // router.Caller → *wire.Session，只登记已安装独立插件。
-	schemaMu     sync.RWMutex // 保护按代次保留的只读选项声明。
+	idle         *idle.Controller // 仅 Core 运行循环访问。
+	wakeSessions sync.Map         // router.Caller → *wire.Session，只登记已安装独立插件。
+	schemaMu     sync.RWMutex     // 保护按代次保留的只读选项声明。
 	schemas      map[string]componentOptionSchemas
 }
 
@@ -239,6 +242,7 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, file *settings.File, messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)) (*assembly, error) {
 	a := &assembly{dir: dir, store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
 	a.waker = supervisor.NewWaker(supervisor.WakeOptions{Store: store, Global: a.global, QueueRequests: v.WakeQueueRequests, QueueBytes: v.WakeQueueBytes, Start: a.startWake})
+	a.idle = idle.New(v)
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
 	if err != nil {
@@ -290,7 +294,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		}
 	}
 	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Profile: a.resolveProfile, EnsureActive: a.ensureActive, RequestTimeout: v.RequestTimeout, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
-		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.settings.CommandPrefixes, CommandNames: p.CommandNames,
+		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.commandPrefixes, CommandNames: p.CommandNames,
 		Continuations: continuations, Metrics: a.metrics,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
@@ -301,6 +305,8 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
+	messages.SetReply(a.replySettings)
+	a.messages = messages
 	p.SetCommandsChanged(a.router.CommandsChanged)
 	continuations.Register(a.mux)
 	a.mux.Handle(wire.ServiceSend, messages.Send)
@@ -526,11 +532,6 @@ func (a *assembly) handler(r *runningComponent, install state.Install) wire.Hand
 			if r.attachErr != nil {
 				return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "plugin Session could not attach"}}
 			}
-			release, err := a.waker.AcquireActivity(r.id, r.instance.Session)
-			if err != nil {
-				return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: err.Error()}}
-			}
-			defer release()
 		}
 		switch in.Target {
 		case wire.ServiceTaskSet, wire.ServiceTaskCancel, wire.ServiceTaskList, wire.ServiceJobPause, wire.ServiceJobResume, wire.ServiceJobStatus:
@@ -873,9 +874,15 @@ func (a *assembly) detach(r *runningComponent) {
 		}
 	}
 	a.broker.Release(r.caller)
+	a.messages.Release(r.caller)
 }
 
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {
+	return c.stopComponentWithActivity(r, t0, timing, reason, nil)
+}
+
+// stopComponentWithActivity 在自动休眠时复核活动快照，成功后共用原资源收尾。
+func (c *Core) stopComponentWithActivity(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason, lastActivityAt *time.Time) error {
 	a := c.assembly
 	frozen := func(deadline time.Time) { a.scheduler.Drain(r.id); a.http.Drain(r.id, deadline); a.bus.Detach(r.id) }
 	detach := func() { a.detach(r) }
@@ -892,8 +899,17 @@ func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.Stop
 	}
 	if r.process != nil {
 		// supervisor 处理进程树、HTTP 与 Scheduler；其余映射由装配撤销。
-		result := r.process.Stop(t0, reason)
-		if reason == pb.StopReason_STOP_REASON_IDLE && result.Err != nil {
+		var result host.StopResult
+		if lastActivityAt != nil {
+			result = r.process.StopIdle(t0, *lastActivityAt)
+		} else {
+			result = r.process.Stop(t0, reason)
+		}
+		if result.Cancelled {
+			return result.Err
+		}
+		// 旧 Session 仍归 Waker 持有时，进程树清理尚未完成；落盘失败则继续归还 app 资源。
+		if reason == pb.StopReason_STOP_REASON_IDLE && result.Err != nil && (!r.activity || a.waker.Activity(r.id).Session == r.instance.Session) {
 			return result.Err
 		}
 		slog.Info("plugin stopped", "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)

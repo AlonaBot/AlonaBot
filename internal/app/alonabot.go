@@ -326,6 +326,15 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		development[entry.manifest.ID] = entry.manifest
 	}
 	version := Version()
+	managementReady := make(chan struct{}) // 启动回收完成后，全部设置发布交给运行循环。
+	managedSettings := c.assembly.settings.WithPublisher(func(change func() error) error {
+		select {
+		case <-managementReady:
+			return c.operation(c.lifetime, func(context.Context) error { return change() })
+		default:
+			return change() // 启动阶段尚无并发管理写入，也没有休眠实例。
+		}
+	})
 	bundles, err := bundledDirectory()
 	if err != nil {
 		return fail(err)
@@ -356,7 +365,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			}
 			return proto.Unmarshal(response.Payload.Bytes, reply)
 		})
-	}, Store: store, Settings: c.assembly.settings, Policy: c.assembly.policy, Router: c.assembly.router, Options: c.assembly.options, Tools: c.assembly.tools,
+	}, Store: store, Settings: managedSettings, Policy: c.assembly.policy, Router: c.assembly.router, Options: c.assembly.options, Tools: c.assembly.tools,
 		CoreInfo: func() (string, string) { return version, c.http.Addr },
 		Adapters: c.assembly.adapters, Scheduler: c.assembly.scheduler, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
 		InstanceStatus: func(ctx context.Context, id, instance string) (string, string, error) {
@@ -461,8 +470,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return fail(err)
 	}
 	managementHandler := management.Handler(authentication)
-	var managementWrites sync.Mutex        // 覆盖元数据写入与随后的引用回收。
-	managementReady := make(chan struct{}) // 启动回收完成后才接受管理写入。
+	var managementWrites sync.Mutex // 覆盖元数据写入与随后的引用回收。
 	administration := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 			managementHandler.ServeHTTP(w, r)
@@ -671,8 +679,20 @@ func (c *Core) run(ctx context.Context) {
 	}
 	ticker := time.NewTicker(c.values.MediaTTL)
 	defer ticker.Stop()
+	idleTicker := time.NewTicker(idleCheckInterval)
+	defer idleTicker.Stop()
+	publishedSleep := c.assembly.settings.Settings().Sleep
 running:
 	for {
+		if current := c.assembly.settings.Settings().Sleep; !reflect.DeepEqual(publishedSleep, current) {
+			publishedSleep = current
+			// 自动恢复 Adapter 也可能经 BindAdapter 重读文件；唤醒仍在循环外等待。
+			c.monitors.Go(func() {
+				if err := c.applySleep(ctx); err != nil {
+					slog.Error("apply published sleep settings failed", "error", err)
+				}
+			})
+		}
 		select {
 		case <-ctx.Done():
 			break running
@@ -765,6 +785,7 @@ running:
 			}
 		case operation := <-c.operations:
 			before := len(c.components)
+			sleep := c.assembly.settings.Settings().Sleep
 			operationContext, cancel := context.WithCancel(operation.ctx)
 			stopCancel := context.AfterFunc(ctx, cancel)
 			err := operation.apply(operationContext)
@@ -775,9 +796,14 @@ running:
 					c.watch(running, exits)
 				}
 			}
-			operation.result <- err
+			publishedSleep = c.assembly.settings.Settings().Sleep
+			operation.result <- operationResult{err: err, sleepChanged: !reflect.DeepEqual(sleep, publishedSleep)}
 		case <-ticker.C:
 			c.assembly.media.Sweep()
+		case now := <-idleTicker.C:
+			if err := c.checkIdle(ctx, now); err != nil {
+				slog.Error("idle check failed", "error", err)
+			}
 		}
 	}
 	c.err = errors.Join(c.err, c.shutdown())
@@ -1004,11 +1030,16 @@ func (c *Core) close() error {
 type coreOperation struct {
 	ctx    context.Context
 	apply  func(context.Context) error
-	result chan error
+	result chan operationResult
+}
+
+type operationResult struct {
+	err          error
+	sleepChanged bool
 }
 
 func (c *Core) operation(ctx context.Context, apply func(context.Context) error) error {
-	op := coreOperation{ctx: ctx, apply: apply, result: make(chan error, 1)}
+	op := coreOperation{ctx: ctx, apply: apply, result: make(chan operationResult, 1)}
 	select {
 	case c.operations <- op:
 	case <-ctx.Done():
@@ -1018,8 +1049,12 @@ func (c *Core) operation(ctx context.Context, apply func(context.Context) error)
 	}
 	// 已接纳的操作在取消后仍须交还资源所有权，调用者才可清理暂存包。
 	select {
-	case err := <-op.result:
-		return err
+	case result := <-op.result:
+		if result.sleepChanged {
+			// 文件锁与逐插件锁已归还；唤醒的 Start 可再次进入运行循环。
+			return errors.Join(result.err, c.applySleep(ctx))
+		}
+		return result.err
 	case <-c.stopping:
 		return errors.New("Core is stopping")
 	}

@@ -19,9 +19,9 @@ func (a *component) scheduled(c *sdk.Context, task AgentTask) error {
 	err := a.runScheduled(c, "task/"+key, task)
 	if err != nil {
 		if errcode.Of(err) == errcode.PermissionDenied {
-			c.Logger().WarnContext(c.Context(), "scheduled agent task denied", "task_key", key, "error", err)
+			c.Logger().WarnContext(c, "scheduled agent task denied", "task_key", key, "error", err)
 		} else {
-			c.Logger().ErrorContext(c.Context(), "scheduled agent task failed", "task_key", key, "error", err)
+			c.Logger().ErrorContext(c, "scheduled agent task failed", "task_key", key, "error", err)
 		}
 	}
 	return err
@@ -29,7 +29,7 @@ func (a *component) scheduled(c *sdk.Context, task AgentTask) error {
 
 func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask) error {
 	// 1. 使用调度调用的配置视图，历史仅使用独立的任务会话；不读取记忆服务。
-	db, err := gormdb.Open(c.Context())
+	db, err := gormdb.Open(c)
 	if err != nil {
 		return err
 	}
@@ -37,29 +37,32 @@ func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask)
 	if selected == nil || selected.modelType != modelChat {
 		return fmt.Errorf("scheduled task has no configured chat model")
 	}
-	history, err := recentConversation(c.Context(), session, a.config.historyEntries)
+	history, err := recentConversation(c, session, a.config.historyEntries)
 	if err != nil {
 		return err
 	}
 	var request provider.Request
-	if persona := a.config.persona(c.Config().String("default_persona")); persona != nil && persona.prompt != "" {
-		request.Messages = append(request.Messages, provider.Message{Role: roleSystem, Content: persona.prompt})
+	prompt, err := a.personaPrompt(c, c.Config().String("default_persona"))
+	if err != nil {
+		return err
 	}
-	if len(a.skills) > 0 {
-		request.Messages = append(request.Messages, provider.Message{Role: roleSystem, Content: a.skillPrompt(c.T("agent.skills.header"))})
+	request.Messages = append(request.Messages, provider.Message{Role: roleSystem, Content: prompt})
+	skills, _ := a.skillSnapshot()
+	if len(skills) > 0 {
+		request.Messages = append(request.Messages, provider.Message{Role: roleSystem, Content: skillPrompt(skills, c.T("agent.skills.header"))})
 	}
 	for _, entry := range history {
 		request.Messages = append(request.Messages, provider.Message{Role: entry.Role, Content: entry.Content})
 	}
 	request.Messages = append(request.Messages, provider.Message{Role: roleUser, Content: task.Prompt})
-	catalog, err := a.listTools(c)
+	catalog, err := a.listTools(c, skills)
 	if err != nil {
 		return err
 	}
 	// 2. 工具循环和发送继承 Core 的 job scope、期限与发信许可。
 	var assistant strings.Builder
-	stream := a.config.retryStream(c.Context(), c.Logger(), selected, nil)
-	if err := runToolLoop(c.Context(), db, request, catalog, stream, func(text string) error { assistant.WriteString(text); return nil }); err != nil {
+	stream := a.config.retryStream(c, c.Logger(), selected, nil)
+	if err := runToolLoop(c, db, request, catalog, stream, func(text string) error { assistant.WriteString(text); return nil }); err != nil {
 		return err
 	}
 	chunks, err := splitTaskText(assistant.String(), task.Target.TextLimit, task.Target.TextUnit)
@@ -67,7 +70,7 @@ func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask)
 		return err
 	}
 	for _, chunk := range chunks {
-		if _, err := sdk.Send(c.Context(), task.Target.session(), message.Text(chunk), sdk.Via(task.Target.Instance)); err != nil {
+		if _, err := sdk.Send(c, task.Target.session(), message.Text(chunk), sdk.Via(task.Target.Instance)); err != nil {
 			return err
 		}
 	}
@@ -79,8 +82,14 @@ func (a *component) runScheduled(c *sdk.Context, session string, task AgentTask)
 	if err != nil {
 		return err
 	}
-	_, err = conversation.Append(c.Context(), session, userJSON, assistantJSON)
-	return err
+	// 正文与目录登记共用会话锁，避免页面把尚未完成的登记当作空会话清走。
+	lock := a.sessionLock(session)
+	lock.Lock()
+	defer lock.Unlock()
+	if _, err := conversation.Append(c, session, userJSON, assistantJSON); err != nil {
+		return err
+	}
+	return db.WithContext(c).Save(&conversationRecord{Key: session}).Error
 }
 
 // splitTaskText 沿用 Context.Stream 的计量方式，按创建时快照在码点边界分段。

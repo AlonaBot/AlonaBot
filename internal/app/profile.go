@@ -14,6 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/profile"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -77,8 +78,8 @@ func (a *assembly) profiles(ctx context.Context, candidateID string, candidate *
 }
 
 func targetProfile(profiles *profile.Service, target *pb.Target) profile.Profile {
-	if target == nil {
-		return profiles.Resolve("", "")
+	if target.GetChatId() == "" {
+		return profiles.Resolve(target.GetAdapterInstanceId(), "")
 	}
 	escape := strings.NewReplacer("%", "%25", "#", "%23")
 	session := target.GetAdapterId() + ":" + escape.Replace(target.GetChatId())
@@ -206,4 +207,22 @@ func (a *assembly) notifyProfileOverrides(ctx context.Context, id string) (err e
 		return errors.New("invalid profile overrides response metadata")
 	}
 	return proto.Unmarshal(response.Payload.Bytes, reply)
+}
+
+func (a *assembly) replySettings(ctx context.Context, target *pb.Target) (settings.Reply, error) {
+	profiles, err := a.profiles(ctx, "", nil)
+	if err != nil {
+		return settings.Reply{}, err
+	}
+	_, reply, err := profiles.EffectivePlatform(targetProfile(profiles, target).ID)
+	return reply, err
+}
+
+func (a *assembly) commandPrefixes(ctx context.Context, target *pb.Target) ([]string, error) {
+	profiles, err := a.profiles(ctx, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	prefixes, _, err := profiles.EffectivePlatform(targetProfile(profiles, target).ID)
+	return prefixes, err
 }
