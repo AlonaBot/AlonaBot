@@ -760,6 +760,7 @@
     "runtimeReasonUpdate": "更新",
     "runtimeReasonCoreShutdown": "Core 关闭",
     "sleepSavedPolicy": "已保存休眠策略",
-    "pluginLogLevelDesc": "只改变这个插件输出哪些日志，立即生效"
+    "pluginLogLevelDesc": "只改变这个插件输出哪些日志，立即生效",
+    "sleepSavedSettings": "已保存运行设置"
   }
 }
