@@ -20,24 +20,26 @@ import (
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
 type Candidates interface {
-	Reload(ctx context.Context, id string) error
-	Update(ctx context.Context, id string, staged *packages.Candidate) error
-	Rollback(ctx context.Context, id, generation string) error
+	Reload(ctx context.Context, id string, manualMigrationApproved bool) error
+	Update(ctx context.Context, id string, staged *packages.Candidate, manualMigrationApproved bool) error
+	Rollback(ctx context.Context, id, generation string, manualMigrationApproved bool) error
 }
 
 type unsupportedCandidates struct{}
 
-func (unsupportedCandidates) Reload(context.Context, string) error { return unsupported() }
-func (unsupportedCandidates) Update(context.Context, string, *packages.Candidate) error {
+func (unsupportedCandidates) Reload(context.Context, string, bool) error { return unsupported() }
+func (unsupportedCandidates) Update(context.Context, string, *packages.Candidate, bool) error {
 	return unsupported()
 }
-func (unsupportedCandidates) Rollback(context.Context, string, string) error { return unsupported() }
+func (unsupportedCandidates) Rollback(context.Context, string, string, bool) error {
+	return unsupported()
+}
 func unsupported() error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "candidate orchestration is not available"}
 }
 
-// Reload 校验安装与运行状态，再交给候选编排器。
-func (s *Service) Reload(ctx context.Context, id string) (err error) {
+// Reload 校验安装与运行状态，再交给候选编排器；显式维护许可允许已停用的 external 组件。
+func (s *Service) Reload(ctx context.Context, id string, manualMigrationApproved bool) (err error) {
 	defer finish(&err)
 	unlock := s.lock(id)
 	defer unlock()
@@ -48,10 +50,13 @@ func (s *Service) Reload(ctx context.Context, id string) (err error) {
 	if in.Role == "webui" && in.Entrypoint == "" {
 		return precondition("webui has no process to reload")
 	}
-	if s.opt.State(id) != "Activated" {
+	if !manualMigrationApproved && s.opt.State(id) != "Activated" {
 		return precondition("reload requires an activated component")
 	}
 	if in.Source == "dev" {
+		if manualMigrationApproved {
+			return precondition("manual migration requires an installed external candidate")
+		}
 		pending, found, err := s.configurations().Pending(ctx, id)
 		if err != nil {
 			return err
@@ -62,13 +67,13 @@ func (s *Service) Reload(ctx context.Context, id string) (err error) {
 			if err := replaceDevelopmentConfig(name, pending.ConfigJSON); err != nil {
 				return err
 			}
-			if err := s.opt.Candidates.Reload(ctx, id); err != nil {
+			if err := s.opt.Candidates.Reload(ctx, id, manualMigrationApproved); err != nil {
 				return err
 			}
 			return s.configurations().Discard(ctx, id)
 		}
 	}
-	return s.opt.Candidates.Reload(ctx, id)
+	return s.opt.Candidates.Reload(ctx, id, manualMigrationApproved)
 }
 
 // UpdateResult 返回本次更新的清单警告。
@@ -77,7 +82,7 @@ type UpdateResult struct {
 }
 
 // Update 验证来源、公钥、pin 与降版影响，再移交暂存候选。
-func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (result UpdateResult, err error) {
+func (s *Service) Update(ctx context.Context, id string, req InstallRequest, manualMigrationApproved bool) (result UpdateResult, err error) {
 	defer finish(&err)
 	s.catalog.Lock()
 	defer s.catalog.Unlock()
@@ -151,6 +156,9 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 	firstWebUIProcess := in.Role == state.RoleWebUI && in.Entrypoint == "" && m.Entrypoint != ""
 	if in.Role == state.RoleWebUI && in.Entrypoint == "" && m.Entrypoint == "" || active == "" && !firstWebUIProcess {
 		// 直接替换包时不会进入 Journal，仍须遵守更新的维护门槛。
+		if manualMigrationApproved {
+			return result, precondition("manual migration requires an active process generation")
+		}
 		previous, err := s.manifest(ctx, id)
 		if err != nil {
 			return result, err
@@ -167,7 +175,7 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest) (re
 		}
 		return result, s.opt.Store.ReplaceProgram(ctx, id, m.Version, m.Entrypoint, key, digest)
 	}
-	return result, s.opt.Candidates.Update(ctx, id, candidate)
+	return result, s.opt.Candidates.Update(ctx, id, candidate, manualMigrationApproved)
 }
 
 func checkPublisher(bound, candidate string, confirm bool) error {
@@ -187,7 +195,7 @@ func checkPublisher(bound, candidate string, confirm bool) error {
 }
 
 // Rollback 按目标保留代次检查依赖与丢弃写入的确认，再交给候选编排器。
-func (s *Service) Rollback(ctx context.Context, id, generation string, confirm bool) (err error) {
+func (s *Service) Rollback(ctx context.Context, id, generation string, confirm, manualMigrationApproved bool) (err error) {
 	defer finish(&err)
 	s.catalog.Lock()
 	defer s.catalog.Unlock()
@@ -227,7 +235,7 @@ func (s *Service) Rollback(ctx context.Context, id, generation string, confirm b
 	if err := s.dependencies(ctx, m); err != nil {
 		return err
 	}
-	return s.opt.Candidates.Rollback(ctx, id, generation)
+	return s.opt.Candidates.Rollback(ctx, id, generation, manualMigrationApproved)
 }
 
 func (s *Service) rollbackManifest(ctx context.Context, in state.Install, generation string) (*manifest.Manifest, error) {

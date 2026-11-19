@@ -67,15 +67,20 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 				return
 			}
 			var request struct {
-				ID         string         `json:"id"`
-				Confirm    bool           `json:"confirm"`
-				Purge      PurgeScope     `json:"purge"`
-				Constraint string         `json:"constraint"`
-				Generation string         `json:"generation"`
-				Install    InstallRequest `json:"install"`
+				ID                      string         `json:"id"`
+				ManualMigrationApproved bool           `json:"manual_migration_approved"`
+				Confirm                 bool           `json:"confirm"`
+				Purge                   PurgeScope     `json:"purge"`
+				Constraint              string         `json:"constraint"`
+				Generation              string         `json:"generation"`
+				Install                 InstallRequest `json:"install"`
 			}
 			if err := decode(r, &request); err != nil {
 				respond(w, nil, err)
+				return
+			}
+			if request.ManualMigrationApproved && action != "reload" && action != "update" && action != "rollback" {
+				respond(w, nil, invalid("manual_migration_approved requires reload, update or rollback"))
 				return
 			}
 			var err error
@@ -91,14 +96,14 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 			case "pin":
 				err = s.Pin(r.Context(), request.ID, request.Constraint)
 			case "reload":
-				err = s.Reload(r.Context(), request.ID)
+				err = s.Reload(r.Context(), request.ID, request.ManualMigrationApproved)
 			case "update":
 				request.Install.Confirm = request.Confirm
-				result, err := s.Update(r.Context(), request.ID, request.Install)
+				result, err := s.Update(r.Context(), request.ID, request.Install, request.ManualMigrationApproved)
 				respond(w, result, err)
 				return
 			case "rollback":
-				err = s.Rollback(r.Context(), request.ID, request.Generation, request.Confirm)
+				err = s.Rollback(r.Context(), request.ID, request.Generation, request.Confirm, request.ManualMigrationApproved)
 			}
 			respond(w, struct{}{}, err)
 		})
