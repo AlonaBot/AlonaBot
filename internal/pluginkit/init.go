@@ -82,8 +82,11 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	case "webui":
 		files["assets/index.html"] = []byte("<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>AlonaBot WebUI</title><main><h1>AlonaBot WebUI</h1></main></html>\n")
 	}
-	// 2. 模板与 Go module 在临时目录准备完成，再发布到空目录。
-	staging, err := os.MkdirTemp("", "alonabot-init-*")
+	// 2. 在目标目录内暂存模板与 Go module，确保发布时 Rename 位于同一文件系统。
+	if err := os.MkdirAll(dir, privateMode); err != nil {
+		return false, err
+	}
+	staging, err := os.MkdirTemp(dir, ".alonabot-init-*")
 	if err != nil {
 		return false, err
 	}
@@ -122,15 +125,12 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 			return false, err
 		}
 	}
-	if err := os.MkdirAll(dir, privateMode); err != nil {
-		return false, err
-	}
-	// 再读一次，避免准备模板期间覆盖作者刚写入的文件。
+	// 再读一次，只允许本次暂存目录，避免覆盖准备模板期间作者刚写入的文件。
 	entries, err = os.ReadDir(dir)
 	if err != nil {
 		return false, err
 	}
-	if len(entries) != 0 {
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(staging) {
 		return false, fmt.Errorf("directory %s is not empty", dir)
 	}
 	entries, err = os.ReadDir(staging)
