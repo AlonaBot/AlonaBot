@@ -495,7 +495,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ### 15.2 Agent 插件页面与数据路由（D-170、D-182）
 
-官方 Agent 的实际 ID 为 `alonabot-agent-official`，以下路径相对于 `/plugins/{agent_id}/`。全部路由要求 Core 管理 Cookie，非 GET 请求沿用 Origin 与 `X-Alonabot-CSRF` 校验；鉴权拒绝沿用 Core 代理响应。五个页面通过 `window.AlonaBot.request` 访问本组件接口，标题取 Agent 的 `pages`，文案取 `messages`；父桥及配置读取 messages 见 §7、§12.1。
+官方 Agent 的实际 ID 为 `alonabot-agent-official`，以下路径相对于 `/plugins/{agent_id}/`。`pages/kit.css`、`pages/kit.js` 与 `pages/assets/` 以公开静态资源模式提供（D-183），其余路由要求 Core 管理 Cookie，非 GET 请求沿用 Origin 与 `X-Alonabot-CSRF` 校验；鉴权拒绝沿用 Core 代理响应。五个页面通过 `window.AlonaBot.request` 访问本组件接口，标题取 Agent 的 `pages`，文案取 `messages`；父桥及配置读取 messages 见 §7、§12.1。
 
 | 方法与子路径 | 内容 |
 | --- | --- |
