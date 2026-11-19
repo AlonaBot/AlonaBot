@@ -126,8 +126,8 @@
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 已完成（PR #253） |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 已完成（PR #256） |
-| goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 待派发 |
-| goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
+| goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 已完成（PR #269） |
+| goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 待派发 |
 
 ## 第 1 波
 
@@ -8745,7 +8745,7 @@ internal/core/state
 
 ### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
 
-状态：待派发。S-02.2（goal-171，PR #249，`18f8af95`）、T-09.14（goal-93，PR #192，`0cff77c`）、S-03.1（goal-172，PR #256，`216bb7f9`）均已合并。2026-11-19 按 main `216bb7f9` 核对设置、策略、状态、管理装配及 Scheduler 的 EnsureActive/Suspend/Jobs/SetJobPaused 接口，与下述签名一致。组件列表的 `Package.RuntimeState` 与 `State=Suspended` 已实现，本切片保留并验收。
+状态：已完成（PR #269），合并提交 `f4bfe5b8`。以下保留派发时语句。派发时：S-02.2（goal-171，PR #249，`18f8af95`）、T-09.14（goal-93，PR #192，`0cff77c`）、S-03.1（goal-172，PR #256，`216bb7f9`）均已合并。2026-11-19 按 main `216bb7f9` 核对设置、策略、状态、管理装配及 Scheduler 的 EnsureActive/Suspend/Jobs/SetJobPaused 接口，与下述签名一致。组件列表的 `Package.RuntimeState` 与 `State=Suspended` 已实现，本切片保留并验收。
 
 无路由快照的查询行为与本分支接入的 ADMIN-API §24 一致：前四类常驻原因可直接判定；需要路由而无已提交快照时返回 412 / FAILED_PRECONDITION，保持读取无唤醒副作用。派发语句与查询契约随本切片一并交付。
 
@@ -8804,7 +8804,7 @@ internal/core/state
 
 ### goal-174 · S-06.2 休眠指标、故障注入与固定机器验收
 
-状态：等待前置（S-06.1 / goal-173）。以下语句已补齐指标、装配、测量与测试约定；管理接口参考 goal-173 候选 `b44051a9c81f01b8fa9cd4df313acdd083c48bef`，待其合并后由审查者按 main 复核六个端点、CLI、设置发布与运行诊断接口，再改为待派发。固定机器测量与 WebUI 页面分别记录证据。
+状态：待派发。前置 S-06.1（goal-173，PR #269，`f4bfe5b8`）已合并。按 main `f4bfe5b8` 复核六个管理端点、`sleep-policy` CLI、设置锁外发布与运行诊断；以下指标、装配、测量与测试约定和当前代码一致。固定 linux/amd64 机器由审查者预约，CI 与采样串行；WebUI 页面由 goal-175 独立接续。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-174（切片 S-06.2：休眠指标、故障注入与固定机器验收）。goal 目录 goal-174，分支 goal-174，worktree .worktrees/goal-174，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
