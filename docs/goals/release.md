@@ -290,7 +290,7 @@
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 只作为可用环境候选，执行时核对实际身份与架构；Windows/amd64、darwin/amd64 的实际执行环境仍待落实。
+状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口仍待落实。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -326,7 +326,7 @@
 
 ### goal-48 · T-10.3 资源比较报告与常驻内存预算核对
 
-状态：等待前置（T-10.1 / goal-46）。需要固定 linux/amd64 机器与等价负载；NoneBot2 直接依赖候选为 nonebot2[fastapi,httpx]==2.5.0、nonebot-adapter-telegram==0.1.0b21（2026-11-19 从 PyPI 元数据核实，Python ≥3.10）。本轮未添加、安装或锁定依赖，等待维护者明确批准。
+状态：等待前置（T-10.1 / goal-46）。需要固定 linux/amd64 机器与等价负载；用户于 2026-11-19 已明确批准 nonebot2[fastapi,httpx]==2.5.0、nonebot-adapter-telegram==0.1.0b21，仅用于 bench/nonebot2 的独立 uv 环境（同日从 PyPI 元数据核实，Python ≥3.10）。正式实施仍等待 goal-46，本轮未添加、安装或锁定依赖。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告与常驻内存预算核对）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
