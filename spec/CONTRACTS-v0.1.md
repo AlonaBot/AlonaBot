@@ -375,7 +375,9 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 受管 SQLite：下载/校验候选 → 冻结旧版新派发并排空 → 停止旧进程及合作型后台资源，确认连接释放 → 使用 SQLite Backup API 将旧 Active DB 备份到独立候选文件 → SDK 配置校验/迁移/OnStart → PREPARED → 同一 Core 事务更新 ActiveGeneration 与 COMMITTED → Activate/OnReady/Activated 后开放路由。副本、程序和不可变配置先持久化再提交引用；备份/空间/校验失败不提交。不能只拷贝运行中 WAL 数据库的主文件。
 - 提交前失败：保留旧 DB/程序/配置，重新启动旧版的**新 Session**。COMMITTED 后失败：新代次仍为权威，标记 Degraded 并关闭新派发；不自动切回已过时的旧数据。Core 崩溃恢复按 Journal 和 Active 指针判定，任意时刻只有一个代次可公开接单；完整时序见 §12。
 - Bootstrap 的 database_descriptor 由 Core 下发 `activation_reason`（first_install/resume/reload/update/rollback）与 `manual_migration_approved`；后者只对经管理员显式维护许可的本次 Session/Generation/DB 为 true，不由插件请求自行设置。SDK 不需要在 Preparing 发起通用业务 RPC 获取许可。
-- 声明 `prepare_effects=external` 的插件在准备期会改动受管 SQLite 之外的数据，候选副本无法隔离。首次安装照常准备；已有安装的 reload、update 与 rollback 返回 NEEDS_MANUAL_MIGRATION。管理员显式进入维护、停止插件并自行完成外部数据的备份后，Core 才以 `manual_migration_approved=true` 准备候选；失败保留停机状态，按该插件的恢复步骤处理，不自动重跑未知副作用；成功后照常完成 Prepared 与激活。普通 restart 与崩溃恢复（`activation_reason=resume`）不建立候选，不受此门槛限制。`prepare_effects` 是可信代码的声明，Core 不能静态证明任意 SQL 没有副作用。
+- 声明 `prepare_effects=external` 的插件在准备期会改动受管 SQLite 之外的数据，候选副本无法隔离。首次安装照常准备；已有安装的 reload、update 与 rollback 返回 NEEDS_MANUAL_MIGRATION。管理员显式进入维护、停止插件并自行完成外部数据的备份后，Core 才以 `manual_migration_approved=true` 准备候选；失败保留停机状态，按该插件的恢复步骤处理，不自动重跑未知副作用；成功后照常完成 Prepared 与激活，再停止候选，仍保持停用；管理员检查外部数据后显式 enable，以同代次 resume 建立业务 Session。
+- 维护入口为经过管理认证的 reload/update/rollback 请求顶层 `manual_migration_approved=true`（CLI `--manual-migration-approved`），表示管理员确认已自行备份外部数据，与普通 `confirm`/`--yes` 分开。请求前必须成功 disable，具有旧 Active，且旧或目标包声明 external；Core 在串行候选操作内复核停用记录、无运行 Session 与 runtime.lock。许可只存在于本次请求和候选 Bootstrap，不写入安装记录或恢复令牌，首装及后续 resume 均为 false。提交前失败保留旧 Active；提交后失败保留新 Active；两者保持停用且不重跑迁移，管理员按插件说明恢复外部数据后重新决定操作。
+- 普通 restart 与崩溃恢复（`activation_reason=resume`）不建立候选，不受此门槛限制。`prepare_effects` 是可信代码的声明，Core 不能静态证明任意 SQL 没有副作用。
 - 人工整机备份须在 Core 与插件停止后覆盖完整 data_dir，以及插件自管的外部数据；单独备份 state.sqlite 不包含插件业务数据。受管 SQLite 的在线副本仍使用 Backup API。不能删除 Active、恢复中 Journal 或保留回退代次引用的程序/DB/配置/secret；候选失败清理只作用于无引用资源。
 
 依据：[GORM 连接文档](https://gorm.io/docs/connecting_to_the_database.html)、[libtnb SQLite 驱动](https://github.com/libtnb/sqlite)、[modernc Backup API](https://pkg.go.dev/modernc.org/sqlite#Backup)、[SQLite Backup](https://sqlite.org/backup.html)、[SQLite PRAGMA](https://www.sqlite.org/pragma.html)、[database/sql](https://pkg.go.dev/database/sql)。这些主源支持选型与约束，AlonaBot 集成测试仍待实施。
@@ -531,7 +533,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `diagnose` | 生成诊断包（§14.7）：`--since`（正时长，缺省 24h）、`--no-logs`、`--no-settings`、`--no-components`（至少保留一组）、`--no-redact`、`-o` / `--output`（缺省为当前目录下的 `alonabot-diagnostics-<UTC 时间>.zip`）。在线经管理 API，连接被拒绝后尝试停机只读导出。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
 | `sleep-policy [ID] [never\|auto\|时长]` | 无参数列出全局模式、全局空闲时长及各插件的配置策略、生效策略、运行状态与最近原因；只有 ID 时读取该插件。`never` 写入 `sleep.plugins.<ID>`，`auto` 删除该覆盖以跟随准入规则与全局值，正时长（Go duration，例如 `15m`）写入插件覆盖。经 ADMIN-API §24 的同一管理服务修改，立即生效。全局模式与全局时长经 Core 设置 API/WebUI 修改。 |
-| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
+| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件须按 §6.3 显式维护，缺少许可返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
 管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。
 

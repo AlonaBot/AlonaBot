@@ -970,7 +970,7 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	}
 	if generation == "" {
 		return c.prepareCandidate(ctx, install.PluginID, func(ctx context.Context) (*journal.Result, error) {
-			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil)
+			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil, false)
 		})
 	}
 	var snapshot state.RouteSnapshot
@@ -1070,7 +1070,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		}
 	}
 	// 无旧 Active 的静态 WebUI 转进程时，原启用状态决定是否装配业务入口。
-	if (kind == journal.KindUpdate || kind == journal.KindRollback) && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
+	if kind != journal.KindFirstInstall && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)
@@ -1120,7 +1120,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 type managedCandidates struct{ core *Core }
 
 // Reload 串行激活正式组件的 Pending；缺省导入快照，开发组件沿直接停止与启动路径执行。
-func (m managedCandidates) Reload(ctx context.Context, id string) error {
+func (m managedCandidates) Reload(ctx context.Context, id string, manualMigrationApproved bool) error {
 	return m.core.operation(ctx, func(ctx context.Context) error {
 		in, err := m.core.store.GetInstall(ctx, id)
 		if err != nil {
@@ -1163,16 +1163,16 @@ func (m managedCandidates) Reload(ctx context.Context, id string) error {
 			return nil
 		}
 		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
-			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil)
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil, manualMigrationApproved)
 		})
 	})
 }
 
 // Update 把已预检的候选交给一次 Core 操作。
-func (m managedCandidates) Update(ctx context.Context, id string, staged *packages.Candidate) error {
+func (m managedCandidates) Update(ctx context.Context, id string, staged *packages.Candidate, manualMigrationApproved bool) error {
 	return m.core.operation(ctx, func(ctx context.Context) error {
 		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
-			return m.core.assembly.journal.Prepare(ctx, id, journal.KindUpdate, staged)
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindUpdate, staged, manualMigrationApproved)
 		})
 	})
 }
@@ -1189,10 +1189,10 @@ func (m managedCandidates) apply(ctx context.Context, id string, prepare func(co
 }
 
 // Rollback 串行准备保留代次的副本，沿用候选接入、提交与失败停止路径。
-func (m managedCandidates) Rollback(ctx context.Context, id, generation string) error {
+func (m managedCandidates) Rollback(ctx context.Context, id, generation string, manualMigrationApproved bool) error {
 	return m.core.operation(ctx, func(ctx context.Context) error {
 		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
-			return m.core.assembly.journal.PrepareRollback(ctx, id, generation)
+			return m.core.assembly.journal.PrepareRollback(ctx, id, generation, manualMigrationApproved)
 		})
 	})
 }

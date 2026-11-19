@@ -411,3 +411,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-18：**D-179**：空闲退出复用正常停止，不新增排空握手或 HTTP 完成字段。
 - 2026-11-18：**D-180、D-181**：SDK 注册去掉 route ID 参数、Context 实现 context.Context、Reply 可带片段、页面自动提供套件、`Result.RequireReply`；`alonabot run` 内置终端对话、开发目录缺省重载、`init` 生成可直接运行的工程。新增 T-04.20（goal-178）与 T-13.7（goal-179），V-148、V-149。文档站改为单一侧栏并移除面向维护者的规格入口，由审查者在 AlonaBot/docs 仓库重写。
 - 2026-11-18：**D-182**：`sdk.ProfileOverrides` 只读访问覆盖值；Agent 自记会话键；缺省系统提示为内置常量。由 T-12.20（goal-167）实现。
+- 2026-11-19：**external 显式维护入口细化（CONTRACTS §6.3）**：管理 reload/update/rollback 增加独立于普通确认的 `manual_migration_approved`（CLI `--manual-migration-approved`），声明已自行备份外部数据。维护操作要求先成功 disable 且具有旧 Active，在串行候选操作内复核状态与系统锁；复用现有停用意图和 Journal 的 WasEnabled/WasRunning，许可仅沿本次请求传至候选 Bootstrap，避免持久通用令牌。成功激活后停止候选，检查后由管理员 enable；失败与 Core 恢复均保持停用，按提交点保留权威代次且不重跑未知外部副作用。同步 ADMIN-API §3.2、T-08/T-09、V-31/V-39，协议字段沿用现有 WIRE。
