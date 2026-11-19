@@ -241,7 +241,12 @@ func assemble(store *state.Store, dir string, v tune.Values, file *settings.File
 
 func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, file *settings.File, messageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)) (*assembly, error) {
 	a := &assembly{dir: dir, store: store, settings: file, adapters: coreadapter.NewRegistry(), mux: router.NewMux(), global: wire.NewBudget(v.CoreMaxPayload), metrics: &metrics.Counters{}}
-	a.waker = supervisor.NewWaker(supervisor.WakeOptions{Store: store, Global: a.global, QueueRequests: v.WakeQueueRequests, QueueBytes: v.WakeQueueBytes, Start: a.startWake})
+	a.waker = supervisor.NewWaker(supervisor.WakeOptions{
+		Store: store, Global: a.global, QueueRequests: v.WakeQueueRequests, QueueBytes: v.WakeQueueBytes, Start: a.startWake,
+		Count: func(pluginID string, reason string) {
+			a.metrics.Add(pluginID, metrics.Kind("wake"), metrics.Reason(reason))
+		},
+	})
 	a.idle = idle.New(v)
 	var err error
 	a.media, err = media.Open(filepath.Join(dir, "media"), media.NewLimits(v), time.Now)
