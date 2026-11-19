@@ -16,13 +16,13 @@
 | T-09.15 | goal-94 | WebUI 日志页：按来源、级别、trace 与日期查看，实时订阅与历史查询，修改输出级别；只有终端视图（每行一条完整记录，CRITICAL 整行紫色、ERROR 红色、WARNING 黄色）、筛选弹出面板（级别多选含 DEBUG 与 CRITICAL、来源分 Core/插件/账号多选、日期，D-158）、CRITICAL、ERROR 与 WARNING 的计数、清空已载入的记录、导出诊断包对话框（D-156） | T-09 步骤 7（日志） | T-09.8、T-09.10、T-09.19、T-02.5 | V-62、V-63、V-127、V-129 的页面分项 | 已完成（PR #243；TEST-MATRIX §3.2） |
 | T-09.18 | goal-146 | WebUI 模型页：侧栏一级入口，按类型筛选，按提供商分组列出模型，添加提供商对话框（预设、连接、拉取模型列表与勾选），测试与当天用量（D-154） | T-09 步骤 7（模型页） | T-09.8、T-09.14、T-12.16 | V-126 | 已完成（PR #244；TEST-MATRIX §3.2） |
 | T-09.23 | goal-156 | 官方 WebUI 的后台进程与页面：按小时分桶统计收发消息、命令触发与各账号，记录见过的用户，抓取与缓存插件源、检查更新；总览图表、商店（插件源切换、安装、发布入口）、插件「数据」视图（数据库表格、KV/文件存储、Agent 会话摘要与清除）、权限「用户」页、版本记录、定时任务开关、侧栏的插件页面、更新后的更新内容对话框（记住看过的版本）与更新前的 Release 正文预览（D-162～D-164、D-166、D-176、D-178） | T-09 步骤 7（WebUI 后台） | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | V-136，V-138 的页面分项，V-134、V-135 的页面分项 | 已完成（PR #245） |
-| T-09.25 | goal-165 | WebUI 配置文件页：一层页面、切换与使用范围、AI、平台与消息与插件三个分区、没有 Agent 的状态，插件配置页的配置文件切换，系统设置去掉命令前缀（D-168） | T-09 步骤 7（配置文件页） | T-04.19、T-11.6、T-12.19、T-09.18 | V-145 | 未开始 |
+| T-09.25 | goal-165 | WebUI 配置文件页：一层页面、切换与使用范围、AI、平台与消息与插件三个分区、没有 Agent 的状态，插件配置页的配置文件切换，系统设置去掉命令前缀（D-168） | T-09 步骤 7（配置文件页） | T-04.19、T-11.6、T-12.19、T-09.18 | V-145 | 已完成（PR #271；TEST-MATRIX §3.2） |
 | T-09.26 | goal-166 | WebUI 品牌、视觉令牌与外壳：浅色与深色 CSS 变量、标志与站点图标、JetBrains Mono、侧栏（展开与收起、拖动排序、「更多」、版本号与「关于」）、顶栏全局搜索、浏览器主题偏好与手机导航，批准的前端依赖的引入（D-169） | T-09 步骤 7（品牌与静态资源） | T-08.7 | V-146 | 已完成（PR #217） |
 | S-06.3 | goal-175 | 休眠策略与运行状态的页面：插件详情「高级」的休眠策略与锁定原因、系统设置的运行模式与空闲时长、运行状态与最近原因（PLAN §7 S-06、ADMIN-API §24） | PLAN §7 S-06 步骤 1 | T-09.8、T-09.9、S-06.1 | V-81 的页面分项 | 未开始 |
 
 ## 3. 页面接入外壳
 
-- 在 `web/admin/src/routes.tsx` 的 `routes` 登记 `RouteEntry`：`id`、`path`、`label`、`icon: LucideIcon`、`group: 'main' | 'bottom'`、`render: () => JSX.Element`。`label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 均定义的 `messages` 键，供导航、顶栏标题和搜索共用。已登记总览、插件、账号、模型、会话、日志、权限与系统设置，权限子页共用同一导航入口；`/dev/forms` 仅在开发模式登记。登录后访问 `/` 跳转 `/overview`，未登录访问管理页跳转 `/login`。
+- 在 `web/admin/src/routes.tsx` 的 `routes` 登记 `RouteEntry`：`id`、`path`、`label`、`icon: LucideIcon`、`group: 'main' | 'bottom'`、`render: () => JSX.Element`。`label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 均定义的 `messages` 键，供导航、顶栏标题和搜索共用。已登记总览、插件、账号、模型、配置文件、会话、日志、权限与系统设置，权限子页共用同一导航入口；`/dev/forms` 仅在开发模式登记。登录后访问 `/` 跳转 `/overview`，未登录访问管理页跳转 `/login`。
 - 桌面侧栏将 `main` 条目的顺序、隐藏状态和侧栏折叠偏好保存在浏览器中，`bottom` 条目放在底部。侧栏以 `100vh` 固定高度贴顶，导航内部滚动，底部保留版本号与「关于」入口。手机固定入口按 `overview`、`plugins`、`profiles`、`logs` 的顺序取已登记的 `main` 条目；其余条目（含 `bottom`）只出现在「更多」，无剩余条目时省略「更多」。
 - `AppShell({ version, onLogout?, coreUpdate?, coreUpdateFailed?, children })` 装配导航和搜索，页面由入口按路径选择后作为 `children` 传入；传入 `onLogout` 才显示退出入口。`coreUpdate` 为 `{ version, releaseURL }`，`coreUpdateFailed` 在侧栏更新处显示局部失败提示。站内跳转用 `router.ts` 的 `navigate(path, options?)` 或 `Link`。`Link` 的 props 为 `to`、可选的 `className` 和 `children`；手机「更多」使用 Radix 菜单项的 `onSelect` 调用 `navigate`。
 - 已登记路由自动加入全局搜索，匹配当前语言的标题和路径。页面可通过 `SearchContext.register(items: SearchItem[]): () => void` 补充搜索项，卸载时调用返回的注销函数。搜索项包含 `id`、`title`、`section`、`run: () => void` 与可选 `keywords`；按标题和关键词做大小写不敏感的子串匹配，结果按 `section` 分组。按 Enter 或点击执行后清除查询、焦点和悬停状态。
@@ -31,5 +31,7 @@
 T-09.23 负责详情页的数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；会话正文归 T-12.20（goal-167）。T-09.9 保留配置、任务与插件页面入口，共用 `/permissions/users` 用户页。
 
 T-09.9 的父桥按 [ADMIN-API §7](../ADMIN-API.md#7-插件页面-postmessage-桥) 在每次 `translate` 请求时用当前语言和请求参数返回 `text`；`hello` 交付语言、主题与令牌，`locale` 事件交付语言。V-130 的浏览器分项用沙箱 iframe 验证 showcase 首次翻译、切换语言后重新取词、主题与快捷键转发。
+
+T-09.25 的工具覆盖候选按 [ADMIN-API §18](../ADMIN-API.md#18-工具调用策略) 的 `identities` 展开为 §23 的独立工具与操作；同名两类分别编辑，仅有旧全局覆盖的空身份行没有新增候选。已保存的配置文件覆盖按原身份继续读写。T-09.9 与 T-09.25 共用 `src/api/admin.ts` 的 `ToolPolicy.identities: ('tool' | 'operation')[]`。
 
 T-09.9 已接入 `PluginConfigPanel({id})` 与共享 `ConfigForm`：编辑基线为 `pending.config ?? active`，保存使用 `active_generation`，409 保留草稿并允许显式采用最新配置；secret 再认证、动态选项、回复示例及双语字段沿用同一表单。插件详情标签单行横滚，Agent 页面入口为 `pages/memory`（记忆），Core 数据标签保留。父桥在 layout effect 提前绑定，保留首次 hello 的主题与语言订阅；实际页面与浏览器证据见 TEST-MATRIX §3.2。

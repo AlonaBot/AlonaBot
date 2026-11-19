@@ -207,47 +207,63 @@
 
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
-状态：等待前置（T-09.11）。T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）已合并。语句中 goal-43、goal-44、goal-73、goal-74、goal-77 提供的产物与入口（发行归档、容器镜像、WebUI 页面、管理 API）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得改为终端显示或 `admin-token show`（D-82）。前置合并后由审查者改写。
+状态：等待前置（T-09.11 / goal-45）。T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）已合并。2026-11-19 已核对以下产物与接口；goal-44 对应 T-09.9（PR #259，`661cf9b1`）已合并，goal-45 正在执行正式流程与故障验收。保持 goal-45 → goal-75 的接续；审查者在 T-09.11 合并后复核页面和 API，再将总览与本状态行改为待派发。本轮只修订派发语句，未执行以下验收。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」，确认 T-09.11 / goal-45 已合并。
 
-目标：在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、/ask 对话、/help 与 /whoami（D-171 去掉 rss 一步）；在 TEST-MATRIX §3.2 记录 T-14 证据，真实 Telegram 与真实 Provider 没有凭证时记为未运行。
+目标：在干净的数据目录上，分别从发行归档与容器镜像完成首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、/ask 对话、/help 与 /whoami，记录 V-66、V-67、V-70 的端到端证据。首发内容为 Core、Telegram Adapter、Agent、WebUI 与 help（D-171）；真实 Telegram 与真实 Provider 缺少凭证时记为未运行。
 
-依据：PLAN T-14 步骤 6 与「停止和失败条件」；CONTRACTS §15；TEST-MATRIX V-66、V-67、V-70。
+依据：spec/plan/release.md T-14 步骤 3～6 及「失败停止条件」；CONTRACTS §7.4、§15.1～§15.4；ADMIN-API §1～§4、§12.1、§13、§15；TEST-MATRIX V-66、V-67、V-70 与 §3；docs/development.md「发行构建」「容器镜像」。前置编号以 spec/plan/core.md 的 T-09.11 / goal-45、spec/plan/webui.md 的 T-09.9 / goal-44 为准。
 
 范围（只新增或修改这些）：
-- 新增 cmd/alonabot/t14_e2e_test.go（//go:build unix；发行归档部分）
-- 新增 deploy/e2e/（容器验收：Go 测试辅助，经 os/exec 调用 docker，运行镜像、模拟服务与断言）
-- spec/TEST-MATRIX.md §3.2：追加 T-14 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- 新增 cmd/alonabot/t14_e2e_test.go（//go:build unix）：一个表驱动集成测试 TestReleaseEndToEnd，分别消费发行归档与容器镜像；同文件内放本测试所需的进程、Docker 与 HTTP 辅助。
+- cmd/alonabot/*_local_test.go：其余本地分项回归。
+- 上述端到端验收直接涉及的对应包、构建与部署文件，以及其直接调用方和回归：允许修复验收中可复现且阻碍既有契约的缺陷，采用最小充分改动。每项修复在 PR 中逐条说明复现输入与完整错误、根因、改动位置、验证命令与结果，保留原始错误和证据。
+- spec/TEST-MATRIX.md §3.2：追加 T-14.6 的实际证据行（本切片获授权修改这一处）。
+允许的依赖：标准库与 cmd/alonabot 已有集成测试依赖；沿用 cmd/alonabot -> adapters/telegram/telegramtest、internal/core/packages 等已有测试依赖边。无新增依赖或跨模块边。本切片包含验收与上述必要修复；发现契约缺口或冲突时按 spec/README.md「执行与维护」流程处理，保留完整错误与证据。
 
-验收步骤（发行归档与容器镜像各跑一遍；每一步记录命令与结果）：
-1) 首次运行：干净 data_dir；终端下初始化 token（容器用 -it admin-token init）；预装包状态符合 goal-74。
-2) 登录：经管理 API 登录（等同页面登录），状态接口显示各包状态。
-3) 添加 Telegram 实例：api_base_url 指向本地 Bot API 模拟服务（容器内经宿主地址访问），实例上线（bot.online）。
-4) 配置 Provider：经配置 API 为 Agent 添加指向本地模拟 Provider 的条目（api_key 为 secret），reload 生效。
-5) /ask：模拟服务中的用户发送 /ask，收到先发送再编辑的回复，最终内容正确。
-6) /help 与 /whoami：列出可用命令；/whoami 返回实例与用户 ID；把该用户加入 Core Admin。
-7) 停止：Core 与全部插件进程退出（容器 docker stop 后进程全部消失）。
-- V-70：镜像文件只含 alonabot、packages/ 与 CA 证书，UID 10001；无 TTY 时拒绝启动；端口只发布到宿主本机；出站 HTTPS 可用；没有 ALONABOT_CONTAINER 时 0.0.0.0 搭配 http Base URL 被拒绝。
-- 证据：TEST-MATRIX §3.2 追加 T-14 一行（平台、Docker 版本、命令、结果）；真实 Telegram、真实 Provider 与没有运行的平台写「未运行」。
+现行入口与可复用辅助：
+- scripts/dist/main.go：go run ./scripts/dist --version 0.1.0 --key FILE --out DIR --platforms <GOOS>/<GOARCH>。FILE 为临时生成的 base64 Ed25519 私钥文件，位于构建上下文外；同名根目录含 alonabot 和 packages/<组件ID>/ 的安装包、release.json、release.json.sig、release.pub。签名与摘要验证复用现有流程。
+- cmd/alonabot/firstrun_e2e_test.go:TestFirstRunDistribution 已展示临时密钥、dist、packages.Extract、无终端启动、admin-token show、登录删除文件和四组件状态比对；复用同包 startRecoveryCore、stopTestCore、core.address/waitFor 及必要 HTTP 观察辅助。运行阶段使用解压后的二进制与 packages，工作目录放在临时解压目录；验收期间不以 go run 或开发目录组件替换候选进程。
+- adapters/telegram/telegramtest 提供 NewServer(t, token)、SetMe(userID, username)、URL()、Push(...json.RawMessage)、Calls(method)、Requests()。cmd/alonabot/telegram_e2e_test.go 的 telegramMessage/telegramUpdate/telegramRequests 展示 update 与发信观察；仅复用模拟端与观察辅助，Core 启动使用候选资产。
+- internal/app/agent_service_test.go 的 agentServiceConfig 与 serviceStream 展示 Provider 配置和 SSE 响应格式；这些辅助属于另一测试包，按当前字段和协议在本集成测试中准备必要数据，不新增公开导出。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t14_e2e_test.go；deploy/e2e。
-- 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上运行容器部分；没有 Docker 时写「未运行」。
+候选构建与运行环境：
+- 发行归档：按宿主 GOOS/GOARCH 构建一次，构建机需 Go 1.27.1、Node 26.5.1/npm 与已锁定的 Go/npm 依赖；dist 自行暂存源码、npm ci/build、pack 和签名。只有缓存已齐时才设置 npm_config_offline=true。构建临时目录需容纳嵌套 Go 构建与 WebUI 产物；缺空间或依赖下载失败如实报错，保留输出。
+- 镜像：从仓库根执行 docker buildx build --platform linux/<amd64或arm64> --build-arg VERSION=0.1.0 --secret id=release_key,src=FILE --load -t alonabot:t14-e2e .。单次 --load 只选择一个平台；两架构分别记录实际运行，跨架构仿真单列。Dockerfile 的 BuildKit secret 必填，镜像为 scratch，入口 /alonabot，UID/GID 10001:10001，ENV ALONABOT_CONTAINER=1，默认 run --data-dir /data。
+- 用独立命名卷与 docker run --init -d -p 127.0.0.1:<宿主端口>:7650 --mount source=<本次卷>,target=/data alonabot:t14-e2e 启动，记录容器 ID；只清理本测试创建的容器、卷和临时资产。现行 deploy/compose.yaml 固定正式镜像 tag，不能直接把它当作本次候选镜像；可用隔离的临时 compose override 指定候选 tag 与卷，保持 init 与 loopback 端口发布。
+- 容器访问宿主模拟服务：Docker Desktop 使用 host.docker.internal；Linux 启动时加 --add-host host.docker.internal:host-gateway。telegramtest.NewServer 固定监听宿主 loopback，容器路径用标准库 httputil.NewSingleHostReverseProxy 在宿主可达接口转发到它，保留原 Server 的 Push/Requests 观察；Provider 模拟服务直接监听可达接口。外部 URL 改用上述主机名和转发/监听端口，宿主观察仍保留本机 URL。明确区分宿主 loopback 与容器 loopback，两个模拟服务都先验证可达性。scratch 镜像无 shell/curl，用 docker exec <容器> /alonabot admin-token show --data-dir /data 读取凭证，以宿主侧 HTTP、docker inspect/export/top 检查镜像与进程。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+验收步骤（归档与镜像各完成一遍）：
+1) 首次运行使用干净 data_dir/卷，无 TTY 正常启动，/data/admin_token（归档为所选 data_dir/admin_token）权限 0600；admin-token show 读出 token，日志不含 token。初始四包均已安装且签名有效，help 与带后台进程的 WebUI 启用，Agent 与无实例的 Telegram Adapter 停用。离线 admin-token init/reset 要求 Core 停止且 stdin/stderr 均为终端，交互分项另行验证；运行中的容器通过 show 取首次 token。
+2) 请求 Host 与 core_config.json 的 base_url 一致。POST /api/auth/login，Content-Type: application/json、受控 Origin、正文 {"token":"..."}；保留管理 Cookie 与返回的 csrf_token，后续 Cookie 变更请求带 Origin 和 X-Alonabot-CSRF。GET /api/v1/packages 与 /api/v1/core 成功，首次登录后 token 文件删除。Bearer 方式只用于 CLI 对照。临时监听端口与受控 base_url 不同时沿用首次预装测试的 Host 转发方式。
+3) POST /api/v1/adapter/instances/create，正文 {"package_id":"alonabot-adapter-telegram","instance_id":"tg_e2e","config":{"token":"${T14_TELEGRAM_TOKEN}","api_base_url":"<可达模拟服务URL>","proxy_mode":"none"},"confirm":false}；启动 Core/容器时传入仅用于测试的 T14_TELEGRAM_TOKEN。核对磁盘保留环境变量引用、API 脱敏、实例上线与 getUpdates 已被调用，Telegram 包自动启用。模拟端 SetMe 与 token 对应。
+4) POST /api/v1/packages/enable，正文 {"id":"alonabot-agent-official"}。先启用缺省空配置，再 GET /api/v1/plugins/alonabot-agent-official/config 取得 active_generation；PUT 同路径的 /pending，正文带 base_generation 与完整 config。最小 config 示例（URL 用模拟端可达地址替换）：
+   {"providers":[{"custom":{"name":"Local","protocol":"openai-compatible","base_url":"<模拟Provider URL>/v1","api_key":"synthetic-provider-key"}}],"models":[{"name":"Chat","provider":"Local","model":"local-model","type":"chat","max_tokens":128}],"chat_model":"Chat"}
+   POST /api/v1/plugins/alonabot-agent-official/reload（无正文），等待新 Active，GET 返回秘密设置状态。chat_model 引用 models.name，models.provider 引用 providers 条目的 name，远端模型 ID 在 models.model。使用 HTTP pending/reload；CLI reload 会先 import 磁盘编辑文件。
+5) 模拟用户 88 私聊发送文本 /ask hello，附 update_id、message_id、date、from.id、from.first_name、chat.id、chat.type；命令包含 text 参数。Bot API 的 bot_command entity 可按真实格式附 offset=0、length=4，Adapter 当前保持文本交 Core 匹配。Provider 模拟 POST /v1/chat/completions，检查 synthetic API key、model 与用户正文，返回 text/event-stream 的两个内容增量、完成标记与 [DONE]；用同步观察控制增量，让请求记录能验证 sendMessage 后 editMessageText、同一消息 ID 与完整最终文本，避免单个瞬时结果掩盖编辑路径。
+6) 同一用户依次发 /help 与 /whoami，按每次请求前的记录位置截取新增回复：help 列出当前可用命令（含 ask），whoami 包含 tg_e2e 与用户 88。POST /api/v1/admins/add，正文 {"user":"telegram:88"}，再 GET /api/v1/core/admins 并核对持久化；必要时再次发送 help 验证权限过滤。管理 token 与聊天 Core Admin 分别使用各自入口。
+7) 真实浏览器打开候选 WebUI，从登录页完成登录，在组件/账号/模型页面核对配置与启用状态，页面保存与 reload 后的结果与上述 API 一致；使用前置合并后的真实页面路径。API 自动联验与浏览器操作分别记录。缺浏览器时保留页面分项为未运行，交审查者承接。
+8) 归档发送 SIGTERM，等待 Core 与子进程退出；容器 docker stop 后检查 State.Running=false、无存活组件进程，保留停止日志。复用 V-66 的卸载后重启、错误签名与内置更新仅列出的已有证据，补齐候选资产上仍缺的分项，不伪造通过。
 
-不做：五平台运行（T-10.2）；发布（T-10.4）；新的产品功能（只做验收与必要修复，修复逐条说明）。
+V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记录；镜像只携带 Core、四组件、CA 及必要 /data 目录，UID 10001；无 TTY 启动与 show、登录删除 token；端口发布限 loopback；通过真实出站 HTTPS 请求核对 CA 可用性（模拟 HTTP 无此证据）；在未设置 ALONABOT_CONTAINER 的归档进程中核对 0.0.0.0 搭配本机 http base_url 被拒绝。网络、Docker 或架构环境缺失时分别写未运行。
+
+测试与证据（按编码规范「测试提交规则」）：
+- 提交一个 TestReleaseEndToEnd，归档主路径默认运行；容器子场景用 ALONABOT_TEST_DOCKER=1 显式启用（测试运行开关），未启用时 t.Skip 并在证据中写未运行。启用后 Docker 构建、连接或断言失败按实际失败返回。两种资产共用上述业务断言；多场景理由：归档与镜像的进程入口、权限、网络与卷不同。
+- 本地自测：交互 TTY token、错误签名、卸载不重装、更新只列出、容器静态检查、HTTPS 出站及浏览器操作；复用已合并辅助和证据，无需新增 testdata 插件或测试依赖。
+- spec/TEST-MATRIX.md §3.2 写测试位置、资产版本与平台、Docker/buildx 版本、原生或仿真、命令、实际结果及未运行原因。真实 Telegram、真实 Provider、其余平台与正式发布分别记录，模拟结果按模拟环境列出。
+
+完成条件：受影响测试与 vet/build 通过；go test -race ./cmd/alonabot -run '^TestReleaseEndToEnd$' 通过归档路径；有 Docker 时以 ALONABOT_TEST_DOCKER=1 执行同一测试并记录容器路径。完整 CI 的 go vet ./...、go test -race ./...、go build ./... 复用同候选有效结果，按共同约束记录；文档修改通过 git diff --check。缺少真实平台或外部环境的分项保留明确缺口与承接者，T-10 汇总时继续闭合。
+
+不做：五平台运行（T-10.2）；正式发布（T-10.4）；首发范围外的 Adapter 或插件；新产品功能、依赖、runner 运维与容量清理。
 ```
 
 ## 第 22 波
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：等待前置（T-09.11、T-14.6）。T-14.7（PR #236，`44d77cd`）已合并。2026-11-17 按 D-171 去掉不进入首个发行版的 Telegram 后续切片与 T-15.3～T-15.7；其余前置已合并。T-08.9（[PR #117](https://github.com/AlonaBot/AlonaBot/pull/117)，合并提交 `2c1fdcc`）已合并。合并后由审查者按 main `2c1fdcc` 核对：`examples/plugins/configdb` 默认使用 sqlitedb，`configdb_gorm` 标签切换到 GORM；`OnConfigLoad` 转换 v1 问候词数组，两个变体的 `Migrations` 与 `OnStart` 覆盖迁移失败及启动写库后失败，启动记录位于 `configdb_startup`。声明字段 null 按维护者裁决以 CONFIG/INVALID_ARGUMENT 拒绝，未知字段 null 保留；组件证据与 T-09 正式入口、Journal 及真实页面的未闭合项见 TEST-MATRIX §3.2。插件 HTTP 入口已按 T-07.7（[PR #116](https://github.com/AlonaBot/AlonaBot/pull/116)，合并提交 `e65eb4d`）改为单一 `base_url` 与管理认证。本切片只汇总与联验，不引入新接口。2026-11-10 按 D-129～D-131 把范围扩展到 V-117，前置加入 T-03.26 与 T-15.7。2026-11-09 按 D-87 追加 V-89～V-97 与对应的 Adapter 切片作为前置；同日按 D-102～D-113 把范围扩展到 V-111，前置加入不在其他前置之下的 T-04.10、T-04.11 与 T-08.13。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得见 D-82；插件页面经 WebUI 的 iframe 与桥访问，不再使用票据（D-84）。前置合并后由审查者改写。
+状态：等待前置（T-09.11 / goal-45、T-14.6 / goal-75）。2026-11-19 按 main `287315ff` 核对；完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含 T-09.27 / goal-177 与 T-16.2 / goal-82。goal-44 为 T-09.9，是 goal-45 的前置；当前 scripts/scenarios 尚未建立，由 goal-45 交付，合并后须复核实际调用方式。本条保留首次发布联验与必要修复，状态由审查者在前置合并且语句复核后更新。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -257,14 +273,22 @@
 依据：PLAN T-10 步骤 1～4 与「停止和失败条件」；TEST-MATRIX 全部；CONTRACTS §12.4。
 
 范围（只新增或修改这些）：
-- 新增 cmd/alonabot/t10_e2e_test.go（//go:build unix）与必要的 testdata 插件
+- 新增 cmd/alonabot/t10_e2e_test.go（//go:build unix）；SDK 绑定的回归及临时插件写在 *_local_test.go，沿用 D-86，不新增 testdata 插件
 - spec/TEST-MATRIX.md：§3 的每个 V 条目更新为最新状态，新增「发布前证据汇总」一节（本切片获授权修改 TEST-MATRIX；其他 spec 文件只在发现契约缺陷时按 spec/README 的流程修改，并在 PR 中说明）
-- 发现的缺陷：在对应包中修复，每项修复在 PR 中写明 V 编号、复现、原因与验证
+- 发现的缺陷：在对应包中修复，每项修复在 PR 中写明 V 编号、复现输入、完整错误、根因、改动位置与验证命令和结果，连同直接调用方、fixture 与回归完成；契约缺口或冲突按 spec/README.md「执行与维护」处理
 允许的新跨模块边：无。
 
+现行入口与证据规则：
+- 使用 cmd/alonabot 的 run、install、enable、restart、reload、update、pin、disable、uninstall、rollback 正式命令与 ADMIN-API；禁止沿用 serve、plugin generate 或旧 --dir/--goos/--goarch 参数。build/check/test/pack 目录为位置参数，pack 用 --target。复用 cmd/alonabot 的 manage_e2e_test.go、recover_e2e_test.go、firstrun_e2e_test.go、t12_e2e_test.go 及 goal-45 合并后的场景，真实 Core/组件进程由候选包启动。
+- 首次运行无 TTY 时正常启动并写 data_dir/admin_token（0600），show 只读取得一次性 token，首次登录删除文件。离线 init/reset 在 Core 停止且 stdin/stderr 为终端时单列验证。管理 Cookie、Origin、X-Alonabot-CSRF 与 CLI Bearer 分别按 ADMIN-API §1～§2；管理 token、聊天 Core Admin、internal HTTP 身份分别验证。
+- 首发预装只包含 Telegram Adapter、Agent、WebUI、help；help 与带后台进程的 WebUI 默认启用，其余按配置/管理操作启用。额外示例仅为联验安装，保持发行清单。Telegram 使用 adapters/telegram/telegramtest，Provider 使用本地 HTTP 模拟；真实凭证仅通过已有批准机制读取，记录模拟与真实平台证据。
+- 插件页面复用 examples/plugins/showcase 的 /status 与 /page，经 /plugins/<id>/、单一 base_url、管理认证、WebUI sandbox iframe/postMessage 桥与 sdk/page 验证（含 D-183 的公开套件与静态资源）；按当前 ADMIN-API、sdk/page 与前置合并后的桥协议逐条核对，禁止沿用页面票据流程。API、浏览器、TCP、stdio 的结果分别记录。
+- configdb 的默认 sqlitedb 与 configdb_gorm 标签变体分别构建，fail_migration、fail_start 与 configdb_startup 用于真实候选/数据库观察；配置按当前 schema 的校正与 Pending/Active 流程验收，历史 OnConfigLoad/配置版本叙述按现行契约核对。
+- V-01～V-76、V-82～V-117 完整保留，并逐项追踪 TEST-MATRIX 当前其他首发适用 V 条目及关联证据；D-171 后置的 OneBot 11、welcome、rss 等分项标随后续版本。历史票据或旧配置流程证据保留来源，新增当前契约的复验结论与缺口。external 维护许可、休眠等由对应 owner 完成，消费其合并后的公开入口与故障场景，不在本轮假定它们已交付。
+
 联验矩阵（各为一个子测试，TCP 与 stdio 各一遍）：
-1) 组件链路：admin-token init → 登录 → 安装并启用 echo、configdb、http 示例与官方插件 → 配置与权限 → Telegram 模拟服务的真实消息 → 插件 HTTP 页面（同一 base_url 下，经管理认证与 WebUI 的 iframe/postMessage 桥）→ reload → update → rollback。
-2) 能力组合（每个能力使用不同的插件二进制，不用同一个 worker 的多份进程代替）：命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、GORM（含迁移），以及 Agent 与 WebUI 组件；既有无配置无数据库的插件，也有实际写入与迁移的插件。
+1) 组件链路：干净 data_dir 的 alonabot run 首次启动 → admin-token show → Cookie 登录与 CSRF → 安装并启用 echo、configdb、showcase HTTP 示例与官方组件 → 配置与权限 → Telegram 模拟服务的真实消息 → 插件 HTTP 页面（同一 base_url 下，经管理认证与 WebUI 的 iframe/postMessage 桥）→ reload → update → rollback。
+2) 能力组合（每个能力使用不同的插件二进制，不用同一个 worker 的多份进程代替）：命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、sqlitedb 与 GORM（含迁移），以及 Agent 与 WebUI 组件；既有无配置无数据库的插件，也有实际写入与迁移的插件。
 3) 边界：伪造与过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job；错误回执与已确认的外部结果一致。
 4) 恢复：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED 与提交前后 Core 退出、不可变 secret、external 插件的维护许可与 resume、显式 rollback 的新代次；核对数据库内容与状态库的 Active 指针，不能只看日志里的「恢复成功」。
 - 汇总：TEST-MATRIX 中每个 V 条目写明测试位置、命令、平台与结果；失败的列为阻塞项；没有运行条件的（真实 Telegram、真实 Provider、非 darwin 平台等）写「未运行」与原因。
@@ -273,7 +297,7 @@
 - 提交：cmd/alonabot/t10_e2e_test.go。
 - 本地自测（不提交，PR 中写明结果）：完整测试套件在 -race 下运行一次的总耗时与结果。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；TEST-MATRIX 中没有「待联验」的条目。
+完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...；首发适用条目逐项完成联验；仍缺真实凭证或环境的项保留「未运行」、原因与承接者，禁止用汇总文档替代实际测试。失败项按 T-10 停止条件修复或取得维护者明确裁定后继续。
 
 不做：五平台运行（T-10.2）；资源报告（T-10.3）；发布（T-10.4）。
 ```
@@ -282,7 +306,7 @@
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：等待前置（T-10.1）。需要真实目标平台；没有运行环境的组合保持未运行。
+状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口仍待落实。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -293,15 +317,18 @@
 
 范围（只新增或修改这些）：
 - 新增 scripts/platform/（可在各平台运行的验收程序：Go 程序，调用构建好的 alonabot 与测试插件，输出结构化结果）
-- 复用 goal-45 的 scripts/scenarios 在各平台运行
+- 复用 goal-45 合并后交付的 scripts/scenarios 在各平台运行；目前目录尚未存在，前置合并后读取实际入口并复用，保持恢复断言
 - spec/TEST-MATRIX.md：V-32、V-34 与各平台相关条目的证据（本切片获授权修改 TEST-MATRIX）
-- 发现的平台缺陷：在对应包中修复（例如 Windows Job Object、路径与锁），每项在 PR 中写明平台、复现与验证
+- 发现的平台缺陷：在对应包及直接调用方修复（例如 Windows Job Object、路径与锁），每项在 PR 中写明平台、复现、完整错误、原因与验证；SDK 绑定与临时进程树/CGO fixture 按 D-86 放本地测试，不新增 testdata 插件。契约冲突按 spec 流程处理
 允许的新跨模块边：scripts/platform 只经 os/exec 调用构建产物，不 import 本 module 的包。
 
 行为：
-- 每个平台：用 scripts/dist 的构建产物（或在该平台本地构建）运行 scripts/platform：启动 serve、安装并启用 echo 与 http 示例、收发一条消息、访问一次插件 HTTP、停止；再循环 100 次启停（每次检查插件进程与监听端口都已释放）；强制结束 Core（Unix 为 SIGKILL，Windows 为 TerminateProcess）后重启，确认插件进程已退出且能恢复；启动一个会派生子进程的测试插件，停止后子进程消失（合作型进程树）。
+- 每个平台：用 scripts/dist 的构建产物（或在该平台本地构建）运行 scripts/platform：启动 alonabot run --data-dir <干净目录>、取得首次 token 并登录、安装并启用 echo 与 showcase HTTP 示例、收发一条消息、访问一次插件 HTTP、停止；再循环 100 次启停（每次检查插件进程与监听端口都已释放）；强制结束 Core（Unix 为 SIGKILL，Windows 为 TerminateProcess）后重启，确认插件进程已退出且能恢复；启动一个会派生子进程的测试插件，停止后子进程消失（合作型进程树）。
+- scripts/platform 为本切片新增的可执行 Go 验收程序；输入明确的候选 Core 路径、当前平台示例安装包目录、goal-45 场景位置和结果输出路径，使用管理 CLI/HTTP 驱动，不 import 测试包私有辅助。具体 flag 在程序 --help 与运行说明中一致登记；程序运行工作目录和 data_dir 放在临时目录，避免源码开发运行改变行为。
+- 五平台分别记录实际 OS/架构、Core/组件构建目标与执行环境（原生、虚拟机、容器或架构仿真）；Windows 真正运行 .exe，Intel macOS 使用真实 x86_64 执行环境。Docker Linux 结果标明容器与宿主，Rosetta/QEMU 结果标明仿真；跨编译、宿主短探测和跳过结果单列。CI 环境未落实时继续独立可运行平台，保持缺口，不改仓库权限、计费或 runner。
+- 无 TTY 首次启动取得 admin-token 文件，通过 show 与登录完成认证；管理 HTTP、showcase 页面与桥用现行 Host/Origin/CSRF，动态监听地址按首次运行集成测试处理。进程树核对需记录实际 PID/子进程与监听端口，杀 Core 后等待旧插件树确认退出和 runtime.lock 释放，再验证恢复，保留故障与恢复前后数据。
 - 结果写成 JSON（平台、Go 版本、OS 版本、各步骤的结果与耗时），附在 PR 中，摘要写入 TEST-MATRIX。
-- CGO：用一个 CGO 测试插件在各平台尝试构建与运行，记录实际支持范围；不支持的平台标为不支持，不发布。
+- CGO：记录 C 编译器、链接库及构建参数；需新工具/依赖时先列明并取得批准。用一个 CGO 测试插件在各平台尝试构建与运行，记录实际支持范围；不支持的平台标为不支持，不发布。
 - 没有某个平台的运行环境时，该平台写「未运行」；交叉编译成功不能代替运行结果。
 
 测试（按编码规范「测试提交规则」）：
@@ -315,12 +342,12 @@
 
 ### goal-48 · T-10.3 资源比较报告与常驻内存预算核对
 
-状态：等待前置（T-10.1）。需要固定机器与等价负载；NoneBot2 侧的 Python 依赖在引入前须经维护者确认。
+状态：等待前置（T-10.1 / goal-46）。需要固定 linux/amd64 机器与等价负载；用户于 2026-11-19 已明确批准 nonebot2[fastapi,httpx]==2.5.0、nonebot-adapter-telegram==0.1.0b21，仅用于 bench/nonebot2 的独立 uv 环境（同日从 PyPI 元数据核实，Python ≥3.10）。正式实施仍等待 goal-46，本轮未添加、安装或锁定依赖。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告与常驻内存预算核对）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；再按 V-74 测量 Core、echo、help（rss 不进入首个发行版，D-171）与 configdb 的 gormdb 变体空闲时的 PSS 并对照预算。输出原始数据与复现命令，不预设优胜结论。
+目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；再按 V-74 测量 Core、echo 与 configdb 的 gormdb 变体空闲时的 PSS 并对照预算；rss 分项按 D-171 标随后续版本，help 可补测并保留自己的名称与结果，不套用 rss 预算。输出原始数据与复现命令，不预设优胜结论。
 
 依据：PLAN T-10 步骤 6；CONTRACTS §10；DECISIONS D-52；TEST-MATRIX V-33、V-74。
 
@@ -328,13 +355,18 @@
 - 新增 bench/（负载生成器与采样程序：Go 程序）；bench/nonebot2/（NoneBot2 侧的等价插件与运行说明，Python 依赖用 uv 管理且只在该目录内）
 - 新增 docs/benchmarks.md（报告：机器、版本、命令、原始数据位置、结果表，不写优胜结论）
 - spec/TEST-MATRIX.md：V-33、V-74 的证据（本切片获授权修改这一处）
+- 基准与验收发现的缺陷：在对应包、基准程序及直接调用方做必要修复，逐项记录复现、完整错误、根因、验证和受影响结果，修复后使最终报告对应同一有效候选；契约缺口/冲突按 spec 流程处理
 允许的新跨模块边：bench 只经 os/exec 与 HTTP 调用被测程序。NoneBot2 及其 Python 依赖只用于基准，不进入 Go module；在 bench/nonebot2 中引入前标阻塞，列出版本，等维护者确认。
 
 行为：
-- 负载（V-33）：空闲——Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟；消息——每秒 20 条文本、持续 10 分钟，echo 逐条回复；数据库——每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟；HTTP——每秒 50 个请求访问插件路由，持续 10 分钟。两边都使用同一个本地 Bot API 模拟服务。
+- 负载（V-33）：空闲——Core 与 echo、configdb、showcase HTTP 示例三个插件运行 10 分钟；消息——每秒 20 条文本、持续 10 分钟，echo 逐条回复；数据库——每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟；HTTP——每秒 50 个请求访问插件路由，持续 10 分钟。两边都使用同一个本地 Bot API 模拟服务。
 - 采样：每秒采样一次全部相关进程（Core、插件、Adapter 及其子进程；NoneBot2 的进程）的 RSS、私有内存（Linux 读 smaps_rollup 的 Private_*；macOS 写明使用的替代指标）、Linux PSS、CPU；延迟为模拟服务从发出 update 到收到回复的时间（消息与数据库负载），HTTP 为请求往返时间。
-- 输出：每次运行的原始 CSV 与汇总 JSON，复现命令写入 docs/benchmarks.md；报告只给数值与条件，不写结论。
+- 输出：每次运行的原始 CSV 与汇总 JSON，复现命令写入 docs/benchmarks.md；报告给出数值、测量条件及有数据依据的解释，不预设优胜结论；空闲场景无业务延迟时标为不适用，缺失样本与失败请求保留原值及原因，禁止用零值补齐。
 - V-74：linux/amd64，各进程 Activated 后空闲 2 分钟，读 smaps_rollup 的 Pss，取 3 轮中位数；超出预算时在报告中列出超出项与可见原因（例如新增依赖、init 分配），不自行调整预算。
+- V-74 的原预算保持 Core ≤24 MiB、echo ≤10 MiB、configdb gormdb ≤16 MiB；rss ≤14 MiB 的分项随组件进入首发后的版本测量。Core-only 时不启用任何插件/Adapter，其余进程在 Activated 后空闲 2 分钟、3 轮中位数；help 补充数据只作观察。超预算按 CONTRACTS §10 定位并修复，预算调整需要维护者在 ADR 明确裁定。
+- 固定测量机与 OS/Go/Python/依赖、CPU/内存/存储、采样权限、相同 SQLite 操作与响应体，双方顺序独立运行，使用同一 Bot API 模拟端与负载生成器。记录 offered/completed/error 数量、采样起止、延迟定义及统计方法；采样覆盖全部相关进程并处理子进程出生/退出，原始数据与候选版本一并保留。避免在承载其他 CI 的 runner 忙碌时采样；运行时段与机器由主线程协调。
+- NoneBot2 方案：nonebot2[fastapi,httpx]==2.5.0 提供真实对照框架、HTTP 服务和客户端驱动，nonebot-adapter-telegram==0.1.0b21 使用相同 Telegram Bot API 模拟端；数据库采用 Python 标准库 sqlite3。批准后仅在 bench/nonebot2 用 uv 管理独立环境并生成 uv.lock，列出全部传递依赖；不使用 all extra。精确版本依据为 PyPI 的 /pypi/nonebot2/2.5.0/json 与 /pypi/nonebot-adapter-telegram/0.1.0b21/json；引入前再核对适配兼容与许可证。
+- 已有替代：Go 标准库负载生成、HTTP、进程采样与 SQLite 可先完成 AlonaBot 基线和 V-74；它们提供可复用测量工具，但 V-33 的 NoneBot2+Telegram Adapter 对照仍需上述真实依赖。审批仅阻塞对照侧，独立基线与测量工作继续，完整对比留待批准后实际运行。
 - TEST-MATRIX 记录机器、OS、版本与结果文件位置；没有在 Linux 上运行时 PSS 写「未运行」。
 
 测试（按编码规范「测试提交规则」）：
@@ -343,19 +375,19 @@
 
 完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果。
 
-不做：性能优化（发现问题时另行处理）；修改 V-74 的预算（需维护者在 DECISIONS 记录）；为吞吐与延迟设定通过阈值（契约不设）。
+不做：脱离实测缺陷的性能优化；修改 V-74 的预算（需维护者在 DECISIONS 记录）；为吞吐与延迟设定通过阈值（契约不设）。
 ```
 
 ## 第 24 波
 
 ### goal-49 · T-10.4 发布资产与说明
 
-状态：等待前置（T-10.2、T-10.3）。正式签名与发布由维护者在其控制的环境中执行。
+状态：等待前置（T-10.2 / goal-47、T-10.3 / goal-48）。正式签名与发布由维护者在其控制的环境中执行。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-49（切片 T-10.4：发布资产与说明）。goal 目录 goal-49，分支 goal-49，worktree .worktrees/goal-49，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：生成五平台候选资产（首个发行版的组件：官方 Telegram Adapter、Agent、WebUI 与 help，D-171）、T-14 的发行归档与容器镜像、外部 release.json 与签名；用干净的测试 data_dir 从这些真实资产完成安装、更新与卸载重装，核对来源、长度、摘要、平台与 Schema/二进制一致性，确保安装不依赖开发机上未打包的文件；关闭全部阻塞用例，写出发布说明。签名私钥只在维护者控制的环境中使用；发布到 GitHub Release 与推送镜像由维护者执行。
+目标：生成五平台候选资产（首个发行版的组件：官方 Telegram Adapter、Agent、WebUI 与 help，D-171）、T-14 的发行归档、容器镜像与 install.sh/compose、外部 release.json 与签名；用干净的测试 data_dir 从这些真实资产完成安装、更新与卸载重装，核对来源、长度、摘要、平台与 Schema/二进制一致性，确保安装不依赖开发机上未打包的文件；关闭全部阻塞用例，写出发布说明。签名私钥只在维护者控制的环境中使用；发布到 GitHub Release 与推送镜像由维护者执行。
 
 依据：PLAN T-10 步骤 7、8；CONTRACTS §9.2、§15.2、§15.3；TEST-MATRIX V-28、V-41 的发布复验。
 
@@ -364,15 +396,20 @@
 - 新增 scripts/release-check/（用候选资产在干净 data_dir 完成安装、更新、卸载重装与一致性核对的 Go 程序）
 - spec/TEST-MATRIX.md：V-28、V-41 的发布复验证据，以及「发布前证据汇总」的最终状态（本切片获授权修改 TEST-MATRIX）
 - README.md：安装与快速开始指向发布资产（本切片获授权修改 README 的这一节）
+- 候选资产验收中发现的缺陷：对应包、构建/部署文件、直接调用方及必要回归，逐项保留复现、完整错误、原因和验证；契约缺口/冲突按 spec 流程处理
 允许的新跨模块边：scripts/release-check -> contracts/release（ARCHITECTURE 已登记，与 scripts/dist 同类）；其余只经 os/exec 调用候选资产。
 
 行为：
 - 候选资产：执行者用测试密钥运行 scripts/dist 与镜像构建，得到与正式发布结构相同的候选资产；正式签名由维护者用官方私钥重新运行同一命令完成。
 - release-check：在干净 data_dir 中只使用候选资产（不访问源码树）：首次运行预装、安装一个第三方测试包、用新版本资产 update、卸载并同来源重装；对每个包核对 release.json 的来源、长度、SHA256、平台与包内 Schema、manifest、二进制的一致性；签名错误、来源不符的资产被拒绝（V-28、V-41 复验）。
+- 现行构建：go run ./scripts/dist --version <版本> --key <临时测试密钥文件> --out <目录>，缺省五平台，--platforms 可选择子集；归档内 Core 与 packages/<ID>/、dist/packages/<ID>/ 各平台资产、合并 release.json/.sig/.pub 及 SHA256SUMS 逐一登记。Core 版本由 internal/app.releaseVersion 注入，GET /api/v1/core 与构建版本一致；每个组件版本读取自己的 plugin.yaml，不能以外层归档版本代替更新版本。
+- Dockerfile 用 VERSION 与 BuildKit release_key secret 构建 linux/amd64、linux/arm64；compose 副本固定本次候选镜像 tag，保留 init、UID 10001、独立 /data 卷、loopback 端口。将 deploy/install.sh 与版本固定的 deploy/compose.yaml 纳入候选资产清单，复用 T-14.7 的真实 systemd/macOS 安装、升级、卸载与失败保持原安装的证据，缺项按原环境继续实测。
+- scripts/release-check 为本切片新增程序，输入候选发行目录、同来源递增组件版本的更新候选目录与临时结果目录，--help/文档登记实际参数。运行时解压并调用候选 alonabot，当前工作目录隔离源码树；无 TTY 启动正常预装后 admin-token show，按现行 Cookie/CSRF 或 CLI Bearer 管理入口操作。第三方样例从现有示例打包，SDK 绑定 fixture 按 D-86 放本地回归。
+- 更新用每个组件 plugin.yaml 中实际更高的 SemVer，再打包签名并维护同一来源/发布者；验证 update 前后版本、Active 代次与数据库内容、pin 及卸载重装的来源绑定。摘要用于发布资产完整性校验，按清单核对文件长度、签名确切字节、平台选择与资源内容；不为普通文档检查增加摘要操作。
 - 发布说明：写明支持的平台与实际运行结果（来自 T-10.2）、资源报告位置（T-10.3）、全部「未运行」项与原因、已知限制（Native 插件是可信代码、库模式无隔离、插件自管的外部数据不承诺自动回退等）、备份与恢复步骤、升级与回退方法。
 - 阻塞用例：TEST-MATRIX 中标为失败的条目必须全部修复或经维护者同意延后（在发布说明中列出）。
 - 插件模板（D-169）：核对 AlonaBot/alonabot-plugin-template 的 go.mod 指向本次发布的 SDK 版本、模板 CI 在候选版本上通过，并在发布说明中给出模板仓库；维护者在 AlonaBot 仓库公开时一并公开模板仓库。
-- 发布：维护者在其环境中用 scripts/dist 构建并签名，把发行归档、各安装包及其 release.json/.sig 发布到本仓库的 GitHub Release，把镜像推送到 ghcr.io/alonabot/alonabot（:<version> 与 :latest）；执行者不持有私钥，不执行发布。
+- 发布：维护者在其环境中用 scripts/dist 构建并签名，把发行归档、各安装包及其 release.json/.sig/.pub、SHA256SUMS、install.sh 与版本固定的 compose 副本发布到本仓库的 GitHub Release，把镜像推送到 ghcr.io/alonabot/alonabot（:<version> 与 :latest）；执行者不持有私钥，不执行发布。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：scripts/release-check（验收程序）。
