@@ -237,10 +237,15 @@ func respond(w http.ResponseWriter, result any, err error) {
 			if errors.As(err, &conflict) {
 				status = http.StatusConflict
 			}
+			// 只省略单条 typed 错误的重复错误码，保留包装与聚合的完整上下文。
+			message := err.Error()
+			if message == detail.Error() {
+				message = detail.Message
+			}
 			result = struct {
 				Code    string `json:"code"`
 				Message string `json:"safe_message"`
-			}{strings.TrimPrefix(detail.Code.String(), "ERROR_CODE_"), detail.Message}
+			}{strings.TrimPrefix(detail.Code.String(), "ERROR_CODE_"), message}
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
