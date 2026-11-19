@@ -142,7 +142,7 @@ return &adapter.Descriptor{
 }
 ```
 
-省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证。SDK 在连接 Core 前核对路径与重复路由。
+省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证；`AuthStatic` 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
 查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](../plugins/help/help.go)。
 
