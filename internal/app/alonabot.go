@@ -366,6 +366,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			return proto.Unmarshal(response.Payload.Bytes, reply)
 		})
 	}, Store: store, Settings: managedSettings, Policy: c.assembly.policy, Router: c.assembly.router, Options: c.assembly.options, Tools: c.assembly.tools,
+		SleepPolicy: func(ctx context.Context, in state.Install) (manage.SleepPolicy, error) {
+			return c.managementSleepPolicy(ctx, in, development[in.PluginID])
+		},
 		CoreInfo: func() (string, string) { return version, c.http.Addr },
 		Adapters: c.assembly.adapters, Scheduler: c.assembly.scheduler, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
 		InstanceStatus: func(ctx context.Context, id, instance string) (string, string, error) {

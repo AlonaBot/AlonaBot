@@ -40,6 +40,7 @@ type Options struct {
 	Stopping               <-chan struct{}                                               // Core 开始停机时关闭，在 HTTP Shutdown 等待之前结束日志流。
 	NotifyLogLevel         func(ctx context.Context, id string, level pb.LogLevel) error // 仅通知当前 Activated Session。
 	Store                  *state.Store
+	SleepPolicy            func(ctx context.Context, in state.Install) (SleepPolicy, error) // 只读查询；使用休眠策略端点时由 Core 注入。
 	Settings               *settings.File
 	Policy                 *policy.Policy
 	Router                 *router.Router

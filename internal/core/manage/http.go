@@ -30,6 +30,7 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.optionRoutes(mux)
 	s.toolRoutes(mux)
 	s.settingsRoutes(mux)
+	s.sleepRoutes(mux)
 	s.instanceRoutes(mux)
 	s.conversationRoutes(mux)
 	s.logRoutes(mux)
