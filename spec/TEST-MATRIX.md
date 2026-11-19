@@ -708,6 +708,91 @@ PR #274；产品候选 `94803c7b868eaac62d47eca56bd420010061d881`，普通合并
 | 受控 HTTP 与生产 AppShell：设置九组、列表中英19组合、详情17组及补充3组；锁定/角色/412独立读取、写前/写后失败与重读错误、草稿/实际值并存、六类警告、旧设置/详情功能与存储 | `node /tmp/g175-browser/settings-check.js`、`node /tmp/g175-browser/list-check.js`、`node tmp/test/g175/detail-browser.cjs`、`node tmp/test/g175/supplemental-browser.cjs` 通过；`node tmp/test/g175/visual-browser.cjs` 的24组中英×浅深×1440/375场景、8组卸载对话框及焦点检查通过。全部截图由执行者实际查看，审查者另看最终桌面/手机、锁定、设置、长警告与多行错误。页面无横向溢出、异常端点或 pageerror；radio共享规则修复前76.671875px，修复后13px，标签恢复且方向键/Escape可用 | 本行故障使用受控 HTTP；真实 Core 主链路见上一行。Figma 高级/系统设置原始 PNG 与锁定画板 metadata 已查看；Starter 调用限额导致锁定画板新 PNG 未取得，当前锁定页面截图已查看 |
 | 审查者独立生产 main.tsx/router 验证：延迟 alpha 的策略/runtime 两个 GET，SPA 切换 beta 并取得 never/ACTIVE 后释放旧响应 | 独立 `.worktrees/review-goal175` 中 `node tmp/test/review-sleep-navigation.cjs` 退出0（0.7766s）；beta身份、策略与runtime保持，各ID各GET一次，无生命周期写操作/异常端点/pageerror。证据 `tmp/test/review-sleep-navigation.{json,log,png}`，最终截图已查看；初轮测试白名单遗漏既有只读 options resolve，修正临时断言后通过，原失败日志保留 | 受控响应验证竞态隔离；当前最终前端产品与独立候选相同。V-81 总体验收仍待 goal-174 的固定 Linux 指标与故障汇总 |
 
+### T-14.6 / V-66、V-67、V-70 发行归档与镜像端到端验收
+
+2026-11-19～20，goal-75 分支。首次归档候选为 `68354e8dc1458949ff8fed90be5a5af020efc80e`（基线 `96d46530`）；普通同步已合并的 S-06.3 / PR #274 后，当前代码候选为 `4200216de7039f3bc6c896ddc218bbc43806c71e`，消费合并点 `a6693609` 的真实页面。G75-03～06 未再改产品或正式测试。
+
+提交的 [TestReleaseEndToEnd](../cmd/alonabot/t14_e2e_test.go) 为一条 Unix 表驱动集成测试，共620新增行；archive、docker-arm64、docker-amd64 共用业务断言，各自使用真实发行入口、权限、网络与数据目录。产品修复为 [.dockerignore](../.dockerignore) 两行放行发行构建必需的 `deploy/install.sh`。其余 `cmd/alonabot/*_local_test.go`、一次性脚本、原始日志和截图只保留在本地 worktree；下文执行者日志及资产路径均相对该 worktree 的 `goal-75/`，干净 checkout 只提供正式集成测试。
+
+**环境与保留候选。** 宿主 darwin/arm64、Go 1.27.1、Node 26.5.1/npm 11.17.0；Docker Client/Server 29.4.2、Desktop 4.72.0、buildx v0.33.0-desktop.1、BuildKit v0.29.0，引擎 linux/aarch64、4 CPU、4109398016字节内存。Core 与四个首发组件均0.1.0，以临时 Ed25519 测试密钥经正式 dist/pack 流程构建、签名；私钥由临时目录或 BuildKit secret 提供并清理。
+
+| 资产 | 实际运行与保留位置 | 测试 / 包 / 外层耗时与日志 |
+| --- | --- | --- |
+| 首次归档，`68354e8d` | darwin/arm64 原生，`archive-assets-20261119-235447/`；正式测试当时396行 | 通过，exit0；22.60s / 34.167s / 38.855s；`G75-01-race-20261119-235447.log` |
+| 当前归档，`4200216d` | darwin/arm64 原生，`archive-assets-20261120-001525/`，供后续专项及浏览器复用 | 通过，exit0；23.52s / 31.806s / 33.409s；`G75-02-archive-race-20261120-001525.log`。未设置容器开关，两项 Docker 场景明确 SKIP |
+| arm64 镜像，`4200216d` | linux/arm64 原生，`alonabot:t14-g75-arm64-20261120-001446`；BuildKit `34p29scgvu7unc814uxb0bxul`，签名发行 RUN 562.0s | 通过，exit0；566.40s / 576.249s / 578.305s；`G75-02-arm64-race-20261120-001446.log` |
+| amd64 镜像，`4200216d` | linux/amd64 在 arm64 引擎上经 Rosetta 仿真，top 明确显示 `/run/rosetta/rosetta`；`alonabot:t14-g75-amd64-20261120-004808`；BuildKit `05dv434qkgokajq2w9j1z2szk`，签名发行 RUN 317.0s | 通过，exit0；326.60s / 336.497s / 338.713s；`G75-04-amd64-race-20261120-004808.log` |
+
+上述正式入口的完整命令如下，分别从执行者 worktree 根运行；首次归档和当前归档使用第一条。容器显式开启后，构建、连接及断言失败均按失败返回。三表项采用各自的成功结果，双 Docker 表项一次整组运行未执行。
+
+```fish
+go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$' -v
+env ALONABOT_TEST_DOCKER=1 go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$/^docker-arm64$' -v
+env ALONABOT_TEST_DOCKER=1 go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$/^docker-amd64$' -v
+```
+
+**三资产共同主路径。**
+
+- 干净 data_dir/卷首次无 TTY 启动，token文件0600、`admin-token show`、Cookie首次登录后删除token文件及日志脱敏通过；四包签名与临时发布者一致，help/WebUI初始启用且WebUI后台真实运行，Agent/无实例Telegram初始停用。
+- 管理请求使用受控Host/Origin及Cookie/CSRF，API与发行CLI列表一致。添加 `tg_e2e` 后Telegram自动启用，磁盘保留 `${T14_TELEGRAM_TOKEN}`、API仅显示秘密设置状态，模拟Bot API实际收到getUpdates。
+- 空配置启Agent→HTTP Pending→reload生成新Active，Local/openai-compatible、Chat/local-model/max_tokens128与Provider认证/模型发现通过。模拟用户88的 `/ask hello` 实际先sendMessage `hel`，再editMessageText同一message_id=1/chat_id=88为`hello`；`/help`列ask、`/whoami`返回telegram:88/tg_e2e，首次Core Admin与磁盘配置一致。
+- 归档SIGTERM后Core及全部已启动代次退出；两镜像均init、UID/GID10001、无TTY、只发布loopback端口，docker stop后Running=false/Pid0/ExitCode0/OOMKilled=false、top报告is not running，四组件drained=true/killed=false。测试容器、卷、原始临时tag已清理，仅保留上述候选。
+
+**V-66/V-67 本地专项。** `release_special_local_test.go` 的 Terminal、PreinstallSpecial、HelpPolicy 消费当前归档；`release_updates_local_test.go` 的 BundledUpdates 使用当前管理Service/SQLite与沿PR #235的公开测试签名静态包夹具，测试进程注入该公开key，发行候选的内置公钥保持原值。完整命令按下列顺序执行：
+
+```fish
+go test -race -count=1 -ldflags '-X github.com/AlonaBot/AlonaBot/internal/core/trust.officialKey=NTyKf+7KOLLEU24L0lhv2xjQcOUOBZ8dQ/i/77l6fOE=' ./cmd/alonabot -run '^TestRelease(Terminal|PreinstallSpecial|HelpPolicy|BundledUpdates)Local$' -v
+go test -race -count=1 ./cmd/alonabot -run '^TestRelease(Terminal|PreinstallSpecial|HelpPolicy)Local$/^(first-run-once|offline-init-reset|uninstalled-stays-uninstalled)$' -v
+go test -race -count=1 ./cmd/alonabot -run '^TestRelease(Terminal|HelpPolicy)Local$' -v
+```
+
+| 原日志与整组状态 | 可消费的独立结果 | 覆盖与输入 |
+| --- | --- | --- |
+| `G75-03-special-race-20261120-003238.log`，整组exit1 | invalid-signature通过1.48s；BundledUpdates通过0.10s | 签名改为64字节零值的help被拒绝，完整错误`release.json signature verification failed`，其他三包保留；已装0.1.0只列0.2.0-rc.1+build更新，pin/启用保持，显式更新/pin/来源优先及坏候选拒绝沿原夹具通过 |
+| `G75-03-special-race-20261120-003448.log`，整组exit1 | uninstalled-stays-uninstalled通过1.99s | 真实归档卸载help后正常停机/重启，保留安装记录与代次，Uninstalled=true/Enabled=false/Stopped，未重装，只有WebUI激活 |
+| `G75-03-special-race-20261120-003623.log`，exit0 | Terminal通过3.12s（首次1.36s、离线1.75s），HelpPolicy通过1.65s；包14.253s/外层15.995s | 真实PTY首次/重启token显示数量1/0，均无token文件、Core退出0；离线init/reset各返回不同token，init --if-missing无输出；无TTY两项exit2，`admin-token requires stdin and stderr to be terminals`；持锁两项exit1，`stop Core before changing the admin token: data_dir is locked by another Core`。预写环境引用实例自动启用；中英文help权限过滤，按现行admin权限添加telegram:88后下一条help立即列whoami，中文whoami精确匹配身份 |
+
+**V-70 镜像结构与真实 HTTPS。** `uv run --no-project python -u goal-75/G75-05-network.py` 通过、exit0，完整日志 `G75-05-network-third.log`；两架构的image/running inspect、启动前export完整清单、top、Core日志与HTTPS响应保留在 `G75-05-20261120-061041/`。镜像仅Core、四组件公开归档/清单/签名/公钥、224449字节CA文件（150张证书）和0755/10001:10001的data目录；Docker注入的.dockerenv、dev/console、etc/hostname/hosts/resolv.conf、etc/mtab及空dev/proc/sys目录单列。ENV为PATH=/、ALONABOT_CONTAINER=1，入口/命令/data卷、UID/GID10001、init、无TTY与loopback发布均核对。
+
+真实候选Agent通过现有 `/plugins/alonabot-agent-official/models/discover` 和默认CA校验，向 `https://openrouter.ai/api/v1/models` 发公共列表请求；管理响应HTTP200，上游2xx模型列表两架构各解码479个非空ID，分别保存为arm64-https-models.json与amd64-https-models.json。使用合成列表key，无真实API凭据或模型推理，未挂载证书、跳过TLS校验或向scratch添加工具。两容器均正常停止、无存活进程，三组件drained=true/killed=false、Core stopped，随后删除本轮容器和卷。
+
+非容器监听拒绝来自该脚本首轮的独立成功断言：当前darwin/arm64归档，子进程环境显式移除ALONABOT_CONTAINER，执行 `alonabot run --console=false --data-dir <干净临时目录> --listen 0.0.0.0:0 --log-format json`，默认base_url为http://127.0.0.1:7650，实际exit2，完整错误 `alonabot: ERROR_CODE_INVALID_ARGUMENT: --listen: non-loopback listen requires HTTPS base_url or trusted_proxies`。原始输出在 `G75-05-20261120-060944/archive-listen.log`，整组首轮仍为exit1，见下文；单独复现入口保留为本地 `uv run --no-project python goal-75/G75-05-listen.py`，该独立有效分项未重跑。
+
+**真实 WebUI 浏览器与保存后的下一消息。** 当前归档和原生arm64镜像分别使用干净目录/卷；ChatGPT in-app browser（IAB，1280×720），经127.0.0.1:7650的loopback反代保持候选真实Host/Origin校验。两者均实际从登录页输入各自临时管理token，查看四组件启用状态、tg_e2e运行状态与脱敏配置（token「已设置」），再在模型页将Chat/Local的远端ID由local-model改为local-model-browser、max_tokens由128改为256，点击保存。页面提示「模型配置已更新并已重载。」，刷新再开编辑框仍保留新值。以下命令的等待时间包含实际浏览器操作，`-timeout=0`仅用于本地交互专项。
+
+```fish
+env ALONABOT_BROWSER_ASSET=archive go test -race -count=1 -timeout=0 ./cmd/alonabot -run '^TestReleaseBrowserLocal$' -v
+env ALONABOT_BROWSER_ASSET=docker go test -race -count=1 -timeout=0 ./cmd/alonabot -run '^TestReleaseBrowserLocal$' -v
+```
+
+| 资产与原日志 | 实际结果 | 页面与业务证据 |
+| --- | --- | --- |
+| 当前归档；`G75-06-archive-race-third.log` | 通过，exit0；测试110.99s/包118.953s；API Active为gen-CDUYA344ZMLHM7Z2W57C5YKVZI、Pending=null | `G75-06-archive/`：六张jpg、五份AX、browser-actions.json、after-model-config.json、after-account-config.json、next-provider-request.json |
+| 原生arm64镜像；`G75-06-docker-race.log` | 通过，exit0；测试124.18s/包134.255s；API Active为gen-BHYTQE3TIOTY37JVNVTHF36PBY、Pending=null | `G75-06-docker/`保留同类证据；容器仅发布127.0.0.1:59724，Bot API/Provider分别经host.docker.internal:59731/59735可达 |
+
+页面操作后，两资产API均返回Chat→Local/local-model-browser/max_tokens256、Provider与账号的秘密设置状态；下一条 `/ask hello` 的实际POST /v1/chat/completions也使用该模型及256、stream=true和合成Provider认证，再次完成sendMessage hel→同一消息编辑hello、help/whoami和管理员持久化。截图由执行者目视，父审查者独立查看组件/账号/模型持久图并核对API与下一请求；登录、组件、账号、修改前、保存成功、刷新后参数分别留图。
+
+浏览器tab、临时反代/控制/模拟服务已关闭；归档Core/全部代次退出，容器正常stop后无存活进程并清理卷/容器，0600临时token文件已删除。精确浏览器构建号查询返回 `This method is not supported through raw CDP.`，未取得该版本号。
+
+**独立认证边界。** 父审查者在 `review-goal75` worktree 的本地 `tmp/test/review-release-auth.py` 消费同一保留归档，完整结果 `tmp/test/review-release-auth.log`：错误Origin登录403且token文件保留；有效登录200且删除token文件；Cookie写入缺CSRF返回401、help仍启用；SIGTERM/Core退出0，耗时1.162s。原始Core日志和result.json目录由该日志的evidence字段记录。
+
+**原始失败、修复与成功的对应关系。** 下列日志全部保留；有效分项按上文逐项消费。
+
+| 日志 | 原始失败与原因 | 改动与后续证据 |
+| --- | --- | --- |
+| `G75-02-arm64-race-20261120-000405.log` | Docker发行RUN233.7s后 `ERROR distribution failed error="read install script: open deploy/install.sh: no such file or directory"`，RUN exit1；测试242.99s/包252.090s/外层254.279s | 唯一产品修复：.dockerignore放行deploy/install.sh，补齐dist现有读取输入；后续arm64及amd64真实签名构建/完整主路径通过 |
+| `G75-02-arm64-race-20261120-000936.log` | 容器CLI错误使用宿主网关HTTP，`release CLI [list --admin-url http://host.docker.internal:50907]: exit status 2`、`alonabot: non-loopback admin URL requires HTTPS`；测试188.12s/包195.448s/外层197.634s | 测试改用容器自身本机base_url，宿主HTTP仍走loopback发布；产品约束保持 |
+| `G75-02-arm64-race-20261120-001336.log` | 临时签名key变化未使BuildKit secret层缓存失效，RUN=CACHED，发布者仍为旧key，断言失败；测试1.43s/包9.521s/外层11.752s | 构建测试增加`--no-cache-filter build`，重新执行签名；最终arm64日志001446及amd64日志004808通过 |
+| `G75-03-special-race-20261120-003223.log`、003238/003448两份整组失败 | 首次 `undefined: BundledPackage`；后续PTY等待/EOF、卸载保留Active及help激活时机误判，权限名core_admin被400拒绝；现行TTY缺省console且stderr WARNING，等待INFO失效 | 本地夹具补manage限定名、保持PTY输入、核对卸载保留/Stopped、等待激活，权限名改admin；显式`--console=false`仍保持真实stdin/stderr TTY。Terminal/HelpPolicy最终003623通过，签名/更新/卸载分项保留前两组独立PASS |
+| `G75-05-network-first.log`、`G75-05-network-second.log` | 首轮归档监听拒绝独立通过后，两个组件ID和Docker注入dev/console的清单预期错误；第二轮只读docker logs stdout，JSON实际在stderr，20秒后AssertionError | 仅修本地脚本清单/日志通道与失败清理；third.log双架构HTTPS、正常停止和清理通过，失败资源均已精确回收 |
+| `G75-06-archive-race-first.log`、`G75-06-archive-race-second.log` | 首次本地import编译错误：fmt未用、time未导入。第二轮在页面操作前为纠正取证脚本的账号API路径而主动释放等待，Active仍local-model/128，`browser changes did not activate`；测试27.45s/包35.687s、exit1 | 本地import与账号路径修正；未修改时的失败完整保留，原Core及五个组件PID已回收。归档真实页面结果来自third.log，容器来自docker-race.log |
+
+**当前检查与承接。** 两次集中审查在同一代码候选上核对契约/规范、原始失败与独立PASS、实际资产与生命周期，未发现已证实的产品缺陷；gofmt和`git diff --check`已通过。正常停机保留本节T-09.11已由父审查者按CONTRACTS §4.2确认的`event router is closed`诊断，成功场景Core均退出0、组件drained=true/killed=false。
+
+受影响vet/build待G75-08；当前候选的完整CI尚待父审查者预约取证。
+
+真实Telegram/真实Provider推理缺少测试凭据，原生linux/amd64、其余目标平台实际运行与其他浏览器未运行，由T-10.1/T-10.2继续闭合；正式密钥签名、公开Release与镜像推送由T-10.4/维护者控制。OneBot 11、welcome、rss按D-171随后续版本验收。
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。
