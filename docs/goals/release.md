@@ -10,7 +10,7 @@
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 已完成（PR #235） |
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
-| goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 等待前置 |
+| goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 待派发 |
 | goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 等待前置 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
 | goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
@@ -207,7 +207,7 @@
 
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
-状态：等待前置（T-09.11 / goal-45）。T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）已合并。2026-11-19 已核对以下产物与接口；goal-44 对应 T-09.9（PR #259，`661cf9b1`）已合并，goal-45 正在执行正式流程与故障验收。保持 goal-45 → goal-75 的接续；审查者在 T-09.11 合并后复核页面和 API，再将总览与本状态行改为待派发。本轮只修订派发语句，未执行以下验收。
+状态：待派发。T-09.11（goal-45，PR #272）的正式流程、三类 Unix 场景与 T-08/T-09 联验已完成，原始证据与未运行项见 TEST-MATRIX §3.2；T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）和 T-09.9（PR #259，`661cf9b1`）已合并。2026-11-19 按 goal-45 候选 `8f62c0bb` 与 main `c2d4774d` 复核以下现行页面、API 与构建入口；执行前确认 PR #272 已合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」，确认 T-09.11 / goal-45 已合并。
@@ -263,7 +263,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：等待前置（T-09.11 / goal-45、T-14.6 / goal-75）。2026-11-19 按 main `287315ff` 核对；完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含 T-09.27 / goal-177 与 T-16.2 / goal-82。goal-44 为 T-09.9，是 goal-45 的前置；当前 scripts/scenarios 尚未建立，由 goal-45 交付，合并后须复核实际调用方式。本条保留首次发布联验与必要修复，状态由审查者在前置合并且语句复核后更新。
+状态：等待前置（T-14.6 / goal-75）。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)。2026-11-19 按候选 `8f62c0bb` 与 main `c2d4774d` 复核；完整前置仍以 spec/plan/release.md 的 T-10.1 行为准，包含 T-09.27 / goal-177 与 T-16.2 / goal-82。goal-44 为 T-09.9，是 goal-45 的前置。本条保留首次发布联验与必要修复，前置合并后由审查者更新派发状态。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -280,6 +280,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 现行入口与证据规则：
 - 使用 cmd/alonabot 的 run、install、enable、restart、reload、update、pin、disable、uninstall、rollback 正式命令与 ADMIN-API；禁止沿用 serve、plugin generate 或旧 --dir/--goos/--goarch 参数。build/check/test/pack 目录为位置参数，pack 用 --target。复用 cmd/alonabot 的 manage_e2e_test.go、recover_e2e_test.go、firstrun_e2e_test.go、t12_e2e_test.go 及 goal-45 合并后的场景，真实 Core/组件进程由候选包启动。
+- goal-45 场景：先用 `uv run --no-project scripts/scenarios/run.py build --out <新目录>` 构建三版包，management 接收 `--alonabot`、`--data-dir` 和三个版本包的位置参数；恢复产物通过 build-recovery 构建，recovery 接收 `--alonabot`、`--overlay-core`、`--data-dir`、`--recovery-package`、`--probe-package`、`--adapter-package`，survivor 接收 `--alonabot`、`--overlay-core`、`--data-dir`、`--recovery-package`。包、普通 Core 与故障 overlay 在当前 Unix 平台构建，运行阶段消费显式输入；完整命令和产物要求见 scripts/scenarios/README.md。
 - 首次运行无 TTY 时正常启动并写 data_dir/admin_token（0600），show 只读取得一次性 token，首次登录删除文件。离线 init/reset 在 Core 停止且 stdin/stderr 为终端时单列验证。管理 Cookie、Origin、X-Alonabot-CSRF 与 CLI Bearer 分别按 ADMIN-API §1～§2；管理 token、聊天 Core Admin、internal HTTP 身份分别验证。
 - 首发预装只包含 Telegram Adapter、Agent、WebUI、help；help 与带后台进程的 WebUI 默认启用，其余按配置/管理操作启用。额外示例仅为联验安装，保持发行清单。Telegram 使用 adapters/telegram/telegramtest，Provider 使用本地 HTTP 模拟；真实凭证仅通过已有批准机制读取，记录模拟与真实平台证据。
 - 插件页面复用 examples/plugins/showcase 的 /status 与 /page，经 /plugins/<id>/、单一 base_url、管理认证、WebUI sandbox iframe/postMessage 桥与 sdk/page 验证（含 D-183 的公开套件与静态资源）；按当前 ADMIN-API、sdk/page 与前置合并后的桥协议逐条核对，禁止沿用页面票据流程。API、浏览器、TCP、stdio 的结果分别记录。
@@ -306,7 +307,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口仍待落实。
+状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口与 GitHub Actions 计费恢复按维护者决定留到最后处理；其余可用平台继续实施和实跑。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -317,7 +318,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 范围（只新增或修改这些）：
 - 新增 scripts/platform/（可在各平台运行的验收程序：Go 程序，调用构建好的 alonabot 与测试插件，输出结构化结果）
-- 复用 goal-45 合并后交付的 scripts/scenarios 在各平台运行；目前目录尚未存在，前置合并后读取实际入口并复用，保持恢复断言
+- Unix 平台复用 goal-45（PR #272）已交付的 scripts/scenarios；其中 run.py 与生成测试使用 Unix/FIFO。Windows 在 scripts/platform 内通过原生进程、锁和检查点驱动对应恢复场景，核对相同 Active/Journal/业务 DB、残存旧树与恢复结果；实际入口与产物要求见 scripts/scenarios/README.md
 - spec/TEST-MATRIX.md：V-32、V-34 与各平台相关条目的证据（本切片获授权修改 TEST-MATRIX）
 - 发现的平台缺陷：在对应包及直接调用方修复（例如 Windows Job Object、路径与锁），每项在 PR 中写明平台、复现、完整错误、原因与验证；SDK 绑定与临时进程树/CGO fixture 按 D-86 放本地测试，不新增 testdata 插件。契约冲突按 spec 流程处理
 允许的新跨模块边：scripts/platform 只经 os/exec 调用构建产物，不 import 本 module 的包。
