@@ -41,7 +41,7 @@ func (s *Service) profileSchema(ctx context.Context, id string) (*configschema.S
 	if active == "" {
 		return nil, nil
 	}
-	raw, _, err := s.configResources(ctx, id)
+	raw, _, _, err := s.configResources(ctx, id)
 	if err != nil {
 		return nil, err
 	}

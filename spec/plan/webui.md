@@ -12,7 +12,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | T-08.7 | goal-34 | `web/admin` 前端骨架（官方 WebUI 组件的源码），配置表单与 i18 组件及 fixture，界面文案的 en-US/zh-CN 目录与语言切换 | T-08 步骤 9（前端） | T-08.1、T-08.10 | V-25 的表单分项、V-54 的界面组件分项 | 已完成（PR #91；TEST-MATRIX §3.2） |
 | T-09.8 | goal-43 | Admin 页面：真实登录、状态、各角色组件的安装启停与替换、Adapter 实例管理、更新/恢复 | T-09 步骤 7（管理页） | T-08.7、T-09.6、T-09.12、T-09.13、T-09.26 | V-40、V-47 的页面分项 | 已完成（PR #238；TEST-MATRIX §3.2） |
-| T-09.9 | goal-44 | Admin 页面：配置表单与 JSON 编辑、命令权限、命令名的替换、追加与删除（D-128）、配置字段的可搜索选择（D-129）、发信许可、Core 设置（Core Admin 列表、默认 locale）、工具调用策略、插件页面入口、界面语言切换、工具的副作用类别与按类别设置策略（D-157）、插件页面桥的 hello、主题与语言事件、设计令牌与快捷键转发，全局搜索固定在外壳第一行最右边（D-159）、配置字段的回复示例（按草稿值即时替换，显示图片，D-160）、校正记录的提示与一键清理无效配置（插件、Adapter 实例与 Core 设置，D-161） | T-09 步骤 7（配置与插件页） | T-09.8、T-09.14、T-11.5、T-04.17、T-08.15、T-08.16 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117、V-128、V-130、V-131、V-132 的页面分项 | 未开始 |
+| T-09.9 | goal-44 | Admin 页面：配置表单与 JSON 编辑、命令权限、命令名的替换、追加与删除（D-128）、配置字段的可搜索选择（D-129）、发信许可、Core 设置（Core Admin 列表、默认 locale）、工具调用策略、插件页面入口、界面语言切换、工具的副作用类别与按类别设置策略（D-157）、插件页面桥的 hello、主题与语言事件、设计令牌与快捷键转发，全局搜索固定在外壳第一行最右边（D-159）、配置字段的回复示例（按草稿值即时替换，显示图片，D-160）、校正记录的提示与一键清理无效配置（插件、Adapter 实例与 Core 设置，D-161） | T-09 步骤 7（配置与插件页） | T-09.8、T-09.14、T-11.5、T-04.17、T-08.15、T-08.16 | V-12、V-22、V-23、V-25、V-43、V-54、V-55、V-56、V-115、V-116、V-117、V-128、V-130、V-131、V-132 的页面分项 | 已完成 |
 | T-09.15 | goal-94 | WebUI 日志页：按来源、级别、trace 与日期查看，实时订阅与历史查询，修改输出级别；只有终端视图（每行一条完整记录，CRITICAL 整行紫色、ERROR 红色、WARNING 黄色）、筛选弹出面板（级别多选含 DEBUG 与 CRITICAL、来源分 Core/插件/账号多选、日期，D-158）、CRITICAL、ERROR 与 WARNING 的计数、清空已载入的记录、导出诊断包对话框（D-156） | T-09 步骤 7（日志） | T-09.8、T-09.10、T-09.19、T-02.5 | V-62、V-63、V-127、V-129 的页面分项 | 已完成（PR #243；TEST-MATRIX §3.2） |
 | T-09.18 | goal-146 | WebUI 模型页：侧栏一级入口，按类型筛选，按提供商分组列出模型，添加提供商对话框（预设、连接、拉取模型列表与勾选），测试与当天用量（D-154） | T-09 步骤 7（模型页） | T-09.8、T-09.14、T-12.16 | V-126 | 已完成（PR #244；TEST-MATRIX §3.2） |
 | T-09.23 | goal-156 | 官方 WebUI 的后台进程与页面：按小时分桶统计收发消息、命令触发与各账号，记录见过的用户，抓取与缓存插件源、检查更新；总览图表、商店（插件源切换、安装、发布入口）、插件「数据」视图（数据库表格、KV/文件存储、Agent 会话摘要与清除）、权限「用户」页、版本记录、定时任务开关、侧栏的插件页面、更新后的更新内容对话框（记住看过的版本）与更新前的 Release 正文预览（D-162～D-164、D-166、D-176、D-178） | T-09 步骤 7（WebUI 后台） | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | V-136，V-138 的页面分项，V-134、V-135 的页面分项 | 已完成（PR #245） |
@@ -22,12 +22,14 @@
 
 ## 3. 页面接入外壳
 
-- 在 `web/admin/src/routes.tsx` 的 `routes` 登记 `RouteEntry`：`id`、`path`、`label`、`icon: LucideIcon`、`group: 'main' | 'bottom'`、`render: () => JSX.Element`。`label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 均定义的 `messages` 键，供导航、顶栏标题和搜索共用。已登记总览、插件、账号、模型、日志与权限用户页；`/dev/forms` 仅在开发模式登记。登录后访问 `/` 跳转 `/overview`，未登录访问管理页跳转 `/login`。
+- 在 `web/admin/src/routes.tsx` 的 `routes` 登记 `RouteEntry`：`id`、`path`、`label`、`icon: LucideIcon`、`group: 'main' | 'bottom'`、`render: () => JSX.Element`。`label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 均定义的 `messages` 键，供导航、顶栏标题和搜索共用。已登记总览、插件、账号、模型、会话、日志、权限与系统设置，权限子页共用同一导航入口；`/dev/forms` 仅在开发模式登记。登录后访问 `/` 跳转 `/overview`，未登录访问管理页跳转 `/login`。
 - 桌面侧栏将 `main` 条目的顺序、隐藏状态和侧栏折叠偏好保存在浏览器中，`bottom` 条目放在底部。侧栏以 `100vh` 固定高度贴顶，导航内部滚动，底部保留版本号与「关于」入口。手机固定入口按 `overview`、`plugins`、`profiles`、`logs` 的顺序取已登记的 `main` 条目；其余条目（含 `bottom`）只出现在「更多」，无剩余条目时省略「更多」。
 - `AppShell({ version, onLogout?, coreUpdate?, coreUpdateFailed?, children })` 装配导航和搜索，页面由入口按路径选择后作为 `children` 传入；传入 `onLogout` 才显示退出入口。`coreUpdate` 为 `{ version, releaseURL }`，`coreUpdateFailed` 在侧栏更新处显示局部失败提示。站内跳转用 `router.ts` 的 `navigate(path, options?)` 或 `Link`。`Link` 的 props 为 `to`、可选的 `className` 和 `children`；手机「更多」使用 Radix 菜单项的 `onSelect` 调用 `navigate`。
 - 已登记路由自动加入全局搜索，匹配当前语言的标题和路径。页面可通过 `SearchContext.register(items: SearchItem[]): () => void` 补充搜索项，卸载时调用返回的注销函数。搜索项包含 `id`、`title`、`section`、`run: () => void` 与可选 `keywords`；按标题和关键词做大小写不敏感的子串匹配，结果按 `section` 分组。按 Enter 或点击执行后清除查询、焦点和悬停状态。
-- `useTheme(): [ThemeChoice, (choice: ThemeChoice) => void]` 提供主题选择接口，面向用户的控件由后续系统设置页接入。桌面搜索在透明顶栏右端，同排展开；收起时为 40×40，内容右边距为 40px。手机顶栏高 54px。配置表单与开发预览沿用原有结构、字体、尺寸和间距，颜色、背景、描边及原生控件 `color-scheme` 随主题更新。
+- `useTheme(): [ThemeChoice, (choice: ThemeChoice) => void]` 提供主题选择接口，面向用户的控件由系统设置页接入。桌面搜索在透明顶栏右端，同排展开；收起时为 40×40，内容右边距为 40px。手机顶栏高 54px。配置表单与开发预览沿用原有结构、字体、尺寸和间距，颜色、背景、描边及原生控件 `color-scheme` 随主题更新。
 
 T-09.23 负责详情页的数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；会话正文归 T-12.20（goal-167）。T-09.9 保留配置、任务与插件页面入口，共用 `/permissions/users` 用户页。
 
 T-09.9 的父桥按 [ADMIN-API §7](../ADMIN-API.md#7-插件页面-postmessage-桥) 在每次 `translate` 请求时用当前语言和请求参数返回 `text`；`hello` 交付语言、主题与令牌，`locale` 事件交付语言。V-130 的浏览器分项用沙箱 iframe 验证 showcase 首次翻译、切换语言后重新取词、主题与快捷键转发。
+
+T-09.9 已接入 `PluginConfigPanel({id})` 与共享 `ConfigForm`：编辑基线为 `pending.config ?? active`，保存使用 `active_generation`，409 保留草稿并允许显式采用最新配置；secret 再认证、动态选项、回复示例及双语字段沿用同一表单。插件详情标签单行横滚，Agent 页面入口为 `pages/memory`（记忆），Core 数据标签保留。父桥在 layout effect 提前绑定，保留首次 hello 的主题与语言订阅；实际页面与浏览器证据见 TEST-MATRIX §3.2。
