@@ -219,8 +219,9 @@
 范围（只新增或修改这些）：
 - 新增 cmd/alonabot/t14_e2e_test.go（//go:build unix）：一个表驱动集成测试 TestReleaseEndToEnd，分别消费发行归档与容器镜像；同文件内放本测试所需的进程、Docker 与 HTTP 辅助。
 - cmd/alonabot/*_local_test.go：其余本地分项回归。
+- 上述端到端验收直接涉及的对应包、构建与部署文件，以及其直接调用方和回归：允许修复验收中可复现且阻碍既有契约的缺陷，采用最小充分改动。每项修复在 PR 中逐条说明复现输入与完整错误、根因、改动位置、验证命令与结果，保留原始错误和证据。
 - spec/TEST-MATRIX.md §3.2：追加 T-14.6 的实际证据行（本切片获授权修改这一处）。
-允许的依赖：标准库与 cmd/alonabot 已有集成测试依赖；沿用 cmd/alonabot -> adapters/telegram/telegramtest、internal/core/packages 等已有测试依赖边。无新增依赖或跨模块边。发现产品缺陷时保留复现与错误，交审查者安排必要修复和范围；本切片只做验收。
+允许的依赖：标准库与 cmd/alonabot 已有集成测试依赖；沿用 cmd/alonabot -> adapters/telegram/telegramtest、internal/core/packages 等已有测试依赖边。无新增依赖或跨模块边。本切片包含验收与上述必要修复；发现契约缺口或冲突时按 spec/README.md「执行与维护」流程处理，保留完整错误与证据。
 
 现行入口与可复用辅助：
 - scripts/dist/main.go：go run ./scripts/dist --version 0.1.0 --key FILE --out DIR --platforms <GOOS>/<GOARCH>。FILE 为临时生成的 base64 Ed25519 私钥文件，位于构建上下文外；同名根目录含 alonabot 和 packages/<组件ID>/ 的安装包、release.json、release.json.sig、release.pub。签名与摘要验证复用现有流程。
