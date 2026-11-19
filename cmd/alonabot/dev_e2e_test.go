@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,10 +15,124 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 )
+
+// TestDevelopmentConsole 通过真实 CLI 创建工程、输入命令，并核对临时实例与管理员未写入设置。
+func TestDevelopmentConsole(t *testing.T) {
+	project := developmentConsoleProject(t)
+	dataDir := t.TempDir()
+	c, input := startDevelopmentConsole(t, project, dataDir)
+	if _, err := io.WriteString(input, "/hello\n"); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(`(?m)^stdout: Hello!$`)
+	var configuration struct {
+		Adapters map[string]struct {
+			Instances map[string]json.RawMessage `json:"instances"`
+		} `json:"adapters"`
+		Admins []string `json:"admins"`
+	}
+	if err := json.Unmarshal(developmentRead(t, filepath.Join(dataDir, "core_config.json")), &configuration); err != nil {
+		t.Fatal(err)
+	}
+	if len(configuration.Adapters[consoleAdapterID].Instances) != 0 {
+		t.Fatalf("console instances persisted: %+v", configuration.Adapters)
+	}
+	for _, admin := range configuration.Admins {
+		if admin == "console:local" {
+			t.Fatalf("console admin persisted: %v", configuration.Admins)
+		}
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d:\n%s", code, c.log())
+	}
+}
+
+func developmentConsoleProject(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := os.MkdirTemp(root, "goal-179-console-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(project); err != nil {
+			t.Error(err)
+		}
+	})
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "init", project, "--id", "alonabot-plugin-console-test")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("init: %v\n%s", err, output)
+	}
+	return project
+}
+
+// startDevelopmentConsole 复用 Core 的进程观察器，将 stdout 单独标记以核对真实终端回复。
+func startDevelopmentConsole(t *testing.T, project, dataDir string, extra ...string) (*core, io.WriteCloser) {
+	t.Helper()
+	args := append([]string{"run", "--console", "--data-dir", dataDir, "--listen", "127.0.0.1:0"}, extra...)
+	c := &core{t: t, cmd: exec.Command(filepath.Join(binDir, "alonabot"), args...), added: make(chan struct{}, 1), done: make(chan struct{})}
+	c.cmd.Dir = project
+	input, err := c.cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := c.cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := c.cmd.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var readers sync.WaitGroup
+	for prefix, stream := range map[string]io.Reader{"stdout: ": stdout, "": stderr} {
+		readers.Go(func() {
+			scanner := bufio.NewScanner(stream)
+			for scanner.Scan() {
+				c.mu.Lock()
+				c.lines = append(c.lines, prefix+scanner.Text())
+				c.mu.Unlock()
+				select { // 通知合并，完整输出保存在 lines 中。
+				case c.added <- struct{}{}:
+				default:
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	go func() {
+		readers.Wait()
+		_ = c.cmd.Wait()
+		close(c.done)
+	}()
+	t.Cleanup(func() {
+		_ = input.Close()
+		_ = c.cmd.Process.Signal(syscall.SIGTERM)
+		select {
+		case <-c.done:
+		case <-time.After(15 * time.Second):
+			_ = c.cmd.Process.Kill()
+			<-c.done
+		}
+	})
+	return c, input
+}
 
 // TestDevelopmentReload 首次贯通目录构建、真实插件/Adapter 进程与热部署；多列理由：现有生命周期测试仅覆盖安装进程。
 func TestDevelopmentReload(t *testing.T) {

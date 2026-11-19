@@ -10,6 +10,8 @@ Module：`github.com/AlonaBot/AlonaBot`。
 
 Core 的[管理 API](spec/ADMIN-API.md#20-webui-需要的补充接口)已支持查询保留代次、列出并暂停或恢复静态任务、查看 Adapter 实例状态、筛选和分页查看聊天目录、在线轮换管理令牌，以及列出由 SDK `.Page` 声明的插件页面及其本地化标题。对应的官方 WebUI 页面随各自切片交付。
 
+官方 Agent 已提供人格、MCP、技能、数据与用户任务五个插件页面（T-12.20，PR #252）。人格保存在受管 SQLite，配置文件通过 `@agent/personas` 选择，修改提示从下一轮普通对话和定时任务生效；数据页查看完整会话正文并管理笔记/档案，MCP 支持状态与手动重连，技能支持重新读取，用户任务支持取消。接口与未运行分项见 [管理 API](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)和 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
+
 最小事件回复示例见 [echo](examples/plugins/echo/main.go)：注册 `message.created`，在 Handler 中调用 `Context.Send`。真实 TCP/stdio 装配和验证见 [echo 集成测试](internal/core/supervisor/echo_test.go)；原 Target 回复无需额外实例许可；显式其他目标和后台发送按 Core 持久化的实例许可逐次准入，撤销在下一次 Send 时生效。许可读写入口当前供 Core 内部使用，CLI 装配与管理入口留给后继切片。许可分项证据见 [TEST-MATRIX §3.3](spec/TEST-MATRIX.md#33-target-与发信许可分项证据)。
 
 Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/cmd/alonabot-adapter-telegram/main.go)，本地 Bot API 模拟服务见 [telegramtest](adapters/telegram/telegramtest/server.go)。OneBot 11 Adapter 已实现正向 WebSocket 连接与接收（发送与媒体随后继切片），入口见 [alonabot-adapter-onebot11](adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go)，本地模拟服务见 [onebottest](adapters/onebot11/onebottest/server.go)。已在 darwin/arm64 验证真实私聊消息接收；完整 Core 装配与其他真实平台场景由后继切片联验。

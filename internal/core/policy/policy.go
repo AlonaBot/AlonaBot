@@ -2,7 +2,7 @@
 //
 // [Policy] 每次命令判定读取全局禁止与作用域覆盖；每次发送先检查会话禁止，
 // 通过后按原始完整 Target 豁免或状态库中的实例许可准入。
-// 管理员由装配处设置内存列表；其文件持久化由设置服务负责（D-82）。
+// 配置管理员由设置服务发布，运行期管理员由装配处登记；有效身份合并两份内存列表（D-82）。
 package policy
 
 import (
@@ -20,6 +20,7 @@ type Policy struct {
 	store           *state.Store
 	adminsMu        sync.RWMutex // 保护管理员列表的整体替换与读取
 	admins          []Admin
+	runtimeAdmins   []Admin                          // 随本次 Core 运行保留，配置发布只替换 admins。
 	commandsChanged func()                           // 开始处理命令策略前装配一次，此后只读。
 	namesMu         sync.RWMutex                     // 串行化命令名写入并保护快照；通知 Router 前释放。
 	names           map[string]map[string][][]string // plugin_id → route_id → 命令名列表

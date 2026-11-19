@@ -163,6 +163,8 @@ return &adapter.Descriptor{
 
 插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css` 与 `kit.js` 两条 GET 路由，认证沿用页面路由；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
+官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、数据与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)）。数据页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 的管理入口。
+
 #### 套件挂载与引入
 
 在插件入口 `New()` 中声明页面：
@@ -257,6 +259,8 @@ AlonaBot.onLocale(async function(locale) {
 给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值（CONTRACTS §5.1、§5.6，D-168）。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 已合并当前会话的有效覆盖，返回整个插件的只读配置；同一 Context 的视图保持不变。Rule、Service、Hook 与延续构造 Context 时同样冻结视图，覆盖更新从 SDK 接收之后开始的调用生效。`p.Config()`、`s.Config()`、OnStart 与后台读取保持基础配置。
 
 覆盖以已经载入、补值及校正的配置为基线，按完整字段路径替换；object/list 整体替换，覆盖祖先 object 后子字段取新对象。`config.Values.WithOverrides(overrides map[string]json.RawMessage) (config.Values, error)` 可建立独立视图，保留当前子路径；覆盖只校验单值并替换，沿用原基础配置的载入与校正结果。
+
+`sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 可读取本插件各配置文件的有效覆盖值副本，外层键为配置文件 ID，内层为字段路径。map 与 RawMessage 均为深拷贝，无覆盖返回空 map；基础配置由 `p.Config()` 读取。传入所属 Handler、HTTP 或生命周期的 ctx，同进程插件按 Session 隔离；独立进程未绑定时沿用默认 Session，缺少 Session 或插件时返回 FAILED_PRECONDITION。每次读取取得当前已发布集合，通知后的读取取得新值，已有副本与 `c.Config()` 冻结视图保持原值。官方 Agent 在 `agent/personas.go` 中与基础配置、`core.profile.list` 合并计算人格直接及继承引用（D-182）。
 
 Core 提供 `core.profile.list`、`current`、`assign` 与 `set`（[WIRE §3.5](../spec/WIRE-FORMAT.md#35-插件可调用的-core-固定服务)）。current/assign/set 从同一 Session 的在途父调用取得可信会话与 Actor，assign/set 要求 Core Admin；set 只修改本插件标记了 `profile` 的字段。会话使用 `default` 时写入 Pending，已有 Pending 或管理互斥占用返回 FAILED_PRECONDITION；整条根调用及延续结束后触发 reload，响应的 `reloading` 为 true。配置文件关闭插件时，命令按禁用处理，文本、事件、Raw 与 PreEvent 候选跳过。
 

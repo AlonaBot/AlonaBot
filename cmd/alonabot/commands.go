@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/app"
 	"github.com/AlonaBot/AlonaBot/internal/core/logging"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +39,7 @@ func execute(args []string) int {
 		return err
 	}
 	var dataDir, format, listen string
-	var reload, stdio bool
+	var reload, stdio, console bool
 	levelText := "info"
 	runCommand := &cobra.Command{Use: "run [directories...]", Short: "Build development components and run AlonaBot Core", Args: cobra.ArbitraryArgs}
 	for _, command := range []*cobra.Command{root, runCommand} {
@@ -46,8 +48,9 @@ func execute(args []string) int {
 		flags.StringVar(&listen, "listen", "", "Core HTTP listen address (overrides settings for this run)")
 		flags.StringVar(&levelText, "log-level", "info", "global log level: debug, info, warn, error or critical")
 		flags.StringVar(&format, "log-format", string(logging.FormatText), "stderr log format: text or json")
-		flags.BoolVar(&reload, "reload", false, "rebuild and restart changed development components")
+		flags.BoolVar(&reload, "reload", true, "rebuild and restart changed development components")
 		flags.BoolVar(&stdio, "stdio", false, "use stdio for development component sessions")
+		flags.BoolVar(&console, "console", false, "chat in this terminal (default: terminal stdin and no configured adapter instances)")
 	}
 	runCommand.RunE = func(cmd *cobra.Command, args []string) error {
 		flags := cmd.Flags()
@@ -71,6 +74,18 @@ func execute(args []string) int {
 		}
 		if flags.Changed("log-format") {
 			options.LogFormat = &format
+		}
+		enabled, err := consoleEnabled(dataDir, flags.Changed("console"), console, isTerminal(os.Stdin))
+		if err != nil {
+			return err
+		}
+		if enabled {
+			level := slog.LevelWarn
+			options.DefaultStderrLevel = &level
+			options.RuntimeAdapters = map[string]settings.AdapterSettings{consoleAdapterID: {
+				Package: consoleComponentID, Instances: map[string]json.RawMessage{consoleInstanceID: json.RawMessage(`{}`)},
+			}}
+			options.RuntimeAdmins = []settings.Admin{{AdapterID: consoleAdapterID, UserID: consoleUserID}}
 		}
 		code = exitFailure
 		if err := runDevelopment(args, dataDir, reload, stdio, values.DevReloadPoll, options); err != nil {

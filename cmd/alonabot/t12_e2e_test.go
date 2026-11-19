@@ -173,18 +173,28 @@ func TestAgentPackage(t *testing.T) {
 	if installed.State != "Installed" || installed.Enabled || installed.Active != "" || installed.Signed || installed.Role != "agent" || installed.Version != "0.1.0" || installed.Source != m.Source {
 		t.Fatalf("installed Agent: %+v", installed)
 	}
-	developmentWrite(t, filepath.Join(dir, "plugins", agentPackageID, "config.json"), fmt.Sprintf(`{
+	writeConfig := func(persona string) {
+		developmentWrite(t, filepath.Join(dir, "plugins", agentPackageID, "config.json"), fmt.Sprintf(`{
 		"providers":[{"custom":{"name":"synthetic","protocol":"openai-compatible","base_url":%q,
 		"api_key":"synthetic-key"}}],
 		"models":[{"name":"synthetic","provider":"synthetic","model":"test-model","type":"chat","max_tokens":128,"image_input":true}],
-		"chat_model":"synthetic","triggers":["private"],"personas":[{"name":"package","prompt":"Package persona"}],"default_persona":"package",
+		"chat_model":"synthetic","triggers":["private"],"default_persona":%q,
 		"skills_dir":%q,"mcp_servers":[{"name":"package","transport":"stdio","command":%q,"args":["--pid-file",%q]}]
-	}`, model.URL, skills, mcp, pidFile))
+	}`, model.URL, persona, skills, mcp, pidFile))
+	}
+	writeConfig("")
 	c.management(t, dir, "", "enable", agentPackageID)
 	active := findPackage(t, c, dir, agentPackageID)
 	if !active.Enabled || active.Active == "" || active.State != "Activated" {
 		t.Fatalf("enabled Agent: %+v", active)
 	}
+	// 人格存在 Agent 的受管数据库中，先经页面 API 创建，再由配置选中。
+	if status, raw := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/"+agentPackageID+"/pages/api/personas", `{"name":"package","prompt":"Package persona"}`); status != http.StatusCreated {
+		t.Fatalf("create persona: %d %s", status, raw)
+	}
+	writeConfig("package")
+	c.management(t, dir, "", "reload", agentPackageID)
+	active = findPackage(t, c, dir, agentPackageID)
 	agentPID := developmentPID(t, c, agentPackageID)
 	developmentRead(t, filepath.Join(dir, "plugins", agentPackageID, "generations", active.Active, "db.sqlite"))
 	c.management(t, dir, "", "install", probeArchive, "--yes")

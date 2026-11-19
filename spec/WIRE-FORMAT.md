@@ -150,6 +150,8 @@ message ConfigCorrection {
 
 路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
+官方 Agent 登记五条 GET 页面 `/pages/personas`、`/pages/mcp`、`/pages/skills`、`/pages/data`、`/pages/tasks`，显式挂载 `/pages/kit.css`、`/pages/kit.js` 与嵌入资源前缀 `/pages/assets/`，并用普通 HTTP 路由提供 `/pages/api/` 数据接口（ADMIN-API §15.2）。只有五条 HTML 路由设置 `page_title`；全部路由沿用管理认证与既有 RouteDescriptor，页面标题来自组件 i18n 的 `pages` 根节点（T-12.20，PR #252）。
+
 `sdk/page.Handler()` 提供的套件资源走插件登记的普通 GET 路由，沿用同一 Listener 和代理认证。浏览器 `postMessage` 消息定义在 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)，与 Session 帧分开。
 
 ### 3.4 Adapter 会话
@@ -214,6 +216,8 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 `ToolEffect` 的编号固定为 `UNSPECIFIED=0`、`READ_ONLY=1`、`WRITE=2`、`DESTRUCTIVE=3`（D-157）；`ToolSpec`、`ToolInfo`、`ToolConfirmRequest` 的 `effect` 均使用此枚举。
 
 Core→插件与 Core→Adapter 方向另有 `sdk.log.set_level`：`LogSetLevelRequest`（`LogLevel level = 1`，与 Bootstrap 使用同一枚举）→ 空的 `LogSetLevelResponse`，SDK 收到后立即按新级别过滤（CONTRACTS §14.3）。Core→插件方向另有 `sdk.profile.set_overrides`：`ProfileSetOverridesRequest` 携带该插件当前有效的全部覆盖值（与 Bootstrap 的 `profile_overrides_json` 同形，空集合为 `{}`）→ 空的 `ProfileSetOverridesResponse`。SDK 全部校验并构造视图成功后原子替换集合，失败返回 INVALID_ARGUMENT；Core 遇发送、业务或响应协议错误关闭原 Session 并返回实际错误（CONTRACTS §5.6，D-168）。
+
+`sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 复用 Bootstrap 与 `sdk.profile.set_overrides` 已发布的当前有效覆盖集合，返回所属插件的深拷贝；Session 归属、错误与冻结视图语义见 CONTRACTS §5.6（D-182）。
 
 配置文件服务的载荷定义在 `profile.proto`，下表为固定字段号；请求与响应均为 PROTOBUF，`schema_version = 1`，`schema_id` 由 `validate.SchemaID` 取得，例如 `ProfileListRequest` 为 `alonabot.profile_list_request.v1`，其他消息按同一规则命名。
 

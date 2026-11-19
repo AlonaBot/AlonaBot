@@ -1633,7 +1633,7 @@ func main() {
  p:=sdk.NewPlugin()
  var mu sync.Mutex
  var hooks []message.Chain
- p.BeforeSend("observe").Handle(func(_ *sdk.Context,_ string,m message.Chain)(message.Chain,error){mu.Lock();hooks=append(hooks,m);mu.Unlock();return nil,nil})
+ p.BeforeSend().ID("observe").Handle(func(_ *sdk.Context,_ string,m message.Chain)(message.Chain,error){mu.Lock();hooks=append(hooks,m);mu.Unlock();return nil,nil})
  p.Route(http.MethodGet,"/reply-hooks").HandleFunc(func(w http.ResponseWriter,_ *http.Request){mu.Lock();defer mu.Unlock();if err:=json.NewEncoder(w).Encode(hooks);err!=nil{slog.Error("write hooks","error",err)}})
  p.Command("reply").Handle(func(c *sdk.Context)(message.Content,error){
   result,err:=c.Send(message.Text("manual"));if err!=nil{return nil,err}

@@ -493,6 +493,44 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 应用层的 400（无效输入）、404（找不到配置项）、502（发现上游失败）和 500（读取用量失败）返回 `{"description":"…"}`，说明为受控英文。模型 ID 的推断规则依次匹配 `embed`、`rerank`、`whisper`/`transcribe`、`tts`，其余为 `chat`。测试路由不落账；有效的零 token 响应存为零，缺失用量不建记录。
 
+### 15.2 Agent 插件页面与数据路由（D-170、D-182）
+
+官方 Agent 的实际 ID 为 `alonabot-agent-official`，以下路径相对于 `/plugins/{agent_id}/`。全部路由要求 Core 管理 Cookie，非 GET 请求沿用 Origin 与 `X-Alonabot-CSRF` 校验；鉴权拒绝沿用 Core 代理响应。五个页面通过 `window.AlonaBot.request` 访问本组件接口，标题取 Agent 的 `pages`，文案取 `messages`；父桥及配置读取 messages 见 §7、§12.1。
+
+| 方法与子路径 | 内容 |
+| --- | --- |
+| `GET pages/personas`、`pages/mcp`、`pages/skills`、`pages/data`、`pages/tasks` | 同一嵌入 HTML，分别声明英文标题 Personas、MCP、Skills、Data、User tasks，并提供中英文标题。 |
+| `GET pages/kit.css`、`pages/kit.js` | `sdk/page.Handler()` 套件资源。 |
+| `GET pages/assets/` 前缀 | 嵌入的 `pages.css` 与 `pages.js`；HTML 使用相对路径引用全部资源。 |
+
+数据路由均返回 JSON；下表子路径相对于 `pages/api/`，成功缺省为 200。查询值按 URL 解码一次；JSON 请求拒绝未知字段与额外对象。
+
+| 方法与子路径 | 请求 | 响应 |
+| --- | --- | --- |
+| `GET personas` | 无 | `{"personas":[{"name":"名字","prompt":"完整提示","references":[{"id":"配置文件 ID","name":"配置文件名","sessions":1}]}]}`，按人格名排序。 |
+| `POST personas` / `PUT personas` | `{"name":"名字","prompt":"完整提示"}`；name 去空白后须非空，保存原值；prompt 必须为字符串，允许空字符串 | 新建为 201、编辑为 200，均返回 `{name,prompt}`；PUT 修改现有人格的提示。 |
+| `DELETE personas?name=...` | 指定现有人格 | 成功 `{}`；基础配置、直接覆盖与继承引用按 CONTRACTS §13.7 检查，被引用返回 409 与 `{description,references:[{id,name,sessions}]}`。 |
+| `GET mcp` | 无 | `{servers:[{name,transport,status,tools:[{name,description,effect}],error?}]}`；status 为 disconnected、connected 或 error，tools 为最近成功目录，effect 为 SDK 的数值类别 0～3。 |
+| `POST mcp/reconnect` | `{"name":"已配置服务器名"}` | 返回该服务器同结构对象；建连失败仍返回 200，status 为 error 且带脱敏 error；未知服务器为 404。 |
+| `GET skills` / `POST skills/reload` | reload 无业务字段，接受空请求体或 `{}` | `{skills:[{name,description}],problems:[{path,message}]}`；reload 一次替换技能与问题快照，已开始轮次保留原快照。 |
+| `GET memory` | 无 | `{records:[{target,scope,instance,entries}]}`，按 target、scope、instance 排序，entries 为完整有序字符串数组。 |
+| `PATCH memory` | `{target,scope,instance,operations:[{op,text?,old_text?}]}` | 返回更新后的 `{target,scope,instance,entries}`；op 为 add、patch、remove，patch/remove 的 old_text 子串须恰好匹配一个条目。 |
+| `DELETE memory` | `{target,scope,instance}` | 删除该完整三元键的整份记录，返回 `{}`。 |
+| `GET conversation` | 省略 key 或 key 为空 | `{conversations:[{key}]}`，列出 Agent 自有目录中的完整会话键并按 key 排序；已无正文的目录项在本次查询中清理。 |
+| `GET conversation?key=...&from_seq=...` | 完整会话键；from_seq 省略或为 0 时从头读取，其他值为无符号整数 | `{entries:[{seq,entry}],next_seq,more}`；entry 为 Core 保存的原样 JSON 对象，游标取 SDK 返回值，读完时 `next_seq=0`、`more=false`。 |
+| `GET tasks` | 无 | `{tasks:[{key,creator,target,prompt,created_at,at?,interval_seconds?,cron?,timezone?,next_at}]}`；列出本 Agent 的全部动态任务，使用真实实例 key。 |
+| `DELETE tasks?key=...` | 非空真实实例 key | `agentTask.Cancel` 删除实例并协作取消在途调用，返回 `{}`。 |
+
+无记录时列表字段返回 `[]`。memory 的 target 为 memory 或 user，scope 与 instance 均须非空；管理操作按完整三元键选记录。PATCH 复用 Agent 的原子记忆操作，会话笔记 2200、用户档案 1375 个 Unicode 码点（含换行），失败保留原记录；既有会话笔记冻结、每轮用户档案读取语义保持。
+
+conversation 覆盖普通键、群成员键与 `task/<key>`，逐页保留真实序号、role、kind、speaker、完整 content、memory_snapshot 与 images 编号。目录恢复及清除交错语义见 CONTRACTS §13.7；Core 的摘要与清除入口沿用 §15。
+
+tasks 的 creator 为 `{instance,user}`，target 为 `{instance,chat,thread,text_limit,text_unit}`，使用创建时保存的目标；created_at、at、next_at 为 RFC 3339 时间，未选触发字段省略，未安排 next_at 为 null。插件代码的静态任务沿用宿主「定时任务」入口。
+
+MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通知并显示真实断线，保留最近成功工具目录；重连只操作选中服务器，停止后拒绝重连及首次连接，旧会话通知保留在原会话。服务器配置沿用通用配置标签。人格页维护目录，配置文件页通过 `@agent/personas` 选择人格，保留 `@agent/llm.models` 来源。
+
+应用错误返回 `{description,code?}`，description 为英文：INVALID_ARGUMENT → 400，NOT_FOUND → 404，ALREADY_EXISTS → 409，RESOURCE_EXHAUSTED → 400，其余为 500；有 SDK 错误码时 code 为对应名称，内部失败记录完整错误链并向页面返回受控说明。人格引用冲突使用上表的 409 响应，附 references。
+
 ## 16. 命令权限、启用与命令名
 
 `GET /api/v1/plugins/{id}/policies` 返回：

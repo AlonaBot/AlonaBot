@@ -8,7 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime/debug"
+	"regexp"
+	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"go.yaml.in/yaml/v3"
@@ -18,7 +19,7 @@ const modulePath = "github.com/AlonaBot/AlonaBot"
 const initialVersion = "0.1.0"
 
 // Init 在空目录创建组件工程，返回是否需要作者补齐开发版 SDK 依赖。
-func Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSDK bool, err error) {
+func Init(ctx context.Context, dir, id, role, adapterID, module, version string) (needsSDK bool, err error) {
 	// 1. 作者字段与目录状态先于写入检查。
 	dir, err = filepath.Abs(dir)
 	if err != nil {
@@ -87,17 +88,19 @@ func Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSD
 		return false, err
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
+	tidySDK := false
 	if !within {
 		if _, err := goCommand(ctx, staging, "mod", "init", module); err != nil {
 			return false, err
 		}
-		version := sdkVersion()
+		version := sdkVersion(version)
 		if version == "(devel)" {
 			needsSDK = role != "webui"
 		} else if role != "webui" {
 			if _, err := goCommand(ctx, staging, "mod", "edit", "-require="+modulePath+"@"+version); err != nil {
 				return false, err
 			}
+			tidySDK = true
 		}
 		files["go.mod"], err = os.ReadFile(filepath.Join(staging, "go.mod"))
 		if err != nil {
@@ -139,6 +142,13 @@ func Init(ctx context.Context, dir, id, role, adapterID, module string) (needsSD
 			return false, err
 		}
 	}
+	// 3. 在已发布的工程中解析 SDK 依赖；失败时保留作者可修复的全部文件。
+	if tidySDK {
+		if _, err := goCommand(ctx, dir, "mod", "tidy"); err != nil {
+			_, outputErr := fmt.Fprintf(os.Stderr, "Project files were kept at %s; run: go -C %q mod tidy\n", dir, dir)
+			return false, errors.Join(err, outputErr)
+		}
+	}
 	return needsSDK, nil
 }
 
@@ -159,26 +169,20 @@ func withinModule(dir string) (bool, error) {
 	}
 }
 
-func sdkVersion() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
+// pseudoVersion 匹配 Go 伪版本末尾的 14 位时间戳与 12 位提交哈希。
+var pseudoVersion = regexp.MustCompile(`[-.]\d{14}-[0-9a-f]{12}$`)
+
+func sdkVersion(version string) string {
+	// Go 会给仓库 checkout 的构建盖上伪版本；它不是发布的版本，按开发版处理。
+	if version == "" || version == "(devel)" || strings.HasSuffix(version, "+dirty") || pseudoVersion.MatchString(version) {
 		return "(devel)"
 	}
-	if info.Main.Path == modulePath && info.Main.Version != "" {
-		return info.Main.Version
+	normalized := strings.TrimPrefix(version, "v")
+	if !manifest.ValidVersion(normalized) {
+		slog.Warn("Invalid CLI version; treating this as a development CLI", "version", version)
+		return "(devel)"
 	}
-	for _, dependency := range info.Deps {
-		if dependency.Path == modulePath {
-			if dependency.Replace != nil {
-				dependency = dependency.Replace
-			}
-			if dependency.Version != "" {
-				return dependency.Version
-			}
-			return "(devel)"
-		}
-	}
-	return "(devel)"
+	return "v" + normalized
 }
 
 const pluginTemplate = `// Package plugin 提供组件的示例命令。
