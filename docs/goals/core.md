@@ -8755,20 +8755,61 @@ internal/core/state
 
 ### goal-174 · S-06.2 休眠指标、故障注入与固定机器验收
 
-状态：等待前置（S-06.1）。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待前置（S-06.1 / goal-173）。以下语句已补齐指标、装配、测量与测试约定；管理接口参考 goal-173 候选 `b44051a9c81f01b8fa9cd4df313acdd083c48bef`，待其合并后由审查者按 main 复核六个端点、CLI、设置发布与运行诊断接口，再改为待派发。固定机器测量与 WebUI 页面分别记录证据。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-174（切片 S-06.2：休眠指标、故障注入与固定机器验收）。goal 目录 goal-174，分支 goal-174，worktree .worktrees/goal-174，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：补齐休眠指标、故障注入与固定机器资源测量，按证据调整初值并汇总 V-77、V-78、V-81。
+目标：补齐休眠计数与耗时记录，完成真实进程故障注入和固定 linux/amd64 机器上的资源测量，以原始数据复核初值并汇总 V-77、V-78、V-81。
 
-依据：PLAN §7 S-06 步骤 2～4；CONTRACTS §4.4、§4.5、§16；DESIGN §O；TEST-MATRIX V-77、V-78、V-81；SLEEP-DESIGN §10 的测量目标。
+依据：PLAN §7 S-06 全部步骤（实施步骤 2～4）；CONTRACTS §4.4、§4.5、§10、§14、§16；DESIGN §O；spec/adr/SLEEP-DESIGN.md §8、§10（现行行为以已并入契约为准）；TEST-MATRIX V-77、V-78、V-81、V-74 及 §3；ARCHITECTURE 的依赖方向；D-86、D-171（rss 后置沿用 goal-48 的首发范围决定）。
 
-要点：
-- 范围：internal/core/metrics、supervisor/idle/scheduler 的必要埋点、internal/app 与 cmd 的现有集成验证入口、examples/plugins/echo 的必要可休眠声明、internal/tune/params.go，以及明确授权的 spec/TEST-MATRIX.md §3 证据回写；不扩大为通用监控平台。
-- 记录冷启动到 ACTIVATED 的 P50/P95/P99、OnStart/OnReady 耗时、唤醒次数、失败/丢弃原因、CPU 与活跃/休眠 PSS/RSS；复用既有 metrics、日志与资源取证方法。
-- 固定机器上 echo 与 V-74 同组插件各取 100 次冷启动样本，记录 OS/arch、CPU、内存、Go 版本、构建设置和测量命令；echo P95 200ms 为初步目标，其他插件只记录。PSS 在支持的平台采集，未取得的值写未运行。
-- 故障注入覆盖唤醒中崩溃、STOPPING 中到达请求、切回 always_on，验证无双进程/重复交付，快照、任务与业务数据保留。复用前置有效证据，不重复提交已有分项测试。
-- 测量环境缺失时固定机器验收保持未运行，指标与独立故障注入可继续；测量未完成时不得把本切片或 V-81 总体验收标为完成。阈值调整须由审查者同步 CONTRACTS §16 与决策依据，不改变既有参数而缺少测量理由。
-- 本切片没有 WebUI 的发布前置。汇总页面证据时引用 T-09.8/T-09.9 的真实操作结果，未合并/未运行则明确保留缺口，不用模拟服务充当浏览器或固定机器证据。
+前置与范围：
+- 开始实现前确认 S-06.1 已合并，并逐项核对下列管理接口；有签名或数据形状差异时交审查者修订本语句。运行状态、策略与设置写回沿用同一 Core 所有者。
+- 产品改动限于 internal/core/metrics/counters.go 的种类/原因说明，internal/core/supervisor/{wake,activity,supervisor,prepare,runtime}.go 的计数、冷启动与状态变化日志，sdk/session.go 与 sdk/activate.go 的回调耗时日志，internal/app/assembly.go 的计数装配，以及 examples/plugins/{echo,configdb}/plugin.yaml 的 sleep_capable 声明。沿用 Idle Controller 与 Scheduler；发现行为故障时先报告具体契约、位置及受影响范围。
+- 验证入口限于新增 internal/app/sleep_metrics_test.go（一个提交的集成测试）、scripts/sleep-measure/main.go（仅 linux 构建的标准库测量工具）与各相关包被忽略的 *_local_test.go；原始数据写入用户指定的临时输出目录。明确授权回写 spec/TEST-MATRIX.md §3 的证据，及在审查者先完成契约同步并批准新值后修改 internal/tune/params.go。其他规格、架构与页面同步交审查者。
+- 固定机器为 linux/amd64，优先与 V-33/V-74 使用同一台机器；可用 instabox，由协调审查者预约独占时段并与 CI 串行。执行者取得时段后才采样。按 D-171 与 goal-48，本轮完整测 Core、echo、configdb 的 gormdb 变体；rss 的 V-74/V-81 样本分项注明随组件进入后续版本测量及原因，作为已裁定后置项保留。help 如有补测，保留 help 名称和独立结果。
+- 复用既有 metrics、slog、管理 API、CLI、真实子进程与 SQLite，无新增依赖。测量工具只负责本次两组插件与 Core 基线取证；两组插件冷启动各 100 次。rss 后置独立登记，本轮现有样本的测量完整执行。
+
+接口与装配（现有签名保留，新增公开面仅一项）：
+- 现有 metrics.Counters.Add(pluginID string, kind metrics.Kind, reason metrics.Reason) 与 Snapshot() map[string]map[metrics.Kind]map[metrics.Reason]uint64 继续由 assembly 的唯一 *metrics.Counters 持有；零值、并发使用和快照复制语义保留。新增 kind 值 "wake"，原因取下文固定集合，完整错误只进日志。
+- 在 supervisor.WakeOptions 新增字段 Count func(pluginID string, reason string)。assembly 创建唯一 Waker 时传入闭包 a.metrics.Add(pluginID, metrics.Kind("wake"), metrics.Reason(reason))；Count 为 nil 时关闭该处计数。supervisor 经函数注入调用，沿用 ARCHITECTURE 已允许的 app→metrics、app→supervisor 边。
+- supervisor.NewWaker(opt WakeOptions) *Waker、EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)、Ready(running *Running)、Activity(pluginID string) ActivityStatus、AcknowledgeColdStarts(pluginID string, through uint64) 均沿用现有签名。计数独立于冷却历史的消费与回收，Snapshot 及诊断读取保持只读。计数回调在活动门禁锁外调用，仅同步累加内存计数。
+- idle.New(values tune.Values) *Controller 与 CanStop(pluginID string, policy Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool 继续由 Core 循环串行调用；scheduler.Options.EnsureActive func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)、Suspend(pluginID string)、Stats(pluginID, jobID string) JobStats 及 TasksStats(pluginID string) TaskStats 沿用现有生命周期与统计所有者。测量读取快照，实际空闲退出仍经 StopIdle；全部绑定完成后的 Ready 门禁继续决定交付时刻。
+- S-06.1 候选提供 manage.Options.SleepPolicy func(ctx context.Context, in state.Install) (manage.SleepPolicy, error)，由 Core.managementSleepPolicy(ctx context.Context, in state.Install, development *manifest.Manifest) (manage.SleepPolicy, error) 装配。六个端点为 GET/PUT /api/v1/core/sleep、GET/PUT/DELETE /api/v1/plugins/{id}/sleep-policy、GET /api/v1/plugins/{id}/runtime；读取保持无唤醒副作用。全局 PUT 同时传 mode 与 idle_timeout，插件 PUT 传 policy，DELETE 删除覆盖。响应沿用 ADMIN-API §24 的 envelope 与 §5 错误；runtime 含 enabled、generation_id、state、reason、changed_at、可选 last_wake/last_suspend。CLI 沿用 alonabot sleep-policy [ID] [never|auto|duration]；全局模式经管理 API 修改。设置更新继续走 settings.File.Update 与既有发布者，失败保留实际错误并重新 GET 核对已保存设置。
+- 测量入口：go run ./scripts/sleep-measure --alonabot <CLI绝对路径> --echo-package <echo归档> --configdb-package <configdb_gorm归档> --work-dir <新的临时目录> --out <原始数据目录>。工具仅 import 标准库，所有函数私有；输入缺失、平台不符、安装/启动/读数失败均返回完整错误和非零退出码，并保留已取得的数据。复用 CLI 的 install/run/restart 与认证管理 API，使用独立 data_dir；Core 与插件使用普通发布构建，编译、安装、首次迁移与测试工具自身耗时均在冷启动样本区间之外。
+
+指标与日志口径：
+- "wake"/"started"：每次 Waker 合并后实际调用 Start 一次记一次；"ready"：该次 Start 返回且完整绑定/Ready 已核对成功；"failed"：该次共享 Start 失败一次。100 个等待者共享一次启动时三者按启动次数统计。"cold_start"：process.Start 成功后的每个真实独立进程记一次，包括初次启用、管理重启与按需恢复；process.Start 本身失败保留错误，唤醒尝试计入 failed。
+- 等待拒绝原因分别为 "dropped_queue"（逐插件条数）、"dropped_bytes"（逐插件字节）、"dropped_budget"（Core 总 payload）。已入队后未交付的请求每个只记一个终止原因："cancelled"、"deadline"、"dropped_failed"（观测到共享启动失败）或 "dropped_other"（其他实际错误）；排队循环与唤醒广播均不重复计数。等待取消/到期立即归还原预算，共享启动继续。区分每次启动的 failed 与每个等待者的丢弃数，Scheduler 到期唤醒复用同一入口。
+- 每次计数同步写 DEBUG "wake metric"，含 plugin_id、reason；集成测试通过同一时间范围的日志聚合并与 Snapshot 对照。测量工具在独立 core_config.json 显式设置 log.level=debug、log.format=json、log.file.enabled=true，保留原日志与设置，插件来源继承 debug。错误日志保留完整 err 及可取得的 phase/code、plugin_id、generation_id、session_id、pid，按 CONTRACTS §14 脱敏。运行状态、唤醒与空闲停止原因沿用已有持久记录，并为真实状态变化补齐 INFO 日志；禁止用任意错误文本作为计数标签。
+- 冷启动起点为 supervisor 调用 process.Start 前的既有 startedAt；终点为 host.Activate 成功返回、Core 已确认合法 ACTIVATED 的第一时间，先记录再写运行状态与装配业务绑定。用同一进程的单调时间求差；通过 Prepared 私有字段跨准备/激活阶段保存起点。成功记录 DEBUG "cold start completed"，含 duration_ns、plugin_id、generation_id、session_id、pid、activation_reason；另外记录 Core 可直接观察的 host.Prepare 调用区间 prepare_ns 与 host.Activate 调用区间 activate_ns。失败记录实际错误与已耗时，成功分布只包含完整成功样本。Ready 继续表示全部绑定完成，两类观测分别保留。
+- 计时触点依据：当前 REGISTER 覆盖配置、迁移和 OnStart，ACTIVATE→ACTIVATED 覆盖 OnReady 及协议往返；control.proto/route.proto 没有回调耗时字段，Core 的上述可见阶段测量分别保留原名。CONTRACTS §4.5 要求单独记录 OnStart/OnReady，因此本语句将 sdk/session.go:prepare 的 root.onStart 和 sdk/activate.go:runOnReady 的 a.onReady 两个调用点的日志纳入最小范围，复用现行 componentLogger 输出英文消息与结构化字段。保持回调预算、watchdog、panic/error 处理及激活门禁；协议字段、wire、根包与 SDK 公开 API 保持现状。
+- OnStart、OnReady 在 SDK 实际执行用户回调的 goroutine 内分别计时，起点为调用前，终点为实际返回或 panic。DEBUG "lifecycle callback completed" 含 phase（OnStart/OnReady）、executed=true、duration_ns、outcome（success/error/panic）及完整错误；缺少回调时记 executed=false、outcome=not_executed，耗时字段省略并在汇总标无样本。watchdog 超时时仅记录 "lifecycle callback deadline observed"、outcome=timeout 及 observed_ns 截止观测，保留原失败日志；实际返回前的 duration_ns 保持缺项，进程退出同样保留缺项原因。额外字段 lifecycle_session_id 取 HELLO_ACK 的 Session ID 十六进制，用于关联准备期日志（现有 Source.SetSession 在 host.Prepare 返回后调用）；Core 的来源、代次与 session_id 字段仍由原 Source 补充，完整冷启动耗时由 Core 直接测得。
+
+行为与故障注入：
+- 唤醒中崩溃：用临时真实插件在 OnReady 同步点退出，多个等待者收到实际启动错误，运行状态 FAILED、共享 failed 只增一次，未交付等待分别归还条数/字节/Core 预算，旧树确认退出后按既有恢复规则处理。无重复请求、双进程、重复迁移或额外业务重试；Scheduler 失败撤销计划沿用 S-03.1。
+- STOPPING 中到达请求：用真实 OnStop 同步点冻结旧树，命令与自然到期项按原 deadline 等待；旧树退出后仅恢复一个原代次 Session，Ready 后各交付一次。取消的请求退出等待，过期项保持原期限；验证 StopReason=IDLE、一次 STOPPING，正常空闲退出继续保持异常重启次数。
+- 切回 always_on：经认证管理 API 修改模式，逐个等待全部已启用且休眠的 plugin/agent 按原代次 ACTIVE；停用插件保持 STOPPED。核对 ActiveGeneration、配置、路由快照内容、静态起点/暂停状态、动态任务参数与业务 DB 标记保持，迁移次数保持，运行状态与最近原因可读。设置保存后的唤醒失败保留完整错误及 FAILED，GET 返回实际已保存值。
+- 频繁唤醒：核对超过 SLEEP_COLD_START_MAX 后从触发时刻起固定常驻 SLEEP_COLD_START_WINDOW，期间新启动保留计数且冷却截止保持；结束后恢复空闲判定。既有测试与已合并证据有效时直接引用，指标读取与冷启动历史回收互不消耗。
+
+固定机器测量与数据定义：
+- 冷启动两组为 echo 与 configdb 的 configdb_gorm 构建，每组固定 100 次真实新进程冷启动尝试，序号 1～100 各执行一次。先在独立临时 data_dir 完成安装/首次迁移，再于 always_on 模式按原代次串行管理 restart，明确记录 activation_reason=resume、文件缓存条件与运行顺序；以 cold start completed 为区间，API/CLI 完成时间另存。该批记录进程冷启动，真实 SUSPENDED→WAKING→Ready 主路径由集成与故障注入另行取证。失败编号逐条保留、报告实际尝试数与失败率，继续独立样本取证；任一组少于 100 个完整成功样本时保留失败/未完成状态，修复后重测须对应新候选并保留原批次。rss 分项按 D-171 后置。
+- 原始行至少含机器标识、产品 head、样本组/序号、代次/Session/pid、起止时间、cold_start_ns、prepare_ns、activate_ns、OnStart/OnReady 的实际耗时或缺项原因、结果与完整错误。成功样本按耗时升序，Pq 取第 ceil(q×N) 项，N 为有效成功样本数；完整批次 N=100，P50/P95/P99 分别第 50/95/99 项，存在缺项的分布标为部分结果。统一以 ms 展示并保留 ns 原值。echo P95 200ms 为初步目标；超出时定位阶段与差异并报告，其他插件只记录实测值。
+- 资源测量每个样本组、每轮使用新的独立 Core/data_dir，避免前 100 次启动触发的冷却期污染空闲测量。记录原样 sleep 与全部 tune 生效值；使用 CONTRACTS 缺省预算、15 分钟空闲时长、最短运行时间、冷启动阈值与冷却窗口，预约时段包含这些实际等待。通过管理 API 开启 component_idle 并按真实空闲条件等待自动 SUSPENDED。每组 ACTIVE 和确认 SUSPENDED 后分别稳定空闲 2 分钟，共 3 轮；采集 /proc/<pid>/smaps_rollup 的 Pss、Rss、Private_Clean+Private_Dirty（KiB 转 MiB），同时记录各 PID 原值、插件进程树汇总和 Core/必要附属进程的单列与合计。仅 Core 的常驻基线按 V-74 单独测量。
+- CPU 从同一 2 分钟区间内 /proc/<pid>/stat 的 utime+stime 差值，结合机器 getconf CLK_TCK 与实际单调墙钟差计算，100% 表示占满一个逻辑核；按进程树汇总并保留 ticks、频率与时间原值。确认旧插件整树已退出后，该树休眠期间的 PSS/RSS/CPU 记录为 0，并保留 Core 与附属进程实测值；读取权限、缺少文件或进程身份变化造成的缺项写明原因。测量平台为 linux/amd64，PSS 缺失时该项保持未运行。
+- 保存 OS/arch、内核、CPU 型号/逻辑核数、总内存、Go 版本、产品/样本源码版本与完整构建命令（含 configdb_gorm 标签、CGO/构建参数）、包来源、环境限制、全部采样命令、逐行原始数据与汇总路径。测量机或本轮样本输入不足时记录具体缺口；实际机器与 V-33/V-74 的对应关系须写明。按 V-74 记录 ACTIVE 三轮中位数及原预算 Core ≤24 MiB、echo ≤10 MiB、configdb gormdb ≤16 MiB；rss ≤14 MiB 随组件后置，help 补测保持独立名称与结果，预算口径按各自样本登记。
+- 初值沿用 CONTRACTS §16；测量支持调整时，在 PR 给出旧值、建议值、对应数据与影响，由审查者先同步 CONTRACTS/PLAN/TEST-MATRIX/ADR，再批准 internal/tune 的落值。保留原预算及 echo 200ms 初步目标，完整记录所有失败与测量缺项。
+
+测试：
+- 提交：internal/app/sleep_metrics_test.go:TestSleepMetrics，一个真实 Core＋认证管理 API＋已安装独立插件进程＋SQLite 的集成主路径，复用 wake/idle/scheduler 现有夹具。覆盖自动休眠→100 个并发请求共享恢复→再次休眠→always_on 恢复；核对每次实际启动及成功计数、逐条交付次数、冷启动与 SDK 阶段日志可关联，原代次/快照/任务/业务标记/迁移次数保持。测试使用显式记录的短时长与 tune 覆盖；真实固定机器测量沿用上述缺省值。测试插件源码在测试中动态构建，遵守 D-86。
+- 本地自测：三种预算拒绝、取消/deadline、唤醒失败的逐启动/逐等待计数，快照并发与历史回收、无 OnStart/OnReady、回调错误/panic/超时、STOPPING 中请求与到期项、OnReady 崩溃、设置保存后唤醒失败、固定冷却期；按上述真实故障场景验证。SDK、supervisor 及 testdata 绑定测试一律 *_local_test.go/临时构建，PR 写明命令与结果。测量工具用本地测试校验 /proc 解析、进程身份、KiB/CPU 单位、nearest-rank 及输入/读数失败保留，禁止以 fixture 代替真实资源数据。
+- 回归复用 TestWake、TestIdle、TestSchedulerWake 与合并后 S-06.1 的管理集成测试；已有有效 V-77/V-78 分项逐项引用源码位置、PR/head、命令/平台/结果，仅补本切片改变或仍缺的证据。
+
+完成条件与停止条件：
+- 开发环境执行 gofmt -w <本切片改动的Go文件>、git diff --check、go vet ./internal/core/metrics/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/scheduler/... ./sdk/... ./internal/app/...、go build ./...；linux/amd64 测量机另外执行 go build ./scripts/sleep-measure。运行 go test -race -count=1 ./internal/core/metrics/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/scheduler/... ./sdk/... ./internal/app/...；S-06.1 管理 API/CLI 测试按合并后的实际测试名定点回归。测量工具用 go test -count=1 ./scripts/sleep-measure 运行本地解析/计算自测。race 与采样分时执行，采样使用普通构建。
+- 在预约的 linux/amd64 机器执行上述测量命令，保留两组各 100 次冷启动、ACTIVE/SUSPENDED 的 PSS/RSS/CPU、Core 基线、全部失败与丢弃原因及故障注入结果。在 TEST-MATRIX §3 回写测试位置、命令、平台/版本、产品与包来源、原始数据/日志路径和通过/失败/未运行，汇总 V-77、V-78、V-81 的每个分项；rss 单列 D-171 后置原因，留给随后续版本的组件验收。
+- 出现双进程、重复交付、期限延长、预算未归还、空闲退出计入异常重启、代次/迁移/数据改变、快照混入凭证、Scheduler 丢失休眠计划或补执行异常离线 tick 时停止并报告；修复涉及本语句范围外的文件、协议或契约时交审查者决定。需要新增依赖、放宽预算/阈值或更换测量样本时同样停止对应工作。
+- 测量机、本轮 echo/configdb 包或任何必需读数缺失时，受影响分项保持未运行；指标与独立故障注入继续。本轮必需测量缺项时 goal-174 及 V-81 总体验收保持未完成；rss 按 D-171 登记的后置状态随对应版本继续。该切片没有 WebUI 发布前置；页面证据归 S-06.3 / goal-175，关联 T-09.8/T-09.9 的真实浏览器操作，未合并/未运行明确留项，V-81 汇总逐项呈现状态。
+- 最后一个 task 重跑本切片适用完成命令，推送 goal-174 并按模板开 PR 到 main，写明提交测试新增行数、本地测试、实际数据及待审查者同步内容。存在必需缺项时保留阻塞与未完成状态；由审查者验收后更新切片状态。
 ```
