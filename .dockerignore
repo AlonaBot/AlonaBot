@@ -24,6 +24,8 @@
 !scripts/
 !scripts/dist/
 !scripts/dist/**
+!deploy/
+!deploy/install.sh
 **/.git
 **/node_modules
 web/admin/dist
