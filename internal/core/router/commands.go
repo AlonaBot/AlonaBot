@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 )
@@ -192,23 +193,31 @@ func (r *Router) commandMenu(ctx context.Context, instance adapter.Instance) ([]
 			continue
 		}
 		// 3. 英文来自代码，目录中的每个语言逐键回落；未登记说明时使用命令名。
-		source := command.GetDescription()
-		description := source
-		if source == "" {
-			description = path[0]
-		}
-		descriptions := map[string]string{"en-US": description}
-		if catalog := route.messages(); catalog != nil {
-			for _, locale := range catalog.Locales() {
-				text := description
-				if source != "" {
-					text = catalog.CommandDescription([]string{locale, route.defaultLocale()}, command.GetPath(), source)
+		descriptions := CommandDescriptions(route.messages(), route.defaultLocale(), command.GetPath(), command.GetDescription())
+		if descriptions == nil {
+			descriptions = map[string]string{"en-US": path[0]}
+			if catalog := route.messages(); catalog != nil {
+				for _, locale := range catalog.Locales() {
+					descriptions[locale] = path[0]
 				}
-				descriptions[locale] = text
 			}
 		}
 		menu = append(menu, &pb.CommandMenuItem{Name: path[0], Descriptions: descriptions})
 	}
 	slices.SortFunc(menu, func(a, b *pb.CommandMenuItem) int { return cmp.Compare(a.Name, b.Name) })
 	return menu, nil
+}
+
+// CommandDescriptions 按包内语言及 Session 默认语言选取说明；未登记英文说明时返回 nil。
+func CommandDescriptions(catalog *i18n.Catalog, defaultLocale string, path []string, source string) map[string]string {
+	if source == "" {
+		return nil
+	}
+	descriptions := map[string]string{"en-US": source}
+	if catalog != nil {
+		for _, locale := range catalog.Locales() {
+			descriptions[locale] = catalog.CommandDescription([]string{locale, defaultLocale}, path, source)
+		}
+	}
+	return descriptions
 }
