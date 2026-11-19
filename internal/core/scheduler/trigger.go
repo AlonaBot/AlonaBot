@@ -58,11 +58,10 @@ func (s *Scheduler) Trigger(ctx context.Context, pluginID, jobID string, complet
 		return triggerError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "static job is paused or running")
 	}
 	runContext, cancel := context.WithCancel(ctx)
-	run := &jobRun{cancel: cancel, reg: reg, completed: completed}
+	run := &jobRun{cancel: cancel, completed: completed}
 	job.state.running = run
 	job.state.stats.Runs++
 	now := s.now()
-	job.state.lastAt = now
 	s.mu.Unlock()
 	// 2. 结果与 Late 槽释放继续交给统一调用路径；保留自然周期起点。
 	s.call(runContext, pluginID, reg, job, run, now, now, nil)

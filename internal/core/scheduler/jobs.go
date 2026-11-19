@@ -89,7 +89,7 @@ type StaticJob struct {
 	LastRunAt, NextRunAt time.Time
 }
 
-// Jobs 列出当前 Session 登记的静态任务；已撤销注册时返回空列表。
+// Jobs 列出保留计划中的静态任务；已撤销注册时返回空列表。
 func (s *Scheduler) Jobs(pluginID string) []StaticJob {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -51,6 +52,9 @@ func (a *assembly) startWake(_ context.Context, id string) (*supervisor.Running,
 				}
 			}
 			err = errors.Join(err, readErr)
+			// 在运行循环内撤销失败的休眠计划，完整启动错误仍交给 Waker 发布。
+			a.scheduler.Detach(id)
+			slog.Error("plugin wake failed", "plugin_id", id, "error", err)
 		}()
 		in, err := c.store.GetInstall(ctx, id)
 		if err != nil {
@@ -77,8 +81,11 @@ func (a *assembly) startWake(_ context.Context, id string) (*supervisor.Running,
 		if status.State != state.RuntimeSuspended {
 			return &wire.CallError{ErrorInfo: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "plugin is no longer suspended"}}
 		}
-		if err := c.stopManaged(id, pb.StopReason_STOP_REASON_RESTART); err != nil {
-			return err
+		// SUSPENDED 已确认旧树退出；直接恢复，保留本次正常休眠接纳的到期项。
+		for i, old := range c.components {
+			if old != nil && old.id == id {
+				c.components[i] = nil
+			}
 		}
 		running, err := c.startInstalled(ctx, c.dir, in)
 		if running != nil {
