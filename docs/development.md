@@ -79,7 +79,7 @@ go run ./scripts/dist --version 0.1.0 \
 
 安装包下载前缀默认取 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，可用 `--asset-base https://example.com/releases/v0.1.0` 覆盖。发行 Core 通过 `-ldflags -X` 嵌入官方公钥，安装官方签名包时免首次来源与发布者确认；签名与摘要仍按安装流程验证，已有发布者绑定继续生效。未注入公钥的开发构建保留原确认流程。
 
-当前 `--version` 决定发行归档名和默认下载前缀；Core 管理 API 的版本仍来自 Go module 构建信息，源码构建会显示 `(devel)`。正式发布前需在 `internal/app/version.go` 补齐 Core 版本注入入口。
+`--version` 决定发行归档名、默认下载前缀及注入的 Core 版本；`GET /api/v1/core` 返回该发行版本。开发构建沿用 Go module 构建信息，源码构建通常显示 `(devel)`。
 
 ## 容器镜像
 
@@ -94,12 +94,12 @@ docker compose -f deploy/compose.yaml exec alonabot alonabot admin-token show --
 
 镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
 
-自行构建时，使用上表锁定的 Go、Node/npm 与 Docker BuildKit/buildx。`VERSION` 必填，签名私钥使用发行构建相同的 base64 Ed25519 格式，存放在构建上下文之外，权限为 0600；构建验收使用临时密钥，正式发行使用维护者控制的密钥。密钥通过必需的 BuildKit secret 挂载传入。构建阶段直接调用 `scripts/dist`，沿用其中的 npm ci/build、签名和四个官方包清单。
+自行构建时，使用上表锁定的 Go、Node/npm 与 Docker BuildKit/buildx。`VERSION` 必填，签名私钥使用发行构建相同的 base64 Ed25519 格式，存放在构建上下文之外，权限为 0600；构建验收使用临时密钥，正式发行使用维护者控制的密钥。密钥通过必需的 BuildKit secret 挂载传入。构建阶段直接调用 `scripts/dist`，沿用其中的 npm ci/build、签名和四个官方包清单。BuildKit 的缓存判定忽略 secret 内容；命令使用 `--no-cache-filter build` 重新执行签名阶段，确保同版本更换密钥时使用本次密钥。
 
 ```fish
 set version 0.1.0
 set release_key ~/.config/alonabot/release.key
-docker buildx build --platform linux/amd64,linux/arm64 \
+docker buildx build --platform linux/amd64,linux/arm64 --no-cache-filter build \
   --build-arg VERSION=$version --secret id=release_key,src=$release_key \
   --output type=oci,dest=/tmp/alonabot-$version.oci.tar \
   -t ghcr.io/alonabot/alonabot:$version .
@@ -108,7 +108,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`；省略时沿用 `scripts/dist` 的 GitHub Release 地址。下面分别构建并在可运行相应平台的主机上启动本地镜像；跨架构运行需要 Docker 已配置的模拟器。
 
 ```fish
-docker buildx build --platform linux/amd64 --load \
+docker buildx build --platform linux/amd64 --load --no-cache-filter build \
   --build-arg VERSION=$version --secret id=release_key,src=$release_key \
   -t alonabot:$version-amd64 .
 docker run -d --name alonabot-amd64 --platform linux/amd64 --init \
@@ -117,7 +117,7 @@ docker exec alonabot-amd64 alonabot admin-token show --data-dir /data
 # 完成该平台验收后停止，释放宿主端口，再运行另一个平台。
 docker stop alonabot-amd64
 
-docker buildx build --platform linux/arm64 --load \
+docker buildx build --platform linux/arm64 --load --no-cache-filter build \
   --build-arg VERSION=$version --secret id=release_key,src=$release_key \
   -t alonabot:$version-arm64 .
 docker run -d --name alonabot-arm64 --platform linux/arm64 --init \
@@ -213,7 +213,7 @@ Core 在出站 Hook 前完成回复改写，并沿用整链复检。前缀按普
 
 官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录已迁入 Agent 受管 SQLite 的 `persona` 表（T-12.20，PR #252），由插件的人格页增删改，`default_persona` 只存名字，选项来源为 `@agent/personas`；基础配置的非空引用在 OnStart 校验，普通与定时轮次读取当前已提交提示。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；初始迁移 ID:1 包含 `persona` 与 `conversation_record`，ID:2 保留记忆迁移，旧开发库按首次发布前约定重建。
 
-官方 Agent 的人格、MCP、技能、数据和用户任务页面由组件自带资源提供，通过管理会话访问。人格修改从下一轮普通对话和定时任务生效；数据页读取完整会话正文并管理笔记/档案，摘要与清除使用 Core 原有入口；动态任务按真实实例 key 取消。接口见 [ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)，验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)；浏览器渲染与真实 iframe 联验未运行，由审查者在 goal-44 合并后核对。
+官方 Agent 的人格、MCP、技能、记忆和用户任务页面由组件自带资源提供，通过管理会话访问。人格修改从下一轮普通对话和定时任务生效；记忆页位于 `pages/memory`，读取完整会话正文并管理笔记/档案，摘要与清除使用 Core 原有入口；动态任务按真实实例 key 取消。接口见 [ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)，验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。goal-44 已完成真实浏览器与 iframe 桥联验，覆盖主题、语言、窄屏标签、配置保存与重载。
 
 ### 导出诊断包
 
