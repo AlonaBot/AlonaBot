@@ -1,4 +1,4 @@
-"""复用正式管理集成流程，构建临时签名包或验收指定的 Core 二进制。"""
+"""以指定产物执行正式管理、崩溃恢复和残存写入者场景。"""
 
 import argparse
 import json
@@ -12,6 +12,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 TEST = ROOT / "cmd/alonabot/t09_e2e_test.go"
 HARNESS = ROOT / "cmd/alonabot/e2e_test.go"
+RECOVERY = ROOT / "cmd/alonabot/recover_e2e_test.go"
+RECOVERY_TEMPLATE = Path(__file__).with_name("recovery.go.tmpl")
 
 
 # shortcut: 依赖集成测试的固定源码锚点，入口结构调整时同步修改场景生成器。
@@ -74,6 +76,53 @@ def management_source(source):
     return source + EVIDENCE_HELPERS
 
 
+def survivor_source(source):
+    source = replace_once(
+        source, "binary, plugin := buildRecoveryFixture(t, fixture)",
+        'binary, plugin := os.Getenv("ALONABOT_SCENARIO_OVERLAY_CORE"), "unused"',
+    )
+    source = replace_once(
+        source, 'archive := recoveryPackage(t, fixture, plugin, "1.0.0")',
+        'archive := os.Getenv("ALONABOT_SCENARIO_RECOVERY_PACKAGE")',
+    )
+    source = replace_once(
+        source, "return startRecoveryCore(t, binary, dir, phase)",
+        "return scenarioRecoveryStart(t, binary, dir, phase)",
+    )
+    source = replace_once(
+        source, '\t\t\tdir := t.TempDir()',
+        '\t\t\tdir := scenarioRecoveryDirectory(t, phase)',
+    )
+    source = replace_once(
+        source, '\t\t\told := findPackage(t, c, dir, "recovery").Active',
+        '\t\t\told := findPackage(t, c, dir, "recovery").Active\n'
+        '\t\t\tscenarioRecoveryValue(t, c, dir, "41", true)',
+    )
+    source = replace_once(
+        source, '\t\t\t\tif err := syscall.Kill(pid, syscall.SIGKILL); err != nil {',
+        '\t\t\t\tscenarioRecord(t, "surviving-writer", map[string]any{"package":item,"pid":pid,"starts_before":string(before),"starts_after":string(after)})\n'
+        '\t\t\t\tscenarioRecoveryDatabase(t, filepath.Join(pluginDir,"generations",old,"db.sqlite"), "41")\n'
+        '\t\t\t\tif err := syscall.Kill(pid, syscall.SIGKILL); err != nil {',
+    )
+    source = replace_once(
+        source, '\t\t\tstopTestCore(t, c)\n\t\t\tst = recoveryStore(t, dir)',
+        '\t\t\tscenarioRecoveryValue(t, c, dir, "41", false)\n'
+        '\t\t\tstopTestCore(t, c)\n\t\t\tst = recoveryStore(t, dir)',
+    )
+    source = replace_once(
+        source, '\t\t\tcandidateDir := filepath.Join(',
+        '\t\t\tscenarioRecord(t, "journal-recovered", got)\n\t\t\tcandidateDir := filepath.Join(',
+    )
+    source = replace_once(
+        source, '\t\t\tst := recoveryStore(t, dir)',
+        '\t\t\tscenarioRecord(t, "cli-process", map[string]any{"args":request.Args,"output":output.String(),"exit_code":request.ProcessState.ExitCode()})\n'
+        '\t\t\tst := recoveryStore(t, dir)',
+    )
+    source = source.replace("c.management(t, ", "scenarioManagement(t, c, ")
+    source = source.replace("findPackage(t, ", "scenarioPackage(t, ")
+    return source
+
+
 EVIDENCE_HELPERS = r'''
 // scenarioRecord 保留原始管理响应与检查点，供场景执行者复查。
 func scenarioRecord(t *testing.T, operation string, payload any) {
@@ -127,10 +176,12 @@ func scenarioHTTP(t *testing.T, c *core, dir, method, path string, body ...strin
 def run(args):
     if os.name != "posix":
         raise ValueError("this scenario uses the Unix integration harness")
-    binary = args.alonabot.resolve(strict=True) if args.scenario == "management" else None
-    directory = args.out if args.scenario == "build" else args.data_dir
+    building = args.scenario in ("build", "build-recovery")
+    binary = None if building else args.alonabot.resolve(strict=True)
+    overlay_core = args.overlay_core.resolve(strict=True) if args.scenario in ("recovery", "survivor") else None
+    directory = args.out if building else args.data_dir
     directory = directory.resolve()
-    if args.scenario == "build":
+    if building:
         directory.mkdir(mode=0o700)
     elif not directory.is_dir() or any(directory.iterdir()):
         raise ValueError("--data-dir must be an existing empty temporary directory")
@@ -147,24 +198,38 @@ def run(args):
         ALONABOT_SCENARIO_OUT=str(directory),
         ALONABOT_SCENARIO_DATA_DIR=str(directory),
         ALONABOT_SCENARIO_EVIDENCE=str(evidence),
+        ALONABOT_SCENARIO_MODE=args.scenario,
     )
     source = TEST.read_text()
     harness = HARNESS.read_text()
     setup = ""
     packages = []
-    if args.scenario == "build":
-        source = fixture_source(source)
+    selected = "^TestT09ManagementFlow$"
+    if args.scenario in ("build-recovery", "recovery", "survivor"):
+        source = RECOVERY_TEMPLATE.read_text() + EVIDENCE_HELPERS
+        selected = "^TestScenarioRecovery$"
+    if building:
+        if args.scenario == "build":
+            source = fixture_source(source)
         harness = replace_once(harness, 'import (', 'import (\n "crypto/ed25519"\n "crypto/rand"')
         setup = '''
         _, private, err := ed25519.GenerateKey(rand.Reader)
         if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
         packageKey = private
 '''
-    else:
+    elif args.scenario == "management":
         source = management_source(source)
         packages = [str(path.resolve(strict=True)) for path in args.packages]
         for index, package in enumerate(packages, start=1):
             environment[f"ALONABOT_SCENARIO_PACKAGE_{index}"] = package
+    else:
+        environment["ALONABOT_SCENARIO_OVERLAY_CORE"] = str(overlay_core)
+        for name in ("recovery", "probe", "adapter") if args.scenario == "recovery" else ("recovery",):
+            package = str(getattr(args, f"{name}_package").resolve(strict=True))
+            packages.append(package)
+            environment[f"ALONABOT_SCENARIO_{name.upper()}_PACKAGE"] = package
+        if args.scenario == "survivor":
+            selected = "^TestRecoveryEndToEnd$/^started$"
     harness = replace_once(
         harness,
         "func TestMain(m *testing.M) {",
@@ -173,14 +238,17 @@ def run(args):
         '  binDir = directory\n' + setup + '  os.Exit(m.Run())\n }',
     )
     replacements = {}
-    for original, content in ((TEST, source), (HARNESS, harness)):
+    sources = [(TEST, source), (HARNESS, harness)]
+    if args.scenario == "survivor":
+        sources.append((RECOVERY, survivor_source(RECOVERY.read_text())))
+    for original, content in sources:
         overlay_file = evidence / original.name
         overlay_file.write_text(content)
         replacements[str(original)] = str(overlay_file)
     overlay = evidence / "overlay.json"
     overlay.write_text(json.dumps({"Replace": replacements}, indent=2) + "\n")
     subprocess.run(["gofmt", "-w", *replacements.values()], check=True)
-    command = ["go", "test", "-overlay", str(overlay), "-count=1", "-v", "./cmd/alonabot", "-run", "^TestT09ManagementFlow$"]
+    command = ["go", "test", "-overlay", str(overlay), "-count=1", "-v", "./cmd/alonabot", "-run", selected]
     inputs = {
         "scenario": args.scenario,
         "platform": platform.platform(),
@@ -190,6 +258,8 @@ def run(args):
     }
     if binary is not None:
         inputs["binary"] = str(binary)
+    if overlay_core is not None:
+        inputs["overlay_core"] = str(overlay_core)
     (evidence / "inputs.json").write_text(json.dumps(inputs, indent=2) + "\n")
     print(f"Evidence: {evidence}", flush=True)
     with (evidence / "go-test.log").open("w") as log:
@@ -199,14 +269,25 @@ def run(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build signed fixtures or run the management flow against a supplied Core binary.")
+    parser = argparse.ArgumentParser(description="Build fixtures or run management and recovery scenarios against supplied binaries.")
     commands = parser.add_subparsers(dest="scenario", required=True)
     build = commands.add_parser("build", help="build three signed recovery fixture packages")
     build.add_argument("--out", type=Path, required=True, help="new output directory")
+    recovery_build = commands.add_parser("build-recovery", help="build checkpoint Core and signed recovery, probe and adapter packages")
+    recovery_build.add_argument("--out", type=Path, required=True, help="new output directory")
     management = commands.add_parser("management", help="run the complete management flow")
     management.add_argument("--alonabot", type=Path, required=True)
     management.add_argument("--data-dir", type=Path, required=True, help="empty temporary directory")
     management.add_argument("packages", nargs=3, type=Path, metavar="ARCHIVE", help="1.0.0, 2.0.0 and 3.0.0 archives, in order")
+    for name in ("recovery", "survivor"):
+        scenario = commands.add_parser(name, help="run crash recovery and gates" if name == "recovery" else "run the surviving writer and lock recovery")
+        scenario.add_argument("--alonabot", type=Path, required=True, help="CLI binary used for every management action")
+        scenario.add_argument("--overlay-core", type=Path, required=True, help="Core with the documented temporary checkpoint overlay")
+        scenario.add_argument("--data-dir", type=Path, required=True, help="empty temporary directory")
+        scenario.add_argument("--recovery-package", type=Path, required=True)
+        if name == "recovery":
+            scenario.add_argument("--probe-package", type=Path, required=True)
+            scenario.add_argument("--adapter-package", type=Path, required=True)
     return run(parser.parse_args())
 
 
