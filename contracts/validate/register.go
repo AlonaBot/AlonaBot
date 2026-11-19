@@ -391,9 +391,13 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor, i
 	if spec.GetIsPublic() {
 		switch mode := spec.GetAuthMode(); {
 		case mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE, mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE, mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_NONCE:
+		case mode == pb.HttpAuthMode_HTTP_AUTH_MODE_STATIC:
+			if method != http.MethodGet && method != http.MethodHead {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "static HTTP route %q only allows GET and HEAD", route.GetRouteId())
+			}
 		case isAdapter && mode == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN:
 		default:
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q must declare callback verification", route.GetRouteId())
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q has invalid authentication mode", route.GetRouteId())
 		}
 	} else if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "private HTTP route %q must use Core session authentication", route.GetRouteId())

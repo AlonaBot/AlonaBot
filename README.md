@@ -45,4 +45,4 @@ Core、SDK 与管理 CLI 已支持 CRITICAL 日志；用 `alonabot logs --level 
 
 SDK 的文本匹配、Raw、事件与 Hook 注册可省略 route ID，需要稳定身份时链式调用 `.ID(...)`。Handler 的 `c` 可直接传给 `kv`、`task`、`llm` 等客户端；`c.Reply("hi", message.ImageURL(url))` 一次发送文本与图片，测试可用 `Result.RequireReply(t, "hi")` 检查 Handler 错误与单次回复文本。用法见[插件开发指南](docs/plugin-guide.md)与[插件测试](docs/development.md#插件测试)。
 
-为插件添加管理页面时，`.Page(title)` 自动提供同目录的 `sdk/page` 样式与桥客户端资源，并继承页面认证；声明方式见[插件开发指南](docs/plugin-guide.md#插件页面)。
+为插件添加管理页面时，`.Page(title)` 自动提供同目录的 `sdk/page` 样式与桥客户端资源，以公开静态资源模式提供；页面 HTML 与数据路由继续要求管理会话；声明方式见[插件开发指南](docs/plugin-guide.md#插件页面)。
