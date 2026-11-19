@@ -503,7 +503,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 | 方法与子路径 | 内容 |
 | --- | --- |
-| `GET pages/personas`、`pages/mcp`、`pages/skills`、`pages/data`、`pages/tasks` | 同一嵌入 HTML，分别声明英文标题 Personas、MCP、Skills、Data、User tasks，并提供中英文标题。 |
+| `GET pages/personas`、`pages/mcp`、`pages/skills`、`pages/memory`、`pages/tasks` | 同一嵌入 HTML，分别声明英文标题 Personas、MCP、Skills、Memory、User tasks，并提供中英文标题。 |
 | `GET pages/kit.css`、`pages/kit.js` | `sdk/page.Handler()` 套件资源。 |
 | `GET pages/assets/` 前缀 | 嵌入的 `pages.css` 与 `pages.js`；HTML 使用相对路径引用全部资源。 |
 
@@ -549,6 +549,8 @@ MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通
 ```
 
 `PUT /api/v1/plugins/{id}/policies` 接收一项 `{scope,permissions,enabled}`，整份替换该作用域的权限与启用覆盖，成功返回 `{}`。`scope.kind` 使用 `plugin/group/route`；group 另带 token 数组 `group`，route 另带 `route_id`。permissions 为 null 或省略时继承，`[]` 表示无权限要求；enabled 为 null 或省略时继承，false 禁用。两项都继承时清除该作用域覆盖。输入校验及保存复用 `policy.SetOverride`，GET 的有效权限/启用与派发的 `CheckCommand` 共用 `CommandState` 规则；子级启用保持父级禁用的效果。覆盖在下一次派发生效。
+
+`commands[].descriptions` 为可选的 locale → 说明对象：英文源说明为空时省略；有说明时 `en-US` 使用英文源文，其余语言复用 Router 命令菜单的逐键回退规则，路径命令、Raw 与文本匹配均适用。顶层可选 `default_locale` 来自当前绑定插件 Session 的默认语言快照；WebUI 按界面语言、插件默认语言、`en-US` 选择说明。
 
 命令列表来自当前 Router 注册声明，权限覆盖保留未注册项。名称只对路径命令返回；Raw 与文本匹配的 declared_names/effective_names 为空数组。has_names_override 表示保存过覆盖，覆盖失效后仍为 true。invalid_names 为 `{route_id,name,reason}`，reason 为 `declared`（与其他当前声明名冲突）或 `unregistered`（路由未注册或非路径命令，name 为 null）；顶层包含当前插件的全部诊断，命令项包含该路由的诊断。shadows 只列涉及该插件的关系，来自 Router 按生效命令名建立的索引。
 

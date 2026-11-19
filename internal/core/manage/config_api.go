@@ -38,6 +38,7 @@ type pluginConfig struct {
 	Pending          *pendingConfig             `json:"pending"`
 	Schema           json.RawMessage            `json:"schema"`
 	I18n             map[string]json.RawMessage `json:"i18n"`
+	Messages         map[string]json.RawMessage `json:"messages"`
 	Corrections      []configschema.Correction  `json:"corrections"`
 	Unknown          []string                   `json:"unknown"`
 }
@@ -118,31 +119,31 @@ func (s *Service) configRoutes(mux *http.ServeMux, auth *adminauth.Auth) {
 	})
 }
 
-func (s *Service) configResources(ctx context.Context, id string) (json.RawMessage, map[string]json.RawMessage, error) {
+func (s *Service) configResources(ctx context.Context, id string) (json.RawMessage, map[string]json.RawMessage, map[string]json.RawMessage, error) {
 	in, err := s.installed(ctx, id)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if in.Role == state.RoleWebUI && in.Entrypoint == "" {
-		return nil, nil, invalid("webui has no config")
+		return nil, nil, nil, invalid("webui has no config")
 	}
 	var raw []byte
 	var files map[string][]byte
 	if in.Source == "dev" {
 		raw, files, err = s.opt.DevelopmentConfig(id)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	} else {
 		directory := s.directory(in)
 		raw, err = os.ReadFile(filepath.Join(directory, "config_schema.json"))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		files = make(map[string][]byte)
 		entries, err := os.ReadDir(filepath.Join(directory, "i18n"))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		for _, entry := range entries {
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -150,7 +151,7 @@ func (s *Service) configResources(ctx context.Context, id string) (json.RawMessa
 			}
 			content, err := os.ReadFile(filepath.Join(directory, "i18n", entry.Name()))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			files[entry.Name()] = content
 		}
@@ -159,21 +160,26 @@ func (s *Service) configResources(ctx context.Context, id string) (json.RawMessa
 	if len(raw) > 0 {
 		parsed, problems := configschema.Parse(raw)
 		if len(problems) != 0 {
-			return nil, nil, invalid(fmt.Sprintf("invalid config schema: %v", problems))
+			return nil, nil, nil, invalid(fmt.Sprintf("invalid config schema: %v", problems))
 		}
 		schema = parsed.Canonical()
 	}
 	translations := make(map[string]json.RawMessage)
+	messages := make(map[string]json.RawMessage)
 	for name, content := range files {
 		var roots map[string]json.RawMessage
 		if err := json.Unmarshal(content, &roots); err != nil {
-			return nil, nil, fmt.Errorf("read config translations %s: %w", name, err)
+			return nil, nil, nil, fmt.Errorf("read config translations %s: %w", name, err)
+		}
+		tag := strings.TrimSuffix(name, ".json")
+		if value, ok := roots["messages"]; ok {
+			messages[tag] = value
 		}
 		if config, ok := roots["config"]; ok {
-			translations[strings.TrimSuffix(name, ".json")] = config
+			translations[tag] = config
 		}
 	}
-	return schema, translations, nil
+	return schema, translations, messages, nil
 }
 
 // configSnapshot 在包管理锁内读取 Active 与有效 Pending，写入时优先编辑 Pending。
@@ -204,7 +210,7 @@ func (s *Service) configSnapshot(ctx context.Context, id string) (active string,
 func (s *Service) readConfig(ctx context.Context, id string) (pluginConfig, error) {
 	unlock := s.lock(id)
 	defer unlock()
-	schema, translations, err := s.configResources(ctx, id)
+	schema, translations, messages, err := s.configResources(ctx, id)
 	if err != nil {
 		return pluginConfig{}, err
 	}
@@ -234,7 +240,7 @@ func (s *Service) readConfig(ctx context.Context, id string) (pluginConfig, erro
 		return pluginConfig{}, err
 	}
 	return pluginConfig{ActiveGeneration: active, Active: redacted, Pending: pending, Schema: schema,
-		I18n: translations, Corrections: corrections, Unknown: unknown}, nil
+		I18n: translations, Messages: messages, Corrections: corrections, Unknown: unknown}, nil
 }
 
 // redactConfig 同时隐藏引用和旧导入入口尚未抽取的明文 Pending，保留旧代次的秘密路径。
@@ -275,7 +281,7 @@ func (s *Service) redactConfig(ctx context.Context, active string, schema, snaps
 func (s *Service) writeConfig(ctx context.Context, id string, base *string, raw []byte, patch bool) (*pendingConfig, error) {
 	unlock := s.lock(id)
 	defer unlock()
-	schema, _, err := s.configResources(ctx, id)
+	schema, _, _, err := s.configResources(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +517,7 @@ func (s *Service) reveal(ctx context.Context, id, path string) (string, error) {
 		}
 	}
 	if _, development := s.opt.Development[id]; development {
-		schema, _, err := s.configResources(ctx, id)
+		schema, _, _, err := s.configResources(ctx, id)
 		if err != nil {
 			return "", err
 		}
