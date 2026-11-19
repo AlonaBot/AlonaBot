@@ -35,7 +35,7 @@ function warningText(warning: string, ui: Messages): string {
   const match = /^route (.+): (HTTP|Hook|Bus subscription|Raw|unfiltered message event|continuous event listener) may cause frequent wakeups$/.exec(warning);
   if (!match) return warning;
   const kinds: Record<string, string> = { HTTP: ui.sleepWarningHTTP, Hook: ui.sleepWarningHook, 'Bus subscription': ui.sleepWarningBus, Raw: ui.sleepWarningRaw, 'unfiltered message event': ui.sleepWarningMessage, 'continuous event listener': ui.sleepWarningListener };
-  return ui.sleepWarning.replace('{route}', () => match[1]).replace('{kind}', () => kinds[match[2]]);
+  return ui.sleepWarning.replace(/\{route\}|\{kind\}/g, token => token === '{route}' ? match[1] : kinds[match[2]]);
 }
 
 /** PluginSleepPanel 编辑休眠覆盖，分别展示已读取策略、运行记录与保存错误。 */
