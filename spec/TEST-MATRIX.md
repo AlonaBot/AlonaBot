@@ -787,9 +787,11 @@ env ALONABOT_BROWSER_ASSET=docker go test -race -count=1 -timeout=0 ./cmd/alonab
 | `G75-05-network-first.log`、`G75-05-network-second.log` | 首轮归档监听拒绝独立通过后，两个组件ID和Docker注入dev/console的清单预期错误；第二轮只读docker logs stdout，JSON实际在stderr，20秒后AssertionError | 仅修本地脚本清单/日志通道与失败清理；third.log双架构HTTPS、正常停止和清理通过，失败资源均已精确回收 |
 | `G75-06-archive-race-first.log`、`G75-06-archive-race-second.log` | 首次本地import编译错误：fmt未用、time未导入。第二轮在页面操作前为纠正取证脚本的账号API路径而主动释放等待，Active仍local-model/128，`browser changes did not activate`；测试27.45s/包35.687s、exit1 | 本地import与账号路径修正；未修改时的失败完整保留，原Core及五个组件PID已回收。归档真实页面结果来自third.log，容器来自docker-race.log |
 
-**当前检查与承接。** 两次集中审查在同一代码候选上核对契约/规范、原始失败与独立PASS、实际资产与生命周期，未发现已证实的产品缺陷；gofmt和`git diff --check`已通过。正常停机保留本节T-09.11已由父审查者按CONTRACTS §4.2确认的`event router is closed`诊断，成功场景Core均退出0、组件drained=true/killed=false。
+**当前检查与承接。** 两次集中审查及终审在同一代码候选上核对契约/规范、原始失败与独立PASS、实际资产与生命周期，未发现已证实的产品缺陷。正常停机保留本节T-09.11已由父审查者按CONTRACTS §4.2确认的`event router is closed`诊断，成功场景Core均退出0、组件drained=true/killed=false。
 
-受影响vet/build待G75-08；当前候选的完整CI尚待父审查者预约取证。
+2026-11-20，darwin/arm64、Go 1.27.1，候选 `d6aab4621c2b7aa69b918df9a4632455bec4e911`：`gofmt -l cmd/alonabot/t14_e2e_test.go` 无输出（0.014s）、`git diff --check` 通过（0.014s）、`go vet ./cmd/alonabot` 通过（0.855s）、`go build ./...` 通过（4.156s），均exit0。完整stdout/stderr与命令、退出码、耗时保留在本地 `G75-08-checks-20261120-063645/{gofmt,diff,vet,build}.log` 和 `results.json`。后续仅回填本节文档，正式代码与测试保持 `4200216d`，上文三资产race、专项、HTTPS、浏览器及独立认证结果继续复用。
+
+当前候选的完整CI未运行，由父审查者预约取证。
 
 真实Telegram/真实Provider推理缺少测试凭据，原生linux/amd64、其余目标平台实际运行与其他浏览器未运行，由T-10.1/T-10.2继续闭合；正式密钥签名、公开Release与镜像推送由T-10.4/维护者控制。OneBot 11、welcome、rss按D-171随后续版本验收。
 
