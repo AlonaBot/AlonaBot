@@ -90,7 +90,7 @@ func (s *Service) configRoutes(mux *http.ServeMux, auth *adminauth.Auth) {
 		respond(w, struct{}{}, err)
 	})
 	mux.HandleFunc("POST /api/v1/plugins/{id}/reload", func(w http.ResponseWriter, r *http.Request) {
-		respond(w, struct{}{}, s.Reload(r.Context(), r.PathValue("id")))
+		respond(w, struct{}{}, s.Reload(r.Context(), r.PathValue("id"), false))
 	})
 	mux.HandleFunc("POST /api/v1/plugins/{id}/config/import", func(w http.ResponseWriter, r *http.Request) {
 		result, err := s.writeConfig(r.Context(), r.PathValue("id"), nil, nil, false)

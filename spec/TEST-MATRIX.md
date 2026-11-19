@@ -38,7 +38,7 @@
 | V-28 | T-09 | 下载损坏 digest、签名错误、错误 OS/arch、不受信来源更新 | 所有错误在停止旧版前发现并拒绝；SHA256 不当作来源身份签名 |
 | V-29 | T-09 | SQLite WAL候选备份；迁移/OnStart失败；空间不足与残存进程 | 确认runtime.lock可取后备份；旧DB不污染；候选失败旧程序新Session恢复；空间/锁失败不激活 |
 | V-30 | T-09 | Core崩溃于PREPARED、Active+COMMITTED提交前后、OnReady失败 | 未提交只恢复旧版；已提交只恢复新代次；旧进程退出未确认时不启动第二写入者；无双代次接单或静默回滚 |
-| V-31 | T-09 | 声明 `prepare_effects=external` 的插件（准备期写外部数据库），尝试自动 reload、update 与 rollback | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；维护许可只对本次 Session/代次有效；普通 restart 不受影响；无虚假无损回退承诺 |
+| V-31 | T-09 | 声明 `prepare_effects=external` 的插件（准备期写外部数据库），尝试自动 reload、update 与 rollback | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；真实 CLI/API 显式备份许可只对本次 Session/Generation/DB 有效，运行中或非 external 请求拒绝，成功与失败均保持停用；提交前后失败及 Core 恢复不重跑迁移，Active 按提交点保持准确；普通 restart 不受影响；无虚假无损回退承诺 |
 | V-32 | T-10 | Linux amd64/arm64、Windows amd64、macOS amd64/arm64 编译、启动/退出 | 五个组合都有真实记录；CGO 插件在不兼容平台标不支持而非虚假发布 |
 | V-33 | T-10 | 同一台固定机器、同一个本地 Bot API 模拟服务；NoneBot2 使用其 Telegram Adapter 与功能相同的插件。四种负载：空闲（Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟）；消息（每秒 20 条文本、持续 10 分钟，echo 逐条回复）；数据库（每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟）；HTTP（每秒 50 个请求访问插件路由，持续 10 分钟） | 每种负载报告 RSS/私有内存、Linux PSS、CPU 与回复或响应延迟的 P50/P95/P99，并记录版本、机器与负载参数；不借同 worker PoC 代替 |
 | V-34 | T-10 | 100 次启停、多次异常退出、普通子进程树、外部副作用重试 | 无 Core 崩溃/会话泄漏，合作型子进程按平台能力清理，业务副作用默认不自动重试 |
@@ -46,7 +46,7 @@
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链后走完OnStop再退出，写管道不因SIGPIPE终止；runtime.lock未释放不打开DB/启动替代实例 |
 | V-37 | T-01、T-02、T-08、T-09 | 旧配置需OnConfigLoad才能符合新Schema、Bootstrap/REGISTER超4MiB、阶段错误 | 旧JSON先经OnConfigLoad再补值与校正（D-161）；完整配置只经私有IPC；超限/失败用合法SESSION_ERROR且无半注册；ACTIVATED严格先于业务帧 |
 | V-38 | T-08、T-09 | schema 删除的字段、nested未知键、null/缺失/false、Merge Patch、陈旧base_generation、选项/模板/slider 不合法、required 不满足、取未声明的键 | OnConfigLoad/补值与校正/required校验顺序固定；schema 删除的字段作为无效配置保留（D-161）；Merge Patch的null删除键后按默认值补齐，存储的null视为缺失，显式空值保留；未知键保留；选项、模板与 slider 不合法时按 V-132 校正，required 不满足返回INVALID_ARGUMENT且带路径；取值方法对未声明键或类型不符panic；陈旧提交拒绝；restart不偷改Active |
-| V-39 | T-01、T-08、T-09 | 两个入口的逐步迁移失败/重复ID、首装、Active resume、external 插件已有安装的升级与伪维护许可 | Up+成功账本同插件DB事务；失败无成功记录；resume 不建立候选；非当前Session/代次许可无效；未许可的 external 候选在准备前返回维护错误 |
+| V-39 | T-01、T-08、T-09 | 两个入口的逐步迁移失败/重复ID、首装、Active resume、external 插件已有安装的升级与伪维护许可 | Up+成功账本同插件DB事务；失败无成功记录；resume 不建立候选；非当前Session/代次许可无效，首装及后续 resume 的许可为 false；未许可的 external 候选在准备前返回维护错误 |
 | V-40 | T-09 | install首次enable、restart/reload区别、pin、uninstall重装与显式rollback | 首次创建Active；restart仅新Session；卸载保留数据/来源且仅同来源可重装；pin持久化；rollback建立新代次/DB副本且不复活旧按钮，external 数据不假装通用恢复 |
 | V-41 | T-01、T-09 | 外部release清单签名、归档摘要、来源/公钥变化、无签名的仓库来源与本地包 | 有签名时对确切字节验签；无自包含摘要循环；所有身份/平台错误停机前拒绝；无签名来源须管理员确认并标明，之后只从同一仓库更新；已签名来源不能降级为无签名，签名失败不降级为无签名信任（D-81） |
 | V-42 | T-02、T-06 | Request计数满、字节满、缓冲满、嵌套Send/Service与Cancel并发、Request发送前取消 | 超额明确失败；Response/控制仍有进展；无阻塞等待自己额度；Cancel不超越自己的Request；Event Bus 256条/4MiB双界限计数并drop-newest |
@@ -614,6 +614,16 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 
 | T-09.9 / V-130、V-147 的真实浏览器联验与 D-183 | `agent/pages_test.go:TestAgentPages` 保留 memory 页面命名及匿名静态资源/私有 HTML 与数据认证断言；真实 Core 安装并启用 Agent、WebUI 与 showcase，使用 Playwright Chromium 验证父桥。FIX-22 将 iframe 桥提前到 layout effect 绑定并移除 load 后重绑，保留 hello 订阅。 | 2026-11-19，darwin/arm64，Go 1.27.1、Chromium 157.0.8103.79。`go test -race -count=1 ./agent -run '^TestAgentPages$'` 通过（2.317s）；`npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test`（66 项）、`npm --prefix web/admin run build` 通过。实际浏览器：记忆页与资源/数据桥正常，匿名 HTML/数据 401、四项静态资源 200；浅深色、中英文、iframe ⌘K、800px 标签横滚与 375px 无整页横向溢出、配置保存→Pending→reload 通过。修复前主题断言超时、iframe 保持 light，修复后浅深色事件通过；截图已由审查者查看。 | D-183 与 goal-44 的本地整合候选。全仓 race 结果另记；真实 Provider、外部 MCP、Telegram/OneBot 11、其他 OS/架构实际运行未运行。本轮 secret 再认证、generation 409、回退/卸载及动态任务操作复用前轮证据，未扩跑。 |
 | 本轮整合验收：S-03.1、T-09.9、D-183 与 T-13.7 初始化修复 | 组合 goal-172 的 Scheduler 唤醒、goal-44 的配置与插件页、D-183 的公开静态资源及 CLI 同文件系统暂存修复；保留各切片的真实进程、HTTP、SQLite 与文件系统集成测试。 | 2026-11-19，darwin/arm64，Go 1.27.1。审查者在独立整合工作区运行 `GOMAXPROCS=2 go test -p 1 -race ./...`，退出 0，全仓通过；CLI 267.173s，Core 装配 242.601s。各源工作区已通过的本地专项证据继续保留。 | 本地组合候选；Linux CI 尚待 runner 恢复并处理临时盘 ENOSPC 后复验，五平台实机与真实外部平台未运行。 |
+
+#### external 显式维护许可候选（V-31、V-39）
+
+2026-11-19，`codex/manual-migration-approval`：补齐 T-08/T-09 的真实管理入口，许可字段与流程见 CONTRACTS §6.3、ADMIN-API §3.2。
+
+| 测试位置与场景 | 命令、平台与结果 | 未运行与承接 |
+| --- | --- | --- |
+| `cmd/alonabot/manual_migration_e2e_test.go` 的 `TestManualMigrationApproval`：真实 CLI/API、签名包、插件进程与 SQLite；首装与 restart/Core resume 的许可 false 且迁移不重跑；external 的普通 reload/update/rollback 拒绝，运行中许可拒绝；先 disable 后显式备份许可完成 reload/update/rollback，保持停用且无业务 HTTP；独立 Session/Generation/DB 与恢复前 Journal 身份一致；迁移写外部文件后失败、OnReady 失败、PREPARED 与提交后杀死 Core 均保持停用，Active 按提交点保留旧/新代次，外部写入不重复；从 external 更新到 managed_db 仍需许可，之后普通候选恢复原行为 | darwin/arm64、Go 1.27.1：`go test -race ./cmd/alonabot -run '^TestManualMigrationApproval$' -count=1` 通过；既有 `go test -race ./cmd/alonabot -run '^(TestRecoveryEndToEnd|TestManagementLifecycle)$' -count=1` 与 `go test -race ./internal/app -run '^TestCandidateJournalResources$' -count=1` 通过 | 外部副作用由插件写真实临时文件模拟，真实 PostgreSQL/MySQL 与其他目标平台实际运行未运行；全仓 CI、五平台构建由 PR 检查承接；V-31/V-39 的其他分项沿原交接 |
+
+本地 `cmd/alonabot/manual_migration_local_test.go`（未提交）的 `TestManualMigrationInputLocal` 覆盖无认证/错误 Bearer、Cookie 缺 CSRF、有效 Cookie、许可字段类型、其他动作携带许可、尚无 Active 与非 external 候选拒绝。darwin/arm64、Go 1.27.1：`go test -race ./cmd/alonabot -run '^TestManualMigrationInputLocal$' -count=1`、`go vet ./internal/core/manage ./internal/core/journal ./internal/app ./cmd/alonabot` 与 `git diff --check` 通过。未新增依赖或协议字段，许可不进入状态库；人工恢复外部数据后由管理员决定下一次候选或 enable。
 
 ### 3.3 Target 与发信许可分项证据
 
