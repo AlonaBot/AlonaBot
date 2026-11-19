@@ -155,12 +155,12 @@ export const routes: RouteEntry[] = [
     render: () => <AccountsPage />,
   },
   {
-    id: 'permissions',
-    path: '/permissions',
-    label: 'permissions',
-    icon: Shield,
+    id: 'models',
+    path: '/models',
+    label: 'models',
+    icon: Box,
     group: 'main',
-    render: () => <PermissionsPage />,
+    render: () => <ModelsPage />,
   },
   {
     id: 'models',
@@ -186,14 +186,6 @@ export const routes: RouteEntry[] = [
     group: 'main',
     render: () => <ConversationsPage />,
   },
-  {
-    id: 'settings',
-    path: '/settings',
-    label: 'settings',
-    icon: Settings,
-    group: 'bottom',
-    render: () => <SettingsPage />,
-  },
   { id: 'tool-policies', path: '/permissions/tools', label: 'tabTools', icon: Shield, group: 'main', navigation: false, render: () => <PermissionsPage tab="tools" /> },
   { id: 'users', path: '/permissions/users', label: 'users', icon: ShieldCheck, group: 'main', navigation: false, render: () => <UsersPage /> },
   {
@@ -203,6 +195,22 @@ export const routes: RouteEntry[] = [
     icon: ScrollText,
     group: 'main',
     render: () => <LogsPage />,
+  },
+  {
+    id: 'permissions',
+    path: '/permissions',
+    label: 'permissions',
+    icon: Shield,
+    group: 'main',
+    render: () => <PermissionsPage />,
+  },
+  {
+    id: 'settings',
+    path: '/settings',
+    label: 'settings',
+    icon: Settings,
+    group: 'bottom',
+    render: () => <SettingsPage />,
   },
   ...(import.meta.env.DEV
     ? [
