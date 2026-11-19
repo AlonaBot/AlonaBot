@@ -168,13 +168,13 @@
    - Admin 命令 `/profile [名字]`：无参数经 `core.profile.current` 显示当前配置文件与会话数；给出名字时经 `core.profile.list` 查 ID，再经 `core.profile.assign` 切换并查询当前结果。名字为「默认」或 `default` 时取消单独指定，回落实例缺省，再回到 `default`；名字不存在时列出可用的配置文件。
    - `agent.New() *sdk.Plugin` 保持；`agent/profile.go` 用包级 `service.Proto` 声明 list/current/assign/set 四个固定服务，均传 `c.Context()`。私有方法 `(*component).selectProfile(c *sdk.Context, name string) error` 处理查询与选择，包级函数 `setProfile(c *sdk.Context, path string, value any) error` 编码 JSON、写入并回复影响范围与重载状态，服务错误原样返回。
 
-14. **插件页面（D-170、D-182，T-12.20，PR #252）。** 用 `sdk/page` 套件提供人格、MCP、技能、数据与用户任务五个页面，HTML 与数据路由要求管理会话；套件和嵌入资源按 D-183 以公开静态资源模式提供，变更请求沿用 Origin/CSRF 校验。路由及响应见 [ADMIN-API §15.2](../ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)。
+14. **插件页面（D-170、D-182，T-12.20，PR #252）。** 用 `sdk/page` 套件提供人格、MCP、技能、记忆与用户任务五个页面，HTML 与数据路由要求管理会话；套件和嵌入资源按 D-183 以公开静态资源模式提供，变更请求沿用 Origin/CSRF 校验。路由及响应见 [ADMIN-API §15.2](../ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)。
 
     - 人格目录存入受管 SQLite 的 `persona` 表（`Name` 为主键、`Prompt` 可为空字符串），与 `conversation_record` 一并纳入初始迁移 ID:1；ID:2 保留记忆迁移。`readPersona(ctx context.Context, name string) (persona, error)` 读取单个人格；`personaOptions(ctx context.Context, q options.Query) (options.Page, error)` 实时查询，Value/Label 均为人格名，Values 只取现存值，否则按 Search/Limit 列出并设置 More。来源为 `@agent/personas`，实际组件 ID 为 `alonabot-agent-official`，保留 `@agent/llm.models`。
     - 人格页维护目录，配置文件页选择人格。删除前用 `sdk.ProfileOverrides`、基础配置与 `core.profile.list` 计算直接及继承引用，返回配置文件 ID、名称与会话数；被引用时返回 409。检查按 D-182 尽力而为；空人格名使用内置缺省提示，调用时名字已失效则记 WARN 并使用同一提示，正文见 CONTRACTS §13.7。
     - MCP 页显示 gate 保护的连接状态、最近成功工具目录与脱敏错误；手动重连只操作选中服务器，停止后拒绝重连和首次连接。刷新时读取当前 Session 的结束通知，旧通知按身份隔离。技能重新读取后一次发布技能与问题快照；普通对话和定时轮次各自保留开始时的快照供提示与 `load_skill` 使用。
-    - 数据页列出 Agent 自有的完整会话键，逐页展示 Core 原样正文、真实序号、角色、kind、speaker、完整文本与图片编号，覆盖普通、群成员与 `task/<key>` 会话；摘要与清除沿用 Core 管理入口。目录在正文追加成功后登记，清理空目录、追加与 reset 共用会话锁；Core 外部清除后下次列出收回空目录，清除与回复交错时成功追加恢复目录，失效 reset 代次跳过追加。会话笔记与用户档案按完整 `(target, scope, instance)` 管理，沿用步骤 5 的事务、上限和冻结快照语义。
-    - 用户任务页经 `agentTask.List` 列出本 Agent 的动态任务，使用真实实例 key 调用 `agentTask.Cancel`，协作取消在途调用；静态任务仍在宿主的「定时任务」标签。V-147 的提交集成路径、本地自测与未运行分项见 TEST-MATRIX §3.2；浏览器渲染与真实 iframe 联验由审查者在 goal-44 合并后核对。
+    - 记忆页列出 Agent 自有的完整会话键，逐页展示 Core 原样正文、真实序号、角色、kind、speaker、完整文本与图片编号，覆盖普通、群成员与 `task/<key>` 会话；摘要与清除沿用 Core 管理入口。目录在正文追加成功后登记，清理空目录、追加与 reset 共用会话锁；Core 外部清除后下次列出收回空目录，清除与回复交错时成功追加恢复目录，失效 reset 代次跳过追加。会话笔记与用户档案按完整 `(target, scope, instance)` 管理，沿用步骤 5 的事务、上限和冻结快照语义。
+    - 用户任务页经 `agentTask.List` 列出本 Agent 的动态任务，使用真实实例 key 调用 `agentTask.Cancel`，协作取消在途调用；静态任务仍在宿主的「定时任务」标签。V-147 的提交集成路径、本地自测与未运行分项见 TEST-MATRIX §3.2；浏览器渲染与真实 iframe 联验已在 goal-44 与 D-183 的本地整合候选核对，证据见 TEST-MATRIX §3.2。
 
 #### 拟目录与交付
 

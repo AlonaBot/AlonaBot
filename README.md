@@ -10,16 +10,16 @@ Module：`github.com/AlonaBot/AlonaBot`。
 
 Core 的[管理 API](spec/ADMIN-API.md#20-webui-需要的补充接口)已支持查询保留代次、列出并暂停或恢复静态任务、查看 Adapter 实例状态、筛选和分页查看聊天目录、在线轮换管理令牌，以及列出由 SDK `.Page` 声明的插件页面及其本地化标题。对应的官方 WebUI 页面随各自切片交付。
 
-官方 Agent 已提供人格、MCP、技能、数据与用户任务五个插件页面（T-12.20，PR #252）。人格保存在受管 SQLite，配置文件通过 `@agent/personas` 选择，修改提示从下一轮普通对话和定时任务生效；数据页查看完整会话正文并管理笔记/档案，MCP 支持状态与手动重连，技能支持重新读取，用户任务支持取消。接口与未运行分项见 [管理 API](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)和 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
+官方 Agent 已提供人格、MCP、技能、记忆与用户任务五个插件页面（T-12.20，PR #252）。人格保存在受管 SQLite，配置文件通过 `@agent/personas` 选择，修改提示从下一轮普通对话和定时任务生效；记忆页查看完整会话正文并管理笔记/档案，MCP 支持状态与手动重连，技能支持重新读取，用户任务支持取消。接口与未运行分项见 [管理 API](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)和 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
-最小事件回复示例见 [echo](examples/plugins/echo/main.go)：注册 `message.created`，在 Handler 中调用 `Context.Send`。真实 TCP/stdio 装配和验证见 [echo 集成测试](internal/core/supervisor/echo_test.go)；原 Target 回复无需额外实例许可；显式其他目标和后台发送按 Core 持久化的实例许可逐次准入，撤销在下一次 Send 时生效。许可读写入口当前供 Core 内部使用，CLI 装配与管理入口留给后继切片。许可分项证据见 [TEST-MATRIX §3.3](spec/TEST-MATRIX.md#33-target-与发信许可分项证据)。
+最小事件回复示例见 [echo](examples/plugins/echo/main.go)：注册 `message.created`，在 Handler 中调用 `Context.Send`。真实 TCP/stdio 装配和验证见 [Core 集成测试](cmd/alonabot/e2e_test.go)；原 Target 回复无需额外实例许可；显式其他目标和后台发送按 Core 持久化的实例许可逐次准入，撤销在下一次 Send 时生效。许可读写入口当前供 Core 内部使用，CLI 装配与管理入口留给后继切片。许可分项证据见 [TEST-MATRIX §3.3](spec/TEST-MATRIX.md#33-target-与发信许可分项证据)。
 
 Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/cmd/alonabot-adapter-telegram/main.go)，本地 Bot API 模拟服务见 [telegramtest](adapters/telegram/telegramtest/server.go)。OneBot 11 Adapter 已实现正向 WebSocket 连接与接收（发送与媒体随后继切片），入口见 [alonabot-adapter-onebot11](adapters/onebot11/cmd/alonabot-adapter-onebot11/main.go)，本地模拟服务见 [onebottest](adapters/onebot11/onebottest/server.go)。已在 darwin/arm64 验证真实私聊消息接收；完整 Core 装配与其他真实平台场景由后继切片联验。
 
-插件配置按 `OnConfigLoad(ctx, raw)` → 补值与校正 → required 校验载入。管理 API 已提供插件、Adapter 实例与 Core 设置的校正记录、无效配置路径和清理入口；插件清理写入 Pending 后经 reload 生效。用法见[配置与 secret](docs/plugin-guide.md#7-配置与-secret)及[Core 设置](docs/development.md#core-设置与-http-入口)，WebUI 的提示与清理按钮由 T-09.9 接入。
+插件配置按 `OnConfigLoad(ctx, raw)` → 补值与校正 → required 校验载入。管理 API 已提供插件、Adapter 实例与 Core 设置的校正记录、无效配置路径和清理入口；插件清理写入 Pending 后经 reload 生效。用法见[配置与 secret](docs/plugin-guide.md#7-配置与-secret)及[Core 设置](docs/development.md#core-设置与-http-入口)，WebUI 已提供校正提示与一键清理，插件配置清理后保存为 Pending 并显式 reload。
 
 配置文件可通过 `alonabot profile` 列出、新建、指定到 Adapter 实例或会话，以及编辑插件字段。会话派发已应用插件开关与字段覆盖，SDK 的 `c.Config()` 提供本次调用的只读视图，消息过滤读取同一会话的生效配置。工具目录、调用与操作确认已应用配置文件策略。官方 Agent 的 `/agent on|off`、`/persona` 与 `/provider` 已接入配置文件，修改影响共用该配置文件的会话，回复显示名称、会话数与 default 重载提示；`/profile [名字]` 可查询或切换当前会话的配置文件。命令前缀与回复方式已按会话配置文件生效（T-04.19，PR #250）：首条回复可加入群提及、引用与普通文本前缀，编辑保留已确认发送的提及和前缀，长回复按阈值与实例能力合并转发。平台设置更新从后续派发和发送生效，无需插件 reload；按实例区分前缀可指定实例缺省配置文件。用法见[开发指南](docs/development.md#运行-core-与管理组件)与[管理 API](spec/ADMIN-API.md#23-配置文件)。
-官方 WebUI 已提供真实登录、总览小时统计、插件商店、权限用户管理，以及插件数据页的数据库表格、KV/文件存储和 Agent 会话摘要与清除；支持更新前的 Release 正文预览、更新后的 changelog 与已读版本持久化。后台使用自身受管 SQLite，官方源缺省为 `AlonaBot/plugin-store`。桌面与手机外壳提供全局搜索、浅深色视觉令牌及本地品牌资源。开发模式可直接访问 `/dev/forms` 预览配置表单和 JSON Merge Patch；安装依赖、构建后台平台包与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)，验收证据见 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
+官方 WebUI 已提供真实登录、总览小时统计、插件商店、配置表单与 JSON 编辑、命令与工具权限、会话、系统设置和插件页面父桥，以及插件数据页的数据库表格、KV/文件存储和 Agent 会话摘要与清除；支持更新前的 Release 正文预览、更新后的 changelog 与已读版本持久化。后台使用自身受管 SQLite，官方源缺省为 `AlonaBot/plugin-store`。桌面与手机外壳提供全局搜索、浅深色视觉令牌及本地品牌资源。开发模式可直接访问 `/dev/forms` 预览配置表单和 JSON Merge Patch；安装依赖、构建后台平台包与验证命令见[官方 WebUI 开发指南](docs/development.md#官方-webui-开发)，验收证据见 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 [showcase 的 `greeting` 字段](examples/plugins/showcase/config_schema.json) 展示了带文字和图片的[配置回复示例](docs/plugin-guide.md#配置字段的回复示例)。作者工具校验示例与翻译，Core 经管理 API 提供 Active 包引用的图片；WebUI 表单展示由后继切片实现。
 

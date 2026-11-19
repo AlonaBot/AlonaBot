@@ -436,6 +436,14 @@ func TestManagementLifecycle(t *testing.T) {
 			}
 			return response.Header, response.StatusCode, body
 		}
+		_, status, configBody := get("/api/v1/plugins/showcase/config")
+		var snapshot struct {
+			Messages map[string]map[string]string `json:"messages"`
+		}
+		if err := json.Unmarshal(configBody, &snapshot); err != nil || status != http.StatusOK ||
+			snapshot.Messages["en-US"]["hello_message"] != "Hello, {name}!" || snapshot.Messages["zh-CN"]["hello_message"] != "你好，{name}！" {
+			t.Fatalf("plugin messages: status = %d, body = %s, error = %v", status, configBody, err)
+		}
 		icon, status, _ := get("/api/v1/packages/showcase/icon")
 		if status != http.StatusOK {
 			t.Fatalf("icon status = %d", status)

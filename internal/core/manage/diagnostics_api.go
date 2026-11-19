@@ -51,7 +51,7 @@ func (s *Service) diagnostics(w http.ResponseWriter, r *http.Request) {
 				}
 				return schema.Canonical(), nil
 			}
-			schema, _, err := s.configResources(ctx, id)
+			schema, _, _, err := s.configResources(ctx, id)
 			return schema, err
 		},
 	}
