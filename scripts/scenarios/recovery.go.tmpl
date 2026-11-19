@@ -1,0 +1,611 @@
+//go:build unix
+
+package main
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
+	"syscall"
+	"testing"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/manage"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
+)
+
+// TestScenarioRecovery 驱动指定产物，保留恢复与门禁的实际状态。
+func TestScenarioRecovery(t *testing.T) {
+	if os.Getenv("ALONABOT_SCENARIO_MODE") == "build-recovery" {
+		scenarioRecoveryBuild(t)
+		return
+	}
+	binary := os.Getenv("ALONABOT_SCENARIO_OVERLAY_CORE")
+	v1 := os.Getenv("ALONABOT_SCENARIO_RECOVERY_PACKAGE")
+	probe := os.Getenv("ALONABOT_SCENARIO_PROBE_PACKAGE")
+	install := func(t *testing.T, c *core, dir string) string {
+		t.Helper()
+		scenarioManagement(t, c, dir, "", "install", v1, "--yes")
+		scenarioManagement(t, c, dir, "", "enable", "recovery")
+		scenarioRecoveryWrite(t, filepath.Join(dir, "plugins", "recovery", "config.json"), "{}")
+		scenarioRecoveryValue(t, c, dir, "41", true)
+		return scenarioPackage(t, c, dir, "recovery").Active
+	}
+	for _, phase := range []string{"prepared", "committed", "first-prepared"} {
+		t.Run(phase, func(t *testing.T) {
+			// 1. 候选写入不同的真实 DB 值，使提交两侧的恢复结果可直接区分。
+			dir := scenarioRecoveryDirectory(t, phase)
+			pluginDir := filepath.Join(dir, "plugins", "recovery")
+			c := scenarioRecoveryStart(t, binary, dir, "")
+			old := ""
+			if phase == "first-prepared" {
+				scenarioManagement(t, c, dir, "", "install", v1, "--yes")
+			} else {
+				old = install(t, c, dir)
+			}
+			stopTestCore(t, c)
+			checkpoint := strings.TrimPrefix(phase, "first-")
+			c = scenarioRecoveryStart(t, binary, dir, checkpoint)
+			c.address()
+			if old != "" {
+				c.waitFor(`"msg":"plugin activated"`)
+			}
+			if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			scenarioRecoveryWrite(t, filepath.Join(pluginDir, "candidate-value"), "77")
+			action := "reload"
+			if old == "" {
+				action = "enable"
+			}
+			request := scenarioRecoveryStartCommand(t, recoveryCommand(t, c, dir, action, "recovery"))
+			scenarioRecoveryWaitFile(t, filepath.Join(dir, "checkpoint"))
+			scenarioRecoveryKillCore(t, c)
+			if result := request.wait(t); result.err == nil {
+				t.Fatalf("interrupted %s succeeded: %s", action, result.output)
+			}
+			waitRecoveryRuntime(t, pluginDir)
+			// 2. Core 退出后检查提交指针、候选引用与两个库的实际内容。
+			store := recoveryStore(t, dir)
+			records, err := store.Journals(t.Context(), "recovery")
+			wantRecords := 2
+			if old == "" {
+				wantRecords = 1
+			}
+			if err != nil || len(records) != wantRecords {
+				t.Fatalf("crash journals: %+v %v", records, err)
+			}
+			operation := records[len(records)-1]
+			wantActive := old
+			if checkpoint == "committed" {
+				wantActive = operation.NewGeneration
+			}
+			active, err := store.Active(t.Context(), "recovery")
+			if err != nil || active != wantActive || operation.ExpectedOld != old || operation.Phase != checkpoint || operation.DatabasePath == "" || len(operation.SessionID) == 0 {
+				t.Fatalf("crash authority: Active=%s journal=%+v error=%v", active, operation, err)
+			}
+			scenarioRecoveryDatabase(t, operation.DatabasePath, "77")
+			if old != "" {
+				scenarioRecoveryDatabase(t, filepath.Join(pluginDir, "generations", old, "db.sqlite"), "41")
+			}
+			scenarioRecoveryJournalResources(t, store, dir, operation, true)
+			t.Logf("crash %s: Active=%s Journal=%+v", phase, active, operation)
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(filepath.Join(pluginDir, "candidate-value")); err != nil {
+				t.Fatal(err)
+			}
+			// 3. 恢复只选择提交点指定的代次；首装未提交时保持未激活。
+			c = scenarioRecoveryStart(t, binary, dir, "")
+			item := scenarioPackage(t, c, dir, "recovery")
+			if item.Active != wantActive || old == "" && (item.Enabled || item.State == "Activated") {
+				t.Fatalf("recovered package: %+v; want %s", item, wantActive)
+			}
+			if old != "" {
+				value := "41"
+				if checkpoint == "committed" {
+					value = "77"
+				}
+				scenarioRecoveryValue(t, c, dir, value, false)
+				if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 || lastSession(t, c) == hex.EncodeToString(operation.SessionID) {
+					t.Fatalf("recovery did not create one new Session: %s", c.log())
+				}
+			} else if status, body := scenarioHTTP(t, c, dir, http.MethodGet, "/plugins/recovery/value"); status != 503 {
+				t.Fatalf("uncommitted first install served: %d %s", status, body)
+			}
+			stopTestCore(t, c)
+			store = recoveryStore(t, dir)
+			recovered, err := store.GetJournal(t.Context(), operation.OpID)
+			wantPhase := "cleaned"
+			if checkpoint == "committed" {
+				wantPhase = "committed"
+			}
+			if err != nil || recovered.Phase != wantPhase {
+				t.Fatalf("recovered operation: %+v %v", recovered, err)
+			}
+			scenarioRecoveryJournalResources(t, store, dir, operation, checkpoint == "committed")
+			t.Logf("recovered %s: %+v", phase, recovered)
+		})
+	}
+	t.Run("ready", func(t *testing.T) {
+		dir := scenarioRecoveryDirectory(t, "ready")
+		pluginDir := filepath.Join(dir, "plugins", "recovery")
+		c := scenarioRecoveryStart(t, binary, dir, "")
+		old := install(t, c, dir)
+		scenarioRecoveryWrite(t, filepath.Join(pluginDir, "candidate-value"), "77")
+		scenarioRecoveryWrite(t, filepath.Join(pluginDir, "fail-ready"), "")
+		output, err := recoveryCommand(t, c, dir, "reload", "recovery").CombinedOutput()
+		if err == nil || !strings.Contains(string(output)+c.log(), "fixture ready failed") {
+			t.Fatalf("OnReady failure: %v %s\n%s", err, output, c.log())
+		}
+		current := scenarioPackage(t, c, dir, "recovery")
+		if current.Active == old || current.State != "Degraded" || !current.Enabled {
+			t.Fatalf("OnReady authority: %+v", current)
+		}
+		if status, body := scenarioHTTP(t, c, dir, http.MethodGet, "/plugins/recovery/value"); status != 503 {
+			t.Fatalf("OnReady failure served: %d %s", status, body)
+		}
+		t.Logf("OnReady rejection: %s\n%s", output, c.log())
+		scenarioRecoveryKillCore(t, c)
+		waitRecoveryRuntime(t, pluginDir)
+		store := recoveryStore(t, dir)
+		records, err := store.Journals(t.Context(), "recovery")
+		if err != nil || len(records) != 2 || records[1].Phase != "committed" || records[1].NewGeneration != current.Active {
+			t.Fatalf("OnReady journal: %+v %v", records, err)
+		}
+		scenarioRecoveryDatabase(t, records[1].DatabasePath, "77")
+		scenarioRecoveryDatabase(t, filepath.Join(pluginDir, "generations", old, "db.sqlite"), "41")
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Join(pluginDir, "candidate-value")); err != nil {
+			t.Fatal(err)
+		}
+		c = scenarioRecoveryStart(t, binary, dir, "")
+		c.waitFor("fixture ready failed")
+		if item := scenarioPackage(t, c, dir, "recovery"); item.Active != current.Active || item.State != "Degraded" {
+			t.Fatalf("failed resume changed authority: %+v", item)
+		}
+		stopTestCore(t, c)
+		if err := os.Remove(filepath.Join(pluginDir, "fail-ready")); err != nil {
+			t.Fatal(err)
+		}
+		c = scenarioRecoveryStart(t, binary, dir, "")
+		c.waitFor(`"msg":"plugin activated"`)
+		if item := scenarioPackage(t, c, dir, "recovery"); item.Active != current.Active || item.State != "Activated" {
+			t.Fatalf("repaired resume: %+v", item)
+		}
+		scenarioRecoveryValue(t, c, dir, "77", false)
+		stopTestCore(t, c)
+		store = recoveryStore(t, dir)
+		records, err = store.Journals(t.Context(), "recovery")
+		if err != nil || len(records) != 2 || records[1].Phase != "committed" {
+			t.Fatalf("resume created a candidate: %+v %v", records, err)
+		}
+		t.Logf("repaired Active=%s Journal=%+v", current.Active, records)
+	})
+	for _, phase := range []string{"prepared", "committed", "binding"} {
+		t.Run("gates-"+phase, func(t *testing.T) { scenarioRecoveryCandidateGates(t, binary, v1, probe, phase) })
+	}
+}
+
+func scenarioRecoveryWrite(t *testing.T, name, value string) {
+	t.Helper()
+	if err := os.WriteFile(name, []byte(value), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func scenarioRecoveryWaitFile(t *testing.T, name string) {
+	t.Helper()
+	recoveryWait(t, func() bool {
+		_, err := os.Stat(name)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		return err == nil
+	})
+}
+
+func scenarioRecoveryValue(t *testing.T, c *core, dir, value string, write bool) {
+	t.Helper()
+	if write {
+		if status, raw := scenarioHTTP(t, c, dir, http.MethodPut, "/plugins/recovery/value?n="+value); status != 204 {
+			t.Fatalf("write value: %d %s", status, raw)
+		}
+	}
+	if status, raw := scenarioHTTP(t, c, dir, http.MethodGet, "/plugins/recovery/value"); status != 200 || string(raw) != value {
+		t.Fatalf("read value: %d %s; want %s", status, raw, value)
+	}
+}
+
+func scenarioRecoveryDatabase(t *testing.T, name, want string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: name, RawQuery: "mode=ro"}).String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	var value string
+	if err := db.QueryRow("SELECT n FROM value WHERE id=1").Scan(&value); err != nil || value != want {
+		t.Fatalf("database %s: %s %v; want %s", name, value, err, want)
+	}
+}
+
+func scenarioRecoveryJournalResources(t *testing.T, store *state.Store, dir string, record state.Journal, present bool) {
+	t.Helper()
+	references, err := store.ReferencedGenerations(t.Context(), "recovery")
+	if err != nil || slices.Contains(references, record.NewGeneration) != present {
+		t.Fatalf("generation references: %v %v; Journal=%+v", references, err, record)
+	}
+	name := filepath.Join(dir, "plugins", "recovery", "generations", record.NewGeneration, "db.sqlite")
+	_, err = os.Stat(name)
+	if present && err != nil || !present && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("candidate resource %s present=%t: %v", name, present, err)
+	}
+	scenarioRecord(t, "resources", map[string]any{"directory": dir, "candidate": record, "references": references, "database_present": present})
+}
+
+func scenarioRecoveryKillCore(t *testing.T, c *core) {
+	t.Helper()
+	if err := c.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	<-c.done
+}
+
+// scenarioRecoveryCommandProcess 在 done 关闭后交付输出，避免观测检查点时并发读取缓冲区。
+type scenarioRecoveryCommandProcess struct {
+	done   chan struct{}
+	args   []string
+	output []byte
+	err    error
+}
+
+func scenarioRecoveryStartCommand(t *testing.T, command *exec.Cmd) *scenarioRecoveryCommandProcess {
+	t.Helper()
+	var output bytes.Buffer
+	command.Stdout, command.Stderr = &output, &output
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	p := &scenarioRecoveryCommandProcess{done: make(chan struct{}), args: command.Args}
+	go func() {
+		p.err = command.Wait()
+		p.output = output.Bytes()
+		close(p.done)
+	}()
+	t.Cleanup(func() { _ = command.Process.Kill(); <-p.done })
+	return p
+}
+
+func (p *scenarioRecoveryCommandProcess) wait(t *testing.T) *scenarioRecoveryCommandProcess {
+	t.Helper()
+	recoveryWait(t, func() bool {
+		select {
+		case <-p.done:
+			return true
+		default:
+			return false
+		}
+	})
+	scenarioRecord(t, "cli-process", map[string]any{"args": p.args, "output": string(p.output), "error": fmt.Sprint(p.err)})
+	return p
+}
+
+func scenarioRecoveryReleasePipe(t *testing.T, dir string) {
+	t.Helper()
+	if err := syscall.Mkfifo(filepath.Join(dir, "checkpoint.release"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func scenarioRecoveryRelease(t *testing.T, dir string) {
+	t.Helper()
+	scenarioRecoveryWrite(t, filepath.Join(dir, "checkpoint.release"), "release")
+}
+
+func scenarioRecoveryFaultFixture(t *testing.T, dir string) (string, string, string) {
+	t.Helper()
+	_, _ = buildRecoveryFixture(t, dir)
+	var overlay struct{ Replace map[string]string }
+	if err := json.Unmarshal(scenarioRecoveryRead(t, filepath.Join(dir, "overlay.json")), &overlay); err != nil {
+		t.Fatal(err)
+	}
+	patch := func(name, anchor, replacement string) {
+		t.Helper()
+		original, err := filepath.Abs(filepath.Join("../..", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := original
+		if modified := overlay.Replace[original]; modified != "" {
+			input = modified
+		}
+		source := string(scenarioRecoveryRead(t, input))
+		if strings.Count(source, anchor) != 1 {
+			t.Fatalf("ambiguous fault observation point: %s %s", name, anchor)
+		}
+		modified := filepath.Join(dir, strings.ReplaceAll(name, "/", "_"))
+		scenarioRecoveryWrite(t, modified, strings.Replace(source, anchor, replacement, 1))
+		overlay.Replace[original] = modified
+	}
+	patch("internal/core/journal/commit.go", " select {}", `
+ if _, err := os.Stat(os.Getenv("ALONABOT_TEST_CHECKPOINT")+".release"); err == nil {
+  if _,err:=os.ReadFile(os.Getenv("ALONABOT_TEST_CHECKPOINT")+".release");err!=nil{panic(err)}
+  return
+ } else if !os.IsNotExist(err) {panic(err)}
+ select {}`)
+	patch("internal/app/assembly.go", "if attachErr := a.attach(ctx, running); attachErr != nil {", `if os.Getenv("ALONABOT_TEST_CRASH_PHASE")=="binding"&&id=="recovery"{
+  name:=os.Getenv("ALONABOT_TEST_CHECKPOINT");if err:=os.WriteFile(name,[]byte("binding"),0600);err!=nil{panic(err)}
+  if _,err:=os.ReadFile(name+".release");err!=nil{panic(err)}
+ }
+ if attachErr := a.attach(ctx, running); attachErr != nil {`)
+	raw, err := json.Marshal(overlay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "fault-overlay.json")
+	scenarioRecoveryWrite(t, path, string(raw))
+	// 观测与候选写入只进入临时插件；原恢复插件的数据库及故障入口继续复用。
+	source := strings.Replace(recoveryFixtureSource, "\"os\"", "\"os\"\n\"time\"\n\"github.com/AlonaBot/AlonaBot/sdk/service\"\n\"github.com/AlonaBot/AlonaBot/sdk/bus\"", 1)
+	source = strings.Replace(source, "func main() {", `type gateArgs struct{}
+func observe(kind string)error{f,err:=os.OpenFile("requests",os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600);if err!=nil{return err};_,err=fmt.Fprintf(f,"%d %s\n",os.Getpid(),kind);closeErr:=f.Close();if err!=nil{return err};return closeErr}
+func main() {`, 1)
+	source = strings.Replace(source, "genimpl.Resources{}", `genimpl.Resources{ServiceSchemas:map[string][]byte{"main.gateArgs":[]byte("{\"type\":\"object\"}")}}`, 1)
+	source = strings.Replace(source, "p:=sdk.NewPlugin()", `p:=sdk.NewPlugin()
+ p.Command("gate").Handle(func(*sdk.Context)error{return observe("command")})
+ p.On(sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(*sdk.Context)error{return observe("event")})
+ service.Serve(p,service.JSON[gateArgs,gateArgs]("recovery/gate")).Access(service.AccessPublic).Handle(func(*sdk.Context,gateArgs)(gateArgs,error){return gateArgs{},observe("service")})
+ bus.Subscribe(p,bus.Define[gateArgs]("gateprobe/pulse")).Handle(func(*sdk.Context,gateArgs)error{return observe("bus")})
+ p.Every("gate",time.Second).Handle(func(*sdk.Context)error{return observe("job")})
+`, 1)
+	source = strings.Replace(source, "file,err:=os.OpenFile(\"starts\"", `if raw,err:=os.ReadFile("candidate-value");err==nil{if _,err=db.ExecContext(ctx,"UPDATE value SET n=? WHERE id=1",string(raw));err!=nil{return err}}else if !os.IsNotExist(err){return err}
+  file,err:=os.OpenFile("starts"`, 1)
+	source = strings.Replace(source, "p.OnReady(func(context.Context)error{", `p.OnReady(func(context.Context)error{slog.Info("OnReady");`, 1)
+	source = strings.Replace(source, "db,err:=sqlitedb.Open(r.Context());if err!=nil", `if err:=observe("http");err!=nil{http.Error(w,err.Error(),500);return};db,err:=sqlitedb.Open(r.Context());if err!=nil`, 1)
+	pluginFile := filepath.Join(dir, "observed-plugin.go")
+	scenarioRecoveryWrite(t, pluginFile, source)
+	probeFile := filepath.Join(dir, "probe.go")
+	scenarioRecoveryWrite(t, probeFile, scenarioRecoveryProbeSource)
+	coreBinary, pluginBinary, probeBinary := filepath.Join(dir, "fault-core"), filepath.Join(dir, "observed-plugin"), filepath.Join(dir, "probe")
+	for _, build := range [][2]string{{coreBinary, "."}, {pluginBinary, pluginFile}, {probeBinary, probeFile}} {
+		if output, err := exec.Command("go", fixtureBuildArgs("-overlay", path, "-o", build[0], build[1])...).CombinedOutput(); err != nil {
+			t.Fatalf("build fault fixture: %v\n%s", err, output)
+		}
+	}
+	return coreBinary, pluginBinary, probeBinary
+}
+
+const scenarioRecoveryProbeSource = `package main
+import("fmt";"encoding/json";"log/slog";"net/http";"os";"time";"github.com/AlonaBot/AlonaBot/sdk";"github.com/AlonaBot/AlonaBot/sdk/genimpl";"github.com/AlonaBot/AlonaBot/sdk/service";"github.com/AlonaBot/AlonaBot/sdk/bus")
+type gateArgs struct{}
+func init(){genimpl.Register("main",genimpl.Resources{ServiceSchemas:map[string][]byte{"main.gateArgs":[]byte("{\"type\":\"object\"}")}})}
+func main(){p:=sdk.NewPlugin()
+ p.Every("clock",time.Second).Handle(func(*sdk.Context)error{if err:=os.WriteFile("clock.next",[]byte(fmt.Sprint(time.Now().UnixMilli())),0600);err!=nil{return err};return os.Rename("clock.next","clock")})
+ for _,action:=range []string{"service","bus"}{p.Route("POST","/"+action).HandleFunc(func(w http.ResponseWriter,r *http.Request){
+  f,err:=os.OpenFile("attempts",os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600);if err!=nil{http.Error(w,err.Error(),500);return};_,err=fmt.Fprintln(f,action);closeErr:=f.Close();if err!=nil{http.Error(w,err.Error(),500);return};if closeErr!=nil{http.Error(w,closeErr.Error(),500);return}
+  if action=="service"{_,err=service.JSON[gateArgs,gateArgs]("recovery/gate").Call(r.Context(),gateArgs{})}else{_,err=bus.Define[gateArgs]("gateprobe/pulse").Publish(r.Context(),gateArgs{})}
+  result:="";if err!=nil{result=err.Error()};if err:=json.NewEncoder(w).Encode(map[string]string{"error":result});err!=nil{slog.Error("write probe","error",err)}
+ })}
+ if err:=sdk.Run(p);err!=nil{slog.Error("probe failed","error",err);os.Exit(1)}
+}`
+
+func scenarioRecoveryCandidateGates(t *testing.T, binary, archive, probe, phase string) {
+	t.Helper()
+	dir := scenarioRecoveryDirectory(t, "gates-"+phase)
+	pluginDir := filepath.Join(dir, "plugins", "recovery")
+	probeDir := filepath.Join(dir, "plugins", "gateprobe")
+	c := scenarioRecoveryStart(t, binary, dir, "")
+	adapter := os.Getenv("ALONABOT_SCENARIO_ADAPTER_PACKAGE")
+	scenarioManagement(t, c, dir, "", "install", adapter, "--yes")
+	scenarioManagement(t, c, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
+	scenarioManagement(t, c, dir, "", "enable", "alonabot-adapter-fixture")
+	scenarioManagement(t, c, dir, "", "install", probe, "--yes")
+	scenarioManagement(t, c, dir, "", "enable", "gateprobe")
+	scenarioManagement(t, c, dir, "", "install", archive, "--yes")
+	scenarioManagement(t, c, dir, "", "enable", "recovery")
+	scenarioRecoveryWrite(t, filepath.Join(pluginDir, "config.json"), "{}")
+	old := scenarioPackage(t, c, dir, "recovery").Active
+	// 1. 同一套驱动先证明六类入口在正常绑定后都实际执行。
+	drive := func() {
+		t.Helper()
+		for _, text := range []string{"/gate", "ordinary event"} {
+			if status, raw := scenarioHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text="+url.QueryEscape(text)); status != 204 {
+				t.Fatalf("deliver: %d %s", status, raw)
+			}
+		}
+		for _, action := range []string{"service", "bus"} {
+			if status, raw := scenarioHTTP(t, c, dir, http.MethodPost, "/plugins/gateprobe/"+action); status != 200 || strings.TrimSpace(string(raw)) != `{"error":""}` {
+				t.Fatalf("%s: %d %s", action, status, raw)
+			}
+		}
+		scenarioRecoveryValue(t, c, dir, "1", false)
+	}
+	kinds := func() map[string]string {
+		t.Helper()
+		result := map[string]string{}
+		for _, line := range strings.Split(string(scenarioRecoveryRead(t, filepath.Join(pluginDir, "requests"))), "\n") {
+			if fields := strings.Fields(line); len(fields) == 2 {
+				result[fields[1]] = fields[0]
+			}
+		}
+		return result
+	}
+	drive()
+	recoveryWait(t, func() bool { return len(kinds()) == 6 })
+	stopTestCore(t, c)
+	scenarioRecoveryReleasePipe(t, dir)
+	c = scenarioRecoveryStart(t, binary, dir, phase)
+	c.waitFor(`"msg":"plugin activated".*"plugin_id":"recovery"`)
+	reload := scenarioRecoveryStartCommand(t, recoveryCommand(t, c, dir, "reload", "recovery"))
+	scenarioRecoveryWaitFile(t, filepath.Join(dir, "checkpoint"))
+	before := string(scenarioRecoveryRead(t, filepath.Join(pluginDir, "requests")))
+	attempts := strings.Fields(string(scenarioRecoveryRead(t, filepath.Join(probeDir, "attempts"))))
+	// 2. 精确检查点保持候选未绑定；异步请求允许门禁选择等待或拒绝。
+	type response struct {
+		status int
+		body   []byte
+	}
+	requests := make([]chan response, 0, 5)
+	for _, request := range [][2]string{
+		{http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Fgate"},
+		{http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=ordinary"},
+		{http.MethodPost, "/plugins/gateprobe/service"},
+		{http.MethodPost, "/plugins/gateprobe/bus"},
+		{http.MethodGet, "/plugins/recovery/value"},
+	} {
+		done := make(chan response, 1)
+		requests = append(requests, done)
+		go func() {
+			defer close(done)
+			status, body := scenarioHTTP(t, c, dir, request[0], request[1])
+			done <- response{status, body}
+		}()
+	}
+	recoveryWait(t, func() bool {
+		return len(strings.Fields(string(scenarioRecoveryRead(t, filepath.Join(probeDir, "attempts"))))) >= len(attempts)+2
+	})
+	scenarioRecoveryWaitFile(t, filepath.Join(probeDir, "clock"))
+	clock, err := strconv.ParseInt(string(scenarioRecoveryRead(t, filepath.Join(probeDir, "clock"))), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 以独立插件的真实定时回调推进至少一个候选任务周期，避免固定 sleep 猜测门禁窗口。
+	recoveryWait(t, func() bool {
+		next, err := strconv.ParseInt(string(scenarioRecoveryRead(t, filepath.Join(probeDir, "clock"))), 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return next >= clock+1000
+	})
+	if after := string(scenarioRecoveryRead(t, filepath.Join(pluginDir, "requests"))); after != before {
+		t.Fatalf("candidate served before binding at %s: %q -> %q", phase, before, after)
+	}
+	scenarioRecoveryRelease(t, dir)
+	if result := reload.wait(t); result.err != nil {
+		t.Fatalf("gate reload: %v %s\n%s", result.err, result.output, c.log())
+	}
+	for _, done := range requests {
+		var result response
+		recoveryWait(t, func() bool {
+			select {
+			case result = <-done:
+				return true
+			default:
+				return false
+			}
+		})
+		t.Logf("held %s response: %d %s", phase, result.status, result.body)
+	}
+	// 3. 完整绑定后六类入口均交给新进程，旧进程不再接单。
+	item := scenarioPackage(t, c, dir, "recovery")
+	if item.Active == old || item.State != "Activated" {
+		t.Fatalf("bound candidate: %+v", item)
+	}
+	drive()
+	pid := strings.Fields(string(scenarioRecoveryRead(t, filepath.Join(pluginDir, "starts"))))
+	wantPID := pid[len(pid)-1]
+	recoveryWait(t, func() bool {
+		current := kinds()
+		for _, kind := range []string{"command", "event", "service", "bus", "job", "http"} {
+			if current[kind] != wantPID {
+				return false
+			}
+		}
+		return true
+	})
+	for _, line := range strings.Split(strings.TrimPrefix(string(scenarioRecoveryRead(t, filepath.Join(pluginDir, "requests"))), before), "\n") {
+		if fields := strings.Fields(line); len(fields) == 2 && fields[0] != wantPID {
+			t.Fatalf("old process served after handoff: %s", line)
+		}
+	}
+	stopTestCore(t, c)
+	store := recoveryStore(t, dir)
+	records, err := store.Journals(t.Context(), "recovery")
+	if err != nil || len(records) != 2 || records[1].Phase != "committed" || records[1].NewGeneration != item.Active {
+		t.Fatalf("gate journal: %+v %v", records, err)
+	}
+	t.Logf("gates %s: old=%s new=%s pid=%s requests=%s Journal=%+v", phase, old, item.Active, wantPID, scenarioRecoveryRead(t, filepath.Join(pluginDir, "requests")), records)
+}
+
+func scenarioRecoveryDirectory(t *testing.T, name string) string {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("ALONABOT_SCENARIO_DATA_DIR"), name)
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	scenarioRecord(t, "subcase", map[string]string{"name": name, "directory": dir})
+	return dir
+}
+
+func scenarioRecoveryStart(t *testing.T, binary, dir, phase string) *core {
+	t.Helper()
+	c := startRecoveryCore(t, binary, dir, phase)
+	t.Cleanup(func() {
+		_ = c.cmd.Process.Kill()
+		<-c.done
+		scenarioRecord(t, "core-log", map[string]string{"directory": dir, "phase": phase, "log": c.log()})
+	})
+	return c
+}
+
+func scenarioRecoveryRead(t *testing.T, name string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func scenarioRecoveryBuild(t *testing.T) {
+	t.Helper()
+	dir := os.Getenv("ALONABOT_SCENARIO_OUT")
+	binary, plugin, probe := scenarioRecoveryFaultFixture(t, dir)
+	for id, executable := range map[string]string{"recovery": plugin, "gateprobe": probe} {
+		packageDir := filepath.Join(dir, id)
+		if err := os.Mkdir(packageDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		manifest := fmt.Sprintf("manifest_version: 1\nid: %s\nname: Recovery Fixture\nversion: 1.0.0\nsource: github.com/example/%s\nrole: plugin\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nmigration_mode: none\nprepare_effects: managed_db\nos: %s\narch: %s\n", id, id, runtime.GOOS, runtime.GOARCH)
+		archive, err := writeTestPackage(packageDir, id, "plugin", "", "github.com/example/"+id, "1.0.0", executable, "", map[string][]byte{"plugin.yaml": []byte(manifest)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		scenarioRecord(t, "built-package", archive)
+	}
+	adapterFile := filepath.Join(dir, "adapter.go")
+	scenarioRecoveryWrite(t, adapterFile, adapterFixtureSource)
+	adapterBinary := filepath.Join(dir, "adapter")
+	command := exec.Command("go", fixtureBuildArgs("-overlay", filepath.Join(dir, "fault-overlay.json"), "-o", adapterBinary, adapterFile)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build adapter: %v\n%s", err, output)
+	}
+	adapterDir := filepath.Join(dir, "adapter-package")
+	if err := os.Mkdir(adapterDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := writeTestPackage(adapterDir, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "1.0.0", adapterBinary, "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scenarioRecord(t, "built-package", archive)
+	scenarioRecord(t, "built-overlay-core", binary)
+}
