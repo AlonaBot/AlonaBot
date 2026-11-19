@@ -15,11 +15,12 @@ import (
 )
 
 type toolPolicy struct {
-	PluginID string `json:"plugin_id"`
-	Service  string `json:"service"`
-	Default  string `json:"default"`
-	Override string `json:"override"`
-	Effect   string `json:"effect"`
+	PluginID   string   `json:"plugin_id"`
+	Service    string   `json:"service"`
+	Identities []string `json:"identities"`
+	Default    string   `json:"default"`
+	Override   string   `json:"override"`
+	Effect     string   `json:"effect"`
 }
 
 type toolPolicyUpdate struct {
@@ -33,7 +34,7 @@ func (s *Service) toolRoutes(mux *http.ServeMux) {
 		entries, err := s.opt.Tools.Policies(r.Context())
 		result := make([]toolPolicy, 0, len(entries))
 		for _, entry := range entries {
-			result = append(result, toolPolicy{entry.PluginID, entry.Service, toolPolicyName(entry.Default), toolPolicyName(entry.Override), toolEffectName(entry.Effect)})
+			result = append(result, toolPolicy{entry.PluginID, entry.Service, entry.Identities, toolPolicyName(entry.Default), toolPolicyName(entry.Override), toolEffectName(entry.Effect)})
 		}
 		respond(w, struct {
 			Policies []toolPolicy `json:"policies"`

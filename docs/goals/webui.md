@@ -365,7 +365,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
   // GET/PUT /api/v1/plugins/{id}/policies；PUT /api/v1/plugins/{id}/commands/{route_id}/names 发 {names}，DELETE 同路径恢复声明。PUT policies 发送一项完整覆盖，permissions/enabled 的 null 表示继承。
 - src/api/admin.ts 工具、发信许可、会话与静态任务：
   export type ToolPolicyValue = 'allow' | 'confirm' | 'deny' | 'inherit'
-  export type ToolPolicy = { plugin_id: string; service: string; default: ToolPolicyValue; override: ToolPolicyValue; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
+  export type ToolPolicy = { plugin_id: string; service: string; identities: ('tool' | 'operation')[]; default: ToolPolicyValue; override: ToolPolicyValue; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
   export type ToolPolicyUpdate = { plugin_id: string; service: string; policy: ToolPolicyValue }
   export function getToolPolicies(): Promise<{ policies: ToolPolicy[] }>
   export function setToolPolicy(item: ToolPolicyUpdate): Promise<void>
@@ -632,7 +632,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-165 · T-09.25 配置文件页
 
-状态：待派发。前置 T-04.19（PR #250，合并提交 `f3a06458`）、T-11.6（PR #246，`24e57d60`）、T-12.19（PR #247，`f3959f6e`）、T-09.18（PR #244，`a989b5f1`）均已合并；配置文件管理 API 的 T-08.18（PR #214，`ab0cd565`）已合并。按 main `ce68e109` 核对： 审查者裁定（2026-11-18）：配置文件页的工具策略只列 §18 工具目录中的工具条目，「覆盖其他工具」的候选为该目录中本配置文件尚未覆盖的工具；确认类操作不在本页，归权限页（goal-44）。goal-44 先合并，本切片合并时复用其插件配置面板，冲突由后合并者按共享规则处理。
+状态：待派发。前置 T-04.19（PR #250，合并提交 `f3a06458`）、T-11.6（PR #246，`24e57d60`）、T-12.19（PR #247，`f3959f6e`）、T-09.18（PR #244，`a989b5f1`）均已合并；配置文件管理 API 的 T-08.18（PR #214，`ab0cd565`）已合并。按 main `ce68e109` 核对页面基线；工具候选沿 2026-11-19 的 D-168 实施细化，按 §18 `identities` 展开为独立工具与确认操作，分别排除本配置文件已有覆盖。派发前先合入目录身份补齐；goal-44 先合并，本切片合并时复用其插件配置面板，冲突由后合并者按共享规则处理。
 
 - `web/admin/src/api/admin.ts` 已导出 `listProfiles(): Promise<Profile[]>`、`getProfileAssignments(): Promise<ProfileAssignments>`、`assignInstanceProfile(instanceID: string, profile: string): Promise<void>`、`listInstances(): Promise<AdapterInstance[]>`、`listChats(): Promise<Chat[]>`，后者读取全部聊天目录；配置文件的其他写入、插件覆盖、平台与工具策略尚无前端导出。已有 `getPluginConfig(id: string): Promise<ConfigSnapshot>`、`patchPluginConfig(id: string, baseGeneration: string, patch: Record<string, unknown>): Promise<PendingConfig>`、`changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void>`、`AdminAPIError` 与 `isConfirmationError`。
 - `src/pages/ModelsPage.tsx` 导出 `ModelsPage(): JSX.Element`；`src/pages/ModelSelect.tsx` 导出 `ModelSelect({value,label,options,disabled,onChange})`，参数见下文；`src/pages/modelConfig.ts` 已有 `parseModels(config: Record<string, unknown>): ConfiguredModel[]`、`editingConfig(snapshot: ConfigSnapshot): Record<string, unknown>`。`src/components/ConfigForm.tsx` 的四个必填 props 为 schema、value、messages、onSubmit，另有 `footer?: ReactNode`；`src/schema/model.ts` 的 `fieldsFromSchema(schema: unknown): Field[]` 尚未接受 `profile` 与 `options_from`。
@@ -683,7 +683,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
   export type ProfileToolPolicy = ({ tool: string; operation?: never } | { operation: { plugin_id: string; name: string }; tool?: never }) & { policy: 'allow' | 'confirm' | 'deny' | 'inherit' }
   export function getProfileTools(id: string): Promise<{ items: ProfileToolPolicy[] }>
   export function putProfileTools(id: string, items: ProfileToolPolicy[]): Promise<void>
-  export type ToolPolicy = { plugin_id: string; service: string; default: string; override: string; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
+  export type ToolPolicy = { plugin_id: string; service: string; identities: ('tool' | 'operation')[]; default: ToolPolicyValue; override: ToolPolicyValue; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
   export function getToolPolicies(): Promise<{ policies: ToolPolicy[] }>
   // GET/PUT .../profiles/{id}/tools，PUT 发 {items}；getToolPolicies 只读 §18 GET /api/v1/tools/policies，供「覆盖其他工具」查询全局目录与策略。
 - 请求复用 admin.ts 的私有 request、现有 jsonBody、同源 Cookie、内存 CSRF 与 onSessionExpired；所有路径 ID 按一个 URL 段编码，保留 AdminAPIError 的 status、code、affected、responseBody 与原始错误。以上成功 {} 的写入由客户端归一为 Promise<void>，不改变既有请求导出。
@@ -712,15 +712,15 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 - 「默认」的字段修改走插件配置 API（Pending 与 reload，保存时提示会重载的插件）；其他配置文件经 ADMIN-API §23 立即生效。插件配置页选中「默认」以外的配置文件时，只有写了 `profile` 的字段可以编辑，其余字段置灰。无效覆盖值显示原因并可一键清理。
 - 其他配置文件以 snapshot.active 为基础，按 ProfilePlugin.fields 中的点分路径应用有效 overrides；invalid 中的路径保留诊断并排除在生效预览外。覆盖按完整字段值替换，object/list 也整体替换，保留基础值的其他字段。ConfigForm 的 RFC 7396 patch 先应用到当前有效草稿，再取本次变更涉及的标记路径的完整值，形成 §23 的 overrides；恢复跟随默认写该路径:null。标记 object 内部的修改提交完整 object，保留未编辑成员；无关标记路径维持原覆盖状态。具有 secret 子树的复合标记按契约只读并展示实际校验原因，失效项用 prune 清理；禁止把掩码或未标记字段送入覆盖接口。
 - default 的普通配置表单继续使用现有 buildPatch，数组、secret、invisible 与 condition 规则保持；插件配置页的非 default 草稿与 Pending 分开展示，切换后重建对应编辑基线。字段恢复默认在 default 中沿用配置 patch 的 null，在其他配置文件中表示跟随 default。prune 只调用 §23 的覆盖清理接口，成功重读 overrides/invalid；保留 §12 的普通配置操作。
-- 工具区默认只列 getProfileTools 的覆盖项，可筛选全局目录来添加覆盖；allow、confirm、deny 分别保存对应策略，恢复全局发 inherit。PUT 只发本次更新项；已读工具保留 tool，已读确认操作保留 operation，包含同名项时分别编辑。插件关闭时展示其工具被禁用的实际含义，保留已存策略；默认配置文件的工具策略仍经 §23 管理。§18 的目录按 plugin_id/service 合并工具与确认操作，缺少可区分两类的标识；新增候选的身份判定存在契约缺口，按共同约束交审查者裁定，保留已有条目的准确读写。
+- 工具区默认只列 getProfileTools 的覆盖项，可筛选全局目录来添加覆盖；allow、confirm、deny 分别保存对应策略，恢复全局发 inherit。PUT 只发本次更新项；已读工具保留 tool，已读确认操作保留 operation，包含同名项时分别编辑。插件关闭时展示其工具被禁用的实际含义，保留已存策略；默认配置文件的工具策略仍经 §23 管理。§18 的目录按 plugin_id/service 合并，按 identities 展开候选：tool 写入完整工具名，operation 写入 plugin_id/name；同名两类分别排除已有覆盖，[] 没有新增候选。已保存覆盖在目录身份消失后仍照原身份准确读写。
 - 系统设置沿 PLAN 保持无命令前缀，平台设置统一在配置文件页。页面只调用上述 ADMIN-API 已有端点，错误显示完整原因；覆盖通知失败可能发生在保存之后，写入报错后重读已保存状态并保留错误，依服务端实际结果更新界面。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无。
 - 本地自测：前端纯函数与请求格式写在 *.local.test.ts，覆盖配置文件切换与同路径查询参数、会话指定优先级与 null 取消、复制请求、平台继承与 false/空字符串/0、完整 PUT 保留未改键、profile/options_from 解析、只读路径、点分覆盖和 object/list 整体替换、恢复继承、invalid 排除与 prune、default 的 Pending/代次冲突、模型配置名与 Active 候选过滤、工具与 operation 的身份及 inherit。其余临时 Go 验证按共同约束写在被忽略的 *_local_test.go，PR 记录结果。
-- 浏览器手动验证：同源真实 Core 与官方 Agent 上打开、切换、新建、重命名、复制与删除，default 删除置灰；使用范围中实例缺省、单独指定、取消指定和真实会话数；AI 六字段、唤醒词显隐与没有 Agent；平台五个键的覆盖和跟随默认；插件开关、箭头预选、非标记字段禁用、无效覆盖清理；default 保存提示、Pending 与 reload，其他配置文件修改后的命令前缀、回复与 Agent/工具策略；深浅色、手机、键盘与搜索。PR 写明浏览器和版本、真实或模拟环境、用例名及未运行项；工具候选身份的缺口与受影响流程单列。
+- 浏览器手动验证：同源真实 Core 与官方 Agent 上打开、切换、新建、重命名、复制与删除，default 删除置灰；使用范围中实例缺省、单独指定、取消指定和真实会话数；AI 六字段、唤醒词显隐与没有 Agent；平台五个键的覆盖和跟随默认；插件开关、箭头预选、非标记字段禁用、无效覆盖清理；default 保存提示、Pending 与 reload，其他配置文件修改后的命令前缀、回复与 Agent/工具策略；工具与操作的独立候选、同名分别覆盖、空身份行及目录身份消失后的原覆盖读写；深浅色、手机、键盘与搜索。PR 写明浏览器和版本、真实或模拟环境、用例名及未运行项。
 
-完成条件：npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；按本章共同约定准备依赖并记录真实 Core 浏览器验证。工具候选身份的契约缺口由审查者裁定，完成对应实现与验证后交付。PR 按 TEST-MATRIX §3 提供 V-145 页面证据与未运行项，审查者据实际结果同步；与 goal-44 的配置标签、表单和选项查询共用同一实现。
+完成条件：npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；按本章共同约定准备依赖并记录真实 Core 浏览器验证，完成 identities 驱动的独立工具与操作候选及原覆盖读写。PR 按 TEST-MATRIX §3 提供 V-145 页面证据与未运行项，审查者据实际结果同步；与 goal-44 的配置标签、表单和选项查询共用同一实现。
 
 不做：配置文件的 Core、SDK 与 Agent 实现（T-08.18、T-04.18、T-04.19、T-11.6、T-12.19）；会话页的配置文件列（goal-44）；模型管理与人格管理、goal-44 的其余配置增强和系统设置实现；Go 产品代码、spec 修改、新 Admin API、新依赖、DOM 测试依赖、CI 前端任务与提交前端测试。
 ```
