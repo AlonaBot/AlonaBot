@@ -121,7 +121,7 @@
 | goal-177 | T-09.27 | 组件市场 ID 改用连字符 | T-09.10、T-09.14、T-12.8、T-13.5 | 已完成（PR #222） |
 | goal-162 | T-04.19 | 平台与消息 | T-04.18 | 已完成（PR #250） |
 | goal-178 | T-04.20 | SDK 用法从简 | T-04.18、T-16.2 | 已完成（PR #251） |
-| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
+| goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 待派发 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 已完成（PR #246） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 已完成（PR #253） |
@@ -8326,7 +8326,7 @@ internal/core/state
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.9，goal-44 / PR #259；external 正式许可 PR #265）。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）、T-09.15（PR #243，`d9e9089`）已合并。本语句按 main `65689f4d`、goal-44 候选 `a8d94dc3` 与维护许可候选 `fe72eacc` 的 CLI、manage、Journal 和测试辅助核对；两项候选合并后按 main 复核正式入口，再改为待派发。获准维护、失败停机与恢复的完整目标保留。
+状态：待派发。全部前置均已合并：T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.9（PR #259，`661cf9b1`）、T-09.10（PR #177）、T-09.12（PR #167）、T-09.15（PR #243，`d9e9089`）；external 正式许可 PR #265（`a97d4362`）已合并。按 main `661cf9b1` 复核 CLI、manage、Journal、配置面板和测试辅助，以下接口与验收矩阵可直接派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -8350,7 +8350,7 @@ internal/core/state
 - 状态取证使用 (*state.Store).Active(ctx context.Context, pluginID string) (string, error)、Journals(ctx context.Context, pluginID string) ([]state.Journal, error)、GetJournal(ctx context.Context, opID string) (state.Journal, error)、Retained(ctx context.Context, pluginID string) ([]string, error)、ReferencedGenerations(ctx context.Context, pluginID string) ([]string, error)。Journal 的 OpID/Kind/ExpectedOld/NewGeneration/Phase 与资源引用同查；只在 Core 退出后打开状态库核对，管理动作始终经 CLI/API。
 - 测试辅助：startEmptyCore(t *testing.T, dataDir string, extra ...string) *core；(*core).management(t *testing.T, dir, token string, args ...string) string；managementFailure(t *testing.T, c *core, dir string, args ...string) string；findPackage(t *testing.T, c *core, dir, id string) manage.Package；fixtureHTTP(t *testing.T, c *core, dir, method, path string, body ...string) (int, []byte)。TestMain 已构建 Core、lifecycle 与 Adapter/command/job 夹具；testPackage 和 writeTestPackage 已生成真实签名安装包。
 - 恢复辅助：buildRecoveryFixture(t *testing.T, dir string) (coreBinary, pluginBinary string)；recoveryPackage(t *testing.T, dir, plugin, version string) string；startRecoveryCore(t *testing.T, binary, dir, phase string) *core；recoveryCommand(t *testing.T, c *core, dir string, args ...string) *exec.Cmd；recoveryStore/recoveryWait/waitRecoveryRuntime。现有 TestRecoveryEndToEnd 覆盖 started/prepared/committed、残存写入者和 rollback。临时 overlay 的 ALONABOT_TEST_CRASH_PHASE/ALONABOT_TEST_CHECKPOINT 精确停在 Journal started 后停旧前、PREPARED 后提交前、CommitCandidate 成功后 ACTIVATE 前；fail-start/fail-ready 与 hold-runtime/runtime-held 是临时插件已有故障入口。
-- goal-44 候选：web/admin/src/pages/PluginConfigPanel.tsx 的 PluginConfigPanel({id})、api/admin.ts 的 getPluginConfig(id)、patchPluginConfig(id, baseGeneration, patch)、revealPluginSecret(id, path, token) 与 changePackage('reload', id)；读取 active_generation/active/pending/schema/i18n/messages/corrections/unknown，PATCH /config/pending 保存后由 API reload 激活。权限、工具策略、会话与页面桥沿 ADMIN-API 的已合并入口；页面实际操作和截图复用 goal-44/goal-94 的有效证据，按缺口补真实浏览器取证。
+- 已合并的 goal-44：web/admin/src/pages/PluginConfigPanel.tsx 的 PluginConfigPanel({id})、api/admin.ts 的 getPluginConfig(id)、patchPluginConfig(id, baseGeneration, patch)、revealPluginSecret(id, path, token) 与 changePackage('reload', id)；读取 active_generation/active/pending/schema/i18n/messages/corrections/unknown，PATCH /config/pending 保存后由 API reload 激活。权限、工具策略、会话与页面桥沿 ADMIN-API 的已合并入口；页面实际操作和截图复用 goal-44/goal-94 的有效证据，按缺口补真实浏览器取证。
 
 验收矩阵（对应提交主路径、既有回归或本地子测试，逐项记录命令、日志与持久状态）：
 1) 正式流程：首次安装 → enable（首个 Active）→ restart（只换 Session）→ 编辑 config.json 后 CLI reload（新代次与 SQLite 副本）→ update（新包、新代次）→ pin → disable → uninstall 后同来源重装（复用数据）→ enable → rollback 到保留代次（新代次、旧按钮不复活）。核对 Active、Session、程序版本、配置与 DB 内容；pin 限制更新，解除后恢复。保留代次以 generations API/状态库实际结果选取。
