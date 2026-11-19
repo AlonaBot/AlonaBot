@@ -8733,9 +8733,9 @@ internal/core/state
 
 ### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
 
-状态：等待前置（S-03.1）。S-02.2（goal-171，PR #249，`18f8af95`）、T-09.14（goal-93，PR #192，`0cff77c`）已合并；S-03.1（goal-172，PR #256）尚未合并。以下候选按 main `24701da4` 的设置、策略、状态与管理装配，以及 goal-172 head `24f3d9bf` 的稳定 Scheduler 候选核对；前置合并后，审查者核对实际合并代码与接口，再改为待派发。组件列表的 `Package.RuntimeState` 与 `State=Suspended` 已在 main 实现，本切片保留并验收。
+状态：待派发。S-02.2（goal-171，PR #249，`18f8af95`）、T-09.14（goal-93，PR #192，`0cff77c`）、S-03.1（goal-172，PR #256，`216bb7f9`）均已合并。2026-11-19 按 main `216bb7f9` 核对设置、策略、状态、管理装配及 Scheduler 的 EnsureActive/Suspend/Jobs/SetJobPaused 接口，与下述签名一致。组件列表的 `Package.RuntimeState` 与 `State=Suspended` 已实现，本切片保留并验收。
 
-无路由快照的查询行为按本轮 ADMIN-API §24 同步候选明确：前四类常驻原因可直接判定；需要路由而无已提交快照时返回 412 / FAILED_PRECONDITION，保持读取无唤醒副作用。正式派发时一并核对已合入的规格与实现接口。
+无路由快照的查询行为与本分支接入的 ADMIN-API §24 一致：前四类常驻原因可直接判定；需要路由而无已提交快照时返回 412 / FAILED_PRECONDITION，保持读取无唤醒副作用。派发语句与查询契约随本切片一并交付。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-173（切片 S-06.1：休眠管理 API、运行诊断与 CLI）。goal 目录 goal-173，分支 goal-173，worktree .worktrees/goal-173，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
