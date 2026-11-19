@@ -637,6 +637,8 @@ PR #271；产品 head `dbde6baeab784abfdbd9ef59298f6397edcd93ac`，同步 main `
 
 ### T-09.11 正式流程与 T-08 联验
 
+交付：PR #272。执行者候选 `8f62c0bb` 的完整契约与规范审查通过；审查者独立验证 recovery/survivor 指定 overlay 的消费与原始错误保留，证据见下文。提交集成测试新增266行；场景 Python 与 Go 模板新增906行，产品 Go 实现新增0行。
+
 2026-11-19，macOS 27.0.1、darwin/arm64、Go 1.27.1。goal-45 从 `661cf9b15aed5860a6687c671e1bd71d045baa7b` 实施；主路径候选 `4d39e541`、管理场景 `4df08b6d`、恢复场景及 configdb/Secret 页面候选 `eacf9294`、场景 URI 修复 `0a617812`。普通 merge main `c2d4774d` 后的 `01e945d7ea2b4ce7f3f921771d5b3232253487c7` 用于新版管理页验收，消费 PR #271 配置文件页、#266 工具身份与 #269 休眠入口。同步引入的产品差异保留此前 Journal/候选/状态恢复链路，已通过的专项按原候选和输入复用。
 
 提交的 Go 测试为 [TestT09ManagementFlow](../cmd/alonabot/t09_e2e_test.go) 一条集成主路径，新增 266 行（含注释）；其余验收代码位于本地 `cmd/alonabot/*_local_test.go`，日志与卡片位于执行者 worktree 的 `goal-45/`，均未提交。[场景入口与配方](../scripts/scenarios/README.md) 提供正式流程、崩溃恢复、残存写入者三类运行方式；故障 Core、插件、签名密钥及 overlay 均为临时产物。下表日志名均相对本地 `goal-45/`。
