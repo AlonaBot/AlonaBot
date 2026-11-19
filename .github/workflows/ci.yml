@@ -53,6 +53,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
+          # 自托管 runner 复用本机 Go 缓存，避免重复归档上传占用临时磁盘。
+          cache: false
       - name: 检查产品 Go 格式
         shell: bash
         run: |

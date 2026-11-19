@@ -258,7 +258,9 @@ current/assign/set 从同一 Session 的在途父调用取得可信 Target 与 A
 - MediaRef 为 Core 分配、受 Session 和目标范围约束的 capability；上传请求包含 upload_id、offset、chunk bytes。顺序分块只接受当前已确认 offset；重复或跳跃 offset 返回 INVALID_ARGUMENT，不静默追加。提交校验声明总量与 sha256 后才产生 MediaRef；未提交上传、过期引用和消费租约按主契约清理。
 - MessageChain/Event/Actor/Target/HandlerOutcome/SendResult 的载荷遵循 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。公共 JSON 标识符使用字符串；媒体数据不直接塞进普通 MessageChain JSON。
 
-Scheduler 到 deadline 后保留实际执行槽；SDK 只在 callback 实际返回后发送唯一 Response，迟到结果只用于释放 running，不把超时重新标为成功。未取得实际完成响应时，须确认旧进程退出才释放；详见 CONTRACTS §4.3。
+Scheduler 正常休眠的自然到期项沿用现有 scheduled REQUEST/RESPONSE 与 ScheduledPayload；scheduled_at 保留原到期时刻，静态 deadline 为该时刻加 JOB_TIMEOUT，动态 deadline 在取得并发名额、开始交付或唤醒等待时固定，冷启动共用原期限。ACTIVATED、摘要核对与全部绑定完成后的 Ready 开放交付，新 Session 按原 route_id 接收一次。
+
+Scheduler 到 deadline 后，未交付等待释放运行槽与唤醒预算，已交付调用保留实际执行槽；SDK 只在 callback 实际返回后发送唯一 Response，迟到结果只用于释放 running，不把超时重新标为成功。未取得实际完成响应时，须确认旧进程退出才释放；详见 CONTRACTS §4.3。
 
 Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read 输入 token、offset、length（1～1 MiB），返回 bytes、next_offset、eof；Grant 只对已有授权签发等同或更窄范围的新 token，不允许调用者自行扩大 Target/接收插件。IncomingMedia 首次取件由内置 Adapter 解析，按 CONTRACTS §1.4 校验和配额处理。各请求/响应的 Protobuf 字段号在 T-01 固定，媒体块始终计入帧与字节预算。
 

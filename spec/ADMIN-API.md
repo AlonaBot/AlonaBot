@@ -595,8 +595,8 @@ MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通
 | Method / path | 请求或成功响应 | 语义 |
 | --- | --- | --- |
 | `GET /api/v1/plugins/{id}/generations` | `{"generations":[{"id":"gen-…","version":"1.2.1","created_at":"RFC 3339","active":true,"has_db":true}]}` | 保留代次按提交时间降序；回退仍用 `/api/v1/packages/rollback` |
-| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 当前 Session 登记的静态任务；Detach 后返回 `{"jobs":[]}`。`trigger` 如 `interval 1h0m0s` 或 `cron 0 8 * * *`，没有记录的时刻省略 |
-| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与 `core.job.pause/resume` 共用持久暂停状态（CONTRACTS §4.3，D-126）；未知任务返回 404 |
+| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 当前保留计划中的静态任务，正常休眠时仍可读取；Detach 后返回 `{"jobs":[]}`。`trigger` 如 `interval 1h0m0s` 或 `cron 0 8 * * *`，没有记录的时刻省略 |
+| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与 `core.job.pause/resume` 共用持久暂停状态（CONTRACTS §4.3，D-126）；已登记任务要求当前 Activated Session，休眠时返回 412 / FAILED_PRECONDITION；未知任务返回 404 |
 | `GET /api/v1/adapter/instances` | `{"instances":[{"instance_id":"main","adapter_id":"telegram","package_id":"…","state":"running","safe_error":"","default":true}]}` | 按实例 ID 排列已配置的实例；`state` 为 `running`、`stopped` 或 `failed`；`default` 遵循显式默认与单实例自动默认规则 |
 | `GET /api/v1/chats` | `?q=词&adapter_id=telegram&chat_type=group&offset=0&limit=50`，返回 `{"chats":[{"session":"telegram:-100…","title":"…","chat_type":"group","instance_id":"main","last_active_at":"…"}],"total":53}` | 聊天目录（D-130），筛选后按最近活跃降序，`total` 为筛选后的精确总数 |
 | `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 再认证后在同一事务中替换令牌并删除全部管理会话（包括当前会话）；响应清除会话 Cookie，带 `Cache-Control: no-store`，只交付一次新令牌 |
