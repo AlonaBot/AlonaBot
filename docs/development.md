@@ -397,6 +397,18 @@ S-02.1 已接通已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 
 
 `internal/tune` 已登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 CONTRACTS §16。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。S-02.2 已接通自动空闲策略：`sleep.mode` 缺省 `always_on`，`sleep.idle_timeout` 缺省 `15m`，`sleep.plugins` 缺省为空；覆盖接受 `never` 或正时长，删除覆盖恢复自动准入。`SLEEP_MIN_UPTIME=5m`（>0）、`SLEEP_COLD_START_WINDOW=1h`（>0）与 `SLEEP_COLD_START_MAX=3`（≥1）已登记，窗口内冷启动超过上限后固定常驻一个窗口，期间启动保持原冷却截止。S-03.1 已接通 Scheduler 自然到期唤醒，复用同一 Waker 与上述等待预算；payload 按完整 HandlerRequest 的编码字节计入。静态 deadline 为原 scheduled_at 加 `JOB_TIMEOUT=15m`（>0），动态从取得并发名额开始计算，冷启动计入原期限；等待继续占用原运行槽与 `TASK_CONCURRENCY=16` 名额（≥1 且 ≤ SESSION_MAX_INFLIGHT）。
 
+管理 CLI 可直接查询和调整逐插件策略（复用既有 `--data-dir`、`--admin-url` 与 `--token-file`）：
+
+```sh
+alonabot sleep-policy
+alonabot sleep-policy my-plugin
+alonabot sleep-policy my-plugin never
+alonabot sleep-policy my-plugin 15m
+alonabot sleep-policy my-plugin auto
+```
+
+无参数返回全局设置与全部已安装 plugin/agent 的策略和运行状态；单 ID 返回对应对象。`auto` 删除覆盖，`never` 与正时长立即写回设置并生效。全局模式与时长通过[管理 API §24](../spec/ADMIN-API.md#24-插件休眠策略与运行状态) 的 `PUT /api/v1/core/sleep` 修改，两项必填。管理读取保持休眠；需要路由而尚无有效已提交快照时，策略查询返回 412 / `FAILED_PRECONDITION`，全局设置与 runtime 可独立读取。保存后的恢复失败保留实际错误；重新 GET 核对已保存设置。
+
 提交集成 `internal/app/wake_test.go:TestWake` 覆盖真实 Core、SDK 回环 Adapter、已安装子进程与 SQLite 的 command/service/http 三入口；`contracts/wirespec_test.go:TestEnumValues` 固定 `STOP_REASON_IDLE=6`。本地 `*_local_test.go` 覆盖并发、预算、取消/期限、停止竞争、活动释放与 RESUME 数据库迁移。`internal/app/idle_test.go:TestIdle` 覆盖自动空闲退出、正常 OnStop 与资源关闭、首命令唯一原代次恢复，以及保存 never 后立即恢复并保持 ACTIVE。本地回归覆盖同步准入与排空交接、全部设置发布入口、固定冷却与历史回收、停止及落盘失败。`internal/app/scheduler_wake_test.go:TestSchedulerWake` 覆盖自动休眠→静态 interval 唤醒→再次休眠→动态 at 唤醒→消费→再次休眠，并核对原时间、静态起点、暂停状态、代次、配置、业务 DB 与执行期活动引用。本地 Scheduler 回归覆盖原 deadline、并发与队列、Late/Released、冻结写入窗口、唤醒失败撤销及同代次恢复清理未注册过期 at。darwin/arm64 的完整命令、结果及真实平台未运行项见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 ## 库模式运行（同一进程）
