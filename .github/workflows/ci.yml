@@ -84,7 +84,8 @@ jobs:
       - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'
-        run: go test -race ./...
+        # 8 GiB runner 上串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
+        run: GOMAXPROCS=2 go test -p 1 -race ./...
       - name: 五目标平台 pure-Go 构建
         shell: bash
         run: |
