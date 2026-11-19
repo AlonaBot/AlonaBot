@@ -759,6 +759,7 @@
     "runtimeReasonReload": "Reload",
     "runtimeReasonUpdate": "Update",
     "runtimeReasonCoreShutdown": "Core shutdown",
-    "sleepSavedPolicy": "Saved sleep policy"
+    "sleepSavedPolicy": "Saved sleep policy",
+    "pluginLogLevelDesc": "Changes which logs this plugin emits, immediately."
   }
 }

@@ -749,7 +749,7 @@
     "runtimeLastSuspend": "最近休眠",
     "runtimeReasonStarting": "正在启动",
     "runtimeReasonActivated": "已激活",
-    "runtimeReasonResume": "休眠恢复",
+    "runtimeReasonResume": "恢复运行",
     "runtimeReasonIdle": "空闲休眠",
     "runtimeReasonInstalled": "已安装",
     "runtimeReasonUninstalled": "已卸载",
@@ -759,6 +759,7 @@
     "runtimeReasonReload": "重新加载",
     "runtimeReasonUpdate": "更新",
     "runtimeReasonCoreShutdown": "Core 关闭",
-    "sleepSavedPolicy": "已保存休眠策略"
+    "sleepSavedPolicy": "已保存休眠策略",
+    "pluginLogLevelDesc": "只改变这个插件输出哪些日志，立即生效"
   }
 }
