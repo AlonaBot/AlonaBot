@@ -697,6 +697,17 @@ uv run --no-project scripts/scenarios/run.py survivor --alonabot /tmp/alonabot-r
 
 **验收状态与后继输入。** 最终检查及上述专项与场景有效通过。正常停机时 remote.offline 已依次撤销 running、Registry 与命令同步，随后 bot.offline 遇到并行关闭的 Router，保留一条 `event router is closed` ERROR；父审查者按 CONTRACTS §4.2 确认该顺序与正常关停一致，Core 退出0、四组件 drained=true/killed=false，原日志在 `/private/tmp/alonabot-g45-admin.sswdf94y/core.log`。所有平台故障/锁实跑目前为 darwin/arm64；Windows、Linux/amd64、Linux/arm64、darwin/amd64 的实际运行、真实磁盘写满和真实外部数据库未运行。后继顺序75→46→47/48→49，按场景 README 在目标环境重新构建本平台产物，消费三类入口；原目录保留供来源与持久状态复核。
 
+### S-06.3 / V-81 休眠策略与运行状态的页面证据
+
+PR #274；产品候选 `94803c7b868eaac62d47eca56bd420010061d881`，普通合并 main `96d46530` 后的 `ac86498d` 前端差异为空。2026-11-19，darwin/arm64、Go 1.27.1、Chrome 157.0.8103.79。产品差异为8个前端文件、413行新增与18行删除，提交测试新增0行；本地测试、浏览器脚本与截图均保留在执行者或独立审查 worktree 的忽略目录。
+
+| 测试位置与场景 | 命令、平台与结果 | 未运行与承接 |
+| --- | --- | --- |
+| `web/admin/src/api/sleep.local.test.ts`、`src/pages/PluginSleepPanel.local.test.tsx`：路径编码、Cookie/CSRF、null 无正文 DELETE、双字段 PUT、完整错误；锁定/never 可退出、六态、稳定原因、六类双语警告与字面 route_id、未知全文及缺历史 | `npm --prefix web/admin ci`、`npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test`（2文件22项）、`npm --prefix web/admin run build`、`go build ./...` 通过；最终 CSS 修复后 typecheck/build 与受影响浏览器回归通过，已有逻辑检查复用。`git diff --check origin/main...HEAD` 通过 | 构建保留既有大于500kB chunk 提示；其他浏览器与操作系统实机未运行；当前 head 的完整 Go race/五目标构建由 PR CI 承接 |
+| 真实 CLI Core、正式 pack/install 的 SDK 插件与当前完整 WebUI，独立数据和端口：component_idle/800ms→SUSPENDED→列表/详情/策略只读→never→auto DELETE→再休眠→always_on→停用后切换模式 | `node tmp/test/g175/core-browser.cjs` 主链路通过，Session 按1→2→3变化，停用后保持3及 STOPPED/enabled=false；原代次、配置、业务行、迁移1次与任务 anchor/interval/paused 保持，无 reload/restart/update/migrate。临时脚本末尾要求停用后 jobs 仍列出的断言违反 ADMIN-API §21 Detach；保留原失败，修正断言后复用主链路，`uv run python tmp/test/g175/core-check.py` 从 SQLite/日志补核对最终值通过。证据 `tmp/test/g175/{core-browser-evidence.json,core-browser.log,core-check.log,core.log}`；真实列表与详情截图已查看，Core 正常停止 | 使用既有 tune `SLEEP_MIN_UPTIME=50ms,SLEEP_COLD_START_MAX=100` 缩短等待；真实主链路候选 fe1c8b9d，后续仅共享 radio 样式修复。固定机器缺省时长测量由 S-06.2 / goal-174 承接；真实 Telegram/OneBot/外部 Provider 未运行 |
+| 受控 HTTP 与生产 AppShell：设置九组、列表中英19组合、详情17组及补充3组；锁定/角色/412独立读取、写前/写后失败与重读错误、草稿/实际值并存、六类警告、旧设置/详情功能与存储 | `node /tmp/g175-browser/settings-check.js`、`node /tmp/g175-browser/list-check.js`、`node tmp/test/g175/detail-browser.cjs`、`node tmp/test/g175/supplemental-browser.cjs` 通过；`node tmp/test/g175/visual-browser.cjs` 的24组中英×浅深×1440/375场景、8组卸载对话框及焦点检查通过。全部截图由执行者实际查看，审查者另看最终桌面/手机、锁定、设置、长警告与多行错误。页面无横向溢出、异常端点或 pageerror；radio共享规则修复前76.671875px，修复后13px，标签恢复且方向键/Escape可用 | 本行故障使用受控 HTTP；真实 Core 主链路见上一行。Figma 高级/系统设置原始 PNG 与锁定画板 metadata 已查看；Starter 调用限额导致锁定画板新 PNG 未取得，当前锁定页面截图已查看 |
+| 审查者独立生产 main.tsx/router 验证：延迟 alpha 的策略/runtime 两个 GET，SPA 切换 beta 并取得 never/ACTIVE 后释放旧响应 | 独立 `.worktrees/review-goal175` 中 `node tmp/test/review-sleep-navigation.cjs` 退出0（0.7766s）；beta身份、策略与runtime保持，各ID各GET一次，无生命周期写操作/异常端点/pageerror。证据 `tmp/test/review-sleep-navigation.{json,log,png}`，最终截图已查看；初轮测试白名单遗漏既有只读 options resolve，修正临时断言后通过，原失败日志保留 | 受控响应验证竞态隔离；当前最终前端产品与独立候选相同。V-81 总体验收仍待 goal-174 的固定 Linux 指标与故障汇总 |
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。
