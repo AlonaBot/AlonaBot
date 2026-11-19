@@ -124,7 +124,7 @@
 | goal-45 | T-09.11 | 正式流程故障注入与 T-09 验收 | T-09.3、T-09.7、T-09.9、T-09.10、T-09.12、T-09.15 | 等待前置 |
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 已完成（PR #246） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
-| goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 待派发 |
+| goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 已完成（PR #253） |
 | goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 待派发 |
 | goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
 | goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
@@ -8689,7 +8689,7 @@ internal/core/state
 
 ### goal-179 · T-13.7 CLI 开箱即用
 
-状态：待派发。前置 T-13.6（PR #233）、T-16.1（PR #168）均已合并。2026-11-18 按 D-181 新增。已按 main `d7c85b63` 核对：`cmd/alonabot/commands.go` 在根命令与 `run` 上登记 `--data-dir`、`--listen`、`--log-level`、`--log-format`、`--reload`、`--stdio`，`RunE` 调用 `runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options app.Options) error`（`cmd/alonabot/dev.go`）；`app.Options{DataDir, Args, Components []Component, Listen, LogLevel *slog.Level, LogFormat, Stdio, WebUIs}`，同进程组件用 `app.AdapterComponent(a adapter.Adapter) Component`、`app.PluginComponent(root *sdk.Plugin) Component`（`internal/app/assembly.go`）；`sdk/adapter` 的 `Adapter{Descriptor() *Descriptor; Start(ctx, StartRequest, Core) (Instance, error)}`、`Instance{Account(); Capabilities(); Send(ctx, to, chain); Stop(ctx)}`、`Core.Deliver(ctx, ev, cursor)`；`examples/devbot/adapter/adapter.go` 与 `plugintest/adapter.go` 是同类回环 Adapter 的现成写法；`cmd/alonabot/terminal_unix.go`、`terminal_windows.go` 的 `isTerminal(file *os.File) bool`；`internal/pluginkit/init.go` 的 `Init` 在发布版 CLI 下用 `go mod edit -require` 写入 SDK 版本，开发版返回 needsSDK。与 goal-178 无共享文件。
+状态：已完成（PR #253），合并提交 `8a95d959`。以下保留派发时语句。派发时：前置 T-13.6（PR #233）、T-16.1（PR #168）均已合并。2026-11-18 按 D-181 新增。已按 main `d7c85b63` 核对：`cmd/alonabot/commands.go` 在根命令与 `run` 上登记 `--data-dir`、`--listen`、`--log-level`、`--log-format`、`--reload`、`--stdio`，`RunE` 调用 `runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval time.Duration, options app.Options) error`（`cmd/alonabot/dev.go`）；`app.Options{DataDir, Args, Components []Component, Listen, LogLevel *slog.Level, LogFormat, Stdio, WebUIs}`，同进程组件用 `app.AdapterComponent(a adapter.Adapter) Component`、`app.PluginComponent(root *sdk.Plugin) Component`（`internal/app/assembly.go`）；`sdk/adapter` 的 `Adapter{Descriptor() *Descriptor; Start(ctx, StartRequest, Core) (Instance, error)}`、`Instance{Account(); Capabilities(); Send(ctx, to, chain); Stop(ctx)}`、`Core.Deliver(ctx, ev, cursor)`；`examples/devbot/adapter/adapter.go` 与 `plugintest/adapter.go` 是同类回环 Adapter 的现成写法；`cmd/alonabot/terminal_unix.go`、`terminal_windows.go` 的 `isTerminal(file *os.File) bool`；`internal/pluginkit/init.go` 的 `Init` 在发布版 CLI 下用 `go mod edit -require` 写入 SDK 版本，开发版返回 needsSDK。与 goal-178 无共享文件。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-179（切片 T-13.7：CLI 开箱即用）。goal 目录 goal-179，分支 goal-179，worktree .worktrees/goal-179，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。

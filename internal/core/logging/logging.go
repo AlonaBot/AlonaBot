@@ -6,6 +6,7 @@
 // [Source] 逐行解析后转成同样的记录，插件给出的同名字段被丢弃，不能覆盖 Core 补充的来源字段。
 //
 // Core 自己的记录按全局级别过滤；插件的记录按该来源的生效级别过滤（[Levels]）。
+// stderr 可追加独立阈值，日志文件与最近记录仍按原有来源级别收集。
 // 输出后的记录按来源缓存在内存中，并可订阅；级别设置由管理服务写回配置文件。
 //
 // 包的组成：
@@ -68,8 +69,9 @@ const (
 
 // Options 描述 Core 日志的启动设置。
 type Options struct {
-	Format Format
-	Level  slog.Level // 全局级别
+	Format      Format
+	Level       slog.Level  // 全局级别
+	StderrLevel *slog.Level // stderr 的额外阈值；nil 时只按全局与来源级别过滤。
 	// Stderr 是 Core 的 stderr。它是终端且未设置 NO_COLOR 时，控制台格式才着色。
 	Stderr        io.Writer
 	BufferRecords int // 每个来源的记录与每个订阅的后续发送队列上限，必须为正。
@@ -79,9 +81,9 @@ type Options struct {
 type Output struct {
 	buffer  *recordBuffer
 	levels  *Levels
-	stderr  slog.Handler // 只写 stderr，不按级别过滤
+	stderr  slog.Handler // 只写 stderr，带独立阈值
 	file    *fileWriter  // EnableFile 之前丢弃写入
-	handler slog.Handler // stderr 与日志文件，不按级别过滤
+	handler slog.Handler // 共用来源过滤、stderr 与日志文件、最近记录
 }
 
 // Open 按 opt 建立日志输出；opt.Format 不是 text 或 json 时返回错误。
@@ -97,6 +99,10 @@ func Open(opt Options) (*Output, error) {
 		stderr = slog.NewJSONHandler(opt.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.Level(math.MinInt), ReplaceAttr: logLevelAttr})
 	default:
 		return nil, fmt.Errorf("unknown log format %q (want %s or %s)", opt.Format, FormatText, FormatJSON)
+	}
+	if opt.StderrLevel != nil {
+		// 文件故障直接调用 Handle，仍由 MultiHandler 复核 stderr 阈值。
+		stderr = slog.NewMultiHandler(&leveled{h: stderr, level: *opt.StderrLevel})
 	}
 	o := &Output{levels: &Levels{sources: map[string]slog.Level{}}, stderr: stderr, buffer: &recordBuffer{limit: opt.BufferRecords, sources: map[string]*recordRing{}, subscribers: map[*subscription]struct{}{}}}
 	o.levels.global.Set(opt.Level)

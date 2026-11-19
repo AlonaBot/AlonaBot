@@ -229,7 +229,19 @@ alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
 
 ## 开发运行与热部署
 
-先从仓库示例完成一次可见回复（以下使用 fish）：
+先构建 CLI：`go build -o bin/alonabot ./cmd/alonabot`。在仓库根目录用以下三步得到第一条回复（使用 fish）：
+
+1. 创建工程：`bin/alonabot init ./alonabot-plugin-hello`。
+2. 运行：`bin/alonabot run ./alonabot-plugin-hello`。
+3. 在同一个终端输入 `/hello`，看到 `Hello!`；Ctrl-C 停止 Core。
+
+已安装 CLI 时，可在工程目录直接运行 `alonabot run`。stdin 是终端且设置文件没有任何 Adapter 实例时，自动启用内置终端对话；`--console` 强制启用并接受管道输入，`--console=false` 关闭。终端用户 `console:local` 在本次运行中具有 Core Admin 权限；实例和管理员保持在内存中。回复中的媒体显示为 `[image]`、`[file: 名称]` 等占位，输入 `#1` 点击最近一条带按钮消息的第一个回调按钮，编辑显示为 `(edited)` 新段。stdin 结束后 Core 继续运行，直到收到停止信号。
+
+有开发目录时缺省自动重载；修改源码后再输入 `/hello` 即可观察新回复。`--reload=false` 关闭重载。
+
+### 不经终端：回环 Adapter 与 curl
+
+需要通过 HTTP 注入消息时，使用仓库的回环示例：
 
 ```fish
 go build -o bin/alonabot ./cmd/alonabot
@@ -266,9 +278,9 @@ bin/alonabot pack ./alonabot-plugin-hello
 
 `init`、`build`、`check`、`test`、`pack` 至多接受一个位置目录，省略时使用当前目录；旧的 `--dir` 会报未知参数。`init` 要求空目录，非空时在写入前报错。`--id` 缺省取目标目录绝对路径的目录名；例如 `alonabot-plugin-hello` 直接作为市场 ID，`my_plugin` 保持本地 ID 并输出缺市场前缀的警告。非法目录名会保留原字符并提示显式给出 `--id`。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 的 `--adapter-id` 缺省等于最终组件 ID，可显式覆盖。插件与 Agent 导出 `New()`，包含一个英文示例命令、schema、i18n；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.md)。
 
-位于现有 Go module 中时复用该 module，保持其 go.mod；外部空目录的 module 缺省同为目录名，可用 `--module example.com/myplugin` 覆盖。发布版 CLI 用自身模块版本写 SDK require，开发版 `(devel)` 会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
+位于现有 Go module 中时复用该 module，保持其 go.mod；外部空目录的 module 缺省同为目录名，可用 `--module example.com/myplugin` 覆盖。发布版 CLI 用自身模块版本写 SDK require，并在生成的工程目录运行 `go mod tidy`，随后可直接 `run`。依赖解析失败时保留工程，命令以失败状态退出并显示手动补齐的命令。开发版 `(devel)`（含本地修改的 `+dirty` 构建，以及从仓库 checkout 构建时 Go 自动盖上的伪版本）会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
 
-在包含 `plugin.yaml` 的组件工程中运行 `alonabot run --reload`，或者明确给出一个或多个工程目录：
+在包含 `plugin.yaml` 的组件工程中运行 `alonabot run`，或者明确给出一个或多个工程目录：
 
 ```sh
 bin/alonabot run ./alonabot-plugin-hello ./myadapter --data-dir ./data --reload
@@ -284,7 +296,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `--reload` 每 `DEV_RELOAD_POLL` 检查源码、`//go:embed` 资源、`go.mod`、`go.sum`、`plugin.yaml`、两个配置 Schema 和 `i18n/`，排除数据目录、vendor、testdata 及以 `.`、`_` 开头的目录。轮询间隔缺省为 500ms，例如 `--args DEV_RELOAD_POLL=1s` 可以覆盖。
 
-源码或资源变化后重新构建，成功时只重启变化的组件；编译失败保留编译器诊断，旧组件继续运行。只改组件 `config.json` 时直接重启该组件，只改 Adapter 的一个实例配置时只重启该实例，二进制保持原样。不带 `--reload` 时构建并运行一次。
+源码或资源变化后重新构建，成功时只重启变化的组件；编译失败保留编译器诊断，旧组件继续运行。只改组件 `config.json` 时直接重启该组件，只改 Adapter 的一个实例配置时只重启该实例，二进制保持原样。`--reload=false` 时构建并运行一次；没有开发目录时保持普通 Core 运行，停止轮询。
 
 `--reload` 也监视 `core_config.json` 的其他设置：`admins` 更新后立即改变 Core Admin 权限，命令前缀从共享设置读取当前值，`default_locale` 对之后建立的 Session 生效。修改 Adapter 的 `default_instance` 后，未指定实例的发送立即改选新的缺省实例；`log.level` 立即更新全局日志级别，本次运行显式给出的 `--log-level` 或库模式 `LogLevel` 选项持续优先。这些修改保持组件进程与实例运行；同时修改设置与开发 Adapter 实例时，先刷新设置，再重启变化的实例。重新读取失败时记录错误并保留旧设置。开发 CLI 经 `internal/app.Core.ReloadSettings(ctx)` 与其他管理操作串行刷新同一份设置。
 
