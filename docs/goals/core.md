@@ -125,8 +125,8 @@
 | goal-163 | T-11.6 | 按配置文件的工具策略 | T-04.18、T-11.4 | 已完成（PR #246） |
 | goal-141 | T-13.6 | CLI 参数从简 | T-13.5、T-14.3 | 已完成（PR #233） |
 | goal-179 | T-13.7 | CLI 开箱即用 | T-13.6、T-16.1 | 已完成（PR #253） |
-| goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 待派发 |
-| goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 等待前置 |
+| goal-172 | S-03.1 | Scheduler 唤醒与离线 tick 区分 | S-02.2、T-07.2 | 已完成（PR #256） |
+| goal-173 | S-06.1 | 休眠管理 API、运行诊断与 CLI | S-02.2、S-03.1、T-09.14 | 待派发 |
 | goal-174 | S-06.2 | 休眠指标、故障注入与固定机器验收 | S-06.1 | 等待前置 |
 
 ## 第 1 波
@@ -8586,7 +8586,7 @@ internal/core/state
 
 ### goal-172 · S-03.1 Scheduler 唤醒与离线 tick 区分
 
-状态：待派发。前置 S-02.2（goal-171，PR #249，合并提交 `18f8af95`）、T-07.2（goal-24，PR #107，合并提交 `fc2c2471`）均已合并；S-02.1（goal-170，PR #241，合并提交 `e0a38d7c`）已提供唤醒与活动门禁。已按 main `54ac4f8a` 核对：`internal/core/scheduler` 的 `New(opt Options) *Scheduler`、`(*Scheduler).Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error`、`Drain(pluginID string)`、`Detach(pluginID string)`、`Released(pluginID string)` 已接入生命周期；当前 `Drain` 调用 `Detach`，会停止定时器并清空注册，`tick`、`tickTask` 与 `pump` 依赖旧 `router.Plugin.Activated()`，尚无到期唤醒入口。`internal/core/supervisor.(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)`、`AcquireActivity(pluginID string, session *wire.Session) (func(), error)` 与 `Ready(running *Running)` 已装配；`(*Running).StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult` 经正常停止写入 SUSPENDED，Frozen、detach、release 分别调用 Scheduler 的 Drain、Detach、Released。`internal/core/idle.(*Controller).CanStop(pluginID string, policy Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool` 以 Ready、零引用及实际活动时间判定空闲。`internal/app/assembly.go`、`journal.go`、`wake.go`、`idle.go` 已串起 Scheduler、Waker 与自动空闲停止，`assembly.detach` 仍无条件撤销当前组件的调度注册。`internal/core/state.(*Store).Jobs(ctx context.Context, pluginID string) ([]Job, error)`、`Tasks(ctx context.Context, pluginID, name string) ([]Task, error)` 与 `RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)` 已提供持久调度与六态读取；复用现有表。空闲退出沿用 CONTRACTS §4 的正常停止（D-179）。
+状态：已完成（PR #256），合并提交 `216bb7f9`。以下保留派发时语句。派发时：前置 S-02.2（goal-171，PR #249，合并提交 `18f8af95`）、T-07.2（goal-24，PR #107，合并提交 `fc2c2471`）均已合并；S-02.1（goal-170，PR #241，合并提交 `e0a38d7c`）已提供唤醒与活动门禁。已按 main `54ac4f8a` 核对：`internal/core/scheduler` 的 `New(opt Options) *Scheduler`、`(*Scheduler).Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error`、`Drain(pluginID string)`、`Detach(pluginID string)`、`Released(pluginID string)` 已接入生命周期；当前 `Drain` 调用 `Detach`，会停止定时器并清空注册，`tick`、`tickTask` 与 `pump` 依赖旧 `router.Plugin.Activated()`，尚无到期唤醒入口。`internal/core/supervisor.(*Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)`、`AcquireActivity(pluginID string, session *wire.Session) (func(), error)` 与 `Ready(running *Running)` 已装配；`(*Running).StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult` 经正常停止写入 SUSPENDED，Frozen、detach、release 分别调用 Scheduler 的 Drain、Detach、Released。`internal/core/idle.(*Controller).CanStop(pluginID string, policy Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool` 以 Ready、零引用及实际活动时间判定空闲。`internal/app/assembly.go`、`journal.go`、`wake.go`、`idle.go` 已串起 Scheduler、Waker 与自动空闲停止，`assembly.detach` 仍无条件撤销当前组件的调度注册。`internal/core/state.(*Store).Jobs(ctx context.Context, pluginID string) ([]Job, error)`、`Tasks(ctx context.Context, pluginID, name string) ([]Task, error)` 与 `RuntimeStatus(ctx context.Context, pluginID string) (RuntimeStatus, error)` 已提供持久调度与六态读取；复用现有表。空闲退出沿用 CONTRACTS §4 的正常停止（D-179）。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-172（切片 S-03.1：Scheduler 唤醒与离线 tick 区分）。goal 目录 goal-172，分支 goal-172，worktree .worktrees/goal-172，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
