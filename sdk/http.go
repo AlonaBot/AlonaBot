@@ -203,6 +203,9 @@ const (
 // AuthPlatformToken 声明由 Adapter 校验公开路由的平台凭证。
 const AuthPlatformToken HTTPAuth = HTTPAuth(pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN)
 
+// AuthStatic 公开提供 GET 与 HEAD 静态资源，Core 不校验会话，组件无需验证额外凭证。
+const AuthStatic HTTPAuth = HTTPAuth(pb.HttpAuthMode_HTTP_AUTH_MODE_STATIC)
+
 // httpNetworkListener 包装 SDK 接受的连接，使用户关闭 Hijack 连接时也能释放登记。
 type httpNetworkListener struct {
 	net.Listener

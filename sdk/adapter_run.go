@@ -82,6 +82,8 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 		case 0:
 		case adapter.AuthPlatformToken:
 			builder.Public(AuthPlatformToken)
+		case adapter.AuthStatic:
+			builder.Public(AuthStatic)
 		default:
 			return fmt.Errorf("invalid adapter HTTP authentication: %d", route.Auth)
 		}
