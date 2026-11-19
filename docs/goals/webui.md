@@ -29,7 +29,7 @@ WebUI 已定稿（D-169）。各 goal 按 Figma 文件 `hV9ILivl2VGGKwtbEEh3mC` 
 | goal-94 | T-09.15 | 日志页 | T-09.8、T-09.10、T-09.19、T-02.5 | 已完成（PR #243） |
 | goal-156 | T-09.23 | 官方 WebUI 的后台进程、统计、商店、用户与数据页 | T-09.8、T-09.20、T-09.21、T-09.22、T-09.24 | 已完成（PR #245） |
 | goal-146 | T-09.18 | 模型页 | T-09.8、T-09.14、T-12.16 | 已完成（PR #244） |
-| goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 进行中 |
+| goal-165 | T-09.25 | 配置文件页 | T-04.19、T-11.6、T-12.19、T-09.18 | 已完成（PR #271） |
 | goal-175 | S-06.3 | 休眠策略与运行状态的页面 | T-09.8、T-09.9、S-06.1 | 待派发 |
 
 ## 第 8 波
@@ -632,7 +632,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-165 · T-09.25 配置文件页
 
-状态：进行中。前置 T-04.19（PR #250，合并提交 `f3a06458`）、T-11.6（PR #246，`24e57d60`）、T-12.19（PR #247，`f3959f6e`）、T-09.18（PR #244，`a989b5f1`）均已合并；配置文件管理 API 的 T-08.18（PR #214，`ab0cd565`）、共享配置面板的 goal-44（PR #259，`661cf9b1`）、工具候选身份（PR #266，`532ed03f`）和外壳导航（PR #260，`4b1b9330`）也已合并。按 main `4b1b9330` 核对以下基线；原执行者在独立 worktree 进行 GPT 修复与真实 Core 浏览器验收。§18 的 `identities` 已区分工具与确认操作，配置文件按 §23 分别保留两类身份；共享配置面板与外壳沿用已合并实现。
+状态：已完成（PR #271）。复用已合并 goal-44 的配置面板、字段选项、Pending/重载与身份目录，在 main `bfc38c5b` 上同步最终候选。真实 Core、官方 Agent 与已安装 WebUI 的页面操作、独立边界测试和最终画板/手机视觉验收通过，实际与模拟环境、未运行分项见 TEST-MATRIX §3.2；以下保留派发时的接口与验收语句。
 
 - `web/admin/src/api/admin.ts` 已导出 `listProfiles(): Promise<Profile[]>`、`getProfileAssignments(): Promise<ProfileAssignments>`、`assignInstanceProfile(instanceID: string, profile: string): Promise<void>`、`listInstances(): Promise<AdapterInstance[]>`、`listChats(): Promise<Chat[]>`，后者读取全部聊天目录；配置文件的其他写入、插件覆盖、平台与工具策略尚无前端导出。已有 `getPluginConfig(id: string): Promise<ConfigSnapshot>`、`patchPluginConfig(id: string, baseGeneration: string, patch: Record<string, unknown>): Promise<PendingConfig>`、`changePackage(action: 'enable' | 'disable' | 'restart' | 'reload', id: string, confirm?: boolean): Promise<void>`、`AdminAPIError` 与 `isConfirmationError`。
 - `src/pages/ModelsPage.tsx` 导出 `ModelsPage(): JSX.Element`；`src/pages/ModelSelect.tsx` 导出 `ModelSelect({value,label,options,disabled,onChange})`，参数见下文；`src/pages/modelConfig.ts` 已有 `parseModels(config: Record<string, unknown>): ConfiguredModel[]`、`editingConfig(snapshot: ConfigSnapshot): Record<string, unknown>`。`src/components/ConfigForm.tsx` 的四个必填 props 为 schema、value、messages、onSubmit，另有 options、exampleImageURL、commandPrefix、onDiscard、onReveal、footer；`src/schema/model.ts` 的 `fieldsFromSchema(schema: unknown): Field[]` 已接受 `profile` 与 `options_from`，本切片复用并补齐编辑路径限制。
@@ -727,7 +727,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 ### goal-175 · S-06.3 休眠策略与运行状态的页面
 
-状态：待派发。前置 T-09.8（PR #238，`9123839`）、T-09.9（goal-44，PR #259，`661cf9b1`）和 S-06.1（goal-173，PR #269，`f4bfe5b8`）均已合并。按 main `f4bfe5b8` 复核以下五个客户端方法、六端点、策略/runtime 数据形状及已有组件列表的 `Package.RuntimeState` 后台字段。原 WebUI 执行者完成 goal-165 后串行接续，复用共享详情与系统设置；S 工作包保持独立记录。
+状态：待派发。前置 T-09.8（PR #238，`9123839`）、T-09.9（goal-44，PR #259，`661cf9b1`）和 S-06.1（goal-173，PR #269，`f4bfe5b8`）均已合并。按 main `f4bfe5b8` 复核以下五个客户端方法、六端点、策略/runtime 数据形状及已有组件列表的 `Package.RuntimeState` 后台字段。goal-165（PR #271）已交付配置文件页与共享面板。原 WebUI 执行者在工作名额空出后接续，复用共享详情与系统设置；S 工作包保持独立记录。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-175（切片 S-06.3：休眠策略与运行状态的页面）。goal 目录 goal-175，分支 goal-175，worktree .worktrees/goal-175，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
