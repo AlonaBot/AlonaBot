@@ -31,3 +31,5 @@
 T-09.23 负责详情页的数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；会话正文归 T-12.20（goal-167）。T-09.9 保留配置、任务与插件页面入口，共用 `/permissions/users` 用户页。
 
 T-09.9 的父桥按 [ADMIN-API §7](../ADMIN-API.md#7-插件页面-postmessage-桥) 在每次 `translate` 请求时用当前语言和请求参数返回 `text`；`hello` 交付语言、主题与令牌，`locale` 事件交付语言。V-130 的浏览器分项用沙箱 iframe 验证 showcase 首次翻译、切换语言后重新取词、主题与快捷键转发。
+
+T-09.25 的工具覆盖候选按 [ADMIN-API §18](../ADMIN-API.md#18-工具调用策略) 的 `identities` 展开为 §23 的独立工具与操作；同名两类分别编辑，仅有旧全局覆盖的空身份行没有新增候选。已保存的配置文件覆盖按原身份继续读写。T-09.9 与 T-09.25 共用 `src/api/admin.ts` 的 `ToolPolicy.identities: ('tool' | 'operation')[]`。

@@ -574,7 +574,9 @@ MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通
 
 ## 18. 工具调用策略
 
-`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit","effect":"read_only"}]}`；`effect` 取 `read_only`、`write`、`destructive` 或 `unspecified`（D-157）。目录按 `plugin_id` 和 `service` 合并当前 Attach 的工具声明、本次 Core 运行的确认记录和已保存覆盖。有确认记录时采用最近上报的类别（包括 `unspecified`），否则采用声明类别，仅有保存覆盖时为 `unspecified`。`default` 优先取声明的缺省策略，仅有确认记录时为 `confirm`，两者都没有时为 `inherit`；`override` 为 `inherit` 表示没有保存覆盖。
+`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","identities":["tool"],"default":"allow","override":"inherit","effect":"read_only"}]}`；`effect` 取 `read_only`、`write`、`destructive` 或 `unspecified`（D-157）。目录按 `plugin_id` 和 `service` 合并当前 Attach 的工具声明、本次 Core 运行的确认记录和已保存覆盖。有确认记录时采用最近上报的类别（包括 `unspecified`），否则采用声明类别，仅有保存覆盖时为 `unspecified`。`default` 优先取声明的缺省策略，仅有确认记录时为 `confirm`，两者都没有时为 `inherit`；`override` 为 `inherit` 表示没有保存覆盖。
+
+`identities` 始终返回数组，表示该行当前可供 §23 分别写入的身份：当前 Attach 的工具声明提供 `tool`，本次 Core 运行出现的确认记录提供 `operation`；同名两类返回 `["tool","operation"]`，顺序固定且各出现一次。仅有保存覆盖时返回 `[]`；空目录返回 `{"policies":[]}`。每个完整名仍只有一条全局策略行，身份元数据沿用现有 default、override 与 effect 的合并规则。
 
 `PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。service 也接受目录已记录的完整操作名，例如 `mcp/filesystem/read_file`；操作名独立于 Service 名语法校验。未知策略、服务名格式错误或目录未记录的操作名返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
 
@@ -668,6 +670,8 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 platform 的 GET 返回已保存的覆盖，运行时按键合并当前 `default`；显式 `false`、空字符串和 `0` 保留。PUT 或会话指定更新后，后续命令派发与回复 Send 读取新快照，无需插件 reload。平台命令菜单按实例缺省配置文件读取前缀，在启动及路由、命令策略变化时同步。旧 `GET/PUT /api/v1/core/command-prefixes` 已移除，访问返回 404；磁盘旧键 `command_prefixes_by_instance` 按 Unknown 保留并忽略，经 §13 的 Core settings prune 清理。按账号区分前缀时，先指定实例缺省配置文件，再写该配置文件的平台覆盖。
 
 tools 的写入从下一次工具策略操作生效，在途确认保留已接纳策略。运行时按可信默认 Target 选择配置文件，无 Target 或无父 list 使用 `default`；插件关闭时视为 deny，其余依次读取配置文件覆盖、§18 的全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；`inherit` 恢复全局策略。§18 的全局目录与写入保持原义。
+
+新增覆盖的候选从 §18 的 `identities` 展开：`tool` 对应 `{"tool":"<plugin_id>/<service>"}`，`operation` 对应 `{"operation":{"plugin_id":"<plugin_id>","name":"<service>"}}`；同名两类分别筛选本配置文件尚未覆盖的身份，空身份行没有新增候选。已保存的工具与操作覆盖继续按原身份读写，包括目录中已消失的身份。
 
 `invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
 

@@ -738,7 +738,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 #### 实施步骤
 
 1. **工具描述与注册校验。** Service 描述接受可选的 `tool`（description、default_policy）。只有 JSON 编码的 Service 可以声明工具；description 为空或策略取值非法时整次注册失败。Core 为已激活 Session 的工具建立目录，Session 失效时移除。
-2. **调用策略与目录。** 以工具名持久化 allow/confirm/deny，未设置时取 default_policy；`core.tool.confirm` 的操作以「调用插件 ID + 操作名」为键，未设置时为 confirm。管理服务层提供查询与修改，修改在下一次调用生效。`core.tool.list` 只返回调用插件按 Service 访问规则可以调用、且生效策略不为 deny 的工具。
+2. **调用策略与目录。** 以工具名持久化 allow/confirm/deny，未设置时取 default_policy；`core.tool.confirm` 的操作以「调用插件 ID + 操作名」为键，未设置时为 confirm。管理服务层提供查询与修改，修改在下一次调用生效。`Catalog.Policies` 与 ADMIN-API §18 的每条全局行提供 `identities`：声明为 `["tool"]`、确认操作为 `["operation"]`、同名为 `["tool","operation"]`、仅保存覆盖为 `[]`，保留现有策略与副作用类别合并规则，供 §23 分别建立候选。`core.tool.list` 只返回调用插件按 Service 访问规则可以调用、且生效策略不为 deny 的工具。
 3. **调用路径。** `core.tool.invoke` 校验 parent_call_id 后按策略分支：deny 直接拒绝；confirm 进入步骤 4；allow 或确认通过后经 Broker 以父调用链调用目标 Service，结果与错误原样返回。`core.tool.confirm` 只执行策略与确认。两者都不重试工具调用。
 4. **用户确认。** 父调用链没有可信 Actor 或默认 Target 时，confirm 直接返回 PERMISSION_DENIED。Core 创建确认记录和两个绑定该记录的按钮 token（沿用按钮 token 表），按 Actor locale 选择 Core 文案；invoke 展示实际的 JSON 参数，confirm 展示插件给出的摘要；确认消息直接经 Adapter 发送，不执行插件出站 Hook；目标不支持 buttons 时返回 UNSUPPORTED。只接受同一 Actor 在 5 分钟内的第一次点击；超时、父调用结束或 Session 失效时记录作废。
 5. **会话存储。** 在 Core 状态库建立以（plugin_id、会话键）为键的条目表。`core.conversation.append` 在一个事务内追加并返回最后一条的序号，`list` 按序号分页并受帧上限约束，`clear` 删除全部条目。管理服务层提供列出与清除；卸载时默认保留，purge 时删除。D-127 起会话属于数据，`--purge-data` 与 `--purge` 都删除。
@@ -763,7 +763,7 @@ T-06 完成后，T-09 可以依赖稳定 Service/Bus 接口集成管理流程；
 | --- | --- |
 | V-55 | 三种策略、确认的全部分支、无 Actor、不支持按钮、运行时修改策略；管理页由 T-09 完成 |
 | V-56 | 原子追加、分页、跨插件隔离、Core 重启与 purge；管理页由 T-09 完成 |
-| V-143 | 步骤 8 中按配置文件的策略覆盖、关闭插件的工具与 `core.tool.list` 的生效策略 |
+| V-143 | 步骤 8 中按配置文件的策略覆盖、关闭插件的工具与 `core.tool.list` 的生效策略；步骤 2 中管理目录四类身份与空目录，及身份消失后的原覆盖读写 |
 
 #### 失败停止条件
 

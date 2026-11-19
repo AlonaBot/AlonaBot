@@ -58,6 +58,16 @@ export type Generation = {
 
 export type SourceLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'critical' | 'off' | 'inherit';
 
+export type ToolPolicyValue = 'allow' | 'confirm' | 'deny' | 'inherit';
+export type ToolPolicy = {
+  plugin_id: string;
+  service: string;
+  identities: ('tool' | 'operation')[];
+  default: ToolPolicyValue;
+  override: ToolPolicyValue;
+  effect: 'read_only' | 'write' | 'destructive' | 'unspecified';
+};
+
 export type LogLevels = {
   global: string;
   sources: Record<string, SourceLogLevel>;
