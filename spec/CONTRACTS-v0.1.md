@@ -143,7 +143,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 
 SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 context 传进去便假定用户函数会退出；阶段超时报告 SESSION_ERROR 并结束该进程运行。Core 对 Preparing 另设上述适用阶段预算之和的硬截止，迁移的 15 分钟不被 OnStart 的 60s 默认值截断。这些值是可测试的首发缺省值（调优参数见 §16），不是已测性能基线。
 
-- 停止从 t0 起冻结新入站派发、Scheduler tick 和该插件的新根业务调用；最多 **6s** 排空。已接纳 Request 的响应和合法子调用仍可在原 deadline 与停止 deadline 内完成，避免一冻结就破坏整个在途调用链。
+- 停止从 t0 起冻结新入站派发、Scheduler 对旧 Session 的新交付和该插件的新根业务调用；最多 **6s** 排空。正常 IDLE 停止保留调度计划并按 §4.3 接纳自然到期，其他停止撤销定时器与到期队列。已接纳 Request 的响应和合法子调用仍可在原 deadline 与停止 deadline 内完成，避免一冻结就破坏整个在途调用链。
 - 排空完成或 6s 到期后，Core Cancel 剩余请求并发送唯一 STOPPING，携带 `min(t0+10s, STOPPING发送时刻+4s)` 的绝对截止时间；Core 终止进程树的总截止仍为 `t0+10s`。SDK 取消 lifetime、使 Session 调用门禁失效并停止 HTTP 接单，再用独立的剩余停止 context 执行 OnStop、关闭 DB/连接并退出；OnStop 及其资源关闭合计最多 **4s**，不复用已经取消的 lifetime context。Core Shutdown 中各插件并行停止，共享同一个总截止时间，不能逐插件串行累加 10s。
 - STOPPING 可以紧跟 ACTIVATED 到达：SDK 先发布 ready，再按上一条处理 STOPPING，这种情况按正常停止退出，不算激活失败。
 - 主 RPC EOF、协议不可恢复错误或 Core 消失时，SDK 立即使 Session 失效、停止新工作并取消 lifetime，按同一总停止预算退出；此时写 stdout 或 stderr 只返回错误，不能因 SIGPIPE 终止进程而跳过 OnStop；不把旧 Session 重新接回新 Core。Core 先撤销 Session 的所有路由/HTTP 映射，再处理恢复；在途业务 UNAVAILABLE，不重放。
@@ -153,14 +153,15 @@ SDK 对配置、迁移和 Hook 分别执行阶段 watchdog，不能只把 contex
 
 - Core 维护稳定 `plugin_id/job_id`、触发规则和当前运行状态；触发经 REQUEST/RESPONSE 执行 `scheduled` callback，不使用无响应的 Event Bus EVENT。job context 无用户 Actor、无默认 Admin，仅有明确 job scope。
 - 任务声明 interval 或 cron，两者互斥；cron 首发固定五字段（分、时、日、月、星期），timezone 为有效 IANA 名称，省略时 UTC。无效表达式在 REGISTER 时拒绝。interval 是至少 1s 的正时长，按固定起点计算，首个 tick 为起点加间隔：静态任务的起点是它首次激活的时刻，保存在 Core 状态库，不随重启改变，间隔在新版本中改变时重置为该次激活时刻（D-125）；Core 的计时器落后时跳过已错过 tick，只取下一未来触发；正常休眠的到期处理见下一条。cron 的日与星期都受限时按 OR 匹配，其他字段按 AND；cron 求下一个真实时间点，夏令时不存在的本地时刻跳过，重复本地时刻对应的不同 UTC tick 可以分别触发。
-- **不同 job 默认并发，同一 job 上一轮未结束时跳过本轮**，不排队补跑。已启用且为 `SUSPENDED` 的插件到期时，Scheduler 保留本次运行槽并取得活动引用，经 EnsureActive 等待 ACTIVATED 后执行原定的 `scheduled` REQUEST；同次到期沿用唤醒前建立的绝对 `JOB_TIMEOUT`（缺省 15 分钟），冷启动计入该期限，scheduled_at 保留原到期时刻。Core 未运行、插件停用或异常离线期间的 tick 不保存、不补执行；恢复后从未来的下一次触发开始。一个任务超时/失败不串行阻塞其他任务，失败有日志/计数而不自动重试有副作用的 callback。
-- job 的调用结果与实际执行结束分开：deadline 到达先返回 DEADLINE_EXCEEDED/Cancel，但 Scheduler 仍保留 running 槽与原调用键；SDK 等用户 callback 实际返回后才发唯一 Response。迟到 Response 只释放任务槽，不恢复业务成功；未收到结束响应时直到确认旧进程退出才释放。仅 RPC 断链不能证明 goroutine 已停止。下一轮只运行未来 tick，不补跑跳过项。
+- **不同 job 默认并发，同一 job 上一轮未结束时跳过本轮**，不排队补跑。正常 IDLE 停止保留的计划在 QUIESCING、SUSPENDED 或唤醒等待期间自然到期时，Scheduler 占用稳定运行槽，在调度锁外经既有 EnsureActive 等待新 Session 的 ACTIVATED、摘要核对与全部绑定完成后的 Ready，复核计划、槽归属与剩余期限后交付一次原定的 `scheduled` REQUEST。静态任务的绝对 deadline 为原 scheduled_at 加 `JOB_TIMEOUT`（缺省 15 分钟），冷启动计入该期限，scheduled_at 保留原到期时刻；等待载荷按完整 HandlerRequest 的编码字节占用既有唤醒队列与 Core 总预算。Core 未运行、插件停用或异常离线期间的 tick 不保存、不补执行；恢复后从未来的下一次触发开始。一个任务超时/失败不串行阻塞其他任务，失败有日志/计数而不自动重试有副作用的 callback。
+- Core 内部 `Jobs(pluginID)` 可读取正常休眠保留的静态计划；`Trigger`、`TriggerTask`、`SetJobPaused` 与 `core.task.*`、`core.job.*` 固定服务仍要求当前 Activated Session。
+- job 的调用结果与实际执行结束分开：未交付等待取消或到期时归还运行槽与唤醒预算；已交付调用在 deadline 到达时先返回 DEADLINE_EXCEEDED/Cancel，但 Scheduler 仍保留 running 槽与原调用键；SDK 等用户 callback 实际返回后才发唯一 Response。迟到 Response 只释放任务槽，不恢复业务成功；未收到结束响应时直到确认旧进程退出才释放。仅 RPC 断链不能证明 goroutine 已停止。下一轮只运行未来 tick，不补跑跳过项。
 - **动态任务（D-124）。** 插件在注册描述中声明任务名（路由 ID 为 `task.` 加任务名，kind 为 task），运行时经 Core 固定服务增删任务实例：
   - `core.task.set` 创建或替换实例：任务名、key、触发规则（at、interval 或 cron 加可选的 timezone，三者恰有一个）与参数。key 为 1～128 字节的 UTF-8 字符串，在同一插件的同一任务名下唯一，已存在时整体替换并重新计算触发时刻。参数是 JSON 对象，至多 `TASK_PAYLOAD_BYTES`，Core 只校验它是合法的 JSON 对象。任务名未在本 Session 注册返回 NOT_FOUND；触发规则不合法、at 不晚于当前时间、参数超限返回 INVALID_ARGUMENT；该插件的实例数达到 `TASKS_PER_PLUGIN` 且 key 不存在时返回 RESOURCE_EXHAUSTED。interval 与 cron 的规则同上，interval 的起点是创建（或替换）时刻。
-  - `core.task.cancel` 按任务名与 key 删除实例，持久实例与在途的同一实例都不存在时返回 NOT_FOUND（一次性任务派发后、仍在执行时也可以取消）；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放；`core.task.set` 替换实例不取消在途的旧一轮。动态任务取得执行名额后，JobTimeout 从实际派发时开始计算；目标为 `SUSPENDED` 时从开始唤醒等待起计算，冷启动占用同一绝对期限，事件中的 scheduled_at 仍为原到期时刻。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
+  - `core.task.cancel` 按任务名与 key 删除实例，持久实例与在途的同一实例都不存在时返回 NOT_FOUND（一次性任务派发后、仍在执行时也可以取消）；实例正在执行时同时取消这一轮调用（协作式，§1.2），运行槽照上一条的规则释放；`core.task.set` 替换实例不取消在途的旧一轮。动态任务取得 `TASK_CONCURRENCY` 名额、开始交付或唤醒等待时固定 `JOB_TIMEOUT` 绝对期限；等待唤醒继续占用该名额与实例运行槽，排队等待名额的时间沿用原规则，冷启动占用同一绝对期限，事件中的 scheduled_at 仍为原到期时刻。`core.task.list` 按任务名返回实例的 key、触发规则、参数与下一次触发时刻，受帧上限约束时分页。
   - 这三个服务只在 Activated 之后可用，不需要父调用链；插件只能操作自己的任务。
-  - 触发与静态任务一样经 `scheduled` 的 REQUEST 执行，载荷另带任务名、key 与参数，没有 Actor。同一实例上一轮未结束时跳过本轮。同一插件同时执行的动态任务至多 `TASK_CONCURRENCY` 个，其余到期的实例按到期时间先后排队等待；排队中的周期实例到了下一个触发时刻仍未执行时，只保留一次。一次性实例在派发时删除，执行失败或超时不重试。
-- **持久化与错过的触发（D-125）。** 动态任务的定义与周期任务的起点保存在 Core 状态库，以 plugin_id 为键，Core 重启、插件重启与更新后保留，不属于插件数据库的候选与回退。到期时，已启用且处于 `SUSPENDED` 的插件按本节唤醒规则执行。Core 未运行、插件停用、异常离线或任务被暂停的触发作废，不补执行：周期任务从下一个未来时刻继续；一次性实例过期即删除，记一条 WARN（plugin_id、任务名、key、原定时刻）并计数。排队等待并发名额不算错过，但插件停用或异常离线时队列清空，其中的触发按作废处理；正常空闲退出保留调度定义、静态起点、暂停状态与未来定时器。新版本没有注册某个任务名时，该任务的实例保留但不触发，在管理诊断中标出。卸载时的去留见 §9.3。
+  - 触发与静态任务一样经 `scheduled` 的 REQUEST 执行，载荷另带任务名、key 与参数，没有 Actor。同一实例上一轮未结束时跳过本轮。同一插件同时执行的动态任务至多 `TASK_CONCURRENCY` 个，其余到期的实例按到期时间先后排队等待；排队中的周期实例到了下一个触发时刻仍未执行时，只保留一次。一次性实例在取得并发名额后、开始交付或唤醒等待前事务删除；已消费实例的待交付所有权与运行槽保留至本次调用收尾，执行失败或超时不重试。
+- **持久化与错过的触发（D-125）。** 动态任务的定义与周期任务的起点保存在 Core 状态库，以 plugin_id 为键，Core 重启、插件重启与更新后保留，不属于插件数据库的候选与回退。到期时，已启用且处于 `SUSPENDED` 的插件按本节唤醒规则执行。Core 未运行、插件停用、异常离线或任务被暂停的触发作废，不补执行：周期任务从下一个未来时刻继续；一次性实例过期即删除，记一条 WARN（plugin_id、任务名、key、原定时刻）并计数。排队等待并发名额不算错过，但插件停用或异常离线时队列清空，其中的触发按作废处理；正常空闲退出保留调度定义、静态起点、暂停状态、未来定时器、到期队列及已接纳项；相同代次与路由的 resume Attach 只交接 Session，保留原 scheduled_at、绝对 deadline、已消费 at 的待交付所有权与稳定运行槽。新版本没有注册某个任务名时，该任务的未来 at 与周期实例保留但不触发，在管理诊断中标出；同代次 resume 也删除其中已过期的 at，记录 WARN、累加 Expired、重算 Unregistered 并归还 TASKS_PER_PLUGIN 配额，已注册项继续由原定时器、队列与运行槽管理。卸载时的去留见 §9.3。
 - **静态任务的暂停与恢复（D-126）。** `core.job.pause` 与 `core.job.resume` 按 job_id 暂停、恢复本插件的静态任务，`core.job.status` 返回是否暂停、上一次与下一次触发时刻（上一次为本次 Core 运行中最后一次实际派发的时刻，Core 重启后缺失；暂停时没有下一次）；job_id 未注册返回 NOT_FOUND，重复暂停或恢复成功且不改变状态。暂停状态保存在 Core 状态库，跨重启与更新保持。暂停期间的触发作废，不打断正在执行的一轮；恢复后从下一个未来时刻继续，interval 的起点不变。
 
 ### 4.4 插件运行模式、状态与路由快照
@@ -194,7 +195,7 @@ Router 根据快照和动态策略初步匹配；每个 Core 创建唯一的 Sup
 
 Router、Broker、HTTP 代理与 Scheduler 交付前取得活动引用。`AcquireActivity(pluginID, session) (release func(), err error)` 为已有 Session 取得引用；释放函数幂等且只影响取得时的 Session。引用覆盖 Handler、Service、Hook、媒体操作和租约、已运行的 schedule 回调、延续调用、多轮等待，以及插件自己发起的在途业务；请求本地超时、取消或断链先返回时，继续持有至实际响应、确认排队撤回或旧进程树退出。插件 HTTP 例外：引用在 Core 反向代理返回时释放，客户端已取消、仍在执行的 Handler 与正常停止一样在停止截止时结束（D-179）。HTTP 引用覆盖流式响应与升级连接的存续。插件发起的请求在 Session 同步准入时登记活动，与在途登记共用临界区；Handler 装配等待计入活动，预算拒绝或实际处理结束时释放，正常停止的 WaitIdle 覆盖整个准入区间。
 
-等待唤醒的请求使用 Core 内存中的有界队列，逐插件限制条数与字节（§16），同时计入现有 Core 总 payload 预算；任一满额返回 RESOURCE_EXHAUSTED，并记录原因。HTTP 按现有管理/插件入口的错误映射返回失败。队列保留原请求、可信 Actor、Target、Trace、顺序约束与绝对 deadline，冷启动不延长期限；取消或到期的未交付请求立即退出队列。确认 ACTIVATED 及路由摘要后，交付前重新核对当前代次、路由开关、权限与剩余期限，原请求至多交付一次。唤醒失败返回实际错误；已交付业务的断链、取消与外部副作用按 §1.2 处理。Event Bus 继续按 §3 尽力广播，离线丢弃规则保持原样。
+等待唤醒的请求使用 Core 内存中的有界队列，逐插件限制条数与字节（§16），同时计入现有 Core 总 payload 预算；任一满额返回 RESOURCE_EXHAUSTED，并记录原因。HTTP 按现有管理/插件入口的错误映射返回失败。队列保留原请求、可信 Actor、Target、Trace、顺序约束与绝对 deadline，冷启动不延长期限；取消或到期的未交付请求立即退出队列。确认 ACTIVATED 及路由摘要后，交付前重新核对当前代次、路由开关、权限与剩余期限，原请求至多交付一次。唤醒失败返回实际错误，并在 Core 串行生命周期内撤销休眠调度计划、队列与未交付等待，日志保留完整启动错误；已交付业务的断链、取消与外部副作用按 §1.2 处理。Event Bus 继续按 §3 尽力广播，离线丢弃规则保持原样。
 
 命令/事件先匹配及过滤，Service 先完成访问、输入 Schema、编码与调用链准入，HTTP 先完成方法、路径与认证检查，再等待唤醒。普通请求在接纳时固定 `REQUEST_TIMEOUT` 与父期限的较早者；Scheduler 到期唤醒沿用原 `JOB_TIMEOUT`（S-03.1）。HTTP 等待期间保持正文流式读取，以零 payload 字节占用等待条数；满额映射 429、期限到达映射 504，其余唤醒失败映射 503，日志保留实际错误。交付前重新绑定当前 Listener 与凭证，核对代次、路由及认证；准入时已有提交快照的请求还须确认快照仍有效，开发组件按当前绑定复核。在线 Bus 工作使用订阅者自身 Caller 持有排队及 EVENT 写出引用，排队撤回或实际写出结束后释放。
 
@@ -208,7 +209,7 @@ Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立�
 
 策略取 §15.1 的 `sleep`：插件未配置时遵循准入规则与全局空闲时长；`never` 始终常驻；时长覆盖全局阈值。管理 API、CLI 与 WebUI 修改后写回文件并立即更新策略，无需 reload：改为 `never` 时立即唤醒仍已启用的休眠插件；修改时长在下一次空闲判定使用，不重置实际活动时间；切回 `always_on` 时按原代次启动全部已启用插件，保留快照、任务与业务数据。已停用插件保持停用。写回成功后的唤醒失败须返回实际错误，响应按 ADMIN-API §5 返回实际错误；调用方重新 GET 核对已保存设置，失败同时记入对应插件的运行状态。
 
-停止与新请求共用逐插件生命周期门禁：进入 QUIESCING 前在逐插件锁与活动门禁内复核启用意图、代次、ACTIVE、当前 Session、Ready、零引用和实际活动结束时刻；变化时撤销本次空闲决定并保留原 Session 与绑定。进入后冻结新派发，新请求按原绝对期限、取消及唤醒队列/Core 总预算等待旧树退出、SUSPENDED 和唯一新 Session 的 Ready；已接纳请求的合法子调用继续按原期限排空。停止复用 §4.2 的 STOP_DRAIN、STOP_ONSTOP 与 STOP_TOTAL，排空后发送一次 STOPPING，OnStop、DB、连接与受管资源按原停止及整树截止关闭，StopReason 为 `IDLE`；成功后记 `SUSPENDED`。HTTP/Bus 在 Core 引用释放后仍执行的 SDK 回调沿用正常停止截止。停止或状态保存失败保留完整错误并记录 FAILED；旧树尚未确认清空时保留运行槽与资源所有权，确认清空后完成资源及组件槽收尾。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间由 `SLEEP_MIN_UPTIME` 控制（缺省 5 分钟）；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。实际启动记录使用单调序号，Core 空闲控制器独占消费确认并回收快照前缀；常驻、停用和休眠实例同样消费，其他快照查询保持只读。控制器按窗口清理记录，回收后消费进度保持稳定。
+停止与新请求共用逐插件生命周期门禁：进入 QUIESCING 前在逐插件锁与活动门禁内复核启用意图、代次、ACTIVE、当前 Session、Ready、零引用和实际活动结束时刻；变化时撤销本次空闲决定并保留原 Session 与绑定。取得 IDLE 停止权后，在宿主离开 Activated 前调用 Scheduler.Suspend 保留计划，覆盖 QUIESCING 持久化写入窗口；进入后冻结新派发，新请求与自然到期项按原绝对期限、取消及唤醒队列/Core 总预算等待旧树退出、SUSPENDED 和唯一新 Session 的 Ready；已接纳请求的合法子调用继续按原期限排空。停止复用 §4.2 的 STOP_DRAIN、STOP_ONSTOP 与 STOP_TOTAL，排空后发送一次 STOPPING，OnStop、DB、连接与受管资源按原停止及整树截止关闭，StopReason 为 `IDLE`；成功后记 `SUSPENDED`。HTTP/Bus 在 Core 引用释放后仍执行的 SDK 回调沿用正常停止截止。停止或状态保存失败保留完整错误并记录 FAILED；旧树尚未确认清空时保留运行槽与资源所有权，确认清空后完成资源及组件槽收尾。正常空闲退出不计入异常重启次数，也不启动新的候选或重复迁移。唤醒后的最短运行时间由 `SLEEP_MIN_UPTIME` 控制（缺省 5 分钟）；在 `SLEEP_COLD_START_WINDOW`（缺省 1 小时）内冷启动超过 `SLEEP_COLD_START_MAX`（缺省 3 次）时，从触发时刻起固定常驻一个 `SLEEP_COLD_START_WINDOW` 的冷却期，期间的新冷启动不延长本次冷却期；冷却结束后恢复空闲判定。实际启动记录使用单调序号，Core 空闲控制器独占消费确认并回收快照前缀；常驻、停用和休眠实例同样消费，其他快照查询保持只读。控制器按窗口清理记录，回收后消费进度保持稳定。
 
 同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，进入 QUIESCING 前撤销空闲决定保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
 
@@ -375,7 +376,9 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - 受管 SQLite：下载/校验候选 → 冻结旧版新派发并排空 → 停止旧进程及合作型后台资源，确认连接释放 → 使用 SQLite Backup API 将旧 Active DB 备份到独立候选文件 → SDK 配置校验/迁移/OnStart → PREPARED → 同一 Core 事务更新 ActiveGeneration 与 COMMITTED → Activate/OnReady/Activated 后开放路由。副本、程序和不可变配置先持久化再提交引用；备份/空间/校验失败不提交。不能只拷贝运行中 WAL 数据库的主文件。
 - 提交前失败：保留旧 DB/程序/配置，重新启动旧版的**新 Session**。COMMITTED 后失败：新代次仍为权威，标记 Degraded 并关闭新派发；不自动切回已过时的旧数据。Core 崩溃恢复按 Journal 和 Active 指针判定，任意时刻只有一个代次可公开接单；完整时序见 §12。
 - Bootstrap 的 database_descriptor 由 Core 下发 `activation_reason`（first_install/resume/reload/update/rollback）与 `manual_migration_approved`；后者只对经管理员显式维护许可的本次 Session/Generation/DB 为 true，不由插件请求自行设置。SDK 不需要在 Preparing 发起通用业务 RPC 获取许可。
-- 声明 `prepare_effects=external` 的插件在准备期会改动受管 SQLite 之外的数据，候选副本无法隔离。首次安装照常准备；已有安装的 reload、update 与 rollback 返回 NEEDS_MANUAL_MIGRATION。管理员显式进入维护、停止插件并自行完成外部数据的备份后，Core 才以 `manual_migration_approved=true` 准备候选；失败保留停机状态，按该插件的恢复步骤处理，不自动重跑未知副作用；成功后照常完成 Prepared 与激活。普通 restart 与崩溃恢复（`activation_reason=resume`）不建立候选，不受此门槛限制。`prepare_effects` 是可信代码的声明，Core 不能静态证明任意 SQL 没有副作用。
+- 声明 `prepare_effects=external` 的插件在准备期会改动受管 SQLite 之外的数据，候选副本无法隔离。首次安装照常准备；已有安装的 reload、update 与 rollback 返回 NEEDS_MANUAL_MIGRATION。管理员显式进入维护、停止插件并自行完成外部数据的备份后，Core 才以 `manual_migration_approved=true` 准备候选；失败保留停机状态，按该插件的恢复步骤处理，不自动重跑未知副作用；成功后照常完成 Prepared 与激活，再停止候选，仍保持停用；管理员检查外部数据后显式 enable，以同代次 resume 建立业务 Session。
+- 维护入口为经过管理认证的 reload/update/rollback 请求顶层 `manual_migration_approved=true`（CLI `--manual-migration-approved`），表示管理员确认已自行备份外部数据，与普通 `confirm`/`--yes` 分开。请求前必须成功 disable，具有旧 Active，且旧或目标包声明 external；Core 在串行候选操作内复核停用记录、无运行 Session 与 runtime.lock。许可只存在于本次请求和候选 Bootstrap，不写入安装记录或恢复令牌，首装及后续 resume 均为 false。提交前失败保留旧 Active；提交后失败保留新 Active；两者保持停用且不重跑迁移，管理员按插件说明恢复外部数据后重新决定操作。
+- 普通 restart 与崩溃恢复（`activation_reason=resume`）不建立候选，不受此门槛限制。`prepare_effects` 是可信代码的声明，Core 不能静态证明任意 SQL 没有副作用。
 - 人工整机备份须在 Core 与插件停止后覆盖完整 data_dir，以及插件自管的外部数据；单独备份 state.sqlite 不包含插件业务数据。受管 SQLite 的在线副本仍使用 Backup API。不能删除 Active、恢复中 Journal 或保留回退代次引用的程序/DB/配置/secret；候选失败清理只作用于无引用资源。
 
 依据：[GORM 连接文档](https://gorm.io/docs/connecting_to_the_database.html)、[libtnb SQLite 驱动](https://github.com/libtnb/sqlite)、[modernc Backup API](https://pkg.go.dev/modernc.org/sqlite#Backup)、[SQLite Backup](https://sqlite.org/backup.html)、[SQLite PRAGMA](https://www.sqlite.org/pragma.html)、[database/sql](https://pkg.go.dev/database/sql)。这些主源支持选型与约束，AlonaBot 集成测试仍待实施。
@@ -531,7 +534,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `diagnose` | 生成诊断包（§14.7）：`--since`（正时长，缺省 24h）、`--no-logs`、`--no-settings`、`--no-components`（至少保留一组）、`--no-redact`、`-o` / `--output`（缺省为当前目录下的 `alonabot-diagnostics-<UTC 时间>.zip`）。在线经管理 API，连接被拒绝后尝试停机只读导出。 |
 | `log-level` | 修改全局或某个插件、Adapter 的日志级别，立即生效（§14.3）。 |
 | `sleep-policy [ID] [never\|auto\|时长]` | 无参数列出全局模式、全局空闲时长及各插件的配置策略、生效策略、运行状态与最近原因；只有 ID 时读取该插件。`never` 写入 `sleep.plugins.<ID>`，`auto` 删除该覆盖以跟随准入规则与全局值，正时长（Go duration，例如 `15m`）写入插件覆盖。经 ADMIN-API §24 的同一管理服务修改，立即生效。全局模式与全局时长经 Core 设置 API/WebUI 修改。 |
-| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
+| `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件须按 §6.3 显式维护，缺少许可返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
 管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。
 
@@ -903,12 +906,12 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | `SLEEP_MIN_UPTIME` | 5m | > 0 | §4.5 |
 | `SLEEP_COLD_START_WINDOW` | 1h | > 0；冷启动统计窗口及触发后固定常驻的冷却时长 | §4.5 |
 | `SLEEP_COLD_START_MAX` | 3 | ≥ 1；窗口内超过此值开始固定冷却期 | §4.5 |
-| `WAKE_QUEUE_REQUESTS` | 256 | ≥ 1；每插件未交付的等待请求数 | §4.5 |
-| `WAKE_QUEUE_BYTES` | 16MiB | ≥ 帧上限 4MiB 且 ≤ `CORE_MAX_PAYLOAD`；每插件等待 payload 总量，同时占用 Core 总预算 | §4.5 |
-| `JOB_TIMEOUT` | 15m | > 0 | §4.3 |
+| `WAKE_QUEUE_REQUESTS` | 256 | ≥ 1；每插件未交付的等待请求数，含 Scheduler 到期唤醒 | §4.3、§4.5 |
+| `WAKE_QUEUE_BYTES` | 16MiB | ≥ 帧上限 4MiB 且 ≤ `CORE_MAX_PAYLOAD`；每插件等待 payload 总量，Scheduler 按完整 HandlerRequest 编码字节计入，同时占用 Core 总预算 | §4.3、§4.5 |
+| `JOB_TIMEOUT` | 15m | > 0；静态从原到期时刻、动态从取得并发名额开始计算，唤醒等待与冷启动共用原绝对期限 | §4.3 |
 | `TASKS_PER_PLUGIN` | 10000 | ≥ 1 | §4.3 |
 | `TASK_PAYLOAD_BYTES` | 64KiB | ≥ 1 且 ≤ 帧上限 4MiB | §4.3 |
-| `TASK_CONCURRENCY` | 16 | ≥ 1 且 ≤ `SESSION_MAX_INFLIGHT` | §4.3 |
+| `TASK_CONCURRENCY` | 16 | ≥ 1 且 ≤ `SESSION_MAX_INFLIGHT`；动态任务的唤醒等待继续占用并发名额 | §4.3 |
 | `OPTIONS_PAGE` | 50 | ≥ 1 且 ≤ 200 | §5.1 的配置选项上限；ADMIN-API §20 的聊天目录上限为生效值的十倍 |
 | `BUTTON_TOKEN_TTL` | 24h | > 0 | MESSAGE-MODEL §6.3 |
 | `TOOL_CONFIRM_TIMEOUT` | 5m | > 0 | §13.2 |
