@@ -3386,7 +3386,7 @@ fieldset.config-field { border: 0; padding: 0; min-width: 0; }
 .profile-ai-section .profile-card-row { min-height: 66px; }
 .profile-card-row > :last-child { max-width: 100%; }
 .profile-card-row .model-select { width: 240px; max-width: 100%; }
-.profile-card-row > .profile-text-input { width: 240px; flex-shrink: 0; }
+.profile-card-row > input.profile-text-input { width: 240px; flex-shrink: 0; }
 .profile-persona-control { width: 240px; max-width: 100%; }
 .profile-persona-popover { width: min(320px, calc(100vw - 32px)); max-height: var(--radix-popover-content-available-height); overflow-y: auto; padding: 12px; background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-line); border-radius: var(--radius); box-shadow: var(--shadow-popover); z-index: 100; }
 .profile-persona-popover .options-dropdown { position: static; max-height: 40vh; box-shadow: none; margin: 8px 0; }
