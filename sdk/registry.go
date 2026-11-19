@@ -459,7 +459,7 @@ type httpRoute struct {
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
 	Public   bool
-	AuthMode HTTPAuth // 认证方式；公开路由须校验回调凭证，Adapter 也可校验平台 token
+	AuthMode HTTPAuth // 认证方式；AuthStatic 公开提供静态资源，其他公开模式校验对应凭证。
 }
 
 // RouteBuilder 收集 HTTP 路由；Handle 或 HandleFunc 结束构建。
@@ -481,7 +481,7 @@ func (b *RouteBuilder) Page(title string) *RouteBuilder {
 	return b
 }
 
-// Public 声明公开路由；插件自行验证 state、签名或 nonce，Adapter 也可验证平台 token。
+// Public 声明公开路由；AuthStatic 公开提供静态资源，其他模式由组件验证对应凭证。
 func (b *RouteBuilder) Public(mode HTTPAuth) *RouteBuilder {
 	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
@@ -545,7 +545,7 @@ func (r *httpRegistry) collect() {
 			}) {
 				continue
 			}
-			r.add(http.MethodGet, httpRoute{Method: http.MethodGet, Path: resourcePath, Handler: page.Handler(), Public: route.Public, AuthMode: route.AuthMode})
+			r.add(http.MethodGet, httpRoute{Method: http.MethodGet, Path: resourcePath, Handler: page.Handler(), Public: true, AuthMode: AuthStatic})
 		}
 	}
 }
@@ -559,8 +559,10 @@ func (r *httpRegistry) add(method string, route httpRoute) {
 		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
 	case !canonicalHTTPPath(route.Path):
 		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", route.Path))
-	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce && route.AuthMode != AuthPlatformToken:
-		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state, signature or nonce verification", method, path))
+	case route.Public && route.AuthMode == AuthStatic && method != http.MethodGet && method != http.MethodHead:
+		r.errs = append(r.errs, fmt.Errorf("static HTTP route %s %s only allows GET and HEAD", method, path))
+	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce && route.AuthMode != AuthPlatformToken && route.AuthMode != AuthStatic:
+		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s has invalid authentication mode", method, path))
 	case !route.Public && route.AuthMode != AuthCoreSession:
 		r.errs = append(r.errs, fmt.Errorf("private HTTP route %s %s must use Core session authentication", method, path))
 	default:
