@@ -413,3 +413,4 @@ PDF **之后**的长时间设计讨论覆盖情况、仍未完整恢复的议题
 - 2026-11-18：**D-180、D-181**：SDK 注册去掉 route ID 参数、Context 实现 context.Context、Reply 可带片段、页面自动提供套件、`Result.RequireReply`；`alonabot run` 内置终端对话、开发目录缺省重载、`init` 生成可直接运行的工程。新增 T-04.20（goal-178）与 T-13.7（goal-179），V-148、V-149。文档站改为单一侧栏并移除面向维护者的规格入口，由审查者在 AlonaBot/docs 仓库重写。
 - 2026-11-18：**D-182**：`sdk.ProfileOverrides` 只读访问覆盖值；Agent 自记会话键；缺省系统提示为内置常量。由 T-12.20（goal-167）实现。
 - 2026-11-18：**D-183**：`HttpAuthMode` 追加公开静态资源模式 `HTTP_AUTH_MODE_STATIC`（只限 GET 与 HEAD）；SDK 自动补齐的页面套件与官方 Agent 的页面资源以此模式提供，页面与数据路由仍要求管理会话。
+- 2026-11-19：**S-06.1 查询语义细化**：管理策略读取复用 `idle.Resolve` 的固定原因顺序；直接可判定的常驻原因可在未启用时读取，需要路由但缺有效已提交快照时沿用状态库的 412 / FAILED_PRECONDITION。这样保留实际缺失信息且查询无唤醒副作用；全局设置与 runtime 查询独立可读。同步 ADMIN-API §24、Core 计划、V-81 与 goal-173，具体端点由 S-06.1 实现。

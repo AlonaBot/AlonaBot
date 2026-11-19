@@ -8733,22 +8733,59 @@ internal/core/state
 
 ### goal-173 · S-06.1 休眠管理 API、运行诊断与 CLI
 
-状态：等待前置（S-03.1）。S-02.2（PR #249，`18f8af9`）已合并。T-09.14已合并。目标、依据与范围要点由 PLAN §7 确定；前置合并后，审查者按实际代码补齐接口签名、行为与测试段，再改为待派发。
+状态：等待前置（S-03.1）。S-02.2（goal-171，PR #249，`18f8af95`）、T-09.14（goal-93，PR #192，`0cff77c`）已合并；S-03.1（goal-172，PR #256）尚未合并。以下候选按 main `24701da4` 的设置、策略、状态与管理装配，以及 goal-172 head `24f3d9bf` 的稳定 Scheduler 候选核对；前置合并后，审查者核对实际合并代码与接口，再改为待派发。组件列表的 `Package.RuntimeState` 与 `State=Suspended` 已在 main 实现，本切片保留并验收。
+
+无路由快照的查询行为按本轮 ADMIN-API §24 同步候选明确：前四类常驻原因可直接判定；需要路由而无已提交快照时返回 412 / FAILED_PRECONDITION，保持读取无唤醒副作用。正式派发时一并核对已合入的规格与实现接口。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-173（切片 S-06.1：休眠管理 API、运行诊断与 CLI）。goal 目录 goal-173，分支 goal-173，worktree .worktrees/goal-173，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
-目标：提供 ADMIN-API §24 的全局设置、插件策略、运行状态与原因，并实现 alonabot sleep-policy；为 S-06.3（goal-175）的页面提供休眠 API。
+目标：提供 ADMIN-API §24 的六个管理端点与 alonabot sleep-policy，读出全局设置、插件有效策略、运行六态及最近原因；复用现有设置发布和唤醒路径，为 S-06.3（goal-175）提供 API。
 
-依据：PLAN §7 S-06 步骤 1；CONTRACTS §4.4、§4.5、§9.3、§15.1；ADMIN-API §24；D-153、D-164；V-81 管理分项。
+依据：PLAN §3.1、§7 S-06 步骤 1 与 S-02/S-03 的失败停止条件；spec/plan/core.md 的 S-06.1；CONTRACTS（spec/CONTRACTS-v0.1.md）§4.3～§4.5、§9.3、§15.1、§16；ADMIN-API §1、§3、§5、§24；DECISIONS D-153、D-164、D-179；TEST-MATRIX V-81 的管理 API/CLI 分项及 V-77/V-78 的受影响回归；ARCHITECTURE 依赖表；docs/execution-order.md 的休眠生命周期及设置共享规则。
 
-要点：
-- 范围：internal/core/manage 新文件 sleep_api.go 与路由登记、internal/core/settings 已有设置方法、supervisor/idle 的已合并策略和诊断接口、internal/app 装配、cmd/alonabot 的 sleep-policy 命令文件与命令注册；不修改 web/admin。
-- API 路径、请求/响应、CSRF 照 ADMIN-API §24，错误仅按 §5；plugin 与 agent 均可管理，读取保持无唤醒副作用，manifest 常驻和实际生效原因可读；组件列表追加 RuntimeState，沿用既有 State 的阶段表示。
-- CLI 不给参数列出全局和插件策略、状态与最近原因；只有 ID 时读取；never 写覆盖、auto 删除覆盖、正 Go duration 写覆盖。全局模式与时长走同一 Core 设置管理 API；不增加 CLI 语法。
-- 写回 sleep 后立即向既有生命周期所有者应用策略，不 reload；never 与 always_on 唤醒对应的已启用插件，停用插件保持停用；保存后唤醒失败按 §5 返回实际错误，失败写运行状态，调用方重新 GET 核对设置。
-- WebUI 页面由 S-06.3（goal-175）实现，不在本切片。
-- 验收要点：默认一个经认证管理 API＋CLI＋真实子进程的集成主路径，覆盖读取、设置、休眠、never 唤醒与不重载；非法值、其他角色、CSRF、保存/唤醒失败等本地自测。
+范围（只新增或修改这些）：
+- internal/core/manage/sleep_api.go（新增）：六个端点、请求/响应、身份筛选、设置编辑与只读运行状态；http.go 的 Handler 路由登记，service.go 的 Options 注入字段。Package、List 与 describe 的既有六态展示保留，仅修正本切片直接暴露的问题。
+- internal/app/alonabot.go 的 manage.Options 装配；idle.go 的管理策略只读适配，必要时新增同包 sleep_management.go；复用现有 sleepPolicy、operation 与 applySleep，不更改休眠生命周期。
+- cmd/alonabot/sleep.go（新增）：命令、参数到管理 API 的映射及输出；manage.go 的 managementCommands 注册。commands.go 已统一接入 managementCommands，保持原入口。
+- cmd/alonabot/sleep_e2e_test.go（新增的一条集成主路径）；manage_e2e_test.go 中现有构建/认证/进程工具的必要复用调整。上述包的 *_local_test.go 保留本地；直接使用现有 settings、idle、state、scheduler API，不改它们的实现。
+
+允许依赖：标准库和现有已批准依赖。manage 复用既有 -> settings/state/contracts，管理端点沿用 adminauth；internal/app -> manage/idle/settings/state/contracts 已由装配边允许，策略结果经 Options 函数注入，manage 不新增 -> idle/supervisor/app 的 import。CLI 继续经 managementClient 请求 HTTP，使用既有 -> manage/settings/state/contracts 及 cobra，不导入根包。测试复用 cmd/alonabot 既有 Core 子进程、包构建、SQLite 与回环服务，不新增 testdata 插件或依赖。
+
+接口（现有，保持签名和原调用可用）：
+- settings.Sleep{Mode string; IdleTimeout time.Duration; Plugins map[string]string}；(*settings.File).Settings() settings.Settings；(*settings.File).Update(edit func(doc *settings.Document) error) error；Reload() ([]string, error)；WithPublisher(publish func(change func() error) error) *settings.File。
+- (*settings.Document).SetSleep(mode, idleTimeout string) error；SetSleepPolicy(pluginID string, policy *string) error。nil 删除覆盖，字符串只接受 never 或正 Go duration；sleep.mode 只接受 always_on/component_idle，缺省 always_on，idle_timeout 缺省 15m，plugins 缺省空 map。
+- idle.Policy{Policy *string; EffectivePolicy string; SleepCapable bool; Eligible bool; Reason string; Warnings []string}；idle.Resolve(s settings.Sleep, m *manifest.Manifest, independent bool, routes []*pb.RouteDescriptor) idle.Policy。原因顺序和全部路由警告由这个唯一实现决定。
+- (*state.Store).GetInstall(ctx context.Context, id string) (state.Install, error)；Installs(ctx context.Context) ([]state.Install, error)；Enabled(ctx context.Context, pluginID string) (bool, error)；Active(ctx context.Context, pluginID string) (string, error)；RuntimeStatus(ctx context.Context, pluginID string) (state.RuntimeStatus, error)；ActiveRouteSnapshot(ctx context.Context, pluginID string) (state.RouteSnapshot, error)。RuntimeStatus 的字段为 State state.RuntimeState、Reason string、ChangedAt time.Time、LastWakeReason string、LastWakeAt time.Time、LastSuspendAt time.Time；六态常量为 RuntimeStopped/RuntimeWaking/RuntimeActive/RuntimeQuiescing/RuntimeSuspended/RuntimeFailed，线上值 STOPPED/WAKING/ACTIVE/QUIESCING/SUSPENDED/FAILED。
+- manage.Options 的 Store *state.Store、Settings *settings.File、Development map[string]*manifest.Manifest、State func(string) string、Scheduler *scheduler.Scheduler；manage.New(opt manage.Options) *manage.Service；(*manage.Service).Handler(auth *adminauth.Auth) http.Handler；List(ctx context.Context) ([]manage.Package, error)。Package.RuntimeState string 的 JSON 名为 RuntimeState，省略空值；State 字段保留阶段语义。
+- app 内部 (*Core).sleepPolicy(ctx context.Context, in state.Install, sleep settings.Sleep) (idle.Policy, state.RouteSnapshot, error)、operation(ctx context.Context, apply func(context.Context) error) error、applySleep(ctx context.Context) error，hasInstalledRoutes(in state.Install) bool。原 manage 装配传入 shared File.WithPublisher 视图；operation 返回前在循环及文件锁、插件锁外应用 sleep 变化并聚合错误。
+- S-03.1 提供 scheduler.Options.EnsureActive func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)、(*scheduler.Scheduler).Suspend(pluginID string)、Jobs(pluginID string) []scheduler.StaticJob、SetJobPaused(ctx context.Context, pluginID, jobID string, paused bool) error；已有 (*supervisor.Waker).EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error) 与 (*assembly).ensureActive 装配保持原义。Jobs 可读正常休眠保留计划；显式调度操作仍要求 Activated。本切片不直接调用唤醒或调度方法完成读取。
+- CLI 内部 managementCommands(code *int) []*cobra.Command、(*managementOptions).flags(command *cobra.Command)、(*managementOptions).client(required bool) (*managementClient, error)、(*managementClient).request(ctx context.Context, method, path string, body any) (json.RawMessage, error)、managementCall(cmd *cobra.Command, code *int, opt *managementOptions, method, path string, body any) error。复用既有认证发现、URL 组装、错误正文和退出码。
+
+接口（本切片新增，固定以下公开形状）：
+- manage.SleepPolicy：Policy *string（json:"policy"，nil 必须输出 null）、EffectivePolicy string（effective_policy）、SleepCapable bool（sleep_capable）、Eligible bool（eligible）、Reason string（reason）、Warnings []string（warnings,omitempty）。这是管理响应视图，字段原义与 idle.Policy 一致。
+- manage.Options 追加 SleepPolicy func(ctx context.Context, in state.Install) (SleepPolicy, error)，由 app 的现有 Core 装配注入；参数是管理入口已核对的安装记录，回调只读策略，不启动进程。现有不使用这些端点的 manage.New 调用保持可用，不给旧调用增加初始化前置条件。其他新增 helper 和 HTTP DTO 保持私有，不新增根包或 SDK API。
+
+行为：
+- Handler 登记 GET/PUT /api/v1/core/sleep、GET/PUT/DELETE /api/v1/plugins/{id}/sleep-policy、GET /api/v1/plugins/{id}/runtime；使用同一管理 Bearer 或 Cookie/CSRF 保护，复用 decode/respond/failure 及 ADMIN-API §5 的 code/safe_message，成功形状严格按 §24。全局 PUT 两项必填，仅改 mode/idle_timeout，保留 plugins；策略 PUT 的 policy 必填；DELETE 无正文。
+- 所有逐插件入口先通过 GetInstall 核对存在、未卸载且 role 为 plugin/agent；其他角色及已卸载 ID 返回 404/NOT_FOUND。未知 mode、auto 存储字面量、零/负/非法时长、缺失必填字段在写入前返回 400/INVALID_ARGUMENT；在 Update 的编辑回调中沿用 SetSleep/SetSleepPolicy 校验，将其输入错误按 invalid(err.Error()) 返回，保留完整说明；文件读取、格式、落盘及发布错误继续按原错误类型传递，不将 I/O 错误归为 INVALID_ARGUMENT。合法时长覆盖允许保存到 manifest 常驻组件，生效仍按 manifest 常驻原因。
+- 策略 GET 读取本次生效 settings.Sleep，app 复用 idle.Resolve，输出原始覆盖、有效时长、准入原因和全部 warnings。installed manifest 的解析与身份检查复用既有路径；开发/同进程组件使用装配已有的 Development manifest 且 independent=false，避免访问不存在的安装包目录。always_on、manifest_requires_resident、in_process、policy_never 这些先于路由的原因可由 manifest/进程形式/设置直接决定；需要路由才能判定时读取已提交 ActiveRouteSnapshot。已安装但尚无已提交代次、快照缺失或身份不符时，保留状态库实际 FAILED_PRECONDITION/错误，不能以空 routes 生成 eligible=true；读取全局设置和 runtime 仍可独立使用。查询不触发恢复、候选准备或数据库迁移，不返回快照中的凭据/配置。
+- runtime GET 从同一个持久状态来源组合 enabled、generation_id、state、reason、changed_at；时间 UTC RFC 3339。LastWakeAt 非零时输出 last_wake{reason:LastWakeReason,at:LastWakeAt}，LastSuspendAt 非零时输出 last_suspend{reason:"idle",at:LastSuspendAt}，缺失记录省略。保留实际英文原因与失败错误；不从 State 阶段字符串推断六态，不用当前请求时间伪造历史。组件列表沿用已存在的 RuntimeState 与 Suspended 展示。
+- 写入只经 manage.Options.Settings 的受管视图 Update 和 Document.SetSleep/SetSleepPolicy；Update 已重读磁盘并保留其他字段、未知键和未修改的 ${...} 原文。提交前失败保留原文件与快照；rename 后目录同步失败仍发布已提交设置并保留真实错误。handler 返回 Update 的聚合结果，不再额外调用 applySleep/EnsureActive。调用者等待恢复时须已释放设置文件锁与逐包锁，保持既有 operation 的串行设置发布和锁外恢复路径，避免在 Handler 中持逐包锁等待唤醒。
+- never 立即恢复已启用的 SUSPENDED 插件；QUIESCING 时先完成停止，再按最新设置恢复。always_on 恢复全部已启用休眠插件，停用插件保持停用。变更立即生效、不 reload；保持代次、配置、业务 DB、路由与任务，时长从下一次空闲判断使用。提交后失败保留已发布设置，各失败插件记录实际运行错误，健康插件继续恢复，所有持久化/唤醒错误聚合按 §5 返回。客户端重新 GET 核对，不增加 applied/persisted 等响应字段，不自动重试。
+- CLI Use 为 sleep-policy [ID] [never|auto|duration]，只接受 0～2 个位置参数；沿用 --data-dir、--admin-url、--token-file。不带参数时读全局 sleep、组件列表，并按安装顺序筛选未卸载 plugin/agent，读取各自策略和 runtime；输出 JSON 含全局 sleep 与 plugins 数组（每项 id、policy 对象、runtime 对象）。只有 ID 时读策略与 runtime 并输出同样的单项信息；never/正时长以 PUT 写 {"policy":值}，auto 以 DELETE 删除覆盖，成功按既有管理命令输出 {}。各请求失败保留原错误并非零退出，聚合读取全部成功后才输出结果。CLI 无参/单 ID 仅 GET，不唤醒；全局 mode/idle_timeout 写入使用上述 PUT API，本切片不扩展 CLI 语法。
+
+测试（遵循 docs/goals/README.md「编写测试段」及 D-86）：
+- 提交：cmd/alonabot/sleep_e2e_test.go（//go:build unix）的 TestSleepPolicyManagement，一条真实 CLI＋认证管理 API＋已安装 sleep_capable 插件子进程＋SQLite 的集成路径。复用 TestManagementLifecycle 的 testPackage/startEmptyCore、core.management、findPackage 与原 HTTP 认证工具；组件若需新增探针源码，写入测试临时目录，不新增 testdata 插件。通过已有 --args 注入短的 SLEEP_MIN_UPTIME 与可观测空闲时长，不改产品缺省值。覆盖默认全局读取→PUT component_idle/时长→启用插件→自动 SUSPENDED→GET 全局/策略/runtime、CLI 列表及单 ID 查询仍保持原 Session 数且无唤醒→CLI never 恢复同代次新 Session→CLI auto 删除覆盖→再次休眠→PUT always_on 恢复。核对最近原因/时间、RuntimeState 与 State、未修改字段、原 generation/config/业务 DB 及迁移次数保持；设置已在线插件的合法时长时 Session 不变，证明没有 reload。集成主路径内验证现有 Cookie/CSRF 认证的一次真实策略写入。保留原 TestManagementLifecycle 的全部断言。
+- 本地自测（*_local_test.go，不提交，PR 中逐项写结果）：六端点的无认证/错误 token、Cookie 缺/错 CSRF 与跨 Origin 写入；缺失 mode/idle_timeout/policy、未知 mode、auto 字面量、空/零/负/非法时长；未知/卸载/Adapter/WebUI ID、plugin/agent 一致；manifest 常驻保存时长与 reason、同进程 in_process、原覆盖 null/never/时长、固定原因优先序、全部危险路由 warnings；从未启用及快照缺失的实际错误与 runtime 可读，读取不泄漏凭据且不启动进程。
+- 本地自测继续覆盖：保存前失败无发布/无唤醒、提交后目录同步失败仍发布及聚合错误、更新保留 ${...}/未知键/插件覆盖、QUIESCING 期间写入与生命周期串行且锁外恢复、never/always_on 的健康恢复与多插件失败聚合、停用保持、原代次/任务/业务数据保留；CLI 0/1/2/超量参数、auto DELETE、非法输入、错误响应/退出码以及凭据发现，API 请求不自动重试。复用原 settings/idle/app 测试机制，针对本切片新增路径取证，不把已验证底层实现的测试整批复制。
+- 既有回归：internal/app 的 TestIdle、TestWake、TestSchedulerWake，以及 cmd/alonabot 的 TestManagementLifecycle、TestManagementInstancesAndCommands；新增 supervisor/sdk 验证只留本地，不提交这些目录的测试。
+
+完成条件：gofmt -l 对改动 Go 文件无输出；git diff --check；go vet ./internal/core/manage/... ./internal/app/... ./cmd/alonabot/...；go test -race -count=1 ./cmd/alonabot -run '^(TestSleepPolicyManagement|TestManagementLifecycle|TestManagementInstancesAndCommands)$'；go test -race -count=1 ./internal/app -run '^(TestIdle|TestWake|TestSchedulerWake)$'；与本切片有关的 *_local_test.go 按测试名定向运行并列全命令；go build ./...。无协议生成变更，不为文档或未改动的生成源重跑生成；全仓 race 按父审查者约定统一串行，按 TEST-MATRIX §3 记录完整命令、平台、结果、提交测试新增行数和未运行项。PR「文档同步」列出 ADMIN-API §24、PLAN/TEST-MATRIX、架构/README/开发指南及后继 goal-175 可用的六端点与字段，审查者在合并前回写。
+
+失败停止条件：未认证写入或跨角色接受、读取导致唤醒/迁移、策略与 idle.Resolve 分叉、缺失快照被当成可休眠、保存前失败仍发布或保存后错误被吞、持锁等待恢复而死锁、停用插件被恢复、策略变更触发 reload/代次变化/重复迁移、丢失已有设置或任务、双进程/重复交付/延长原期限，均阻止合入。发现契约冲突或必须改范围外产品文件、公开签名、proto、依赖/调优初值时按共同约束记录阻塞，不自行扩展。
+
+不做：web/admin 页面（goal-175）、指标/固定机器测量及参数调整（goal-174）；新生命周期、Waker/调度实现、状态表或迁移、协议/SDK/根包 API、自动重试或新 CLI 语法；不改 spec、ARCHITECTURE、README 与 docs/execution-order.md，所需文档同步写入 PR。
 ```
 
 ## 第 22 波
