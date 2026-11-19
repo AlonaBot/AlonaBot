@@ -23,7 +23,7 @@ type activation struct {
 	onStop  func(context.Context) error
 	sess    *wire.Session // 激活后使用的 Session
 
-	readyMu sync.Mutex    // 同步 ACTIVATED 写出、ready 发布与首条业务准入
+	readyMu sync.Mutex    // 同步激活结果发布与首条业务准入
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
 	readyCh chan struct{} // ready gate 打开时关闭
 	started atomic.Bool   // 已收到 ACTIVATE
@@ -137,6 +137,9 @@ func (a *activation) runOnReady(m *pb.Activate) {
 
 // reportFailure 发送 SESSION_ERROR(ON_READY)（只含安全消息）后关闭 Session。
 func (a *activation) reportFailure(code pb.ErrorCode, safe string, cause error) {
+	// 错误帧写出、Session 关闭与原始原因发布必须完成后才允许激活等待返回。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	env, err := wire.ControlEnvelope(a.ack.GetSessionId(), a.ack.GetChosenMinor(), a.l.pluginID, pb.FrameKind_FRAME_KIND_SESSION_ERROR,
 		&pb.SessionError{FailedPhase: pb.SessionPhase_SESSION_PHASE_ON_READY})
 	if err == nil {
@@ -275,6 +278,9 @@ func (a *activation) waitReady() error {
 		return err
 	case <-a.sess.Done():
 	}
+	// 发送错误帧也可能关闭 Session，先等待激活结果发布完成。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	select {
 	case <-a.readyCh:
 		return nil
