@@ -99,7 +99,7 @@ func managementCommands(code *int) []*cobra.Command {
 	commands := []*cobra.Command{list, admin, adapter, profileCommand(code), sleepPolicyCommand(code)}
 	for _, action := range []string{"install", "enable", "disable", "restart", "uninstall", "pin", "reload", "update", "rollback"} {
 		options := &managementOptions{}
-		var yes, replace, purgeData, purgeAll bool
+		var yes, replace, purgeData, purgeAll, manualMigrationApproved bool
 		var source, archive, releaseFile, signatureFile, keyFile string
 		command := &cobra.Command{Use: action + " <id>", Short: "Manage installed components", Args: cobra.ExactArgs(1)}
 		options.flags(command)
@@ -117,6 +117,9 @@ func managementCommands(code *int) []*cobra.Command {
 				command.Flags().BoolVar(&replace, "replace", false, "replace an installed component of the same kind")
 			}
 		}
+		if action == "reload" || action == "update" || action == "rollback" {
+			command.Flags().BoolVar(&manualMigrationApproved, "manual-migration-approved", false, "confirm external data has been backed up for this candidate (disable the component first)")
+		}
 		if action == "uninstall" {
 			command.Flags().BoolVar(&purgeData, "purge-data", false, "also delete managed data")
 			command.Flags().BoolVar(&purgeAll, "purge", false, "also delete managed data, configuration and installation binding")
@@ -132,6 +135,9 @@ func managementCommands(code *int) []*cobra.Command {
 		}
 		command.RunE = func(cmd *cobra.Command, args []string) error {
 			request := map[string]any{"confirm": yes}
+			if manualMigrationApproved {
+				request["manual_migration_approved"] = true
+			}
 			if action != "install" {
 				request["id"] = args[0]
 			}
