@@ -207,40 +207,55 @@
 
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
-状态：等待前置（T-09.11）。T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）已合并。语句中 goal-43、goal-44、goal-73、goal-74、goal-77 提供的产物与入口（发行归档、容器镜像、WebUI 页面、管理 API）只写名字；合并后由审查者核对，再改为待派发。2026-11-04 按 D-77～D-85 修订计划：首次 token 的取得改为终端显示或 `admin-token show`（D-82）。前置合并后由审查者改写。
+状态：等待前置（T-09.11 / goal-45）。T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）已合并。2026-11-19 按 main `24701da4` 核对以下产物与接口；goal-44 对应 T-09.9（PR #259 尚未合并），是 goal-45 的前置。保持 goal-44 → goal-45 → goal-75 的接续；审查者在 T-09.11 合并后复核页面和 API，再将总览与本状态行改为待派发。本轮只修订派发语句，未执行以下验收。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」，确认 T-09.11 / goal-45 已合并。
 
-目标：在干净的数据目录上，分别从发行归档与容器镜像依次完成：首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、/ask 对话、/help 与 /whoami（D-171 去掉 rss 一步）；在 TEST-MATRIX §3.2 记录 T-14 证据，真实 Telegram 与真实 Provider 没有凭证时记为未运行。
+目标：在干净的数据目录上，分别从发行归档与容器镜像完成首次运行、登录 WebUI、添加 Telegram 实例（本地 Bot API 模拟服务）、启用 Agent 并配置 Provider（本地模拟服务）、/ask 对话、/help 与 /whoami，记录 V-66、V-67、V-70 的端到端证据。首发内容为 Core、Telegram Adapter、Agent、WebUI 与 help（D-171）；真实 Telegram 与真实 Provider 缺少凭证时记为未运行。
 
-依据：PLAN T-14 步骤 6 与「停止和失败条件」；CONTRACTS §15；TEST-MATRIX V-66、V-67、V-70。
+依据：spec/plan/release.md T-14 步骤 3～6 及「失败停止条件」；CONTRACTS §7.4、§15.1～§15.4；ADMIN-API §1～§4、§12.1、§13、§15；TEST-MATRIX V-66、V-67、V-70 与 §3；docs/development.md「发行构建」「容器镜像」。前置编号以 spec/plan/core.md 的 T-09.11 / goal-45、spec/plan/webui.md 的 T-09.9 / goal-44 为准。
 
 范围（只新增或修改这些）：
-- 新增 cmd/alonabot/t14_e2e_test.go（//go:build unix；发行归档部分）
-- 新增 deploy/e2e/（容器验收：Go 测试辅助，经 os/exec 调用 docker，运行镜像、模拟服务与断言）
-- spec/TEST-MATRIX.md §3.2：追加 T-14 的证据行（本切片获授权修改这一处）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- 新增 cmd/alonabot/t14_e2e_test.go（//go:build unix）：一个表驱动集成测试 TestReleaseEndToEnd，分别消费发行归档与容器镜像；同文件内放本测试所需的进程、Docker 与 HTTP 辅助。
+- cmd/alonabot/*_local_test.go：其余本地分项回归。
+- spec/TEST-MATRIX.md §3.2：追加 T-14.6 的实际证据行（本切片获授权修改这一处）。
+允许的依赖：标准库与 cmd/alonabot 已有集成测试依赖；沿用 cmd/alonabot -> adapters/telegram/telegramtest、internal/core/packages 等已有测试依赖边。无新增依赖或跨模块边。发现产品缺陷时保留复现与错误，交审查者安排必要修复和范围；本切片只做验收。
 
-验收步骤（发行归档与容器镜像各跑一遍；每一步记录命令与结果）：
-1) 首次运行：干净 data_dir；终端下初始化 token（容器用 -it admin-token init）；预装包状态符合 goal-74。
-2) 登录：经管理 API 登录（等同页面登录），状态接口显示各包状态。
-3) 添加 Telegram 实例：api_base_url 指向本地 Bot API 模拟服务（容器内经宿主地址访问），实例上线（bot.online）。
-4) 配置 Provider：经配置 API 为 Agent 添加指向本地模拟 Provider 的条目（api_key 为 secret），reload 生效。
-5) /ask：模拟服务中的用户发送 /ask，收到先发送再编辑的回复，最终内容正确。
-6) /help 与 /whoami：列出可用命令；/whoami 返回实例与用户 ID；把该用户加入 Core Admin。
-7) 停止：Core 与全部插件进程退出（容器 docker stop 后进程全部消失）。
-- V-70：镜像文件只含 alonabot、packages/ 与 CA 证书，UID 10001；无 TTY 时拒绝启动；端口只发布到宿主本机；出站 HTTPS 可用；没有 ALONABOT_CONTAINER 时 0.0.0.0 搭配 http Base URL 被拒绝。
-- 证据：TEST-MATRIX §3.2 追加 T-14 一行（平台、Docker 版本、命令、结果）；真实 Telegram、真实 Provider 与没有运行的平台写「未运行」。
+现行入口与可复用辅助：
+- scripts/dist/main.go：go run ./scripts/dist --version 0.1.0 --key FILE --out DIR --platforms <GOOS>/<GOARCH>。FILE 为临时生成的 base64 Ed25519 私钥文件，位于构建上下文外；同名根目录含 alonabot 和 packages/<组件ID>/ 的安装包、release.json、release.json.sig、release.pub。签名与摘要验证复用现有流程。
+- cmd/alonabot/firstrun_e2e_test.go:TestFirstRunDistribution 已展示临时密钥、dist、packages.Extract、无终端启动、admin-token show、登录删除文件和四组件状态比对；复用同包 startRecoveryCore、stopTestCore、core.address/waitFor 及必要 HTTP 观察辅助。运行阶段使用解压后的二进制与 packages，工作目录放在临时解压目录；验收期间不以 go run 或开发目录组件替换候选进程。
+- adapters/telegram/telegramtest 提供 NewServer(t, token)、SetMe(userID, username)、URL()、Push(...json.RawMessage)、Calls(method)、Requests()。cmd/alonabot/telegram_e2e_test.go 的 telegramMessage/telegramUpdate/telegramRequests 展示 update 与发信观察；仅复用模拟端与观察辅助，Core 启动使用候选资产。
+- internal/app/agent_service_test.go 的 agentServiceConfig 与 serviceStream 展示 Provider 配置和 SSE 响应格式；这些辅助属于另一测试包，按当前字段和协议在本集成测试中准备必要数据，不新增公开导出。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t14_e2e_test.go；deploy/e2e。
-- 本地自测（不提交，PR 中写明结果）：在有 Docker 的机器上运行容器部分；没有 Docker 时写「未运行」。
+候选构建与运行环境：
+- 发行归档：按宿主 GOOS/GOARCH 构建一次，构建机需 Go 1.27.1、Node 26.5.1/npm 与已锁定的 Go/npm 依赖；dist 自行暂存源码、npm ci/build、pack 和签名。只有缓存已齐时才设置 npm_config_offline=true。构建临时目录需容纳嵌套 Go 构建与 WebUI 产物；缺空间或依赖下载失败如实报错，保留输出。
+- 镜像：从仓库根执行 docker buildx build --platform linux/<amd64或arm64> --build-arg VERSION=0.1.0 --secret id=release_key,src=FILE --load -t alonabot:t14-e2e .。单次 --load 只选择一个平台；两架构分别记录实际运行，跨架构仿真单列。Dockerfile 的 BuildKit secret 必填，镜像为 scratch，入口 /alonabot，UID/GID 10001:10001，ENV ALONABOT_CONTAINER=1，默认 run --data-dir /data。
+- 用独立命名卷与 docker run --init -d -p 127.0.0.1:<宿主端口>:7650 --mount source=<本次卷>,target=/data alonabot:t14-e2e 启动，记录容器 ID；只清理本测试创建的容器、卷和临时资产。现行 deploy/compose.yaml 固定正式镜像 tag，不能直接把它当作本次候选镜像；可用隔离的临时 compose override 指定候选 tag 与卷，保持 init 与 loopback 端口发布。
+- 容器访问宿主模拟服务：Docker Desktop 使用 host.docker.internal；Linux 启动时加 --add-host host.docker.internal:host-gateway。telegramtest.NewServer 固定监听宿主 loopback，容器路径用标准库 httputil.NewSingleHostReverseProxy 在宿主可达接口转发到它，保留原 Server 的 Push/Requests 观察；Provider 模拟服务直接监听可达接口。外部 URL 改用上述主机名和转发/监听端口，宿主观察仍保留本机 URL。明确区分宿主 loopback 与容器 loopback，两个模拟服务都先验证可达性。scratch 镜像无 shell/curl，用 docker exec <容器> /alonabot admin-token show --data-dir /data 读取凭证，以宿主侧 HTTP、docker inspect/export/top 检查镜像与进程。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+验收步骤（归档与镜像各完成一遍）：
+1) 首次运行使用干净 data_dir/卷，无 TTY 正常启动，/data/admin_token（归档为所选 data_dir/admin_token）权限 0600；admin-token show 读出 token，日志不含 token。初始四包均已安装且签名有效，help 与带后台进程的 WebUI 启用，Agent 与无实例的 Telegram Adapter 停用。离线 admin-token init/reset 要求 Core 停止且 stdin/stderr 均为终端，交互分项另行验证；运行中的容器通过 show 取首次 token。
+2) 请求 Host 与 core_config.json 的 base_url 一致。POST /api/auth/login，Content-Type: application/json、受控 Origin、正文 {"token":"..."}；保留管理 Cookie 与返回的 csrf_token，后续 Cookie 变更请求带 Origin 和 X-Alonabot-CSRF。GET /api/v1/packages 与 /api/v1/core 成功，首次登录后 token 文件删除。Bearer 方式只用于 CLI 对照。临时监听端口与受控 base_url 不同时沿用首次预装测试的 Host 转发方式。
+3) POST /api/v1/adapter/instances/create，正文 {"package_id":"alonabot-adapter-telegram","instance_id":"tg_e2e","config":{"token":"${T14_TELEGRAM_TOKEN}","api_base_url":"<可达模拟服务URL>","proxy_mode":"none"},"confirm":false}；启动 Core/容器时传入仅用于测试的 T14_TELEGRAM_TOKEN。核对磁盘保留环境变量引用、API 脱敏、实例上线与 getUpdates 已被调用，Telegram 包自动启用。模拟端 SetMe 与 token 对应。
+4) POST /api/v1/packages/enable，正文 {"id":"alonabot-agent-official"}。先启用缺省空配置，再 GET /api/v1/plugins/alonabot-agent-official/config 取得 active_generation；PUT 同路径的 /pending，正文带 base_generation 与完整 config。最小 config 示例（URL 用模拟端可达地址替换）：
+   {"providers":[{"custom":{"name":"Local","protocol":"openai-compatible","base_url":"<模拟Provider URL>/v1","api_key":"synthetic-provider-key"}}],"models":[{"name":"Chat","provider":"Local","model":"local-model","type":"chat","max_tokens":128}],"chat_model":"Chat"}
+   POST /api/v1/plugins/alonabot-agent-official/reload（无正文），等待新 Active，GET 返回秘密设置状态。chat_model 引用 models.name，models.provider 引用 providers 条目的 name，远端模型 ID 在 models.model。使用 HTTP pending/reload；CLI reload 会先 import 磁盘编辑文件。
+5) 模拟用户 88 私聊发送文本 /ask hello，附 update_id、message_id、date、from.id、from.first_name、chat.id、chat.type；命令包含 text 参数。Bot API 的 bot_command entity 可按真实格式附 offset=0、length=4，Adapter 当前保持文本交 Core 匹配。Provider 模拟 POST /v1/chat/completions，检查 synthetic API key、model 与用户正文，返回 text/event-stream 的两个内容增量、完成标记与 [DONE]；用同步观察控制增量，让请求记录能验证 sendMessage 后 editMessageText、同一消息 ID 与完整最终文本，避免单个瞬时结果掩盖编辑路径。
+6) 同一用户依次发 /help 与 /whoami，按每次请求前的记录位置截取新增回复：help 列出当前可用命令（含 ask），whoami 包含 tg_e2e 与用户 88。POST /api/v1/admins/add，正文 {"user":"telegram:88"}，再 GET /api/v1/core/admins 并核对持久化；必要时再次发送 help 验证权限过滤。管理 token 与聊天 Core Admin 分别使用各自入口。
+7) 真实浏览器打开候选 WebUI，从登录页完成登录，在组件/账号/模型页面核对配置与启用状态，页面保存与 reload 后的结果与上述 API 一致；使用前置合并后的真实页面路径。API 自动联验与浏览器操作分别记录。缺浏览器时保留页面分项为未运行，交审查者承接。
+8) 归档发送 SIGTERM，等待 Core 与子进程退出；容器 docker stop 后检查 State.Running=false、无存活组件进程，保留停止日志。复用 V-66 的卸载后重启、错误签名与内置更新仅列出的已有证据，补齐候选资产上仍缺的分项，不伪造通过。
 
-不做：五平台运行（T-10.2）；发布（T-10.4）；新的产品功能（只做验收与必要修复，修复逐条说明）。
+V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记录；镜像只携带 Core、四组件、CA 及必要 /data 目录，UID 10001；无 TTY 启动与 show、登录删除 token；端口发布限 loopback；通过真实出站 HTTPS 请求核对 CA 可用性（模拟 HTTP 无此证据）；在未设置 ALONABOT_CONTAINER 的归档进程中核对 0.0.0.0 搭配本机 http base_url 被拒绝。网络、Docker 或架构环境缺失时分别写未运行。
+
+测试与证据（按编码规范「测试提交规则」）：
+- 提交一个 TestReleaseEndToEnd，归档主路径默认运行；容器子场景用 ALONABOT_TEST_DOCKER=1 显式启用（测试运行开关），未启用时 t.Skip 并在证据中写未运行。启用后 Docker 构建、连接或断言失败按实际失败返回。两种资产共用上述业务断言；多场景理由：归档与镜像的进程入口、权限、网络与卷不同。
+- 本地自测：交互 TTY token、错误签名、卸载不重装、更新只列出、容器静态检查、HTTPS 出站及浏览器操作；复用已合并辅助和证据，无需新增 testdata 插件或测试依赖。
+- spec/TEST-MATRIX.md §3.2 写测试位置、资产版本与平台、Docker/buildx 版本、原生或仿真、命令、实际结果及未运行原因。真实 Telegram、真实 Provider、其余平台与正式发布分别记录，模拟结果按模拟环境列出。
+
+完成条件：受影响测试与 vet/build 通过；go test -race ./cmd/alonabot -run '^TestReleaseEndToEnd$' 通过归档路径；有 Docker 时以 ALONABOT_TEST_DOCKER=1 执行同一测试并记录容器路径。完整 CI 的 go vet ./...、go test -race ./...、go build ./... 复用同候选有效结果，按共同约束记录；文档修改通过 git diff --check。缺少真实平台或外部环境的分项保留明确缺口与承接者，T-10 汇总时继续闭合。
+
+不做：五平台运行（T-10.2）；正式发布（T-10.4）；首发范围外的 Adapter 或插件；新产品功能、依赖、runner 运维与容量清理。
 ```
 
 ## 第 22 波
