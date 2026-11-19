@@ -8326,43 +8326,55 @@ internal/core/state
 
 ### goal-45 · T-09.11 正式流程故障注入与 T-09 验收
 
-状态：等待前置（T-09.9）。T-09.15（PR #243，`d9e9089`）已合并。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）已合并；T-09.9（goal-44）与 T-09.15（goal-94）属 WebUI 章节，未在本轮 core/agent 推进范围内派发，本切片因此阻塞，待两者合并后由审查者核对语句。语句中 goal-38～goal-44、goal-66、goal-84、goal-92～goal-94 提供的命令与 API 只写名字；合并后由审查者核对，再改为待派发。
+状态：等待前置（T-09.9，goal-44 / PR #259）。T-09.3（PR #194，`e9ff45e`）、T-09.7（PR #187，`864819e`）、T-09.10（PR #177）、T-09.12（PR #167）、T-09.15（PR #243，`d9e9089`）已合并。本语句按 main `24701da4` 的 CLI、manage、Journal 与测试辅助，以及 goal-44 head `a1e4d53412c212961c0ff0704c6f1ebefdf92658` 的页面/API 候选核对；goal-44 合并后审查者核对实际接口。派发前还须补齐下述 external 显式维护许可入口，保留获准维护、失败停机与恢复的验收目标，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-45（切片 T-09.11：正式流程故障注入与 T-09 验收）。goal 目录 goal-45，分支 goal-45，worktree .worktrees/goal-45，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
 
 目标：通过真实 CLI 与管理 API，在临时 data_dir 中跑完正式流程：首次安装 → enable → restart → reload → update → pin → disable → 同来源重装 → 显式 rollback；以包损坏、签名或公钥变化、external 插件的维护错误验证拒绝路径；在 PREPARED、提交前后与 OnReady 失败点终止 Core，连同残存旧进程、空间不足与同插件并发操作，验证没有双写、没有提前开放、没有静默的数据回滚。回填 T-08 留给集成的 V-23～V-25、V-39 证据，在 TEST-MATRIX §3.2 记录 T-09 证据，形成 T-10 可复用的恢复场景。
 
-依据：PLAN T-09 步骤 8 与「停止和失败条件」；CONTRACTS §5、§6、§7、§9、§12、§14；TEST-MATRIX V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63。
+依据：spec/plan/core.md 的 T-09 步骤 8 与停止条件、PLAN §3.1；CONTRACTS（spec/CONTRACTS-v0.1.md）§5、§6.3、§7、§9、§12.2、§12.3、§14；ADMIN-API §1、§3、§5、§10、§12、§14～§18、§20；TEST-MATRIX V-23～V-25、V-27～V-31、V-39、V-40、V-52、V-54～V-56、V-62、V-63、V-82、V-83 及 §3 的分项证据；DECISIONS D-86。
 
 范围（只新增或修改这些）：
-- 新增 cmd/alonabot/t09_e2e_test.go（//go:build unix）与必要的测试插件（testdata 下）
-- 新增 scripts/scenarios/（可重复执行的恢复场景脚本或 Go 测试辅助，供 T-10 在其他平台复用；只调用 alonabot 二进制）
-- spec/TEST-MATRIX.md §3.2：追加 T-09 的证据行，并更新 T-08 行中留待集成的项（本切片获授权修改这两处）
-- 上述包的测试文件
-允许的新跨模块边：无。
+- cmd/alonabot/t09_e2e_test.go（新增，//go:build unix）：一条正式管理主路径 TestT09ManagementFlow；e2e_test.go、manage_e2e_test.go、recover_e2e_test.go 中既有辅助的必要复用调整，保留原测试断言。
+- scripts/scenarios/：供 T-10 重用的正式流程、崩溃恢复与残存写入者场景及入口说明；管理动作只调用传入的 alonabot 二进制。场景接收临时 data_dir、测试包与所需的临时 overlay 二进制，说明实际构建和执行命令、输入产物与检查点。平台相关的进程/锁场景标注支持范围，五平台实际运行由 T-10 取证。
+- spec/TEST-MATRIX.md §3.2：追加 T-09 的证据行，并更新 T-08 行中留待集成的项（本切片获授权修改这两处）。
+- cmd/alonabot 的 *_local_test.go；需要补充的插件源码、配置、签名密钥和 overlay 均在测试临时目录生成（D-86）。复用 examples/plugins/lifecycle、configdb、showcase 和现有 Adapter 测试源码。
+允许的新跨模块边：无；沿用现有测试对 manage、state、buttons 等包的依赖与已批准依赖。产品缺陷由审查者确认修复归属并补足文件范围后继续。
 
-验收矩阵（各为一个子测试，记录命令、日志摘录与状态库检查）：
-1) 正式流程：首次安装 → enable（首个 Active）→ restart（只换 Session）→ 编辑 config.json 后 reload（新代次与 SQLite 副本）→ update（新包、新代次）→ pin → disable → uninstall 后同来源重装（复用数据）→ rollback 到上一代次（新代次、旧按钮不复活）。
-2) 拒绝路径：归档损坏、摘要不符、签名错误、发布者公钥变化（需要确认）、错误的 OS/arch、来源 ID 冲突、../ 与符号链接逃逸的归档：都在停止旧版前拒绝，旧版继续运行。
-3) external：声明 prepare_effects=external 的测试插件，已有安装的 update 返回 NEEDS_MANUAL_MIGRATION；授予维护许可后执行；rollback 返回 NEEDS_MANUAL_MIGRATION；普通 restart 不受影响。
-4) 崩溃点：在 PREPARED 之后、提交之前、提交之后 ACTIVATED 之前、OnReady 失败时分别杀掉 Core，重启后的状态与 goal-42 的规则一致；任何时刻只有一个代次接单（以插件的事件处理日志证明）。
-5) 残存旧进程（忽略断链、持有 runtime.lock）：不启动第二个写入者，插件 Degraded。
-6) 空间不足（测试钩子使备份失败）：不激活，旧版不受影响。
-7) 同插件并发操作（两个 CLI 同时 reload 与 disable）：串行执行，没有交错的 Journal。
-8) 依赖：必需依赖缺失时拒绝启用并列出缺失项；停用被依赖的插件需要确认，确认后依赖方继续运行且调用返回 UNAVAILABLE；成环在安装时拒绝。
-9) 回填 T-08：V-23（config.json 编辑在 reload 前不生效）、V-24（候选 OnStart 写库后失败不污染旧库）、V-25（secret 修改、旧 secret 字段转未知键、掩码不成为保存值）、V-39（external 插件的维护门槛）经正式入口验证。
-10) 日志与 i18n（V-54、V-62、V-63）经正式入口的回归：日志级别修改、logs 查询、Core usage 的语言。
-- scripts/scenarios：把 1)、4)、5) 写成只依赖 alonabot 二进制与测试包的场景，T-10 在其他平台运行。
-- 证据：TEST-MATRIX §3.2 追加 T-09 一行；五平台的真实运行留给 T-10，写「未运行」。
+接口与入口（现有，沿用原签名）：
+- CLI 为顶层 install [archive|component-id]、enable/disable/restart/reload/update/uninstall <id>、pin <id> [version]、rollback <id> <generation>、list；install/update 使用 --archive、--release、--signature、--public-key 或 --source owner/repo，install 另有 --replace。pin 是精确 SemVer，省略 version 解除；uninstall 缺省保留数据，--purge-data/--purge 沿原确认语义。共享 --data-dir、--admin-url、--token-file 或 ALONABOT_ADMIN_TOKEN；需要确认时 --yes。CLI reload 先 POST /api/v1/plugins/{id}/config/import，再 POST /api/v1/packages/reload；API/UI reload 直接激活已有有效 Pending，缺 Pending 时导入编辑快照。
+- manage.New(opt manage.Options) *manage.Service；(*manage.Service).Handler(auth *adminauth.Auth) http.Handler；List(ctx context.Context) ([]manage.Package, error)；Install(ctx context.Context, req manage.InstallRequest) (manage.Package, error)；Enable/Restart/Reload(ctx context.Context, id string) error；Disable(ctx context.Context, id string, confirm bool) error；Uninstall(ctx context.Context, id string, purge manage.PurgeScope, confirm bool) error；Pin(ctx context.Context, id, constraint string) error；Update(ctx context.Context, id string, req manage.InstallRequest) (manage.UpdateResult, error)；Rollback(ctx context.Context, id, generation string, confirm bool) error。
+- InstallRequest{Archive,ReleaseJSON,Signature,PublicKey,Source string; Replace,Confirm bool}；JSON install 保留这些大写字段，update 用 {id,confirm,install}，其他动作经 POST /api/v1/packages/{action} 的 id/confirm/constraint/generation/purge，list 用 GET /api/v1/packages。错误保留 §5 的 code/safe_message；需确认时 409 及全部 affected；Cookie 写入校验 Origin/CSRF，Bearer 复用正式认证。
+- Journal：journal.New(opt journal.Options) *journal.Orchestrator；Prepare(ctx context.Context, pluginID string, kind journal.Kind, staged *packages.Candidate) (*journal.Result, error)；PrepareRollback(ctx context.Context, pluginID, generation string) (*journal.Result, error)；Commit(ctx context.Context, r *journal.Result) (*supervisor.Running, error)；Abort(ctx context.Context, r *journal.Result, cause error) error；Recover(ctx context.Context) ([]string, error)。生产装配在 internal/app/assembly.go 的 managedCandidates 与 alonabot.go 的启动恢复，仍经唯一管理入口驱动。
+- 状态取证使用 (*state.Store).Active(ctx context.Context, pluginID string) (string, error)、Journals(ctx context.Context, pluginID string) ([]state.Journal, error)、GetJournal(ctx context.Context, opID string) (state.Journal, error)、Retained(ctx context.Context, pluginID string) ([]string, error)、ReferencedGenerations(ctx context.Context, pluginID string) ([]string, error)。Journal 的 OpID/Kind/ExpectedOld/NewGeneration/Phase 与资源引用同查；只在 Core 退出后打开状态库核对，管理动作始终经 CLI/API。
+- 测试辅助：startEmptyCore(t *testing.T, dataDir string, extra ...string) *core；(*core).management(t *testing.T, dir, token string, args ...string) string；managementFailure(t *testing.T, c *core, dir string, args ...string) string；findPackage(t *testing.T, c *core, dir, id string) manage.Package；fixtureHTTP(t *testing.T, c *core, dir, method, path string, body ...string) (int, []byte)。TestMain 已构建 Core、lifecycle 与 Adapter/command/job 夹具；testPackage 和 writeTestPackage 已生成真实签名安装包。
+- 恢复辅助：buildRecoveryFixture(t *testing.T, dir string) (coreBinary, pluginBinary string)；recoveryPackage(t *testing.T, dir, plugin, version string) string；startRecoveryCore(t *testing.T, binary, dir, phase string) *core；recoveryCommand(t *testing.T, c *core, dir string, args ...string) *exec.Cmd；recoveryStore/recoveryWait/waitRecoveryRuntime。现有 TestRecoveryEndToEnd 覆盖 started/prepared/committed、残存写入者和 rollback。临时 overlay 的 ALONABOT_TEST_CRASH_PHASE/ALONABOT_TEST_CHECKPOINT 精确停在 Journal started 后停旧前、PREPARED 后提交前、CommitCandidate 成功后 ACTIVATE 前；fail-start/fail-ready 与 hold-runtime/runtime-held 是临时插件已有故障入口。
+- goal-44 候选：web/admin/src/pages/PluginConfigPanel.tsx 的 PluginConfigPanel({id})、api/admin.ts 的 getPluginConfig(id)、patchPluginConfig(id, baseGeneration, patch)、revealPluginSecret(id, path, token) 与 changePackage('reload', id)；读取 active_generation/active/pending/schema/i18n/messages/corrections/unknown，PATCH /config/pending 保存后由 API reload 激活。权限、工具策略、会话与页面桥沿 ADMIN-API 的已合并入口；页面实际操作和截图复用 goal-44/goal-94 的有效证据，按缺口补真实浏览器取证。
 
-测试（按编码规范「测试提交规则」）：
-- 提交：cmd/alonabot/t09_e2e_test.go 与 scripts/scenarios。
-- 本地自测（不提交，PR 中写明结果）：在 -race 下重复运行崩溃点场景若干次无偶发失败。
+验收矩阵（对应提交主路径、既有回归或本地子测试，逐项记录命令、日志与持久状态）：
+1) 正式流程：首次安装 → enable（首个 Active）→ restart（只换 Session）→ 编辑 config.json 后 CLI reload（新代次与 SQLite 副本）→ update（新包、新代次）→ pin → disable → uninstall 后同来源重装（复用数据）→ enable → rollback 到保留代次（新代次、旧按钮不复活）。核对 Active、Session、程序版本、配置与 DB 内容；pin 限制更新，解除后恢复。保留代次以 generations API/状态库实际结果选取。
+2) 拒绝路径：归档损坏、摘要不符、签名错误、错误 OS/arch、来源 ID 冲突、../ 与符号链接逃逸均在停止旧版前拒绝；旧 Active/Session/DB 保持。已绑定签名公钥发生变化时 403 / PERMISSION_DENIED；原未签名绑定首次信任签名公钥须确认（409 affected，确认后执行）。签名失败保留拒绝结果。
+3) external：首次安装与普通 restart/resume 放行；已有安装的 reload/update/rollback 在 Journal 和停机前返回 412 / FAILED_PRECONDITION、safe_message=NEEDS_MANUAL_MIGRATION，旧 Session 与 Journal 数保持。CONTRACTS §6.3 要求管理员进入维护、停机并完成外部备份后，以仅绑定本次 Session/Generation/DB 的 manual_migration_approved=true 准备候选，成功激活、失败保持停机并按插件步骤恢复。当前 main 及所核对 goal-44 候选均缺 CLI/API 许可来源，Journal 拒绝 external 候选，装配下发 false；此成功/失败维护分项保持未完成。由审查者补齐负责切片、正式入口和许可签名后再派发，保留该目标，--yes 仍只承担原管理确认。
+4) 崩溃点：复用既有 overlay 和 TestRecoveryEndToEnd；PREPARED 后提交前杀 Core，清理未提交候选并恢复旧代次的新 Session；首次安装无旧 Active 时保持未激活；COMMITTED 后、ACTIVATED 前杀 Core，只恢复新代次。fail-ready 导致 OnReady 失败后保留新 Active/committed 与 Degraded，终止并重启 Core 仍按新代次恢复，故障移除后可恢复运行。各点记录 Journal、资源引用、业务 DB 和插件请求日志；ACTIVATED 及 Core 绑定完成前，命令、事件、Service、Bus、任务与 HTTP 保持门禁，任意时刻仅一代接单。
+5) 残存旧进程：沿 hold-runtime/runtime-held 让旧进程断链后仍持 runtime.lock，重启 Core 显示 Degraded，进程启动计数不增、Active 与数据保留；确认旧树退出并释放锁后再恢复。清理测试自建进程及锁，保留完整失败日志。
+6) 空间不足：沿临时 overlay 在 internal/core/candidate/database.go 的 backupDatabase 返回可识别的 ENOSPC（限故障场景），真实 CLI reload/update 验证失败无提交/无激活、旧 Active/DB/配置保留；已停止旧版时由 Abort 用旧代次的新 Session 恢复。保留真实备份错误与清理/恢复错误；故障注入与真实磁盘不足的证据分别标注。
+7) 同插件并发操作：两个真实 CLI 分别 reload 与 disable，用检查点同步其重叠窗口，核对逐包串行、Journal 阶段与最终启用状态，无交错提交、双进程或死锁。
+8) 依赖与四角色：复用 TestManagementDependencies/TestManagementReplacement/TestManagementUninstallScopes 的有效证据；必需依赖缺失拒启并列全缺项；停用被依赖者须确认，确认后依赖方仍运行且调用返回 UNAVAILABLE；成环拒装；同类唯一、--replace、--source 后续更新、同来源重装、默认保留与显式 purge 符合 V-40/V-52/V-82。V-83 复用 WebUI 静态/进程、回退、版本检查与图标路径/CSP 的真实入口证据。
+9) 回填 T-08：configdb 的 fail_start 在候选 OnStart 写库后失败，fail_migration 覆盖版本迁移；两者分别按默认 SQLite 与 -tags configdb_gorm 构建打包运行。V-23 验证编辑 config.json 在 reload 前不生效及 Pending/base_generation；V-24 验证候选失败、Core 崩溃与 WAL 复制不污染旧库；V-25 验证 secret 修改、旧路径转未知键仍保密、invisible/显式空值/未知键保留、掩码拒写及查看需再认证，复用目标页面实际操作补齐；V-39 包含第 3 项完整维护门槛。
+10) 日志、i18n、工具与会话：log-level [ID] [LEVEL]、logs 的 --source/--level/--trace/--date/--follow 经正式 API 核对即时级别、重启持久化、历史/最近/SSE；复用 TestLogManagement 的断言。核对 Core usage 和页面语言切换（V-54）、工具 allow/confirm/deny 的下一次调用生效（V-55）、会话列出/清除与 purge（V-56），沿管理 API 与 goal-44/goal-94 的真实浏览器证据取证。TEST-MATRIX 已指定由 T-09.11 汇总的后续分项复用所属切片记录，有缺口逐项列明。
+- scripts/scenarios 把 1)、4)、5) 做成传入二进制和测试包即可重复执行的场景，交付 README 中完整命令与所需产物；崩溃钩子、故障插件及检测 marker 保持测试产物，不向正式 Core/SDK 增加开关或公开 API。
+- 证据：TEST-MATRIX §3.2 的 T-09 与 T-08 待联验行按分项填写测试位置、命令、平台和结果，V 编号有未完成项就保留缺口；五平台的真实运行留给 T-10，写「未运行」。
 
-完成条件：gofmt -l 无输出；go vet ./...；go test -race ./...；go build ./...。
+测试（遵循 docs/goals/README.md「编写测试段」与 D-86）：
+- 提交：cmd/alonabot/t09_e2e_test.go:TestT09ManagementFlow，一条真实 CLI＋认证 API＋已安装插件子进程＋SQLite/文件系统的正式流程；复用上述包构建、状态与 HTTP 辅助。scripts/scenarios 作为 T-10 的可运行交接产物提交。既有 TestRecoveryEndToEnd/TestManagementLifecycle 等仅做必要复用调整并保留断言，已覆盖场景引用原入口。
+- 本地自测（*_local_test.go，不提交，PR 逐项写结果）：矩阵中主路径及现有有效证据尚未覆盖的拒绝、external、首次安装崩溃、OnReady 失败、ENOSPC、并发、配置/secret、权限/工具/会话分项。复用已有精确检查点，不靠固定 sleep 猜测崩溃窗口；实际失败修复后定向复验，不把已通过且无改动的崩溃测试无条件重复运行。
 
-不做：五平台运行与发布（T-10）；新的产品功能（只做验收与必要的缺陷修复，修复需在 PR 中逐条说明）。
+完成条件：改动 Go 文件 gofmt -l 无输出；git diff --check；go vet ./...；go test -race -count=1 ./cmd/alonabot -run '^(TestT09ManagementFlow|TestRecoveryEndToEnd|TestManagementLifecycle|TestManagementDependencies|TestManagementReplacement|TestManagementUninstallScopes|TestLogManagement)$'；新增本地分项按名称列出完整命令并运行；scripts/scenarios 三类场景按其 README 实际运行；最终 go test -race ./...、go build ./...。复用前置切片仍有效的专项/浏览器证据；全仓 race 与父审查者串行安排。PR 列提交测试新增行数、实际运行平台、未运行项及「文档同步」。
+
+失败停止条件：鉴权/来源/归档越界或 secret 泄漏、Active 与 COMMITTED 分叉、候选污染旧数据、提交后自动退回旧 DB、旧树未退出就启动写入者、ACTIVATED/绑定前接单、external 未授权准备或获准后失败自动重跑、维护许可入口缺失、并发死锁/双写、静默吞错、清理仍被 Active/Pending/保留代次/恢复 Journal 引用的资源，均阻止交付。维护缺口由审查者补正式接口与范围后继续；其他范围外产品修复、proto、依赖或契约冲突按共同约束记录阻塞。
+
+不做：五平台运行与发布（T-10）；新增产品功能、通用故障注入框架或维护审批系统。必要缺陷修复须由审查者补齐范围，PR 逐条说明并补对应证据。
 ```
 
 ### goal-171 · S-02.2 空闲退出与即时休眠策略
