@@ -1,9 +1,10 @@
 //go:build linux
 
-// sleep-measure 命令在独立 Core 中采集插件冷启动的原始日志与统计。
+// sleep-measure 命令在独立 Core 中采集插件冷启动与 Linux 进程资源。
 //
 // 构建来源由 <alonabot>.measure.json 记录；--help 给出最小格式。
-// 每组先安装和启用，再以原代次执行 100 次 restart；计时口径见 CONTRACTS §4.5。
+// cold 每组以原代次执行 100 次 restart；resources/core 每次采集指定轮次。
+// 计时与休眠预算见 CONTRACTS §4.5。
 package main
 
 import (
@@ -26,18 +27,21 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
 const (
-	coldAttempts = 100 // 每组固定真实尝试数；失败编号保留且不补跑。
-	privateDir   = 0o700
-	privateFile  = 0o600
-	startupPoll  = 20 * time.Millisecond // 只观察启动日志，截止由 Core 和调用 context 决定。
-	echoID       = "echo"
-	configdbID   = "alonabot-plugin-configdb"
+	coldAttempts     = 100 // 每组固定真实尝试数；失败编号保留且不补跑。
+	privateDir       = 0o700
+	privateFile      = 0o600
+	startupPoll      = 20 * time.Millisecond // 只观察启动日志，截止由 Core 和调用 context 决定。
+	resourceInterval = 2 * time.Minute       // 固定机器验收的 ACTIVE/SUSPENDED 空闲区间。
+	kibPerMiB        = 1024
+	echoID           = "echo"
+	configdbID       = "alonabot-plugin-configdb"
 )
 
 type options struct {
@@ -108,6 +112,7 @@ type logRecord struct {
 	Error              string    `json:"error"`
 	CallbackError      string    `json:"err"`
 	Stage              string    `json:"stage"`
+	State              string    `json:"state"`
 }
 
 type commandRecord struct {
@@ -295,9 +300,6 @@ func run(ctx context.Context, args []string) (err error) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		return errors.New("measurement requires linux/amd64")
 	}
-	if o.phase != "cold" {
-		return fmt.Errorf("phase %s is not implemented", o.phase)
-	}
 	// 1. 新目录由本次运行独占；失败时保留原始输入、日志与已完成的尝试。
 	if err := os.Mkdir(o.out, privateDir); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
@@ -339,13 +341,20 @@ func run(ctx context.Context, args []string) (err error) {
 	if err := writeJSON(filepath.Join(o.out, "run.json"), metadata); err != nil {
 		return err
 	}
+	if o.phase == "core" {
+		return measureResources(ctx, o, metadata, "core", "", "")
+	}
 	// 2. 顺序固定为 echo、configdb_gorm；两组各自从新的 Core/data_dir 开始。
 	var failures error
+	measure := measureCold
+	if o.phase == "resources" {
+		measure = measureResources
+	}
 	for _, group := range []struct{ name, id, archive string }{{"echo", echoID, o.echoPackage}, {"configdb_gorm", configdbID, o.configdbPackage}} {
 		if ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
-		if err := measureCold(ctx, o, metadata, group.name, group.id, group.archive); err != nil {
+		if err := measure(ctx, o, metadata, group.name, group.id, group.archive); err != nil {
 			failures = errors.Join(failures, fmt.Errorf("measure %s: %w", group.name, err))
 		}
 	}
@@ -360,6 +369,9 @@ func checkProvenance(o options, p provenance) error {
 		path   string
 		source artifactSource
 	}{{o.alonabot, p.Core}, {o.echoPackage, p.Echo}, {o.configdbPackage, p.ConfigDB}} {
+		if o.phase == "core" && entry.path == "" {
+			continue
+		}
 		actual, err := filepath.Abs(entry.path)
 		if err != nil {
 			return err
@@ -601,40 +613,106 @@ func (c *coreProcess) cliCall(ctx context.Context, name, action string, args ...
 
 func (c *coreProcess) runtime(ctx context.Context, id, name string) (runtimeStatus, error) {
 	var status runtimeStatus
-	token, err := os.ReadFile(filepath.Join(c.dataDir, "admin_token"))
+	raw, err := c.api(ctx, name+"-runtime", http.MethodGet, "/api/v1/plugins/"+url.PathEscape(id)+"/runtime", nil)
 	if err != nil {
 		return status, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.address+"/api/v1/plugins/"+url.PathEscape(id)+"/runtime", nil)
-	if err != nil {
-		return status, err
-	}
-	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	started := time.Now()
-	response, err := client.Do(request)
-	if err != nil {
-		finished := time.Now()
-		return status, errors.Join(err, appendJSON(filepath.Join(c.out, "api.jsonl"), map[string]any{"name": name, "method": request.Method, "url": request.URL.String(), "started_at": started.UTC(), "finished_at": finished.UTC(), "duration_ns": finished.Sub(started).Nanoseconds(), "duration_ms": float64(finished.Sub(started)) / float64(time.Millisecond), "error": err.Error()}))
-	}
-	raw, readErr := io.ReadAll(response.Body)
-	finished := time.Now()
-	responseFile := name + "-runtime.json"
-	readErr = errors.Join(readErr, response.Body.Close(), os.WriteFile(filepath.Join(c.out, responseFile), raw, privateFile))
-	entry := map[string]any{"name": name, "method": request.Method, "url": request.URL.String(), "started_at": started.UTC(), "finished_at": finished.UTC(), "duration_ns": finished.Sub(started).Nanoseconds(), "duration_ms": float64(finished.Sub(started)) / float64(time.Millisecond), "status": response.Status, "response_file": responseFile}
-	if readErr != nil {
-		entry["error"] = readErr.Error()
-	}
-	if err := errors.Join(readErr, appendJSON(filepath.Join(c.out, "api.jsonl"), entry)); err != nil {
-		return status, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return status, fmt.Errorf("runtime API %s: %s", response.Status, raw)
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
 		return status, fmt.Errorf("parse runtime: %w: %s", err, raw)
 	}
 	return status, nil
+}
+
+// api 保存每次请求及完整响应；管理凭证只放在 Authorization 头内。
+func (c *coreProcess) api(ctx context.Context, name, method, path string, payload []byte) ([]byte, error) {
+	token, err := os.ReadFile(filepath.Join(c.dataDir, "admin_token"))
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequestWithContext(ctx, method, c.address+path, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	if payload != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	started := time.Now()
+	response, err := client.Do(request)
+	if err != nil {
+		finished := time.Now()
+		return nil, errors.Join(err, appendJSON(filepath.Join(c.out, "api.jsonl"), map[string]any{"name": name, "method": request.Method, "url": request.URL.String(), "request_body": string(payload), "started_at": started.UTC(), "finished_at": finished.UTC(), "duration_ns": finished.Sub(started).Nanoseconds(), "duration_ms": float64(finished.Sub(started)) / float64(time.Millisecond), "error": err.Error()}))
+	}
+	raw, readErr := io.ReadAll(response.Body)
+	finished := time.Now()
+	responseFile := name + ".json"
+	readErr = errors.Join(readErr, response.Body.Close(), os.WriteFile(filepath.Join(c.out, responseFile), raw, privateFile))
+	entry := map[string]any{"name": name, "method": request.Method, "url": request.URL.String(), "request_body": string(payload), "started_at": started.UTC(), "finished_at": finished.UTC(), "duration_ns": finished.Sub(started).Nanoseconds(), "duration_ms": float64(finished.Sub(started)) / float64(time.Millisecond), "status": response.Status, "response_file": responseFile}
+	if response.StatusCode != http.StatusOK {
+		readErr = errors.Join(readErr, fmt.Errorf("API %s %s: %s: %s", method, path, response.Status, raw))
+	}
+	if readErr != nil {
+		entry["error"] = readErr.Error()
+	}
+	if err := errors.Join(readErr, appendJSON(filepath.Join(c.out, "api.jsonl"), entry)); err != nil {
+		return raw, err
+	}
+	return raw, nil
+}
+
+func (c *coreProcess) installSample(ctx context.Context, group, id, archive string) (runtimeStatus, logRecord, error) {
+	// 1. 正式安装与首次迁移在采样之前完成。
+	release, err := os.ReadFile(filepath.Join(filepath.Dir(archive), "release.json"))
+	if err != nil {
+		return runtimeStatus{}, logRecord{}, fmt.Errorf("read package release metadata: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(c.out, "release.json"), release, privateFile); err != nil {
+		return runtimeStatus{}, logRecord{}, err
+	}
+	var publication struct {
+		PluginID string `json:"plugin_id"`
+	}
+	if err := json.Unmarshal(release, &publication); err != nil {
+		return runtimeStatus{}, logRecord{}, fmt.Errorf("parse package release metadata: %w", err)
+	}
+	if publication.PluginID != id {
+		return runtimeStatus{}, logRecord{}, fmt.Errorf("package release ID %q does not match %q", publication.PluginID, id)
+	}
+	if err := c.cliCall(ctx, "install", "install", archive, "--yes"); err != nil {
+		return runtimeStatus{}, logRecord{}, err
+	}
+	if err := c.cliCall(ctx, "enable", "enable", id, "--yes"); err != nil {
+		return runtimeStatus{}, logRecord{}, err
+	}
+	// 2. 运行状态与激活日志共同确定原代次和首次进程。
+	initial, err := c.runtime(ctx, id, "initial")
+	if err != nil {
+		return runtimeStatus{}, logRecord{}, err
+	}
+	if !initial.Enabled || initial.State != "ACTIVE" || initial.GenerationID == "" {
+		return runtimeStatus{}, logRecord{}, fmt.Errorf("initial runtime is not ACTIVE: %+v", initial)
+	}
+	initialLog, err := c.awaitLog(ctx, func(record logRecord) bool {
+		return record.Component == "core" && record.Message == "cold start completed" && record.PluginID == id && record.GenerationID == initial.GenerationID
+	})
+	if err != nil {
+		return runtimeStatus{}, logRecord{}, err
+	}
+	initialPID := initialLog.PID
+	if initialPID <= 0 {
+		return runtimeStatus{}, logRecord{}, errors.New("initial activation has no process identity")
+	}
+	// 3. 实际执行文件的构建信息与输入 sidecar 声明分别保留。
+	tags := ""
+	if group == "configdb_gorm" {
+		tags = "configdb_gorm"
+	}
+	build, err := readBuild(fmt.Sprintf("/proc/%d/exe", initialPID), tags)
+	if err := errors.Join(err, writeJSON(filepath.Join(c.out, "plugin-build.json"), build)); err != nil {
+		return runtimeStatus{}, logRecord{}, err
+	}
+	return initial, initialLog, nil
 }
 
 func measureCold(ctx context.Context, o options, metadata runMetadata, group, id, archive string) (err error) {
@@ -649,54 +727,8 @@ func measureCold(ctx context.Context, o options, metadata runMetadata, group, id
 		}
 	}()
 	// 1. 正式安装与首次迁移在全部编号样本之前完成。
-	release, err := os.ReadFile(filepath.Join(filepath.Dir(archive), "release.json"))
+	initial, _, err := c.installSample(ctx, group, id, archive)
 	if err != nil {
-		return fmt.Errorf("read package release metadata: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(c.out, "release.json"), release, privateFile); err != nil {
-		return err
-	}
-	var publication struct {
-		PluginID string `json:"plugin_id"`
-	}
-	if err := json.Unmarshal(release, &publication); err != nil {
-		return fmt.Errorf("parse package release metadata: %w", err)
-	}
-	if publication.PluginID != id {
-		return fmt.Errorf("package release ID %q does not match %q", publication.PluginID, id)
-	}
-	if err := c.cliCall(ctx, "install", "install", archive, "--yes"); err != nil {
-		return err
-	}
-	if err := c.cliCall(ctx, "enable", "enable", id, "--yes"); err != nil {
-		return err
-	}
-	initial, err := c.runtime(ctx, id, "initial")
-	if err != nil {
-		return err
-	}
-	if !initial.Enabled || initial.State != "ACTIVE" || initial.GenerationID == "" {
-		return fmt.Errorf("initial runtime is not ACTIVE: %+v", initial)
-	}
-	initialLog, err := c.awaitLog(ctx, func(record logRecord) bool {
-		return record.Component == "core" && record.Message == "cold start completed" && record.PluginID == id && record.GenerationID == initial.GenerationID
-	})
-	if err != nil {
-		return err
-	}
-	initialPID := initialLog.PID
-	if initialPID <= 0 {
-		return errors.New("initial activation has no process identity")
-	}
-	tags := ""
-	if group == "configdb_gorm" {
-		tags = "configdb_gorm"
-	}
-	build, err := readBuild(fmt.Sprintf("/proc/%d/exe", initialPID), tags)
-	if err := errors.Join(err, writeJSON(filepath.Join(c.out, "plugin-build.json"), build)); err != nil {
-		return err
-	}
-	if err := writeJSON(filepath.Join(c.out, "initial-runtime.json"), initial); err != nil {
 		return err
 	}
 	attemptFile, err := os.OpenFile(filepath.Join(c.out, "attempts.jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, privateFile)
@@ -956,4 +988,568 @@ func summarizeCold(group string, samples []coldSample) coldSummary {
 		summary.EchoP95Over200 = &over
 	}
 	return summary
+}
+
+type procStat struct {
+	PID         int       `json:"pid"`
+	ParentPID   int       `json:"ppid"`
+	GroupPID    int       `json:"pgrp"`
+	Command     string    `json:"comm"`
+	State       string    `json:"state"`
+	StartTicks  uint64    `json:"starttime_ticks"`
+	UserTicks   uint64    `json:"utime_ticks"`
+	SystemTicks uint64    `json:"stime_ticks"`
+	ObservedAt  time.Time `json:"observed_at"` // 内存中的值保留单调时钟，CPU 差值按各 PID 实际读时计算。
+	Raw         string    `json:"raw"`
+	Error       string    `json:"error,omitempty"`
+}
+
+type procMemory struct {
+	PSSKiB          *uint64 `json:"pss_kib"`
+	RSSKiB          *uint64 `json:"rss_kib"`
+	PrivateCleanKiB *uint64 `json:"private_clean_kib"`
+	PrivateDirtyKiB *uint64 `json:"private_dirty_kib"`
+}
+
+type procReading struct {
+	Stat          procStat   `json:"stat"`
+	Memory        procMemory `json:"memory"`
+	SmapsRaw      string     `json:"smaps_rollup_raw"`
+	VerifiedStat  procStat   `json:"verified_stat"`
+	IdentityError string     `json:"identity_error,omitempty"`
+	Error         string     `json:"error,omitempty"`
+}
+
+type procSnapshot struct {
+	StartedAt  time.Time           `json:"started_at"`
+	FinishedAt time.Time           `json:"finished_at"`
+	Census     map[int]procStat    `json:"census"` // PPID 树的完整取证；无关进程在枚举期间退出也保留原错误。
+	Processes  map[int]procReading `json:"processes"`
+	Error      string              `json:"error,omitempty"`
+}
+
+type resourceUsage struct {
+	PSSMiB     *float64 `json:"pss_mib"`
+	RSSMiB     *float64 `json:"rss_mib"`
+	PrivateMiB *float64 `json:"private_mib"`
+	CPUPercent *float64 `json:"cpu_percent"` // 100% 对应一个逻辑核。
+}
+
+type processUsage struct {
+	PID       int           `json:"pid"`
+	Role      string        `json:"role"`
+	Ticks     *uint64       `json:"cpu_ticks"`
+	ElapsedNS int64         `json:"elapsed_ns"`
+	Usage     resourceUsage `json:"usage"`
+	Error     string        `json:"error,omitempty"`
+}
+
+type resourceSample struct {
+	MachineID   string                   `json:"machine_id"`
+	ProductHead string                   `json:"product_head"`
+	Group       string                   `json:"group"`
+	Round       int                      `json:"round"`
+	State       string                   `json:"state"`
+	Runtime     *runtimeStatus           `json:"runtime,omitempty"`
+	ClockTicks  uint64                   `json:"clock_ticks_per_second"`
+	RequestedNS int64                    `json:"requested_interval_ns"`
+	ElapsedNS   int64                    `json:"elapsed_ns"`
+	Begin       procSnapshot             `json:"begin"`
+	End         procSnapshot             `json:"end"`
+	Processes   []processUsage           `json:"processes"`
+	Totals      map[string]resourceUsage `json:"totals"`
+	Result      string                   `json:"result"`
+	Error       string                   `json:"error,omitempty"`
+}
+
+func parseProcStat(raw string) (procStat, error) {
+	s := procStat{Raw: raw}
+	open, close := strings.IndexByte(raw, '('), strings.LastIndexByte(raw, ')')
+	if open < 0 || close <= open {
+		return s, fmt.Errorf("invalid proc stat command: %q", raw)
+	}
+	var err error
+	s.PID, err = strconv.Atoi(strings.TrimSpace(raw[:open]))
+	if err != nil || s.PID <= 0 {
+		return s, fmt.Errorf("invalid proc stat pid: %q: %w", raw, errors.Join(err, errors.New("positive pid required")))
+	}
+	s.Command = raw[open+1 : close]
+	fields := strings.Fields(raw[close+1:]) // comm 可含空格和括号，余下从第 3 字段 state 开始。
+	if len(fields) < 20 {
+		return s, fmt.Errorf("proc stat has %d fields after comm; need 20: %q", len(fields), raw)
+	}
+	s.State = fields[0]
+	s.ParentPID, err = strconv.Atoi(fields[1])
+	if err != nil || s.ParentPID < 0 {
+		return s, fmt.Errorf("invalid proc stat ppid %q: %w", fields[1], errors.Join(err, errors.New("nonnegative ppid required")))
+	}
+	s.GroupPID, err = strconv.Atoi(fields[2])
+	if err != nil || s.GroupPID < 0 {
+		return s, fmt.Errorf("invalid proc stat pgrp %q: %w", fields[2], errors.Join(err, errors.New("nonnegative pgrp required")))
+	}
+	for _, field := range []struct {
+		index  int
+		target *uint64
+	}{{11, &s.UserTicks}, {12, &s.SystemTicks}, {19, &s.StartTicks}} {
+		*field.target, err = strconv.ParseUint(fields[field.index], 10, 64)
+		if err != nil {
+			return s, fmt.Errorf("parse proc stat field %d %q: %w", field.index+3, fields[field.index], err)
+		}
+	}
+	return s, nil
+}
+
+func readProcStat(root string, pid int) (procStat, error) {
+	path := filepath.Join(root, strconv.Itoa(pid), "stat")
+	raw, readErr := os.ReadFile(path)
+	observed := time.Now()
+	s, parseErr := parseProcStat(string(raw))
+	s.ObservedAt = observed
+	if readErr != nil {
+		parseErr = readErr
+	}
+	if parseErr == nil && s.PID != pid {
+		parseErr = fmt.Errorf("proc stat pid %d differs from path pid %d", s.PID, pid)
+	}
+	if parseErr != nil {
+		parseErr = fmt.Errorf("read %s: %w", path, parseErr)
+		s.Error = parseErr.Error()
+	}
+	return s, parseErr
+}
+
+func readProcCensus(root string) (map[int]procStat, error) {
+	table := make(map[int]procStat)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return table, err
+	}
+	for _, entry := range entries {
+		pid, parseErr := strconv.Atoi(entry.Name())
+		if parseErr != nil || pid <= 0 || !entry.IsDir() {
+			continue
+		}
+		s, readErr := readProcStat(root, pid)
+		table[pid] = s
+		// 无关进程的自然退出保留在 census；其余错误使树成员关系未获确认。
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+			err = errors.Join(err, readErr)
+		}
+	}
+	return table, err
+}
+
+func procTree(table map[int]procStat, root int) map[int]bool {
+	tree := map[int]bool{root: true}
+	for changed := true; changed; {
+		changed = false
+		for pid, s := range table {
+			if s.Error == "" && tree[s.ParentPID] && !tree[pid] {
+				tree[pid], changed = true, true
+			}
+		}
+	}
+	return tree
+}
+
+func sameProcess(before, after procStat) error {
+	if before.Error != "" || after.Error != "" {
+		return fmt.Errorf("process identity unavailable: before=%s; after=%s", before.Error, after.Error)
+	}
+	if before.PID != after.PID || before.StartTicks != after.StartTicks {
+		return fmt.Errorf("process identity changed: pid/starttime %d/%d -> %d/%d", before.PID, before.StartTicks, after.PID, after.StartTicks)
+	}
+	return nil
+}
+
+func parseProcMemory(raw string) (procMemory, error) {
+	var memory procMemory
+	wanted := map[string]**uint64{"Pss:": &memory.PSSKiB, "Rss:": &memory.RSSKiB, "Private_Clean:": &memory.PrivateCleanKiB, "Private_Dirty:": &memory.PrivateDirtyKiB}
+	var failures error
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		target, ok := wanted[fields[0]]
+		if !ok {
+			continue
+		}
+		if len(fields) != 3 || fields[2] != "kB" || *target != nil {
+			failures = errors.Join(failures, fmt.Errorf("invalid or duplicate smaps_rollup field: %q", line))
+			continue
+		}
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			failures = errors.Join(failures, fmt.Errorf("parse smaps_rollup %q: %w", line, err))
+			continue
+		}
+		*target = &value
+	}
+	for key, target := range wanted {
+		if *target == nil {
+			failures = errors.Join(failures, fmt.Errorf("smaps_rollup missing %s", key))
+		}
+	}
+	return memory, failures
+}
+
+func readProcSnapshot(root string, core procStat) (procSnapshot, error) {
+	// 1. 先保存 PPID 关系并核对本轮 Core 身份。
+	snapshot := procSnapshot{StartedAt: time.Now(), Processes: make(map[int]procReading)}
+	var err error
+	snapshot.Census, err = readProcCensus(root)
+	if observed, ok := snapshot.Census[core.PID]; !ok {
+		err = errors.Join(err, fmt.Errorf("Core pid %d missing from proc census", core.PID))
+	} else {
+		err = errors.Join(err, sameProcess(core, observed))
+	}
+	// 2. 每个 PID 在 smaps 读取后再次核对身份，原文和部分数据一起留下。
+	for pid := range procTree(snapshot.Census, core.PID) {
+		reading := procReading{Stat: snapshot.Census[pid]}
+		raw, readErr := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "smaps_rollup"))
+		reading.SmapsRaw = string(raw)
+		memory, parseErr := parseProcMemory(string(raw))
+		reading.Memory = memory
+		after, identityErr := readProcStat(root, pid)
+		reading.VerifiedStat = after
+		identityErr = errors.Join(identityErr, sameProcess(reading.Stat, after))
+		if identityErr != nil {
+			reading.IdentityError = identityErr.Error()
+		}
+		if failure := errors.Join(readErr, parseErr, identityErr); failure != nil {
+			failure = fmt.Errorf("sample pid %d: %w", pid, failure)
+			reading.Error = failure.Error()
+			err = errors.Join(err, failure)
+		}
+		snapshot.Processes[pid] = reading
+	}
+	snapshot.FinishedAt = time.Now()
+	if err != nil {
+		snapshot.Error = err.Error()
+	}
+	return snapshot, err
+}
+
+func processCPU(before, after procStat, clockTicks uint64) (*uint64, int64, *float64, error) {
+	elapsed := after.ObservedAt.Sub(before.ObservedAt).Nanoseconds()
+	if err := sameProcess(before, after); err != nil {
+		return nil, elapsed, nil, err
+	}
+	if clockTicks == 0 || elapsed <= 0 || after.UserTicks < before.UserTicks || after.SystemTicks < before.SystemTicks {
+		return nil, elapsed, nil, fmt.Errorf("invalid CPU interval: clock_ticks=%d elapsed_ns=%d utime=%d->%d stime=%d->%d", clockTicks, elapsed, before.UserTicks, after.UserTicks, before.SystemTicks, after.SystemTicks)
+	}
+	ticks := after.UserTicks - before.UserTicks + after.SystemTicks - before.SystemTicks
+	percent := float64(ticks) / float64(clockTicks) / (float64(elapsed) / float64(time.Second)) * 100
+	return &ticks, elapsed, &percent, nil
+}
+
+func memoryUsage(memory procMemory) resourceUsage {
+	var usage resourceUsage
+	if memory.PSSKiB != nil {
+		value := float64(*memory.PSSKiB) / kibPerMiB
+		usage.PSSMiB = &value
+	}
+	if memory.RSSKiB != nil {
+		value := float64(*memory.RSSKiB) / kibPerMiB
+		usage.RSSMiB = &value
+	}
+	if memory.PrivateCleanKiB != nil && memory.PrivateDirtyKiB != nil {
+		value := (float64(*memory.PrivateCleanKiB) + float64(*memory.PrivateDirtyKiB)) / kibPerMiB
+		usage.PrivateMiB = &value
+	}
+	return usage
+}
+
+// summarizeResources 只汇总完整的对应读数；某 PID 缺项时该列合计保持 null。
+func summarizeResources(sample *resourceSample, corePID, pluginPID int) error {
+	roles := map[string][]resourceUsage{"core": {}, "auxiliary": {}, "core_with_auxiliary": {}, "total": {}}
+	if sample.Group != "core" {
+		roles["plugin_tree"] = nil
+	}
+	pluginTree := procTree(sample.Begin.Census, pluginPID)
+	pids := make(map[int]bool)
+	for pid := range sample.Begin.Processes {
+		pids[pid] = true
+	}
+	for pid := range sample.End.Processes {
+		pids[pid] = true
+	}
+	ordered := make([]int, 0, len(pids))
+	for pid := range pids {
+		ordered = append(ordered, pid)
+	}
+	slices.Sort(ordered)
+	var failures error
+	for _, pid := range ordered {
+		before, beforeOK := sample.Begin.Processes[pid]
+		after, afterOK := sample.End.Processes[pid]
+		process := processUsage{PID: pid, Role: "auxiliary"}
+		if pid == corePID {
+			process.Role = "core"
+		} else if pluginPID != 0 && pluginTree[pid] {
+			process.Role = "plugin_tree"
+		}
+		var err error
+		if !beforeOK || !afterOK {
+			err = fmt.Errorf("pid %d missing at interval boundary: begin=%t end=%t", pid, beforeOK, afterOK)
+		} else {
+			process.Ticks, process.ElapsedNS, process.Usage.CPUPercent, err = processCPU(before.Stat, after.Stat, sample.ClockTicks)
+			if identityErr := errors.Join(sameProcess(before.Stat, after.Stat), errorText(before.IdentityError), errorText(after.IdentityError)); identityErr != nil {
+				err = errors.Join(err, identityErr)
+				process.Usage = resourceUsage{}
+			} else {
+				memory := memoryUsage(after.Memory)
+				process.Usage.PSSMiB, process.Usage.RSSMiB, process.Usage.PrivateMiB = memory.PSSMiB, memory.RSSMiB, memory.PrivateMiB
+			}
+			err = errors.Join(err, errorText(before.Error), errorText(after.Error))
+		}
+		if err != nil {
+			process.Error = err.Error()
+			failures = errors.Join(failures, fmt.Errorf("pid %d: %w", pid, err))
+		}
+		sample.Processes = append(sample.Processes, process)
+		roles[process.Role] = append(roles[process.Role], process.Usage)
+		roles["total"] = append(roles["total"], process.Usage)
+		if process.Role != "plugin_tree" {
+			roles["core_with_auxiliary"] = append(roles["core_with_auxiliary"], process.Usage)
+		}
+	}
+	sample.Totals = make(map[string]resourceUsage)
+	for role, usages := range roles {
+		sample.Totals[role] = sumUsage(usages)
+	}
+	return failures
+}
+
+func errorText(value string) error {
+	if value == "" {
+		return nil
+	}
+	return errors.New(value)
+}
+
+func sumUsage(usages []resourceUsage) resourceUsage {
+	pss, rss, private, cpu := 0.0, 0.0, 0.0, 0.0
+	total := resourceUsage{&pss, &rss, &private, &cpu}
+	for _, usage := range usages {
+		for _, pair := range []struct {
+			target **float64
+			value  *float64
+		}{{&total.PSSMiB, usage.PSSMiB}, {&total.RSSMiB, usage.RSSMiB}, {&total.PrivateMiB, usage.PrivateMiB}, {&total.CPUPercent, usage.CPUPercent}} {
+			if pair.value == nil {
+				*pair.target = nil
+			} else if *pair.target != nil {
+				**pair.target += *pair.value
+			}
+		}
+	}
+	return total
+}
+
+// exitedTree 同时核对已见 PID 身份和原进程组，覆盖停止期间重新挂到其他父进程的子进程。
+func exitedTree(table map[int]procStat, old []procStat, groupPID int) error {
+	var failures error
+	for _, previous := range old {
+		if current, ok := table[previous.PID]; ok {
+			if current.Error != "" {
+				failures = errors.Join(failures, fmt.Errorf("old pid %d exit identity unavailable: %s", previous.PID, current.Error))
+			} else if err := sameProcess(previous, current); err == nil {
+				failures = errors.Join(failures, fmt.Errorf("old plugin pid %d starttime %d still exists (state %s)", previous.PID, previous.StartTicks, current.State))
+			}
+		}
+	}
+	for pid, current := range table {
+		if current.Error == "" && current.GroupPID == groupPID {
+			failures = errors.Join(failures, fmt.Errorf("plugin process group %d still contains pid %d", groupPID, pid))
+		}
+	}
+	return failures
+}
+
+func (c *coreProcess) resourceInterval(ctx context.Context, base resourceSample, id, generation string, core, plugin procStat, old []procStat) (sample resourceSample, err error) {
+	sample = base
+	sample.RequestedNS, sample.Result = resourceInterval.Nanoseconds(), "failed"
+	name := strings.ToLower(sample.State)
+	defer func() {
+		if err != nil {
+			sample.Error = err.Error()
+		} else {
+			sample.Result = "success"
+		}
+		err = errors.Join(err, writeJSON(filepath.Join(c.out, name+".json"), sample))
+	}()
+	// 1. 区间两端保留整棵树和逐 PID 原文；中途取消仍留下起点。
+	started := time.Now()
+	sample.Begin, err = readProcSnapshot("/proc", core)
+	err = errors.Join(err, writeJSON(filepath.Join(c.out, name+"-begin.json"), sample.Begin))
+	if sample.State == "SUSPENDED" {
+		err = errors.Join(err, exitedTree(sample.Begin.Census, old, plugin.GroupPID))
+	}
+	if sample.State == "ACTIVE" && id != "" {
+		current, ok := sample.Begin.Processes[plugin.PID]
+		if !ok {
+			err = errors.Join(err, errors.New("ACTIVE plugin missing from Core tree"))
+		} else {
+			err = errors.Join(err, sameProcess(plugin, current.Stat))
+		}
+	}
+	if err != nil {
+		return sample, err
+	}
+	timer := time.NewTimer(time.Until(started.Add(resourceInterval)))
+	defer timer.Stop()
+	select { // 只等待规定的观测区间；Core 提前退出或调用取消会保留未完成状态。
+	case <-ctx.Done():
+		err = ctx.Err()
+	case <-c.done:
+		err = fmt.Errorf("Core exited during resource interval: %w", errors.Join(c.waitErr, errors.New("interval incomplete")))
+	case <-timer.C:
+	}
+	// 2. 终点内存与同区间 CPU 分别计算，缺项沿对应列传播。
+	var readErr error
+	sample.End, readErr = readProcSnapshot("/proc", core)
+	sample.ElapsedNS = time.Since(started).Nanoseconds()
+	err = errors.Join(err, readErr)
+	pluginPID := plugin.PID
+	var treeErr error
+	if sample.State == "SUSPENDED" {
+		pluginPID = 0
+		treeErr = exitedTree(sample.End.Census, old, plugin.GroupPID)
+		err = errors.Join(err, treeErr)
+	}
+	err = errors.Join(err, summarizeResources(&sample, core.PID, pluginPID))
+	if id != "" {
+		status, statusErr := c.runtime(ctx, id, name+"-end")
+		sample.Runtime = &status
+		if statusErr == nil && (!status.Enabled || status.GenerationID != generation || status.State != sample.State) {
+			statusErr = fmt.Errorf("resource runtime changed: expected %s generation %s, got %+v", sample.State, generation, status)
+		}
+		err = errors.Join(err, statusErr)
+		if sample.State == "SUSPENDED" {
+			treeErr = errors.Join(treeErr, statusErr)
+		}
+	}
+	if treeErr != nil {
+		// 退出或状态取证失败时整树零值失去依据，保留已测 Core/附属值。
+		sample.Totals["plugin_tree"] = resourceUsage{}
+		sample.Totals["total"] = sumUsage([]resourceUsage{sample.Totals["core_with_auxiliary"], sample.Totals["plugin_tree"]})
+	}
+	return sample, err
+}
+
+func measureResources(ctx context.Context, o options, metadata runMetadata, group, id, archive string) (err error) {
+	c, err := startCore(ctx, o, group)
+	if err != nil {
+		return err
+	}
+	completed := make(map[string]bool)
+	defer func() {
+		err = errors.Join(err, c.stop())
+		summary := map[string]any{"group": group, "round": o.round, "machine_id": metadata.Machine.ID, "product_head": metadata.Provenance.ProductHead, "completed_intervals": completed, "result": "success"}
+		if err != nil {
+			summary["result"], summary["error"] = "failed", err.Error()
+		}
+		err = errors.Join(err, writeJSON(filepath.Join(c.out, "summary.json"), summary))
+	}()
+	// 1. 只使用机器实际 CLK_TCK，Core 与插件均保持缺省 tune。
+	if err := command(ctx, "getconf", c.out, "clock-ticks", "CLK_TCK"); err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(filepath.Join(c.out, "clock-ticks.log"))
+	if err != nil {
+		return err
+	}
+	clockTicks, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
+	if err != nil || clockTicks == 0 {
+		return fmt.Errorf("invalid getconf CLK_TCK %q: %w", raw, errors.Join(err, errors.New("positive clock frequency required")))
+	}
+	core, identityErr := readProcStat("/proc", c.command.Process.Pid)
+	if err := errors.Join(identityErr, writeJSON(filepath.Join(c.out, "core-identity.json"), core)); err != nil {
+		return err
+	}
+	if _, err := c.api(ctx, "initial-sleep", http.MethodGet, "/api/v1/core/sleep", nil); err != nil {
+		return err
+	}
+	base := resourceSample{MachineID: metadata.Machine.ID, ProductHead: metadata.Provenance.ProductHead, Group: group, Round: o.round, ClockTicks: clockTicks, State: "ACTIVE"}
+	if id == "" {
+		_, err = c.resourceInterval(ctx, base, "", "", core, procStat{}, nil)
+		completed["ACTIVE"] = err == nil
+		return err
+	}
+	initial, activation, err := c.installSample(ctx, group, id, archive)
+	if err != nil {
+		return err
+	}
+	plugin, identityErr := readProcStat("/proc", activation.PID)
+	if identityErr == nil && plugin.GroupPID != plugin.PID {
+		identityErr = fmt.Errorf("plugin pid %d does not own expected process group: %d", plugin.PID, plugin.GroupPID)
+	}
+	if err := errors.Join(identityErr, writeJSON(filepath.Join(c.out, "plugin-identity.json"), plugin)); err != nil {
+		return err
+	}
+	policyPath := "/api/v1/plugins/" + url.PathEscape(id) + "/sleep-policy"
+	if _, err := c.api(ctx, "initial-policy", http.MethodGet, policyPath, nil); err != nil {
+		return err
+	}
+	active, err := c.resourceInterval(ctx, base, id, initial.GenerationID, core, plugin, nil)
+	completed["ACTIVE"] = err == nil
+	if err != nil {
+		return err
+	}
+	// 2. ACTIVE 测完再开启 component_idle；策略写回不重置已有活动时间。
+	waitingSince := time.Now()
+	var policyErr error
+	if id == echoID {
+		_, policyErr = c.api(ctx, "set-policy", http.MethodPut, policyPath, []byte(`{"policy":"15m"}`))
+	}
+	_, modeErr := c.api(ctx, "set-sleep", http.MethodPut, "/api/v1/core/sleep", []byte(`{"mode":"component_idle","idle_timeout":"15m"}`))
+	_, sleepErr := c.api(ctx, "effective-sleep", http.MethodGet, "/api/v1/core/sleep", nil)
+	policyRaw, effectiveErr := c.api(ctx, "effective-policy", http.MethodGet, policyPath, nil)
+	if err := errors.Join(policyErr, modeErr, sleepErr, effectiveErr); err != nil {
+		return err
+	}
+	var policy struct {
+		EffectivePolicy string `json:"effective_policy"`
+		Eligible        bool   `json:"eligible"`
+	}
+	if err := json.Unmarshal(policyRaw, &policy); err != nil {
+		return fmt.Errorf("parse effective sleep policy: %w: %s", err, policyRaw)
+	}
+	duration, err := time.ParseDuration(policy.EffectivePolicy)
+	if err != nil || !policy.Eligible || duration != 15*time.Minute {
+		return fmt.Errorf("unexpected effective sleep policy: %s: %w", policyRaw, errors.Join(err, errors.New("eligible 15m policy required")))
+	}
+	transition, err := c.awaitLog(ctx, func(record logRecord) bool {
+		return record.Component == "core" && record.Message == "plugin runtime state changed" && record.PluginID == id && !record.Time.Before(waitingSince) && (record.State == "SUSPENDED" || record.State == "FAILED" || record.State == "STOPPED")
+	})
+	if err := errors.Join(err, writeJSON(filepath.Join(c.out, "suspend-transition.json"), transition)); err != nil {
+		return err
+	}
+	status, err := c.runtime(ctx, id, "suspended")
+	if err != nil {
+		return err
+	}
+	if !status.Enabled || status.GenerationID != initial.GenerationID || status.State != "SUSPENDED" {
+		return fmt.Errorf("automatic suspend did not preserve enabled generation: %+v", status)
+	}
+	// 3. 旧树全退的独立证据先落盘，随后才允许记休眠树为零。
+	var old []procStat
+	for pid := range procTree(active.End.Census, plugin.PID) {
+		old = append(old, active.End.Census[pid])
+	}
+	slices.SortFunc(old, func(a, b procStat) int { return a.PID - b.PID })
+	census, censusErr := readProcCensus("/proc")
+	exitErr := errors.Join(censusErr, exitedTree(census, old, plugin.GroupPID))
+	exitRecord := map[string]any{"checked_at": time.Now().UTC(), "old_tree": old, "old_process_group": plugin.GroupPID, "census": census, "exited": exitErr == nil}
+	if exitErr != nil {
+		exitRecord["error"] = exitErr.Error()
+	}
+	if err := errors.Join(exitErr, writeJSON(filepath.Join(c.out, "old-tree-exit.json"), exitRecord)); err != nil {
+		return err
+	}
+	base.State = "SUSPENDED"
+	_, err = c.resourceInterval(ctx, base, id, initial.GenerationID, core, plugin, old)
+	completed["SUSPENDED"] = err == nil
+	return err
 }
