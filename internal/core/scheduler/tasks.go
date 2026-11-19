@@ -102,7 +102,7 @@ func (s *Scheduler) tickTask(pluginID string, reg *registration, task *registere
 		return
 	}
 	s.armTask(pluginID, reg, task, now)
-	if !reg.plugin.Activated() {
+	if !s.canSchedule(reg) {
 		return
 	}
 	if task.definition.At.IsZero() {
@@ -135,7 +135,7 @@ func (s *Scheduler) enqueue(reg *registration, queued *queuedTask) {
 // pump 只持锁操作库与运行记录；真正的 IPC 由新 goroutine 执行。
 func (s *Scheduler) pump(pluginID string, plugin *pluginJobs) {
 	reg := plugin.current
-	if s.closed || reg == nil || !reg.plugin.Activated() {
+	if s.closed || reg == nil || !s.canSchedule(reg) {
 		return
 	}
 	for plugin.running < s.concurrency && len(reg.queue) > 0 {
@@ -164,7 +164,7 @@ func (s *Scheduler) pump(pluginID string, plugin *pluginJobs) {
 			parent = context.Background()
 		}
 		ctx, cancel := context.WithCancel(parent)
-		run := &jobRun{cancel: cancel, dynamic: true, reg: reg, key: key}
+		run := &jobRun{cancel: cancel, dynamic: true, key: key}
 		if queued.result != nil {
 			run.completed = func(id string, response wire.Response, err error) {
 				queued.result <- triggerResult{runID: id, response: response, err: err}

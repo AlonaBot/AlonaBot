@@ -1030,6 +1030,8 @@ func (c *Core) startManaged(ctx context.Context, id string) error {
 }
 
 func (c *Core) stopManaged(id string, reason pb.StopReason) error {
+	// 休眠实例已从 components 移除，管理停用仍须撤销它保留的未来调度。
+	c.assembly.scheduler.Detach(id)
 	for i, running := range c.components {
 		if running == nil || running.id != id {
 			continue
