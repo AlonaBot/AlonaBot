@@ -78,7 +78,7 @@ Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返�
 
 ### 3.2 组件动作
 
-全部为 POST，成功返回 200；update 返回 `UpdateResult`，其他动作返回 `{}`。动作共享解码结构 `id`、`confirm`、`purge`、`constraint`、`generation`、`install`，每个动作消费下表字段；`id` 为组件 ID。
+全部为 POST，成功返回 200；update 返回 `UpdateResult`，其他动作返回 `{}`。动作共享解码结构 `id`、`confirm`、`purge`、`constraint`、`generation`、`install`、`manual_migration_approved`，每个动作消费下表字段；`id` 为组件 ID。
 
 | Path | 请求字段及示例 | 行为与特定失败 |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返�
 | `/api/v1/packages/restart` | `{"id":"demo"}` | 以当前 Active 换 Session；要求已启用且有 Active；纯静态 WebUI 返回 412 |
 | `/api/v1/packages/uninstall` | `{"id":"demo","purge":0,"confirm":false}` | 停止并清理选定范围，准确对象需确认；开发组件返回 412 |
 | `/api/v1/packages/pin` | `{"id":"demo","constraint":"1.2.3"}` | 精确 SemVer；空串解除；格式错误 400 |
-| `/api/v1/packages/reload` | `{"id":"demo"}` | 要求已激活的进程组件，优先激活有效 Pending；无 Pending 时导入 config.json 再激活；纯静态 WebUI 返回 412 |
+| `/api/v1/packages/reload` | `{"id":"demo"}` | 普通请求要求已激活的进程组件，显式维护见下文；优先激活有效 Pending；无 Pending 时导入 config.json 再激活；纯静态 WebUI 返回 412 |
 | `/api/v1/packages/update` | `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` | `install` 使用 3.1 的 `InstallRequest` 大写字段；外层 `confirm` 覆盖 `install.Confirm`；校验身份、来源、公钥、pin、版本与依赖影响，通过候选准备与提交更新版本，保持启用状态 |
 | `/api/v1/packages/rollback` | `{"id":"demo","generation":"<保留代次>","confirm":false}` | 要求目标代次属于该组件且不是当前 Active，校验确认后交给候选编排器回退到该保留代次（T-09.7），成功返回 `{}` |
 
@@ -96,6 +96,10 @@ Install 的 `Package` 额外携带可选 `Warnings: string[]`，按原顺序返�
 Update 成功响应为 `UpdateResult`：有警告时为 `{"warnings":["..."]}`，按原顺序返回 manifest 的全部警告；没有警告时为 `{}`。JSON 与 multipart 使用相同响应格式。
 
 Update 的本地候选可以提供 `install.Archive/ReleaseJSON/Signature/PublicKey`；省略候选来源和归档时，沿用安装时绑定来源。前置校验可能先返回 400、403、404、409 或 412；重复上传已安装的同版本同归档会因不可变包目录已存在返回 409 / `ALREADY_EXISTS`。Rollback 经候选编排执行（T-09.7）：目标须为该组件的保留代次且不是当前 Active，否则返回 404 或 412；未确认时返回 409 并列出回退目标与丢弃的本地写入。
+
+维护 external 插件时，先成功 disable 并自行备份外部数据，再对上述 JSON reload/update/rollback 请求增加顶层 `"manual_migration_approved": true`。此字段明确确认备份已完成；缺省 false，`confirm` 单独确认来源/影响/丢弃写入。CLI 对应 `--manual-migration-approved`，例如 `alonabot reload demo --manual-migration-approved`；rollback 仍另需 `--yes`。许可只用于具有旧 Active 且旧包或目标包声明 external 的正式进程组件，运行中、未停用、首装、开发组件或非 external 操作返回 412。其他动作携带 true 返回 400。multipart 上传沿用原字段，维护更新使用 JSON 或 CLI。
+
+维护 reload 允许已停用组件；成功后 Prepared、提交和激活均已完成，候选随即停止，组件仍停用且不发布业务入口。管理员检查后显式 enable，以新 Active 的 resume 启动。提交前失败保留旧 Active，提交后失败保留新 Active，均保持停用；Core 重启只清理未提交候选，保留外部副作用供人工恢复，不重复迁移。每次操作须重新明确许可，许可只绑定当次候选 Bootstrap 的 Session/Generation/DB，首装与 resume 均为 false。普通未许可 external 候选返回 412 / `FAILED_PRECONDITION`，`safe_message` 含 `NEEDS_MANUAL_MIGRATION`。
 
 ### 3.3 组件图标
 
@@ -251,7 +255,7 @@ X-Content-Type-Options: nosniff
 
 ### 7.3 SDK 页面客户端
 
-插件声明 `Route(method, path).Page(title)` 后，SDK 自动补齐页面同目录的 `kit.css` 与 `kit.js` GET 路由，继承页面认证；作者已登记的同方法、同路径路由优先。`/page` 的相对资源为 `/kit.css`、`/kit.js`，`/page/` 的相对资源为 `/page/kit.css`、`/page/kit.js`，均位于该插件的 URL 前缀内。资源路由的 `page_title` 为空，组件 `pages` 列表只列页面；手动挂载可继续使用 `sdk/page.Handler()`（CONTRACTS §7.3，D-180）。
+插件声明 `Route(method, path).Page(title)` 后，SDK 自动补齐页面同目录的 `kit.css` 与 `kit.js` GET 路由，以 `sdk.AuthStatic` 公开提供（D-183）；作者已登记的同方法、同路径路由优先。`/page` 的相对资源为 `/kit.css`、`/kit.js`，`/page/` 的相对资源为 `/page/kit.css`、`/page/kit.js`，均位于该插件的 URL 前缀内。资源路由的 `page_title` 为空，组件 `pages` 列表只列页面；手动挂载可继续使用 `sdk/page.Handler()`（CONTRACTS §7.3，D-180）。
 
 `sdk/page` 的 `kit.js` 在 `window.AlonaBot` 上公开 `request(method, path, body?)`、`t(key, args?)`、`onTheme(fn)`、`onLocale(fn)`。嵌入时自动发送 `hello`，把令牌写到 `:root` 并设置 `data-theme`，接收主题与语言事件，转发全局搜索快捷键。两个订阅函数在注册时立即交付当前状态，并返回取消订阅函数。独立打开时使用 `light`、`en-US` 与浅色缺省令牌；`request` 返回拒绝的 Promise，不直接发送 HTTP 请求。
 
@@ -495,7 +499,7 @@ PUT/PATCH 必须提供 `base_generation`，首次代次可提交空串；与当�
 
 ### 15.2 Agent 插件页面与数据路由（D-170、D-182）
 
-官方 Agent 的实际 ID 为 `alonabot-agent-official`，以下路径相对于 `/plugins/{agent_id}/`。全部路由要求 Core 管理 Cookie，非 GET 请求沿用 Origin 与 `X-Alonabot-CSRF` 校验；鉴权拒绝沿用 Core 代理响应。五个页面通过 `window.AlonaBot.request` 访问本组件接口，标题取 Agent 的 `pages`，文案取 `messages`；父桥及配置读取 messages 见 §7、§12.1。
+官方 Agent 的实际 ID 为 `alonabot-agent-official`，以下路径相对于 `/plugins/{agent_id}/`。`pages/kit.css`、`pages/kit.js` 与 `pages/assets/` 以公开静态资源模式提供（D-183），其余路由要求 Core 管理 Cookie，非 GET 请求沿用 Origin 与 `X-Alonabot-CSRF` 校验；鉴权拒绝沿用 Core 代理响应。五个页面通过 `window.AlonaBot.request` 访问本组件接口，标题取 Agent 的 `pages`，文案取 `messages`；父桥及配置读取 messages 见 §7、§12.1。
 
 | 方法与子路径 | 内容 |
 | --- | --- |
@@ -595,8 +599,8 @@ MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通
 | Method / path | 请求或成功响应 | 语义 |
 | --- | --- | --- |
 | `GET /api/v1/plugins/{id}/generations` | `{"generations":[{"id":"gen-…","version":"1.2.1","created_at":"RFC 3339","active":true,"has_db":true}]}` | 保留代次按提交时间降序；回退仍用 `/api/v1/packages/rollback` |
-| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 当前 Session 登记的静态任务；Detach 后返回 `{"jobs":[]}`。`trigger` 如 `interval 1h0m0s` 或 `cron 0 8 * * *`，没有记录的时刻省略 |
-| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与 `core.job.pause/resume` 共用持久暂停状态（CONTRACTS §4.3，D-126）；未知任务返回 404 |
+| `GET /api/v1/plugins/{id}/jobs` | `{"jobs":[{"job_id":"…","trigger":"cron 0 8 * * *","paused":false,"last_run_at":"…","next_run_at":"…"}]}` | 当前保留计划中的静态任务，正常休眠时仍可读取；Detach 后返回 `{"jobs":[]}`。`trigger` 如 `interval 1h0m0s` 或 `cron 0 8 * * *`，没有记录的时刻省略 |
+| `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与 `core.job.pause/resume` 共用持久暂停状态（CONTRACTS §4.3，D-126）；已登记任务要求当前 Activated Session，休眠时返回 412 / FAILED_PRECONDITION；未知任务返回 404 |
 | `GET /api/v1/adapter/instances` | `{"instances":[{"instance_id":"main","adapter_id":"telegram","package_id":"…","state":"running","safe_error":"","default":true}]}` | 按实例 ID 排列已配置的实例；`state` 为 `running`、`stopped` 或 `failed`；`default` 遵循显式默认与单实例自动默认规则 |
 | `GET /api/v1/chats` | `?q=词&adapter_id=telegram&chat_type=group&offset=0&limit=50`，返回 `{"chats":[{"session":"telegram:-100…","title":"…","chat_type":"group","instance_id":"main","last_active_at":"…"}],"total":53}` | 聊天目录（D-130），筛选后按最近活跃降序，`total` 为筛选后的精确总数 |
 | `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 再认证后在同一事务中替换令牌并删除全部管理会话（包括当前会话）；响应清除会话 Cookie，带 `Cache-Control: no-store`，只交付一次新令牌 |

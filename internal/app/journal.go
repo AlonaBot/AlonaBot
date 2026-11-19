@@ -124,7 +124,6 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	database := boot.DatabaseDescriptor
 	database.Backend = pb.DatabaseBackend_DATABASE_BACKEND_NONE
 	database.MigrationMode = pb.MigrationMode_MIGRATION_MODE_NONE
-	database.ManualMigrationApproved = false
 	switch m.MigrationMode {
 	case manifest.MigrationSelf:
 		database.MigrationMode = pb.MigrationMode_MIGRATION_MODE_SELF

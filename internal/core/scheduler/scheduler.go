@@ -3,8 +3,9 @@
 // [Scheduler] 分别用 plugin_id/job_id 和 plugin_id/name/key 保存静态与动态实际运行槽，
 // 用本次 Attach 的注册保存定时器与到期队列；[Scheduler.Services] 提供任务和静态调度的固定服务。
 // 超时结束 RPC 结果后仍保留槽，直到迟到响应或 [Scheduler.Released] 确认进程退出；
-// 插件恢复或定时器落后时只安排未来 tick（CONTRACTS §4.3）。
-// 装配处负责激活后 [Scheduler.Attach]、排空时 [Scheduler.Drain]、撤销时 [Scheduler.Detach] 与退出后的 Released。
+// 正常休眠保留计划，到期经注入的 Waker 等待新 Session；异常离线恢复只安排未来 tick（CONTRACTS §4.3）。
+// 装配处负责激活后 [Scheduler.Attach]、空闲停止时 [Scheduler.Suspend]、管理排空时 [Scheduler.Drain]、
+// 撤销时 [Scheduler.Detach] 与退出后的 Released。
 package scheduler
 
 import (
@@ -38,6 +39,8 @@ type Options struct {
 	TaskConcurrency  int
 	JobTimeout       time.Duration    // 装配处传入 tune.Values.JobTimeout
 	Now              func() time.Time // nil 时使用 time.Now
+	// EnsureActive 可选；等待完整装配并取得活动引用。
+	EnsureActive func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)
 }
 
 // JobStats 汇总同一 plugin_id/job_id 在本次 Core 运行期间的计数。
@@ -55,6 +58,7 @@ type Scheduler struct {
 	payloadBytes int64
 	concurrency  int
 	jobTimeout   time.Duration
+	ensureActive func(context.Context, string, int64) (func(), error)
 	now          func() time.Time
 	plugins      map[string]*pluginJobs
 	closed       bool
@@ -69,11 +73,13 @@ type pluginJobs struct {
 }
 
 type registration struct {
-	plugin router.Plugin
-	names  map[string]bool
-	tasks  map[taskKey]*registeredTask
-	queue  []*queuedTask
-	jobs   []*registeredJob
+	plugin     router.Plugin
+	suspended  bool // 正常空闲停止保留计划，旧 plugin 只保留路由描述。
+	generation string
+	names      map[string]bool
+	tasks      map[taskKey]*registeredTask
+	queue      []*queuedTask
+	jobs       []*registeredJob
 }
 
 type registeredJob struct {
@@ -96,8 +102,8 @@ type jobState struct {
 type jobRun struct {
 	cancel    context.CancelFunc
 	dynamic   bool
-	reg       *registration
-	timedOut  bool // Late 可早于 Call 返回，两个路径在同一锁下只记一次超时
+	delivery  router.Plugin // nil 表示尚在等待交付；实际调用固定归属本次 Session。
+	timedOut  bool          // Late 可早于 Call 返回，两个路径在同一锁下只记一次超时
 	key       taskKey
 	completed func(string, wire.Response, error) // 显式触发的 RPC 结果；在锁外调用一次。
 }
@@ -107,16 +113,54 @@ func New(opt Options) *Scheduler {
 	if opt.Now == nil {
 		opt.Now = time.Now
 	}
-	return &Scheduler{store: opt.Store, maxTasks: opt.TasksPerPlugin, payloadBytes: opt.TaskPayloadBytes, concurrency: opt.TaskConcurrency, jobTimeout: opt.JobTimeout, now: opt.Now, plugins: make(map[string]*pluginJobs)}
+	return &Scheduler{store: opt.Store, maxTasks: opt.TasksPerPlugin, payloadBytes: opt.TaskPayloadBytes, concurrency: opt.TaskConcurrency, jobTimeout: opt.JobTimeout, ensureActive: opt.EnsureActive, now: opt.Now, plugins: make(map[string]*pluginJobs)}
 }
 
-// Attach 为已通过 REGISTER 校验的 SCHEDULE 路由安排下一次未来触发。
-// 同插件重新接入时替换定时器，仍未结束的旧实例调用继续占用原运行槽。
+// Attach 为已通过 REGISTER 校验的路由绑定 Session；正常休眠保留已接纳项与未来定时器。
+// 其他恢复重新安排未来触发，仍未结束的旧实例调用继续占用原运行槽。
 func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return nil
+	}
+	// 正常休眠保留同一计划及已消费的一次性项；恢复清理未注册的过期项后交接 Session。
+	var generation string
+	if s.ensureActive != nil {
+		var err error
+		generation, err = s.store.Active(ctx, p.PluginID())
+		if err != nil {
+			return err
+		}
+	}
+	if plugin := s.plugins[p.PluginID()]; plugin != nil && plugin.current != nil {
+		reg := plugin.current
+		if reg.suspended && reg.generation == generation && equalRoutes(reg.plugin, p) {
+			tasks, err := s.store.Tasks(ctx, p.PluginID(), "")
+			if err != nil {
+				return err
+			}
+			now := s.now()
+			var unregistered uint64
+			for _, task := range tasks {
+				// 已注册项仍由保留的定时器、队列和运行槽管理。
+				if reg.names[task.Name] {
+					continue
+				}
+				if !task.At.IsZero() && !task.At.After(now) {
+					if err := s.store.DeleteTask(ctx, p.PluginID(), task.Name, task.Key); err != nil {
+						return err
+					}
+					plugin.taskStats.Expired++
+					slog.Warn("expired one-time task discarded", "plugin_id", p.PluginID(), "task_name", task.Name, "key", task.Key, "scheduled_at", task.At)
+					continue
+				}
+				unregistered++
+			}
+			plugin.taskStats.Unregistered = unregistered
+			reg.plugin, reg.suspended = p, false
+			return nil
+		}
 	}
 	// 1. 所有读取与必要写入成功后，才替换本 Session 的定时器。
 	savedJobs, err := s.store.Jobs(ctx, p.PluginID())
@@ -131,7 +175,7 @@ func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt tim
 	for _, job := range savedJobs {
 		saved[job.JobID] = job
 	}
-	reg := &registration{plugin: p, names: make(map[string]bool), tasks: make(map[taskKey]*registeredTask)}
+	reg := &registration{plugin: p, generation: generation, names: make(map[string]bool), tasks: make(map[taskKey]*registeredTask)}
 	for _, route := range p.Routes() {
 		switch route.GetKind() {
 		case pb.RouteKind_ROUTE_KIND_TASK:
@@ -190,6 +234,7 @@ func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt tim
 	}
 	// 3. 发布注册并复用稳定键对应的实际槽；旧回调按 registration 身份失效。
 	stopTimers(plugin.current)
+	s.cancelWaiting(plugin)
 	plugin.current = reg
 	plugin.taskStats.Unregistered = unregistered
 	for _, job := range reg.jobs {
@@ -220,6 +265,7 @@ func (s *Scheduler) Detach(pluginID string) {
 	if plugin := s.plugins[pluginID]; plugin != nil {
 		stopTimers(plugin.current)
 		plugin.current = nil
+		s.cancelWaiting(plugin)
 		for key, task := range plugin.tasks {
 			if task.running == nil {
 				delete(plugin.tasks, key)
@@ -233,16 +279,15 @@ func (s *Scheduler) Released(pluginID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if plugin := s.plugins[pluginID]; plugin != nil {
-		// 新 Session 已接入时，退出确认只属于旧注册；当前激活注册的槽继续保留。
-		keepCurrent := plugin.current != nil && plugin.current.plugin.Activated()
+		// 尚未交付的等待与活 Session 的调用继续保留，退出只清理旧 Session 的实际槽。
 		for _, job := range plugin.jobs {
-			if run := job.running; run != nil && (!keepCurrent || run.reg != plugin.current) {
+			if run := job.running; run != nil && run.delivery != nil && !run.delivery.Activated() {
 				run.cancel()
 				job.running = nil
 			}
 		}
 		for key, task := range plugin.tasks {
-			if run := task.running; run != nil && (!keepCurrent || run.reg != plugin.current) {
+			if run := task.running; run != nil && run.delivery != nil && !run.delivery.Activated() {
 				run.cancel()
 				task.running = nil
 				plugin.running--
@@ -263,6 +308,7 @@ func (s *Scheduler) Close() {
 	for _, plugin := range s.plugins {
 		stopTimers(plugin.current)
 		plugin.current = nil
+		s.cancelWaiting(plugin)
 	}
 }
 
@@ -332,7 +378,7 @@ func (s *Scheduler) tick(pluginID string, reg *registration, job *registeredJob,
 		s.mu.Unlock()
 		return
 	}
-	if !reg.plugin.Activated() {
+	if !s.canSchedule(reg) {
 		s.mu.Unlock()
 		return
 	}
@@ -342,10 +388,9 @@ func (s *Scheduler) tick(pluginID string, reg *registration, job *registeredJob,
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	run := &jobRun{cancel: cancel, reg: reg}
+	run := &jobRun{cancel: cancel}
 	job.state.running = run
 	job.state.stats.Runs++
-	job.state.lastAt = now
 	s.mu.Unlock()
 	// RPC 不占调度锁，不同 job 的用户函数可以并发执行。
 	go s.call(ctx, pluginID, reg, job, run, scheduledAt, now, nil)
@@ -384,22 +429,31 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 		if task != nil {
 			deadline = now.Add(s.jobTimeout)
 		}
-		response, err = reg.plugin.Call(ctx, wire.Request{Target: job.routeID, TraceID: trace,
-			Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
-				SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
-			Deadline: deadline, Attach: invocation,
-			Late: func(response wire.Response) {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				if response.LocalErrorCode == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
-					markTimeout(job.state, run)
-				}
-				// 本地排队撤回只有公开错误，成功或带原始错误码的实际响应才计迟到。
-				if response.Err == nil || response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
-					job.state.stats.Late++
-				}
-				s.releaseRun(pluginID, job.state, run)
-			}})
+		ctx, cancel := context.WithDeadline(ctx, deadline)
+		defer cancel()
+		var plugin router.Plugin
+		var release func()
+		plugin, release, err = s.destination(ctx, pluginID, reg, job, run, int64(len(encoded)))
+		if err == nil {
+			// 等待引用覆盖实际调用包装取得引用的全过程，再由包装跟随 Late 收尾。
+			defer release()
+			response, err = plugin.Call(ctx, wire.Request{Target: job.routeID, TraceID: trace,
+				Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF,
+					SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},
+				Deadline: deadline, Attach: invocation,
+				Late: func(response wire.Response) {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					if response.LocalErrorCode == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
+						markTimeout(job.state, run)
+					}
+					// 本地排队撤回只有公开错误，成功或带原始错误码的实际响应才计迟到。
+					if response.Err == nil || response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
+						job.state.stats.Late++
+					}
+					s.releaseRun(pluginID, job.state, run)
+				}})
+		}
 	}
 	// 3. 对端已响应的错误也结束实际执行；本地超时、停止取消与断链继续保留槽。
 	// 本地超时或取消由 Late 释放实际槽；断链由 Released 在确认进程树清空后释放。
@@ -407,7 +461,8 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 	code := wire.CodeOf(err)
 	if response.RawErrorCode == pb.ErrorCode_ERROR_CODE_UNSPECIFIED && code == pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED {
 		markTimeout(job.state, run)
-	} else if response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || (code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE && code != pb.ErrorCode_ERROR_CODE_CANCELLED) {
+	}
+	if run.delivery == nil || response.RawErrorCode != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || (code != pb.ErrorCode_ERROR_CODE_UNAVAILABLE && code != pb.ErrorCode_ERROR_CODE_CANCELLED && code != pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED) {
 		s.releaseRun(pluginID, job.state, run)
 	}
 	s.mu.Unlock()

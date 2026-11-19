@@ -716,7 +716,7 @@ func TestToolFieldNumbers(t *testing.T) {
 // TestHTTPAuthModeNumbers 固定 HTTP 认证模式的线上编号。
 func TestHTTPAuthModeNumbers(t *testing.T) {
 	values := pb.HttpAuthMode(0).Descriptor().Values()
-	names := []protoreflect.Name{"HTTP_AUTH_MODE_UNSPECIFIED", "HTTP_AUTH_MODE_CORE_SESSION", "HTTP_AUTH_MODE_CALLBACK_STATE", "HTTP_AUTH_MODE_CALLBACK_SIGNATURE", "HTTP_AUTH_MODE_CALLBACK_NONCE", "HTTP_AUTH_MODE_PLATFORM_TOKEN"}
+	names := []protoreflect.Name{"HTTP_AUTH_MODE_UNSPECIFIED", "HTTP_AUTH_MODE_CORE_SESSION", "HTTP_AUTH_MODE_CALLBACK_STATE", "HTTP_AUTH_MODE_CALLBACK_SIGNATURE", "HTTP_AUTH_MODE_CALLBACK_NONCE", "HTTP_AUTH_MODE_PLATFORM_TOKEN", "HTTP_AUTH_MODE_STATIC"}
 	if values.Len() != len(names) {
 		t.Fatalf("HttpAuthMode has %d values, want %d", values.Len(), len(names))
 	}
