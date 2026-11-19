@@ -98,6 +98,7 @@ export type ToolPolicy = {
   identities: ('tool' | 'operation')[];
   plugin_id: string;
   service: string;
+  identities: ('tool' | 'operation')[];
   default: ToolPolicyValue;
   override: ToolPolicyValue;
   effect: 'read_only' | 'write' | 'destructive' | 'unspecified';

@@ -33,10 +33,11 @@ type Catalog struct {
 	operations map[string]ToolPolicyEntry
 }
 
-// ToolPolicyEntry 列出工具声明的缺省策略与已保存的覆盖。
+// ToolPolicyEntry 列出当前目录身份、缺省策略与已保存的覆盖。
 type ToolPolicyEntry struct {
 	PluginID, Service string
-	Default           pb.ToolPolicy // UNSPECIFIED 表示当前没有工具声明
+	Identities        []string      // 按 tool、operation 排列；仅保存覆盖时为空数组。
+	Default           pb.ToolPolicy // UNSPECIFIED 表示当前没有声明与确认记录
 	Override          pb.ToolPolicy // UNSPECIFIED 表示没有覆盖
 	Effect            pb.ToolEffect
 }
@@ -107,6 +108,7 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 			}
 			entry := entries[plugin.PluginID()+"/"+spec.GetServiceName()]
 			entry.PluginID, entry.Service = plugin.PluginID(), spec.GetServiceName()
+			entry.Identities = []string{"tool"}
 			entry.Default = spec.GetTool().GetDefaultPolicy()
 			entry.Effect = spec.GetTool().GetEffect()
 			entries[entry.PluginID+"/"+entry.Service] = entry
@@ -120,6 +122,7 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 			operation.Default = entry.Default
 		}
 		operation.Override = entry.Override
+		operation.Identities = append(entry.Identities, "operation")
 		entries[key] = operation
 	}
 	c.mu.Unlock()
@@ -146,7 +149,7 @@ func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, er
 	}
 	entries := make(map[string]ToolPolicyEntry, len(rows))
 	for _, row := range rows {
-		entries[row.PluginID+"/"+row.Service] = ToolPolicyEntry{PluginID: row.PluginID, Service: row.Service, Override: row.Policy}
+		entries[row.PluginID+"/"+row.Service] = ToolPolicyEntry{PluginID: row.PluginID, Service: row.Service, Identities: []string{}, Override: row.Policy}
 	}
 	return entries, nil
 }
