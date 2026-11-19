@@ -233,7 +233,7 @@ func scenarioRecoveryValue(t *testing.T, c *core, dir, value string, write bool)
 
 func scenarioRecoveryDatabase(t *testing.T, name, want string) {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+name+"?mode=ro")
+	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: name, RawQuery: "mode=ro"}).String())
 	if err != nil {
 		t.Fatal(err)
 	}
