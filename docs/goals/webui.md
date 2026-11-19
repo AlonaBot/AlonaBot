@@ -365,7 +365,7 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
   // GET/PUT /api/v1/plugins/{id}/policies；PUT /api/v1/plugins/{id}/commands/{route_id}/names 发 {names}，DELETE 同路径恢复声明。PUT policies 发送一项完整覆盖，permissions/enabled 的 null 表示继承。
 - src/api/admin.ts 工具、发信许可、会话与静态任务：
   export type ToolPolicyValue = 'allow' | 'confirm' | 'deny' | 'inherit'
-  export type ToolPolicy = { plugin_id: string; service: string; default: ToolPolicyValue; override: ToolPolicyValue; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
+  export type ToolPolicy = { plugin_id: string; service: string; identities: ('tool' | 'operation')[]; default: ToolPolicyValue; override: ToolPolicyValue; effect: 'read_only' | 'write' | 'destructive' | 'unspecified' }
   export type ToolPolicyUpdate = { plugin_id: string; service: string; policy: ToolPolicyValue }
   export function getToolPolicies(): Promise<{ policies: ToolPolicy[] }>
   export function setToolPolicy(item: ToolPolicyUpdate): Promise<void>
@@ -712,22 +712,22 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 - 「默认」的字段修改走插件配置 API（Pending 与 reload，保存时提示会重载的插件）；其他配置文件经 ADMIN-API §23 立即生效。插件配置页选中「默认」以外的配置文件时，只有写了 `profile` 的字段可以编辑，其余字段置灰。无效覆盖值显示原因并可一键清理。
 - 其他配置文件以 snapshot.active 为基础，按 ProfilePlugin.fields 中的点分路径应用有效 overrides；invalid 中的路径保留诊断并排除在生效预览外。覆盖按完整字段值替换，object/list 也整体替换，保留基础值的其他字段。ConfigForm 的 RFC 7396 patch 先应用到当前有效草稿，再取本次变更涉及的标记路径的完整值，形成 §23 的 overrides；恢复跟随默认写该路径:null。标记 object 内部的修改提交完整 object，保留未编辑成员；无关标记路径维持原覆盖状态。具有 secret 子树的复合标记按契约只读并展示实际校验原因，失效项用 prune 清理；禁止把掩码或未标记字段送入覆盖接口。
 - default 的普通配置表单继续使用现有 buildPatch，数组、secret、invisible 与 condition 规则保持；插件配置页的非 default 草稿与 Pending 分开展示，切换后重建对应编辑基线。字段恢复默认在 default 中沿用配置 patch 的 null，在其他配置文件中表示跟随 default。prune 只调用 §23 的覆盖清理接口，成功重读 overrides/invalid；保留 §12 的普通配置操作。
-- 工具区默认只列 getProfileTools 的覆盖项，可筛选全局目录来添加覆盖；allow、confirm、deny 分别保存对应策略，恢复全局发 inherit。PUT 只发本次更新项；已读工具保留 tool，已读确认操作保留 operation，包含同名项时分别编辑。插件关闭时展示其工具被禁用的实际含义，保留已存策略；默认配置文件的工具策略仍经 §23 管理。§18 的目录按 plugin_id/service 合并工具与确认操作，以 identities 枚举实际声明的身份；两种身份均存在时分别提供候选，按 §23 的 tool 与 operation 结构读写，保留已有条目的准确身份。
+- 工具区默认只列 getProfileTools 的覆盖项，可筛选全局目录来添加覆盖；allow、confirm、deny 分别保存对应策略，恢复全局发 inherit。PUT 只发本次更新项；已读工具保留 tool，已读确认操作保留 operation，包含同名项时分别编辑。插件关闭时展示其工具被禁用的实际含义，保留已存策略；默认配置文件的工具策略仍经 §23 管理。§18 的目录按 plugin_id/service 合并，按 identities 展开候选：tool 写入完整工具名，operation 写入 plugin_id/name；同名两类分别排除已有覆盖，[] 没有新增候选。已保存覆盖在目录身份消失后仍照原身份准确读写。
 - 系统设置沿 PLAN 保持无命令前缀，平台设置统一在配置文件页。页面只调用上述 ADMIN-API 已有端点，错误显示完整原因；覆盖通知失败可能发生在保存之后，写入报错后重读已保存状态并保留错误，依服务端实际结果更新界面。
 
 测试（按编码规范「测试提交规则」）：
 - 提交：无。
 - 本地自测：前端纯函数与请求格式写在 *.local.test.ts，覆盖配置文件切换与同路径查询参数、会话指定优先级与 null 取消、复制请求、平台继承与 false/空字符串/0、完整 PUT 保留未改键、profile/options_from 解析、只读路径、点分覆盖和 object/list 整体替换、恢复继承、invalid 排除与 prune、default 的 Pending/代次冲突、模型配置名与 Active 候选过滤、工具与 operation 的身份及 inherit。其余临时 Go 验证按共同约束写在被忽略的 *_local_test.go，PR 记录结果。
-- 浏览器手动验证：同源真实 Core 与官方 Agent 上打开、切换、新建、重命名、复制与删除，default 删除置灰；使用范围中实例缺省、单独指定、取消指定和真实会话数；AI 六字段、唤醒词显隐与没有 Agent；平台五个键的覆盖和跟随默认；插件开关、箭头预选、非标记字段禁用、无效覆盖清理；default 保存提示、Pending 与 reload，其他配置文件修改后的命令前缀、回复与 Agent/工具策略；深浅色、手机、键盘与搜索。PR 写明浏览器和版本、真实或模拟环境、用例名及未运行项；核对同名 tool/operation 分别添加、编辑、恢复继承，旧覆盖项 identities:[] 保留已有身份与原文。
+- 浏览器手动验证：同源真实 Core 与官方 Agent 上打开、切换、新建、重命名、复制与删除，default 删除置灰；使用范围中实例缺省、单独指定、取消指定和真实会话数；AI 六字段、唤醒词显隐与没有 Agent；平台五个键的覆盖和跟随默认；插件开关、箭头预选、非标记字段禁用、无效覆盖清理；default 保存提示、Pending 与 reload，其他配置文件修改后的命令前缀、回复与 Agent/工具策略；工具与操作的独立候选、同名分别覆盖与恢复继承、空身份行及目录身份消失后的原覆盖读写；深浅色、手机、键盘与搜索。PR 写明浏览器和版本、真实或模拟环境、用例名及未运行项。
 
-完成条件：npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；按本章共同约定准备依赖并记录真实 Core 浏览器验证。按已合并 identities 契约完成工具候选及两类身份的实现与验证。PR 按 TEST-MATRIX §3 提供 V-145 页面证据与未运行项，审查者据实际结果同步；与 goal-44 的配置标签、表单和选项查询共用同一实现。
+完成条件：npm --prefix web/admin run typecheck、npm --prefix web/admin run test、npm --prefix web/admin run build 全部成功；按本章共同约定准备依赖并记录真实 Core 浏览器验证，完成 identities 驱动的独立工具与操作候选及原覆盖读写。PR 按 TEST-MATRIX §3 提供 V-145 页面证据与未运行项，审查者据实际结果同步；与 goal-44 的配置标签、表单和选项查询共用同一实现。
 
 不做：配置文件的 Core、SDK 与 Agent 实现（T-08.18、T-04.18、T-04.19、T-11.6、T-12.19）；会话页的配置文件列（goal-44）；模型管理与人格管理、goal-44 的其余配置增强和系统设置实现；Go 产品代码、spec 修改、新 Admin API、新依赖、DOM 测试依赖、CI 前端任务与提交前端测试。
 ```
 
 ### goal-175 · S-06.3 休眠策略与运行状态的页面
 
-状态：等待前置（T-09.9、S-06.1）。T-09.8（PR #238，`9123839`）已合并。2026-11-17 维护者决定把插件休眠（PLAN §7）纳入本轮时新增：休眠控件从 goal-43、goal-44 移到本切片，使 WebUI 主线与发布链不依赖休眠切片（S 工作包不进入 v0.1 发布门槛）。目标、依据与要点由 PLAN §7 S-06 步骤 1、ADMIN-API §24 与设计稿确定；前置合并后，审查者按合并后的代码写出接口与测试段，再改为待派发。
+状态：等待前置（T-09.9、S-06.1）。T-09.8（PR #238，`9123839`）已合并。2026-11-17 维护者决定把插件休眠（PLAN §7）纳入本轮时新增：休眠控件从 goal-43、goal-44 移到本切片，使 WebUI 主线与发布链不依赖休眠切片（S 工作包不进入 v0.1 发布门槛）。以下接口按 goal-173 / PR #269 产品候选 `b44051a9` 与 goal-44 / PR #259 候选核对；两项前置合并后须按 main 再核对实际接口，再改为待派发。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-175（切片 S-06.3：休眠策略与运行状态的页面）。goal 目录 goal-175，分支 goal-175，worktree .worktrees/goal-175，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」与 docs/goals/webui.md「设计稿与共同约定」。
@@ -736,9 +736,45 @@ main 上 T-09.7（PR #187）已接通回退执行，ADMIN-API §3.2 的 501 说�
 
 依据：PLAN §7 S-06 步骤 1；CONTRACTS §4.4、§4.5、§15.1；ADMIN-API §24；DECISIONS D-153；TEST-MATRIX V-81 的页面分项。画板：「v4 · 插件 · 天气 · 高级」「v4 · 插件 · 天气 · 高级（不能改休眠）」「v4 · 系统设置」。
 
-要点：
-- 只调用 ADMIN-API §24；读取不唤醒插件。保存后唤醒失败时显示实际错误并重新读取当前设置。
-- 原因与警告的文案按 §24 的稳定值在 i18n 中翻译；未声明 Core 过滤的消息事件、Raw、HTTP、Hook 或持续监听的插件被显式给出时长时，提示会被频繁唤醒。
+范围（只新增或修改这些）：
+- web/admin/src/api/admin.ts：§24 的类型和客户端；Package 追加 RuntimeState 可选字段，保留既有 State 与角色语义。
+- web/admin/src/pages/PluginDetailPage.tsx：高级标签的策略与最近原因；必要时把该区放在同目录的 PluginSleepPanel.tsx，复用现有详情加载/刷新及错误展示。
+- web/admin/src/pages/SettingsPage.tsx：复用 readSettings/mutate 的全局模式、空闲时长与保存后重新读取。
+- web/admin/src/pages/PluginsPage.tsx：列表六态与 Suspended 展示；只消费已有组件列表中的 RuntimeState，不逐行请求策略。
+- web/admin/src/style.css、i18n/en-US.json、i18n/zh-CN.json：所需样式与文案；上述包的 *.local.test.ts(x) 保留本地。
+依赖：只使用已批准 React、Radix、lucide-react 和既有 request/表单/视觉令牌；不新增依赖、路由或 Go 代码。
+
+客户端接口（按 ADMIN-API §24，字段原义不变）：
+- export type CoreSleep = { mode: 'always_on' | 'component_idle'; idle_timeout: string; plugins: Record<string, string> }
+- export type SleepPolicy = { policy: string | null; effective_policy: string; sleep_capable: boolean; eligible: boolean; reason: string; warnings?: string[] }
+- export type RuntimeState = 'STOPPED' | 'WAKING' | 'ACTIVE' | 'QUIESCING' | 'SUSPENDED' | 'FAILED'
+- export type PluginRuntime = { enabled: boolean; generation_id: string; state: RuntimeState; reason: string; changed_at: string; last_wake?: { reason: string; at: string }; last_suspend?: { reason: string; at: string } }
+- export function getCoreSleep(): Promise<CoreSleep>：GET /api/v1/core/sleep。
+- export function setCoreSleep(value: Pick<CoreSleep, 'mode' | 'idle_timeout'>): Promise<void>：PUT 同路径，两项必填，不发送 plugins。
+- export function getPluginSleepPolicy(id: string): Promise<SleepPolicy>：GET /api/v1/plugins/{id}/sleep-policy。
+- export function setPluginSleepPolicy(id: string, policy: string | null): Promise<void>：非 null 为 PUT {policy}；null 为 DELETE，无正文。auto 仅为界面选项，不写入 API。
+- export function getPluginRuntime(id: string): Promise<PluginRuntime>：GET /api/v1/plugins/{id}/runtime。
+- 全部请求复用 request、encodeURIComponent、Cookie/CSRF 与 AdminAPIError；保存成功响应 {}，失败保留 code/safe_message/responseBody，不新增重试或错误响应字段。
+
+行为：
+- 只调用 ADMIN-API §24 完成休眠管理；读取不唤醒插件。详情只对 plugin/agent 显示休眠区，Adapter/WebUI 沿原展示；列表读取 Package.RuntimeState，缺字段时保留既有角色的 State 展示。
+- 高级标签将 policy=null 显示为跟随全局，never 显示为永不休眠，其余显示原时长；同时展示 effective_policy、准入原因和全部 warnings。时长由 Core 按正 Go duration 校验，保留原始错误与输入；未知/缺失策略加载失败时显示实际错误，runtime 可独立读取并显示，不伪造默认策略。
+- manifest 要求常驻或同进程时锁定时长选项并展示原因；always_on 显示全局模式原因及系统设置入口。policy_never 仍可切换为跟随全局/时长；route_requires_resident 允许按契约显式设置时长，成功后展示对应频繁唤醒警告。锁定规则保持管理员可退出已有 never 覆盖或调整全局模式。
+- 系统设置新增 always_on/component_idle 运行模式和「插件空闲休眠」时长，初始值取 GET；保存经 PUT 同时提交两项，保留插件覆盖和其他设置。复用现有保存中禁用和写入后重读流程。
+- 保存后唤醒失败时显示完整实际错误，再分别读取策略/运行状态或全局设置；重读失败与原写入错误均保留。只有读取成功的值更新界面；用户能看到已经保存而恢复失败的实际状态。不得触发 reload、重新迁移或代次切换，停用插件保持停用。
+- 六态按稳定值本地化，SUSPENDED 显示「已休眠」，FAILED 保留实际诊断；最近唤醒/休眠时间来自 at，缺事件时省略，不用当前时间补历史。详情刷新沿既有入口，不引入通用轮询框架。
+- 原因与警告文案按 §24 的稳定值在两种 i18n 中翻译；已知 warning 格式保留 route_id 并翻译种类与频繁唤醒提示，覆盖 HTTP、Hook、Bus subscription、Raw、unfiltered message event、continuous event listener；未知诊断原文完整显示。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 或持续监听显式给出时长时显示全部对应警告。
+- 按指定三个画板的布局与现有视觉令牌实现，浅深色、英文/中文及桌面/手机均可读；输入标签、锁定原因、错误和键盘操作可访问。
+
+测试与验收：
+- 提交前端测试为无；本地 API 请求与展示逻辑验证放 *.local.test.ts(x)，覆盖 null→DELETE、never/时长→PUT、全局双字段、原错误保留、六态、全部原因与警告、缺事件及角色筛选。无 DOM 测试依赖时用已有工具和真实浏览器验证交互。
+- 在实际 Core 和已安装可休眠插件上：全局 component_idle→自动 SUSPENDED→打开列表/详情/策略查询保持原 Session 数→never 唤醒原代次→auto 删除覆盖→再次休眠→always_on 恢复；核对同代次、配置、业务 DB 和任务，停用组件保持停用。
+- 浏览器覆盖 manifest 常驻锁定、同进程原因、never 可退出、危险路由显式时长全部警告、未启用/缺快照412且runtime独立可读；保存前失败和保存后恢复失败均完整展示并重新读取实际设置。若故障需要临时插件/overlay，沿既有忽略测试机制生成，不加产品开关。
+- 实际查看三个画板并比较渲染；中英浅深、至少一个桌面和375px手机宽度，核对无横向页面溢出、表单焦点、保存反馈和原设置/详情功能。记录浏览器版本、操作与截图位置，模拟HTTP数据单列，不作为真实Core证据。
+
+完成条件：在 web/admin 运行 npm ci、npm run typecheck、npm run test、npm run build；go build ./...；git diff --check；上述真实浏览器操作与截图验收完成。PR 逐项记录命令、平台和未运行项，并列出由审查者回写的 S-06.3 / V-81 页面证据。
+
+失败停止条件：查询引发唤醒、跨角色接受、锁定导致已有 never 无法修改、缺快照伪装成可休眠、写入错误或重读错误丢失、已保存状态被旧表单覆盖、策略变更触发 reload/迁移/代次变化、停用插件被唤醒、secret/管理token落入页面存储，均阻止交付；范围外Go、依赖或契约缺口交审查者处理。
 
 不做：休眠的 Core 实现与管理 API（S-01.1～S-06.1）；固定机器测量（S-06.2）。
 ```

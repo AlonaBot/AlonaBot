@@ -580,7 +580,9 @@ MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通
 
 ## 18. 工具调用策略
 
-`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","default":"allow","override":"inherit","effect":"read_only"}]}`；`effect` 取 `read_only`、`write`、`destructive` 或 `unspecified`（D-157）。目录按 `plugin_id` 和 `service` 合并当前 Attach 的工具声明、本次 Core 运行的确认记录和已保存覆盖。有确认记录时采用最近上报的类别（包括 `unspecified`），否则采用声明类别，仅有保存覆盖时为 `unspecified`。`default` 优先取声明的缺省策略，仅有确认记录时为 `confirm`，两者都没有时为 `inherit`；`override` 为 `inherit` 表示没有保存覆盖。
+`GET /api/v1/tools/policies` 返回 `{"policies":[{"plugin_id":"demo","service":"echo","identities":["tool"],"default":"allow","override":"inherit","effect":"read_only"}]}`；`effect` 取 `read_only`、`write`、`destructive` 或 `unspecified`（D-157）。目录按 `plugin_id` 和 `service` 合并当前 Attach 的工具声明、本次 Core 运行的确认记录和已保存覆盖。有确认记录时采用最近上报的类别（包括 `unspecified`），否则采用声明类别，仅有保存覆盖时为 `unspecified`。`default` 优先取声明的缺省策略，仅有确认记录时为 `confirm`，两者都没有时为 `inherit`；`override` 为 `inherit` 表示没有保存覆盖。
+
+`identities` 始终返回数组，表示该行当前可供 §23 分别写入的身份：当前 Attach 的工具声明提供 `tool`，本次 Core 运行出现的确认记录提供 `operation`；同名两类返回 `["tool","operation"]`，顺序固定且各出现一次。仅有保存覆盖时返回 `[]`；空目录返回 `{"policies":[]}`。每个完整名仍只有一条全局策略行，身份元数据沿用现有 default、override 与 effect 的合并规则。
 
 `PUT /api/v1/tools/policies` 接收 `{"plugin_id":"demo","service":"echo","policy":"deny"}`，成功返回 `{}`。policy 接受 allow、confirm、deny、inherit；inherit 删除覆盖。service 也接受目录已记录的完整操作名，例如 `mcp/filesystem/read_file`；操作名独立于 Service 名语法校验。未知策略、服务名格式错误或目录未记录的操作名返回 400，未知组件返回 404。写入与固定 ListTools 使用同一个 tool.Catalog 和状态库；下次查询或调用读取新策略，deny 的工具从 ListTools 隐藏，无需重启。
 
@@ -675,6 +677,8 @@ platform 的 GET 返回已保存的覆盖，运行时按键合并当前 `default
 
 tools 的写入从下一次工具策略操作生效，在途确认保留已接纳策略。运行时按可信默认 Target 选择配置文件，无 Target 或无父 list 使用 `default`；插件关闭时视为 deny，其余依次读取配置文件覆盖、§18 的全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；`inherit` 恢复全局策略。§18 的全局目录与写入保持原义。
 
+新增覆盖的候选从 §18 的 `identities` 展开：`tool` 对应 `{"tool":"<plugin_id>/<service>"}`，`operation` 对应 `{"operation":{"plugin_id":"<plugin_id>","name":"<service>"}}`；同名两类分别筛选本配置文件尚未覆盖的身份，空身份行没有新增候选。已保存的工具与操作覆盖继续按原身份读写，包括目录中已消失的身份。
+
 `invalid` 列出失效覆盖的路径与原因（`unmarked`、`type`、`schema unavailable`）。已有复合字段标记仍可读取；覆盖路径与秘密路径相交或 Active schema 不可用时，普通 GET 在 `overrides` 中省略原值，`invalid` 与 `prune` 仍可定位该项。写入或复制使某插件的有效覆盖集合超过 4 MiB 时，按 §5 返回 HTTP 500 与 `RESOURCE_EXHAUSTED`。
 
 创建、复制或删除使有效覆盖集合变化时，Core 向受影响的在线插件 Session 下发完整集合；指定插件的 PATCH 与 prune 成功后，即使有效集合相同也下发。更新成功后开始的 SDK 调用使用新视图，在途调用保留原视图。发送、业务拒绝或响应协议错误关闭原 Session，管理请求返回实际错误，已保存的变更保留；离线插件在下次 Bootstrap 接收最新集合。HTTP 管理入口沿原有管理互斥执行。
@@ -698,6 +702,8 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 策略对象为 `{"policy":null,"effective_policy":"never","sleep_capable":false,"eligible":false,"reason":"manifest_requires_resident"}`。`policy` 为文件中的覆盖值，无覆盖时为 `null`；`effective_policy` 为 `"never"` 或生效时长；`eligible` 表示当前模式、manifest、进程形式与路由策略是否允许自动休眠，实际空闲退出仍须满足活动条件。`reason` 使用稳定值：`always_on`、`manifest_requires_resident`、`in_process`、`policy_never`、`route_requires_resident`，允许休眠时为空串，按前述顺序选择首个成立原因。未声明 Core 过滤的消息事件、Raw、HTTP、Hook 与持续监听被显式时长放行时，逐一检查全部路由并返回 `warnings` 字符串数组（`route <route_id>: <kind> may cause frequent wakeups`）；无警告时省略。面向用户的原因与提示由 WebUI i18n 翻译。
 
+策略读取先按上述固定顺序检查已有设置、manifest 和进程形式；已能确定 `always_on`、`manifest_requires_resident`、`in_process` 或 `policy_never` 时返回对应常驻原因。需要路由准入结论时读取与当前安装身份一致的已提交路由快照；尚无已提交代次、缺少快照或快照身份不符时，按 §5 返回 412 / `FAILED_PRECONDITION` 及实际原因。查询保持只读，不启动组件或补建快照；全局设置与 runtime 查询可独立使用。
+
 所有插件接口都只接受已安装且未卸载的 `role: plugin` 或 `role: agent` ID；ID 不存在、已卸载或属于其他角色返回 404 / `NOT_FOUND`。无 manifest 可休眠声明时，时长覆盖仍可保存，生效策略保持 `never`，WebUI 锁定时长选项并显示原因。未知模式、`auto` 字面量作为存储值、零/负/非法时长在写入前返回 400 / `INVALID_ARGUMENT`。
 
 写入经共享的 `settings.File.WithPublisher(publish func(change func() error) error) *File` 受管视图执行 Update/Reload，保留其他字段及未修改的 `${...}` 原文；全部管理设置发布（含命令前缀、Prune、BindAdapter 与 PrepareInstances 的内部写回）交给 Core 生命周期循环，与空闲判定串行。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复。变更立即生效，无需 reload。`never` 立即唤醒已启用的 `SUSPENDED` 插件；处于 `QUIESCING` 时先完成正常停止，再按最新策略恢复；切回 `always_on` 唤醒全部已启用插件，已停用插件保持停用。时长变更从下一次空闲判定使用。提交前保存失败时返回实际错误；提交后保留已发布设置并应用策略，持久化错误及各插件唤醒失败聚合后按 §5 返回，健康插件继续恢复。调用方重新 GET 核对设置；各失败插件的运行状态同时记录实际错误。
@@ -706,7 +712,7 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 运行对象为 `{"enabled":true,"generation_id":"…","state":"SUSPENDED","reason":"idle","changed_at":"2026-11-17T12:00:00Z"}`。`state` 取 CONTRACTS §4.4 的六个值，`changed_at` 为最近状态变化的 UTC RFC 3339 时间；`reason` 为无 secret 的诊断字符串（程序输出用英文），失败保留实际错误原因。最近一次唤醒与空闲停止另在存在记录时返回 `last_wake:{"reason":"…","at":"…"}` 与 `last_suspend:{"reason":"idle","at":"…"}`，缺失时省略。
 
-`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；进入 QUIESCING 前撤销空闲决定时保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 已提供底层记录，本文休眠管理端点由 S-06.1 接入；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
+`last_wake` 记录 WAKING→ACTIVE 的实际完成时间与原因；进入 QUIESCING 前撤销空闲决定时保留原记录。`last_suspend` 在确认旧进程树退出、写入 SUSPENDED 时更新。S-02.1 提供底层记录，S-06.1（PR #269）已接入本文六端点及 CLI；ACTIVATED 后的业务交付仍须等待 Core 完成全部绑定。
 
 组件列表继续保留 §3 的 `State` 字段及现有角色的语义；plugin 与 agent 追加 `RuntimeState`，取同一持久化记录中的六态值。休眠插件的 `State` 显示 `Suspended`，与 `Degraded` 区分；低层 Preparing、Activating、Activated 等阶段仍通过原字段展示。所有读取均排除快照中的私有认证材料与配置。
 
