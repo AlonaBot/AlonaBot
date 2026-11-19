@@ -349,7 +349,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		}
 		return instances, nil
 	}})
-	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency})
+	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency, EnsureActive: a.ensureActive})
 	a.scheduler.Services(a.mux, a.router.PluginFor)
 	if harness := inproc.HarnessFor(dir); harness != nil {
 		completed := func(pluginID, routeID string, notify func(inproc.Dispatch)) func(string, wire.Response, error) {
@@ -865,7 +865,9 @@ func (a *assembly) detach(r *runningComponent) {
 		}
 		a.router.Detach(r.id)
 		a.bus.Detach(r.id)
-		a.scheduler.Detach(r.id)
+		if r.process == nil {
+			a.scheduler.Detach(r.id)
+		} // 独立进程的调度计划由 Supervisor 按停止原因撤销或保留。
 		if r.instance != nil {
 			a.http.Unbind(r.id, r.instance.GenerationID, r.instance.HTTPProxyToken)
 		}
@@ -940,7 +942,9 @@ func (c *Core) stopComponentWithActivity(r *runningComponent, t0 time.Time, timi
 		if r.process == nil {
 			err = errors.Join(err, r.runErr)
 		}
-		a.scheduler.Released(r.id)
+		if r.process == nil {
+			a.scheduler.Released(r.id)
+		} // 独立进程只由持有旧树清理权的 Supervisor 通知一次。
 	default:
 	}
 	if r.process == nil && tracksRuntime(r.install.Role) {

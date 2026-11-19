@@ -115,8 +115,9 @@ type Running struct {
 	waker           *Waker
 
 	// released 与 cleanupErr 由逐插件锁保护；进程资源只释放一次。
-	released   bool
-	cleanupErr error // Stop 或 WaitExit 清理进程树时的错误，供随后的 Stop 返回
+	released           bool
+	schedulerSuspended bool  // 由逐插件锁保护；正常 IDLE 的撤销回调保留调度计划。
+	cleanupErr         error // Stop 或 WaitExit 清理进程树时的错误，供随后的 Stop 返回
 }
 
 // Launch 启动插件并完成准备与激活；保持启动期间的逐插件锁。
@@ -482,6 +483,11 @@ func (r *Running) stop(t0 time.Time, reason pb.StopReason, lastActivityAt *time.
 			return host.StopResult{Err: wakeError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "plugin still has active work")}
 		}
 	}
+	// 活动门禁已交出停止权；先保留到期入口，再让宿主离开 Activated。
+	r.schedulerSuspended = r.scheduler != nil && reason == pb.StopReason_STOP_REASON_IDLE
+	if r.schedulerSuspended {
+		r.scheduler.Suspend(r.pluginID)
+	}
 
 	// 2. 冻结、排空、STOPPING，并等待整棵进程树清空或在总截止终止它。
 	ctx := context.Background()
@@ -492,7 +498,7 @@ func (r *Running) stop(t0 time.Time, reason pb.StopReason, lastActivityAt *time.
 			if !activationFailed {
 				runtimeErr = r.runtime.writeIfCurrent(ctx, state.RuntimeQuiescing, reason.String())
 			}
-			if r.scheduler != nil {
+			if r.scheduler != nil && !r.schedulerSuspended {
 				r.scheduler.Drain(r.pluginID)
 			}
 			if r.http != nil {
@@ -522,6 +528,10 @@ func (r *Running) stop(t0 time.Time, reason pb.StopReason, lastActivityAt *time.
 		}
 	}
 	res.Err = errors.Join(res.Err, runtimeErr)
+	if res.Err != nil && r.scheduler != nil {
+		r.schedulerSuspended = false
+		r.scheduler.Detach(r.pluginID)
+	}
 	if r.cleanupErr == nil {
 		r.release()
 		r.runtime.release()
@@ -606,7 +616,7 @@ func (r *Running) detach() {
 	if r.http != nil {
 		r.http.Unbind(r.pluginID, r.Instance.GenerationID, r.Instance.HTTPProxyToken)
 	}
-	if r.scheduler != nil {
+	if r.scheduler != nil && !r.schedulerSuspended {
 		r.scheduler.Detach(r.pluginID)
 	}
 }
