@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
@@ -168,8 +169,12 @@ func withinModule(dir string) (bool, error) {
 	}
 }
 
+// pseudoVersion 匹配 Go 伪版本末尾的 14 位时间戳与 12 位提交哈希。
+var pseudoVersion = regexp.MustCompile(`[-.]\d{14}-[0-9a-f]{12}$`)
+
 func sdkVersion(version string) string {
-	if version == "" || version == "(devel)" || strings.HasSuffix(version, "+dirty") {
+	// Go 会给仓库 checkout 的构建盖上伪版本；它不是发布的版本，按开发版处理。
+	if version == "" || version == "(devel)" || strings.HasSuffix(version, "+dirty") || pseudoVersion.MatchString(version) {
 		return "(devel)"
 	}
 	normalized := strings.TrimPrefix(version, "v")
