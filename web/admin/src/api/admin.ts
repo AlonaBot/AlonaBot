@@ -1287,4 +1287,3 @@ export function getProfileTools(id: string): Promise<{ items: ProfileToolPolicy[
 export async function putProfileTools(id: string, items: ProfileToolPolicy[]): Promise<void> {
   await request(`/api/v1/profiles/${encodeURIComponent(id)}/tools`, jsonBody({ items }, 'PUT'));
 }
-
