@@ -625,6 +625,16 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 
 本地 `cmd/alonabot/manual_migration_local_test.go`（未提交）的 `TestManualMigrationInputLocal` 覆盖无认证/错误 Bearer、Cookie 缺 CSRF、有效 Cookie、许可字段类型、其他动作携带许可、尚无 Active 与非 external 候选拒绝。darwin/arm64、Go 1.27.1：`go test -race ./cmd/alonabot -run '^TestManualMigrationInputLocal$' -count=1`、`go vet ./internal/core/manage ./internal/core/journal ./internal/app ./cmd/alonabot` 与 `git diff --check` 通过。未新增依赖或协议字段，许可不进入状态库；人工恢复外部数据后由管理员决定下一次候选或 enable。
 
+### T-09.25 / V-145 配置文件页的页面证据
+
+PR #271；产品 head `dbde6baeab784abfdbd9ef59298f6397edcd93ac`，同步 main `bfc38c5b` 后前端产品差异保持一致。2026-11-19，darwin/arm64、Go 1.27.1、Chromium 157.0.8103.79；实际运行同源 Core、官方 Agent 与已安装的 WebUI 产物，本地 Provider、回环 Adapter 和 schema fixture 使用合成数据。
+
+| 测试位置与场景 | 命令、平台与结果 | 未运行与承接 |
+| --- | --- | --- |
+| `web/admin/src/{api,schema,pages}/*.local.test.ts(x)`（未提交）；配置文件 CRUD、返回 ID 选择、同路径查询/历史、实例缺省与单独会话指定、null 与显式 default、AI 六字段、平台五键、覆盖与继承、Pending/409、invalid/prune、工具和操作独立身份 | `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test`（8 文件 44 项）、`npm --prefix web/admin run build` 通过；Popover 修复后受影响的 typecheck/build 与浏览器通过，最终 CSS 调整后 build 和宽度检查通过。审查者在固定产品候选的忽略测试 `src/pages/reviewProfile.local.test.ts` 中独立验证复合覆盖保留未编辑成员、null/false、复合 secret 只读、同名 tool/operation、空身份与目录消失后的旧覆盖，`npm --prefix web/admin run test -- src/pages/reviewProfile.local.test.ts` 两项通过（83ms）。提交测试新增 0 行 | 构建保留既有单 chunk 超过 500 kB 的提示；其他 OS/架构前端运行未运行；全仓 Go race 与五目标构建由当前 PR head 的 Quality gate 承接 |
+| 实际 Core 浏览器：打开/切换/新建/颜色/重命名/复制/删除，default 鼠标与键盘禁删；使用范围、手动完整 session、真实会话数；AI 六字段、隐藏唤醒词保留、无 Agent；默认 Pending 保存/确认 reload/discard/409；非默认 object/list 完整替换/继承、无效覆盖 prune；平台五键完整 PUT、false/空串/0；工具与操作同名分别覆盖并 inherit | 上述页面与持久化读回通过；官方 Agent 使用所选模型与人格，回环收到 `VIP:AI profile response`；回环 Adapter 的 `!` 命令与 `VIP:` 回复前缀即时生效。卸载 Agent 后显示商店引导，安装启用后恢复。1440/800/375px 无整页横向溢出，中英、浅深色、搜索与键盘操作通过。审查者实际对照画板并查看最终人格 Popover、375px 深色上下半页、桌面平台 240px 输入框与使用范围弹窗；截图为本地 `/tmp/g165-browser/` 中 12:06 后的 `profiles-mobile-dark-{top,bottom}.png`、`profiles-final-{light,dark}.png`、`platform-final-light.png`、`profiles-scope-light.png`，以及 `persona-popover-mobile.png` 和 `platform-final-mobile-dark-bottom.png` | 真实 Telegram/OneBot 外部环境、支持平台的 mention/quote/forward 实际发送及 Unicode 阈值发送未运行，随正式流程/目标环境验收继续；OneBot 本地模拟只验证接收，发送效果使用回环 Adapter；真实外部 Provider 未运行 |
+| 受控 HTTP 故障与目录变化：`identities:[]`、保存成功后响应 503、人格空目录/来源 503 | 浏览器路由截获分别验证无新增候选且原 operation 覆盖按原身份保存；PUT 已真实写入时页面重读已存状态并保留 503 原错误；人格保留缺失的原值并显示来源完整错误 | 这些分项使用受控模拟；真实目录同名 tool/operation 的独立读写已在上一行运行 |
+
 ### 3.3 Target 与发信许可分项证据
 
 [PR #31](https://github.com/AlonaBot/AlonaBot/pull/31)（T-03.2），产品代码 head `bb5992119928b06a3df89f8445a2da9b4e005472`；2026-10-28 在 macOS 27.0.1（26A434）、darwin/arm64、Go 1.27.1 上运行。
