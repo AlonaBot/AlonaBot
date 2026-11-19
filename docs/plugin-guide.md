@@ -9,7 +9,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 - 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
 - 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。实测一个只用 SDK 的插件进程约 7.5 MiB（linux/amd64 PSS），每多链接一个库、多做一次初始化都会增加这个数。官方组件的预算见 TEST-MATRIX V-74（D-52）。
-- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。S-02.1 已接通 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒；S-02.2 已接通自动空闲退出与即时休眠策略，Scheduler 到期唤醒由 S-03.1 接入。开发组件、Adapter 与 WebUI 保持常驻。
+- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。S-02.1 已接通 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒；S-02.2 已接通自动空闲退出与即时休眠策略，S-03.1 已接通正常休眠插件的静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
 
