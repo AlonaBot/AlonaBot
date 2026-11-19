@@ -244,7 +244,7 @@ export function ProfilesPage(): JSX.Element {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content className="dropdown-menu-content profile-menu-content" align="start" sideOffset={6}>
-                <input aria-label={ui.searchProfiles} placeholder={ui.searchProfiles} value={profileQuery} onChange={event => setProfileQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} />
+                <input aria-label={ui.searchProfiles} placeholder={ui.searchProfiles} value={profileQuery} onChange={event => setProfileQuery(event.target.value)} onKeyDown={event => { if (event.key.length === 1) event.stopPropagation(); }} />
                 {profiles.filter(p => (p.name + p.id).toLowerCase().includes(profileQuery.toLowerCase())).map(p => (
                   <DropdownMenu.Item
                     key={p.id}

@@ -1,5 +1,6 @@
 import { useMemo, useState, type JSX } from 'react';
-import { Plus, X } from 'lucide-react';
+import * as Popover from '@radix-ui/react-popover';
+import { ChevronDown, Plus, X } from 'lucide-react';
 import type { ConfigSnapshot, Package, ProfilePlugin } from '../api/admin';
 import { OptionsFromControl, type ConfigFormProps } from '../components/ConfigForm';
 import { useUI } from '../i18n/UI';
@@ -26,6 +27,7 @@ function AIForm({ form, snapshot, profileID, plugin }: { form: ConfigFormProps; 
   const ui = useUI();
   const [patch, setPatch] = useState<Record<string, unknown>>({});
   const [word, setWord] = useState('');
+  const [personaOpen, setPersonaOpen] = useState(false);
   const fields = useMemo(() => fieldsFromSchema(snapshot.schema).filter(field => names.includes(field.key) && field.profile), [snapshot.schema]);
   const base = form.value as Record<string, unknown>;
   const value = (name: string) => Object.hasOwn(patch, name) ? patch[name] === null ? snapshot.active[name] : patch[name] : base[name];
@@ -44,10 +46,16 @@ function AIForm({ form, snapshot, profileID, plugin }: { form: ConfigFormProps; 
       {fields.filter(field => group.includes(field.key)).filter(field => field.key !== 'wake_words' || triggerValues.includes('wake_word')).map(field => <div className="profile-card-row" key={field.key}>
         <div className="profile-row-info"><span className="profile-row-title">{({ chat_model: ui.chatModel, image_caption_model: ui.imageCaptionModel, default_persona: ui.persona, triggers: ui.triggerModes, wake_words: ui.wakeWords, member_sessions: ui.memberSessions } as Record<string, string>)[field.key]}</span>
           {field.key === 'member_sessions' && <span className="profile-row-desc">{ui.memberSessionsDesc}</span>}
-          {profileID !== 'default' && <button type="button" className="profile-inherit-btn" disabled={inherited(field.key)} onClick={() => change(field.key, null)}>{ui.followDefault}</button>}
+          {profileID !== 'default' && (inherited(field.key) ? <span className="profile-inherit-badge">{ui.followDefault}</span> : <button type="button" className="profile-inherit-btn" onClick={() => change(field.key, null)}>{ui.followDefault}</button>)}
         </div>
         {field.key === 'chat_model' || field.key === 'image_caption_model' ? <ModelSelect value={value(field.key) as string} label={field.key === 'chat_model' ? ui.chatModel : ui.imageCaptionModel} options={modelOptions(field.key)} onChange={next => change(field.key, next)} />
-          : field.key === 'default_persona' ? <details className="profile-persona-control"><summary>{value(field.key) as string || ui.none}</summary><OptionsFromControl field={field} value={value(field.key)} onChange={next => change(field.key, next)} attributes={{ 'aria-label': ui.persona }} optionsAPI={form.options!} /><button type="button" onClick={() => change(field.key, '')}>{ui.none}</button></details>
+          : field.key === 'default_persona' ? <Popover.Root open={personaOpen} onOpenChange={setPersonaOpen}>
+            <Popover.Trigger asChild><button type="button" className="model-select profile-persona-control" aria-label={ui.persona}><span>{value(field.key) as string || ui.none}</span><ChevronDown size={14} /></button></Popover.Trigger>
+            <Popover.Portal><Popover.Content className="profile-persona-popover" align="end" sideOffset={6} collisionPadding={16}>
+              <OptionsFromControl field={field} value={value(field.key)} onChange={next => { change(field.key, next); setPersonaOpen(false); }} attributes={{ 'aria-label': ui.persona }} optionsAPI={form.options!} />
+              <button type="button" onClick={() => { change(field.key, ''); setPersonaOpen(false); }}>{ui.none}</button>
+            </Popover.Content></Popover.Portal>
+          </Popover.Root>
           : field.key === 'triggers' ? <div className="profile-trigger-pills">{(['mention', 'wake_word', 'private'] as const).map((mode, index) => <button type="button" key={mode} aria-pressed={triggerValues.includes(mode)} className={`profile-trigger-pill ${triggerValues.includes(mode) ? 'is-active' : ''}`} onClick={() => change('triggers', triggerValues.includes(mode) ? triggerValues.filter(item => item !== mode) : [...triggerValues, mode])}>{[ui.triggerMention, ui.triggerWakeWords, ui.triggerDirect][index]}</button>)}</div>
           : field.key === 'wake_words' ? <div className="profile-tag-editor"><div className="profile-tags-list">{(value('wake_words') as string[]).map((entry, index) => <span className="profile-tag-pill" key={index}>{entry}<button type="button" aria-label={`${ui.removeRow} ${entry}`} onClick={() => change('wake_words', (value('wake_words') as string[]).filter((_, at) => at !== index))}><X size={12} /></button></span>)}</div><div className="profile-tag-input-box"><input aria-label={ui.addWakeWord} placeholder={ui.addWakeWord} value={word} onChange={event => setWord(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (word) { change('wake_words', [...value('wake_words') as string[], word]); setWord(''); } } }} /><button type="button" aria-label={ui.addWakeWord} disabled={!word} onClick={() => { change('wake_words', [...value('wake_words') as string[], word]); setWord(''); }}><Plus size={14} /></button></div></div>
           : <label className="plugin-switch-label"><input type="checkbox" role="switch" aria-label={ui.memberSessions} checked={value('member_sessions') === true} onChange={event => change('member_sessions', event.target.checked)} /><span className="plugin-switch-slider" /></label>}

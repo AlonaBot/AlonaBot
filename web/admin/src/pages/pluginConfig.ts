@@ -91,18 +91,10 @@ export function extractProfileOverrides(
   patch: Record<string, unknown>,
   markedFields: string[],
 ): Record<string, unknown> {
-  const overrides: Record<string, unknown> = {};
-  for (const dotPath of markedFields) {
-    if (isPathInPatch(dotPath, patch)) {
-      const val = getValueByDottedPath(nextDraft, dotPath);
-      if (val === undefined) {
-        overrides[dotPath] = null;
-      } else {
-        overrides[dotPath] = structuredClone(val);
-      }
-    }
-  }
-  return overrides;
+  return Object.fromEntries(markedFields.filter(path => isPathInPatch(path, patch)).map(path => {
+    const value = getValueByDottedPath(nextDraft, path);
+    return [path, value === undefined ? null : structuredClone(value)];
+  }));
 }
 
 function containsSecret(field: Field): boolean {

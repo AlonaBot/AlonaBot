@@ -163,14 +163,6 @@ export const routes: RouteEntry[] = [
     render: () => <ModelsPage />,
   },
   {
-    id: 'models',
-    path: '/models',
-    label: 'models',
-    icon: Box,
-    group: 'main',
-    render: () => <ModelsPage />,
-  },
-  {
     id: 'profiles',
     path: '/profiles',
     label: 'profiles',
