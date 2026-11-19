@@ -32,6 +32,9 @@ type HTTPAuth int
 // AuthPlatformToken 声明由 Adapter 校验公开路由的平台凭证。
 const AuthPlatformToken HTTPAuth = 1
 
+// AuthStatic 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。
+const AuthStatic HTTPAuth = 2
+
 // HTTPRoute 声明 SDK 托管的 HTTP 路由。
 type HTTPRoute struct {
 	Method  string

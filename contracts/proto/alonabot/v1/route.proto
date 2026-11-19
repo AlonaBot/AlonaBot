@@ -325,6 +325,8 @@ enum HttpAuthMode {
   HTTP_AUTH_MODE_CALLBACK_NONCE = 4;
   // Adapter 校验平台传入的凭证。
   HTTP_AUTH_MODE_PLATFORM_TOKEN = 5;
+  // 公开静态资源：只限 GET 与 HEAD，Core 不校验会话，插件不做额外验证。
+  HTTP_AUTH_MODE_STATIC = 6;
 }
 
 // HttpRouteSpec 描述 HTTP 路由的专属描述。

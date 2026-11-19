@@ -65,7 +65,7 @@ T-11.6 已接通按配置文件的工具策略（PR #246）。`internal/app` 在
 
 SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup 上省略 route ID；Hook 在 Plugin 与 SubPlugin 上提供，稳定身份由 builder 的 `.ID` 指定。`*sdk.Context` 实现 `context.Context`，分类客户端可直接接收 `c`；`c.Reply(text, more...)` 将文本与片段作为一条消息发送。插件测试的 `Result.RequireReply` 检查 Handler 错误与单次发送的文本（D-180，T-04.20）。
 
-`sdk/page` 属于 SDK：根包在收集 `.Page(title)` 时调用 `page.Handler()`，自动补齐页面同目录的 GET `kit.css` 与 `kit.js`，继承页面认证，优先保留作者已登记的同方法、同路径路由；插件也可手动挂载 `Handler()`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示页面声明与套件使用。
+`sdk/page` 属于 SDK：根包在收集 `.Page(title)` 时调用 `page.Handler()`，自动补齐页面同目录的 GET `kit.css` 与 `kit.js`，以公开静态资源模式 `sdk.AuthStatic` 提供，页面 HTML 与数据路由继续要求管理会话，优先保留作者已登记的同方法、同路径路由；插件也可手动挂载 `Handler()`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示页面声明与套件使用。
 
 T-12.20 已实现官方 Agent 的五个插件页面（PR #252）。`agent/pages.go` 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、数据、用户任务及嵌入资源，接口见 [ADMIN-API §15.2](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
 
