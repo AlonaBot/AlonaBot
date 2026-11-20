@@ -44,7 +44,7 @@ var (
 	// SemVer 2.0 官方正则。
 	semver                = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 	marketComponentSuffix = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
-	localAdapterID        = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, validate.MaxPluginIDLen-1))
+	localAdapterID        = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`) // 长度先行检查，避免展开有界重复。
 	reservedAdapterID     = regexp.MustCompile(`^(con|prn|aux|nul|com[1-9]|lpt[1-9])$`)
 )
 
@@ -309,7 +309,7 @@ func componentID(id, role string) ([]string, error) {
 }
 
 func checkAdapterID(id string) error {
-	if !localAdapterID.MatchString(id) || reservedAdapterID.MatchString(id) {
+	if len(id) > validate.MaxPluginIDLen || !localAdapterID.MatchString(id) || reservedAdapterID.MatchString(id) {
 		return fmt.Errorf("invalid local Adapter ID %q", id)
 	}
 	return nil

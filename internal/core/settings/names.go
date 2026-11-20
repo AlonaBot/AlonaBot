@@ -2,14 +2,14 @@ package settings
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 )
 
 // CONTRACTS §15.1 规定实例名的字符集和长度，且跨 Adapter 唯一。
 const maxInstanceNameBytes = 64
 
-var instanceName = regexp.MustCompile(fmt.Sprintf(`^[A-Za-z0-9_-]{1,%d}$`, maxInstanceNameBytes))
+// 各名称入口先检查长度，避免编译展开有界重复。
+var instanceName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func validateNames(s Settings, locations map[string]*node) error {
 	seen := make(map[string]bool)
@@ -17,7 +17,7 @@ func validateNames(s Settings, locations map[string]*node) error {
 		path := "adapters." + id
 		for name := range adapter.Instances {
 			key := path + ".instances." + name
-			if !instanceName.MatchString(name) {
+			if len(name) > maxInstanceNameBytes || !instanceName.MatchString(name) {
 				return at(locations, key, errors.New("invalid adapter instance name"))
 			}
 			if seen[name] {

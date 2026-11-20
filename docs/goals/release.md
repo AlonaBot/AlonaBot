@@ -11,9 +11,9 @@
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 已完成（PR #275） |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 待派发 |
-| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
-| goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 实施与证据审查中（PR #278） |
+| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 独立实施中；最终验收等待前置 |
+| goal-48 | T-10.3 | 现有资源实测与维护者决定归档 | T-10.1 | 等待文档收口（D-184） |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
 
 ## 第 19 波
@@ -263,7 +263,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：待派发。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，派发前确认合并后 main 的 Quality gate 通过。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 的固定 Linux 测量仍在途，按实际合并状态消费其公开入口并保留具体待联验项；由原 Core 执行者完成资源归因。
+状态：实施与证据审查中（PR #278）。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，main `cb5acc79` 的 Quality gate（run 44647524835）已通过。跨组件实现、浏览器补验与 GN11 功能增量联验均已完成独立审查，PR #278 等待最终 head CI 与合并。GN11 已接入 goal-174 的固定产品候选；D-184 已接受当前资源开销，资源测量收口。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 已完成固定 Linux 实测并按 D-184 收口，最终消费稳定合并输入完成公开入口联验。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -307,7 +307,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口与 GitHub Actions 计费恢复按维护者决定留到最后处理；其余可用平台继续实施和实跑。
+状态：独立实施中，最终验收等待 T-10.1 / goal-46。2026-11-20 从经父审查的 goal-46 候选 `eb01ed6c` 开始平台程序与可用环境的独立实施；最终以整合后的同一候选闭合五平台要求，后继候选变动补受影响验证。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口与 GitHub Actions 计费恢复按维护者决定留到最后处理；其余可用平台继续实施和实跑。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -341,42 +341,18 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 不做：资源报告（T-10.3）；发布（T-10.4）。
 ```
 
-### goal-48 · T-10.3 资源比较报告与常驻内存预算核对
+### goal-48 · T-10.3 现有资源实测与维护者决定归档
 
-状态：等待前置（T-10.1 / goal-46）。需要固定 linux/amd64 机器与等价负载；用户于 2026-11-19 已明确批准 nonebot2[fastapi,httpx]==2.5.0、nonebot-adapter-telegram==0.1.0b21，仅用于 bench/nonebot2 的独立 uv 环境（同日从 PyPI 元数据核实，Python ≥3.10）。正式实施仍等待 goal-46，本轮未添加、安装或锁定依赖。
+状态：等待 goal-46 稳定输入后文档收口。2026-11-20 维护者接受当前开销并要求停止该方面测量（D-184）；原四负载及 NoneBot2 对照取消新增运行。已批准的两组基准依赖及本地兼容预检保留历史，不再扩展基准实现。
 
 ```text
-/goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：资源比较报告与常驻内存预算核对）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
+/goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：现有资源实测与维护者决定归档）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。
 
-目标：在一台固定机器上，按 TEST-MATRIX V-33 的四种负载（空闲、消息、数据库、HTTP）测量 Core 加插件及附属进程的总 RSS/私有内存、Linux PSS、CPU 与 P50/P95/P99 延迟，并用同一模拟服务与功能相同的插件测量 NoneBot2；再按 V-74 测量 Core、echo 与 configdb 的 gormdb 变体空闲时的 PSS 并对照预算；rss 分项按 D-171 标随后续版本，help 可补测并保留自己的名称与结果，不套用 rss 预算。输出原始数据与复现命令，不预设优胜结论。
+目标：在 docs/benchmarks.md 收录 goal-174 已取得的固定 linux/amd64 资源数据、测量条件、真实候选与原始记录位置，以及 D-184 的维护者接受决定；同步 TEST-MATRIX V-33、V-74。
 
-依据：PLAN T-10 步骤 6；CONTRACTS §10；DECISIONS D-52；TEST-MATRIX V-33、V-74。
+范围：docs/benchmarks.md、spec/TEST-MATRIX.md 的相关证据。复用已核算的九段120s/15进程读数和原有效休眠/冷启动记录，列每轮 PSS、RSS、私有内存和中位数；保留旧预算比较及历史失败。V-33 四负载和 NoneBot2 对照标记“维护者取消新增测量”，保持未取得的指标缺项。
 
-范围（只新增或修改这些）：
-- 新增 bench/（负载生成器与采样程序：Go 程序）；bench/nonebot2/（NoneBot2 侧的等价插件与运行说明，Python 依赖用 uv 管理且只在该目录内）
-- 新增 docs/benchmarks.md（报告：机器、版本、命令、原始数据位置、结果表，不写优胜结论）
-- spec/TEST-MATRIX.md：V-33、V-74 的证据（本切片获授权修改这一处）
-- 基准与验收发现的缺陷：在对应包、基准程序及直接调用方做必要修复，逐项记录复现、完整错误、根因、验证和受影响结果，修复后使最终报告对应同一有效候选；契约缺口/冲突按 spec 流程处理
-允许的新跨模块边：bench 只经 os/exec 与 HTTP 调用被测程序。NoneBot2 及其 Python 依赖只用于基准，不进入 Go module；在 bench/nonebot2 中引入前标阻塞，列出版本，等维护者确认。
-
-行为：
-- 负载（V-33）：空闲——Core 与 echo、configdb、showcase HTTP 示例三个插件运行 10 分钟；消息——每秒 20 条文本、持续 10 分钟，echo 逐条回复；数据库——每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟；HTTP——每秒 50 个请求访问插件路由，持续 10 分钟。两边都使用同一个本地 Bot API 模拟服务。
-- 采样：每秒采样一次全部相关进程（Core、插件、Adapter 及其子进程；NoneBot2 的进程）的 RSS、私有内存（Linux 读 smaps_rollup 的 Private_*；macOS 写明使用的替代指标）、Linux PSS、CPU；延迟为模拟服务从发出 update 到收到回复的时间（消息与数据库负载），HTTP 为请求往返时间。
-- 输出：每次运行的原始 CSV 与汇总 JSON，复现命令写入 docs/benchmarks.md；报告给出数值、测量条件及有数据依据的解释，不预设优胜结论；空闲场景无业务延迟时标为不适用，缺失样本与失败请求保留原值及原因，禁止用零值补齐。
-- V-74：linux/amd64，各进程 Activated 后空闲 2 分钟，读 smaps_rollup 的 Pss，取 3 轮中位数；超出预算时在报告中列出超出项与可见原因（例如新增依赖、init 分配），不自行调整预算。
-- V-74 的原预算保持 Core ≤24 MiB、echo ≤10 MiB、configdb gormdb ≤16 MiB；rss ≤14 MiB 的分项随组件进入首发后的版本测量。Core-only 时不启用任何插件/Adapter，其余进程在 Activated 后空闲 2 分钟、3 轮中位数；help 补充数据只作观察。超预算按 CONTRACTS §10 定位并修复，预算调整需要维护者在 ADR 明确裁定。
-- 固定测量机与 OS/Go/Python/依赖、CPU/内存/存储、采样权限、相同 SQLite 操作与响应体，双方顺序独立运行，使用同一 Bot API 模拟端与负载生成器。记录 offered/completed/error 数量、采样起止、延迟定义及统计方法；采样覆盖全部相关进程并处理子进程出生/退出，原始数据与候选版本一并保留。避免在承载其他 CI 的 runner 忙碌时采样；运行时段与机器由主线程协调。
-- NoneBot2 方案：nonebot2[fastapi,httpx]==2.5.0 提供真实对照框架、HTTP 服务和客户端驱动，nonebot-adapter-telegram==0.1.0b21 使用相同 Telegram Bot API 模拟端；数据库采用 Python 标准库 sqlite3。批准后仅在 bench/nonebot2 用 uv 管理独立环境并生成 uv.lock，列出全部传递依赖；不使用 all extra。精确版本依据为 PyPI 的 /pypi/nonebot2/2.5.0/json 与 /pypi/nonebot-adapter-telegram/0.1.0b21/json；引入前再核对适配兼容与许可证。
-- 已有替代：Go 标准库负载生成、HTTP、进程采样与 SQLite 可先完成 AlonaBot 基线和 V-74；它们提供可复用测量工具，但 V-33 的 NoneBot2+Telegram Adapter 对照仍需上述真实依赖。审批仅阻塞对照侧，独立基线与测量工作继续，完整对比留待批准后实际运行。
-- TEST-MATRIX 记录机器、OS、版本与结果文件位置；没有在 Linux 上运行时 PSS 写「未运行」。
-
-测试（按编码规范「测试提交规则」）：
-- 提交：基准程序本身是交付物，不另提交测试；负载生成器的本地自测在 PR 中写明。
-- 运行记录：原始数据附在 PR 中（是否提交到 bench/results/ 由维护者决定）。
-
-完成条件：gofmt -l 无输出；go vet ./...；go build ./...；一次完整基准运行的结果。
-
-不做：脱离实测缺陷的性能优化；修改 V-74 的预算（需维护者在 DECISIONS 记录）；为吞吐与延迟设定通过阈值（契约不设）。
+完成条件：数据与原始记录一致，git diff --check 通过，文档经审查后交付 PR。不新增采样、压测、性能优化、基准工具或依赖；后继 goal-49 消费该文档与 D-184。
 ```
 
 ## 第 24 波

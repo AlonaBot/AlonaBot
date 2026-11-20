@@ -18,6 +18,18 @@
 
 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链接上述清单的一个子集（D-52，D-68 修订），由审查时用下方的 `go list -deps` 命令核对：Core 允许 protobuf、modernc SQLite 及其依赖、GORM 与 libtnb/sqlite 及其依赖（jinzhu/inflection、jinzhu/now、golang.org/x/text）、yaml、x/sys、cobra 与 pflag、仅 Windows 链接的 mousetrap、jsonschema-go；SDK 根包只允许 protobuf、x/sys 与 jsonschema-go。MCP go-sdk、coder/websocket 只出现在官方插件、Agent 或 Adapter 中，openai-go 与 anthropic-sdk-go 只出现在 Agent 中；插件只在导入 `sdk/gormdb` 时链接 GORM。修改子集与修改已批准清单一样，需要维护者同意。
 
+### GORM 固定补丁来源
+
+2026-11-20 用户批准使用组织派生仓库 `github.com/AlonaBot/gorm` 的固定补丁。基线为上游 v1.31.2（`1d6ce99528060be18a42be09aca8d39efcb47f28`），补丁 commit 为 `34b98340007ddc2acd5cb8727a0b4b72ea295896`；仅将 `schema/schema.go` 的九种 hook 查找改为常量方法名，使 Go 链接器能裁剪无关方法。hook 顺序、签名检查、警告与 `gorm.io/gorm` 包身份保持。
+
+仓库保留 `require gorm.io/gorm v1.31.2`，以确切 pseudo-version 固定来源：
+
+```go
+replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d
+```
+
+独立组件的 `build`、`pack` 与开发构建将作者主 module 的 go.mod/go.sum 原样复制到临时 module，库模式构建直接沿用作者 module 上下文，仓库内示例因此继承该替换。正式 GORM 组件的 `build-info` 应同时列出 `gorm.io/gorm v1.31.2` 和上述替换来源。独立作者项目由自己的主 module 决定替换；需要使用相同补丁时，在该项目的 go.mod 中加入同一条 `replace`，再运行 `go mod download gorm.io/gorm` 更新 go.sum。
+
 ## 日常命令（仓库根目录）
 
 ```sh

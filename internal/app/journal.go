@@ -42,8 +42,15 @@ func (c *Core) recordRuntime(ctx context.Context, in state.Install, next state.R
 	if current.State == next && current.Reason == reason {
 		return nil
 	}
+	previous := current.State
 	current.State, current.Reason, current.ChangedAt = next, reason, time.Now().UTC()
-	return c.store.SetRuntimeStatus(ctx, in.PluginID, current)
+	if err := c.store.SetRuntimeStatus(ctx, in.PluginID, current); err != nil {
+		return err
+	}
+	if previous != next {
+		slog.Info("plugin runtime state changed", "plugin_id", in.PluginID, "previous_state", previous, "state", next, "reason", reason)
+	}
+	return nil
 }
 
 // recoverRuntime 在 Journal 清理后核对旧 SDK 是否仍持有跨代次锁，再发布当前运行状态。

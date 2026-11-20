@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -22,7 +23,7 @@ type activation struct {
 	onStop  func(context.Context) error
 	sess    *wire.Session // 激活后使用的 Session
 
-	readyMu sync.Mutex    // 同步 ACTIVATED 写出、ready 发布与首条业务准入
+	readyMu sync.Mutex    // 同步激活结果发布与首条业务准入
 	ready   atomic.Bool   // ready gate：ACTIVATED 完整写出后才为 true
 	readyCh chan struct{} // ready gate 打开时关闭
 	started atomic.Bool   // 已收到 ACTIVATE
@@ -94,6 +95,8 @@ func (a *activation) control(env *pb.Envelope) error {
 // runOnReady 在 ACTIVATE 给出的期限内执行 OnReady；用户函数不响应 ctx 时由 watchdog 判定失败。
 func (a *activation) runOnReady(m *pb.Activate) {
 	// 1. 在 ACTIVATE 给出的截止前执行 OnReady（如有）；失败或超时报告 SESSION_ERROR。
+	const phase = "OnReady"
+	observedAt := time.Now()
 	deadline := time.UnixMilli(m.GetOnReadyDeadlineUnixMs())
 	ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 	defer cancel()
@@ -104,17 +107,7 @@ func (a *activation) runOnReady(m *pb.Activate) {
 	}
 	go func() {
 		defer a.l.runtime.callbacks.Done()
-		defer func() {
-			if p := recover(); p != nil {
-				logPanic(ctx, "OnReady", p)
-				errc <- fmt.Errorf("OnReady panic: %v", p)
-			}
-		}()
-		var err error
-		if a.onReady != nil {
-			err = a.onReady(ctx)
-		}
-		errc <- err
+		errc <- runLifecycleCallback(ctx, phase, a.ack.GetSessionId(), a.onReady)
 	}()
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
@@ -126,6 +119,8 @@ func (a *activation) runOnReady(m *pb.Activate) {
 			return
 		}
 	case <-timer.C:
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback deadline observed", "phase", phase, "outcome", "timeout",
+			"observed_ns", time.Since(observedAt).Nanoseconds(), "lifecycle_session_id", hex.EncodeToString(a.ack.GetSessionId()))
 		a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
 		return
 	}
@@ -142,6 +137,9 @@ func (a *activation) runOnReady(m *pb.Activate) {
 
 // reportFailure 发送 SESSION_ERROR(ON_READY)（只含安全消息）后关闭 Session。
 func (a *activation) reportFailure(code pb.ErrorCode, safe string, cause error) {
+	// 错误帧写出、Session 关闭与原始原因发布必须完成后才允许激活等待返回。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	env, err := wire.ControlEnvelope(a.ack.GetSessionId(), a.ack.GetChosenMinor(), a.l.pluginID, pb.FrameKind_FRAME_KIND_SESSION_ERROR,
 		&pb.SessionError{FailedPhase: pb.SessionPhase_SESSION_PHASE_ON_READY})
 	if err == nil {
@@ -166,7 +164,7 @@ func (a *activation) shutdown(deadline time.Time) {
 		// 1. 关闭 ready gate 并取消 lifetime，不再接受新业务。
 		a.ready.Store(false)
 		a.stopLifetime()
-		go a.l.http.close(deadline)
+		go a.l.closeHTTP(deadline)
 		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
 		ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 		done := make(chan struct{})
@@ -198,7 +196,7 @@ func (a *activation) shutdown(deadline time.Time) {
 		}
 		timer.Stop()
 		cancel()
-		a.l.http.close(deadline)
+		a.l.closeHTTP(deadline)
 		if err := a.l.runtime.database.Close(); err != nil {
 			componentLogger(a.l.runtime.ctx).Error("close plugin database failed", "err", err)
 		}
@@ -259,7 +257,7 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *re
 		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
 	if l.http != nil {
-		l.http.activation.Store(a)
+		l.http.activate(a)
 	}
 	l.runtime.active.Store(a)
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效
@@ -280,6 +278,9 @@ func (a *activation) waitReady() error {
 		return err
 	case <-a.sess.Done():
 	}
+	// 发送错误帧也可能关闭 Session，先等待激活结果发布完成。
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
 	select {
 	case <-a.readyCh:
 		return nil

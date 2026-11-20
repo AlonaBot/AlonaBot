@@ -57,10 +57,11 @@ func (s *activitySession) active() bool {
 
 func (w *Waker) started(id string, at time.Time) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	p := w.plugin(id)
 	p.coldStartSequence++
 	p.coldStarts = append(p.coldStarts, at)
+	w.mu.Unlock()
+	w.count(id, "cold_start")
 }
 
 // AcknowledgeColdStarts 回收控制器已消费的快照前缀，保留快照之后发生的启动。

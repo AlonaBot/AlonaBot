@@ -19,12 +19,14 @@ import (
 )
 
 var environmentReference = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
-var instanceName = regexp.MustCompile(fmt.Sprintf(`^[A-Za-z0-9_-]{1,%d}$`, validate.MaxPluginIDLen))
+
+// 各名称入口先检查长度，避免编译展开有界重复。
+var instanceName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // CreateInstance 补全并校验实例配置，将凭证或环境变量引用原样写入 Core 设置。
 // 更换配置块的所属组件须 confirm，确认后整块丢弃旧实例与缺省选择。
 func (s *Service) CreateInstance(ctx context.Context, adapterPackageID, instanceID string, raw json.RawMessage, confirm bool) error {
-	if !instanceName.MatchString(instanceID) {
+	if len(instanceID) > validate.MaxPluginIDLen || !instanceName.MatchString(instanceID) {
 		return invalid("invalid adapter instance name")
 	}
 	// 实例名跨 Adapter 唯一，先串行化实例编辑，再取得包锁；删除沿用同一顺序。

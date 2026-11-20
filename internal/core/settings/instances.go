@@ -135,7 +135,7 @@ func prepareInstances(document *Document, adapterID string, schema *configschema
 	}
 	for _, instance := range group.members[index].value.members {
 		path := fmt.Sprintf("$.adapters[%q].instances[%q]", adapterID, instance.key)
-		if !instanceName.MatchString(instance.key) {
+		if len(instance.key) > maxInstanceNameBytes || !instanceName.MatchString(instance.key) {
 			prepared.problems = append(prepared.problems, InstanceProblem{InstanceID: instance.key, Path: path, Reason: "invalid adapter instance name"})
 			continue
 		}

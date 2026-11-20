@@ -4,3 +4,4 @@ name: ConfigDB
 version: 0.1.0
 source: github.com/AlonaBot/AlonaBot
 description: Managed SQLite notes and configuration migration
+sleep_capable: true
