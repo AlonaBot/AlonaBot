@@ -374,7 +374,7 @@ func packCrossComponentWebUI(t *testing.T) string {
 	if err := os.CopyFS(project, os.DirFS("../../web/admin")); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"ci", "--offline"}, {"run", "build"}} {
+	for _, args := range [][]string{{"ci"}, {"run", "build"}} {
 		command := exec.CommandContext(t.Context(), "npm", args...)
 		command.Dir = project
 		if output, err := command.CombinedOutput(); err != nil {

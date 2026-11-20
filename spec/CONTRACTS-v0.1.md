@@ -16,7 +16,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 ### 1.1 连接、Bootstrap 与帧
 
 - 每次 Native 进程启动创建新 Session。TCP 为默认传输：Core 使用 `net.Listen("tcp4", "127.0.0.1:0")` 或明确选定的 IPv6 loopback 地址直接绑定临时端口，持有 Listener 至会话结束；不采用先探测空闲端口、关闭后再绑定的流程。Core 为本次启动生成至少 256-bit 随机 Secret，经最小子进程环境或专用继承句柄传递。Hello 的插件 ID、包摘要、协议版本和 Secret 必须与 Core 启动记录一致；build_digest 为安装时已验证的归档 SHA256，由 Core 从安装记录随本次启动上下文下发供 SDK 回显，不在程序中内嵌自身整包摘要；Core 负责安装与启动前的实际文件完整性检查。Secret 用恒时比较，不接受跨插件凭证。该机制不构成对同宿主同权限恶意程序的沙箱。
-- CLI 的现有 `run --stdio`（库模式为 `Options.Stdio`）对本次运行的全部 Native 独立进程生效，包括开发、已安装组件的首次启用、候选、重启、重载、恢复与休眠唤醒；缺省 TCP。传输选择不持久化；纯静态 WebUI 与同进程组件沿用既有机制。
+- CLI 的现有 `run --stdio`（Core 内部装配选项为 `internal/app.Options.Stdio`）对本次运行的全部 Native 独立进程生效，包括开发、已安装组件的首次启用、候选、重启、重载、恢复与休眠唤醒；缺省 TCP。传输选择不持久化；纯静态 WebUI 与同进程组件沿用既有机制。
 - stdio 为可选传输：stdin/stdout 专用协议，stderr 专用普通日志；首帧同样认证。stdio stdout 出现非协议字节时关闭该 Session 并记录插件故障，不能把混入的日志当合法帧。TCP 模式下 Core 可同时捕获插件 stdout/stderr，并标记 plugin ID。
 - 两种传输均为 `uint32 big-endian payload length + Protobuf Envelope`；长度不含 4-byte 前缀，合法范围为 **1～4,194,304 bytes**。先验证长度再分配受限缓冲；完整读取前缀和载荷，不能假设一次 Read 得到一帧。长度 0、超限、截断或不可解码的 Envelope 终止当前连接。每方向只有一个帧写入器，多个 goroutine 的帧不能交错。
 - Hello 前不得发送其他帧。Protocol Major 不相等，或任一 required capability 不在双方能力交集中，拒绝握手；Minor 选双方支持范围内的较低版本。所有枚举保留零值 UNSPECIFIED，业务要求的枚举和身份字段解码后验证。Envelope 字段编号、控制帧方向及 schema 见 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不另定义平行的 JSON 字节流协议。
