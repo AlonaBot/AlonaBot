@@ -3,6 +3,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -92,6 +94,146 @@ func testCrossCapabilityPackages(t *testing.T, transport string) {
 		return false
 	})
 	stopTestCore(t, c)
+	for _, tag := range []string{"sqlite", "configdb_gorm"} {
+		t.Run(tag, func(t *testing.T) { testCrossDatabasePackages(t, transport, tag) })
+	}
+}
+
+func testCrossDatabasePackages(t *testing.T, transport, tag string) {
+	out := t.TempDir()
+	arguments := []string{"pack", "../../examples/plugins/configdb", "--asset-base", "https://example.invalid", "--out", out}
+	if tag == "configdb_gorm" {
+		arguments = append(arguments, "--tags", tag)
+	}
+	if output, err := exec.CommandContext(t.Context(), filepath.Join(binDir, "alonabot"), arguments...).CombinedOutput(); err != nil {
+		t.Fatalf("pack %s: %v\n%s", tag, err, output)
+	}
+	const id = "alonabot-plugin-configdb"
+	archive := filepath.Join(out, id+"-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	adapter := packAgentComponent(t, "../../adapters/telegram", "alonabot-adapter-telegram")
+	server := telegramtest.NewServer(t, "database-token")
+	server.SetMe(101, "database_bot")
+	dir := t.TempDir()
+	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"database_bot","instances":{"database_bot":{"token":"database-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
+	configFile := filepath.Join(dir, "plugins", id, "config.json")
+	developmentWrite(t, configFile, `{"greeting":["First","value"],"count":"invalid","enabled":false,"unknown":41}`)
+	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
+	if transport == "stdio" {
+		args = append(args, "--stdio")
+	}
+	c := startEmptyCore(t, dir, args...)
+	for _, item := range []struct{ archive, id string }{{adapter, "alonabot-adapter-telegram"}, {archive, id}} {
+		c.management(t, dir, "", "install", item.archive, "--yes")
+		c.management(t, dir, "", "enable", item.id)
+	}
+	first := findPackage(t, c, dir, id).Active
+	status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/plugins/"+id+"/config")
+	var snapshot struct {
+		Active      map[string]any `json:"active"`
+		Unknown     []string       `json:"unknown"`
+		Corrections []any          `json:"corrections"`
+	}
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK || snapshot.Active["greeting"] != "First value" || snapshot.Active["count"] != float64(7) || snapshot.Active["enabled"] != false || len(snapshot.Corrections) == 0 || !reflect.DeepEqual(snapshot.Unknown, []string{`$["unknown"]`}) {
+		t.Fatalf("normalized configuration: %d %s", status, raw)
+	}
+	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
+	reply := func(sequence int, text, want string) {
+		t.Helper()
+		before := len(server.Requests())
+		telegramMessage(t, server, sequence, map[string]any{"text": text, "chat": map[string]any{"id": 9, "type": "private"}})
+		telegramEventually(t, c, func() bool {
+			for _, request := range server.Requests()[before:] {
+				if request.Method == "sendMessage" && request.Params["text"] == want {
+					return true
+				}
+			}
+			return false
+		})
+	}
+	reply(1, "/note set durable persisted", "Saved durable")
+	// 候选先写自己的启动表再失败；原代次与真实笔记继续可用。
+	developmentWrite(t, configFile, `{"greeting":"Candidate only","fail_start":true}`)
+	output, err := recoveryCommand(t, c, dir, "reload", id).CombinedOutput()
+	if err == nil || !strings.Contains(c.log(), "requested failure after startup database write") {
+		t.Fatalf("failed candidate: %v %s\n%s", err, output, c.log())
+	}
+	if current := findPackage(t, c, dir, id); current.Active != first || current.State != "Activated" {
+		t.Fatalf("failed reload changed Active: %+v", current)
+	}
+	reply(2, "/note get durable", "durable: persisted")
+	developmentWrite(t, configFile, `{"greeting":"","count":0,"enabled":false}`)
+	c.management(t, dir, "", "reload", id)
+	last := findPackage(t, c, dir, id).Active
+	if last == first || last == "" {
+		t.Fatal("successful reload did not create a generation")
+	}
+	status, raw = fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/plugins/"+id+"/config")
+	var reloaded struct {
+		Active  map[string]any `json:"active"`
+		Pending any            `json:"pending"`
+	}
+	if err := json.Unmarshal(raw, &reloaded); err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK || reloaded.Active["greeting"] != "" || reloaded.Active["count"] != float64(0) || reloaded.Active["enabled"] != false || reloaded.Pending != nil {
+		t.Fatalf("explicit empty configuration after reload: %d %s", status, raw)
+	}
+	reply(3, "/note get durable", "durable: persisted")
+	stopTestCore(t, c)
+	// Core 退出后读取权威状态库及两个真实业务库，避免日志代替数据证据。
+	store := recoveryStore(t, dir)
+	active, err := store.Active(t.Context(), id)
+	if err != nil || active != last {
+		t.Fatalf("persisted Active: %s %v", active, err)
+	}
+	records, err := store.Journals(t.Context(), id)
+	if err != nil || len(records) != 3 {
+		t.Fatalf("database journals: %+v %v", records, err)
+	}
+	for _, record := range records {
+		wantPhase := "committed"
+		if record.NewGeneration != first && record.NewGeneration != last {
+			wantPhase = "cleaned"
+			candidate := filepath.Join(dir, "plugins", id, "generations", record.NewGeneration)
+			if _, err := os.Stat(candidate); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("failed candidate directory retained: %s %v", candidate, err)
+			}
+		}
+		if record.Phase != wantPhase {
+			t.Fatalf("database journal: %+v", record)
+		}
+	}
+	var previous os.FileInfo
+	for _, item := range []struct{ generation, startup string }{{first, "First value"}, {last, ""}} {
+		file := filepath.Join(dir, "plugins", id, "generations", item.generation, "db.sqlite")
+		info, err := os.Stat(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if previous != nil && os.SameFile(previous, info) {
+			t.Fatal("reload reused the old database file")
+		}
+		previous = info
+		db, err := sql.Open("sqlite", file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var startup, note string
+		var migrations int
+		errs := []error{
+			db.QueryRow("SELECT value FROM configdb_startup WHERE key='startup'").Scan(&startup),
+			db.QueryRow("SELECT value FROM configdb_note WHERE key='durable'").Scan(&note),
+			db.QueryRow("SELECT count(*) FROM _alonabot_migrations").Scan(&migrations),
+			db.Close(),
+		}
+		if err := errors.Join(errs...); err != nil || startup != item.startup || note != "persisted" || migrations != 2 {
+			t.Fatalf("%s %s database: startup=%q note=%q migrations=%d err=%v", tag, item.generation, startup, note, migrations, err)
+		}
+	}
+	t.Logf("%s/%s Active=%s journals=%+v", transport, tag, active, records)
 }
 
 func testCrossComponentPackages(t *testing.T, transport string) {
