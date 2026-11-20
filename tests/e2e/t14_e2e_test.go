@@ -125,6 +125,11 @@ func releaseOptionalPackages(t *testing.T, keyFile, target string) []string {
 		if err := os.Chmod(out, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		for _, name := range []string{files[0], filepath.Join(out, "release.json"), filepath.Join(out, "release.json.sig"), filepath.Join(out, "release.pub")} {
+			if err := os.Chmod(name, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
 		archives = append(archives, files[0])
 	}
 	return archives
