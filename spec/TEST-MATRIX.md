@@ -1390,7 +1390,7 @@ $evidence/release-check --candidate $evidence/dist --version 0.1.0 \
 
 新补建资产为明确的Windows子集，各清单仅声明该目标；原五目标候选及四个非Windows目标按原始目录/清单身份保留，最终候选库存逐一指向对应目录，未覆盖旧数据。命令、环境、PID、完整日志、静态JSON和PE反汇编位于goal49的`goal-49/evidence/GN49-06/final/`，汇总为`summary.json`。首次构建显式`GOTOOLCHAIN=local`选中基础Go1.26.3，因模块要求Go1.27.1在构建前失败；原`windows-dist-attempt1.*`保留，随后显式使用已缓存Go1.27.1完成。无依赖安装、资源测试、Windows实际运行或无变化矩阵重跑。
 
-**交付状态。** T-10.4候选资产、检查器、首发说明与矩阵已完成；REVIEW49-02契约/规范自审与增量文档检查见同目录。最终head CI、独立终审和合并由父负责。Windows实机/CGO及完整未运行项按D-185批准延期；模板PR#3保持46main候选及本地已验结果，模板CI主仓库正式公开后验收，原公开模板run44694601377因`ALONABOT_SDK_TOKEN`为空的SDK认证失败，以及私有主仓库Windows run44695663481在分配runner前的payment/spending failure（`steps=[]`、`runner_name`为空、artifact0）原样保留，完整缺项见§3.6。正式SDK tag、官方私钥签名、公开Release和镜像推送由维护者执行。D-184保持现有开销及历史预算FAIL，V-33取消新增运行；资源主入口为[资源实测记录](../docs/benchmarks.md)。
+**交付状态。** T-10.4候选资产、检查器、首发说明与矩阵已完成（PR #281）；REVIEW49-02契约/规范自审与增量文档检查见同目录。Windows实机/CGO及完整未运行项按D-185批准延期；模板PR#3保持46main候选及本地已验结果，模板CI主仓库正式公开后验收，原公开模板run44694601377因`ALONABOT_SDK_TOKEN`为空的SDK认证失败，以及私有主仓库Windows run44695663481在分配runner前的payment/spending failure（`steps=[]`、`runner_name`为空、artifact0）原样保留，完整缺项见§3.6。正式SDK tag、官方私钥签名、公开Release和镜像推送由维护者执行。D-184保持现有开销及历史预算FAIL，V-33取消新增运行；资源主入口为[资源实测记录](../docs/benchmarks.md)。
 
 ## 4. 实施交接
 
@@ -1398,4 +1398,4 @@ $evidence/release-check --candidate $evidence/dist --version 0.1.0 \
 2. goal46交付唯一Unix正式集成 `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`，四类子测试均TCP/stdio；不同真实能力程序/SDK回归按D-86留本地。75不变发行资产、双架构镜像及浏览器结果复用，GN46-11的174固定产品增量联验、正式GORM fork来源及V77/78/81分项见§3.4。
 3. goal48 / T-10.3 已通过 PR #279 锁定 head `db980b75` squash 为实际 main `44aeb7e5`；该 head Quality44694052919/最新metadata44697793408均成功。现有三轮资源实测、中位数、来源与D-184接受决定归档在[资源实测记录](../docs/benchmarks.md)，原数值及历史失败保留，停止新增资源测量和优化。
 4. goal47 / T-10.2 按D-185以四环境实际运行/CGO与100次启停通过、Windows实跑批准延期完成，完整原始证据和缺项见§3.6；PR #280 已锁定 `736b4974`，于2026-11-20 08:22:48 UTC squash 为实际 main `fcf4105bbe0e2b7de309af3aef5e718d75c5ee52`；Quality44699418199（14m8s）与最终 metadata44701996922 均成功。需要真实Telegram/Provider凭据的既有分项仍未运行，历史真实记录按原候选复用。
-5. goal49已普通整合实际main `fcf4105b`，消费47平台结果、D-185及48资源文档，完成受影响Windows发行资产补建/静态、候选检查器及发布说明；本切片待PR独立审查与当前head CI，批准延期和完整未运行项保留。模板CI待主仓库正式公开后验收；已完成的候选SDK版本与本地功能核对保留，正式SDK tag由维护者发布前替换。正式签名、公开Release与镜像发布由维护者控制；D-171后置OneBot11/welcome/rss及Telegram分项随对应版本验收。后继派发由父按实际main和最终验收处理。
+5. goal49已普通整合实际main `fcf4105b`，消费47平台结果、D-185及48资源文档，完成受影响Windows发行资产补建/静态、候选检查器及发布说明；本切片候选交付已完成（PR #281），批准延期和完整未运行项保留。模板CI待主仓库正式公开后验收；已完成的候选SDK版本与本地功能核对保留，正式SDK tag由维护者发布前替换。正式签名、公开Release与镜像发布由维护者控制；D-171后置OneBot11/welcome/rss及Telegram分项随对应版本验收。
