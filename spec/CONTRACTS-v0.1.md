@@ -16,6 +16,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 ### 1.1 连接、Bootstrap 与帧
 
 - 每次 Native 进程启动创建新 Session。TCP 为默认传输：Core 使用 `net.Listen("tcp4", "127.0.0.1:0")` 或明确选定的 IPv6 loopback 地址直接绑定临时端口，持有 Listener 至会话结束；不采用先探测空闲端口、关闭后再绑定的流程。Core 为本次启动生成至少 256-bit 随机 Secret，经最小子进程环境或专用继承句柄传递。Hello 的插件 ID、包摘要、协议版本和 Secret 必须与 Core 启动记录一致；build_digest 为安装时已验证的归档 SHA256，由 Core 从安装记录随本次启动上下文下发供 SDK 回显，不在程序中内嵌自身整包摘要；Core 负责安装与启动前的实际文件完整性检查。Secret 用恒时比较，不接受跨插件凭证。该机制不构成对同宿主同权限恶意程序的沙箱。
+- CLI 的现有 `run --stdio`（Core 内部装配选项为 `internal/app.Options.Stdio`）对本次运行的全部 Native 独立进程生效，包括开发、已安装组件的首次启用、候选、重启、重载、恢复与休眠唤醒；缺省 TCP。传输选择不持久化；纯静态 WebUI 与同进程组件沿用既有机制。
 - stdio 为可选传输：stdin/stdout 专用协议，stderr 专用普通日志；首帧同样认证。stdio stdout 出现非协议字节时关闭该 Session 并记录插件故障，不能把混入的日志当合法帧。TCP 模式下 Core 可同时捕获插件 stdout/stderr，并标记 plugin ID。
 - 两种传输均为 `uint32 big-endian payload length + Protobuf Envelope`；长度不含 4-byte 前缀，合法范围为 **1～4,194,304 bytes**。先验证长度再分配受限缓冲；完整读取前缀和载荷，不能假设一次 Read 得到一帧。长度 0、超限、截断或不可解码的 Envelope 终止当前连接。每方向只有一个帧写入器，多个 goroutine 的帧不能交错。
 - Hello 前不得发送其他帧。Protocol Major 不相等，或任一 required capability 不在双方能力交集中，拒绝握手；Minor 选双方支持范围内的较低版本。所有枚举保留零值 UNSPECIFIED，业务要求的枚举和身份字段解码后验证。Envelope 字段编号、控制帧方向及 schema 见 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不另定义平行的 JSON 字节流协议。
@@ -546,7 +547,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 
 详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
 
-Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/development.md) 列出的允许模块，由审查用 `go list -deps` 核对（V-75）；Core 与示例插件空闲时的常驻内存不超过 V-74 的预算。超出预算视为回归：先定位原因，确需提高时在 adr/DECISIONS.md 记录新值与原因。
+Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/development.md) 列出的允许模块，由审查用 `go list -deps` 核对（V-75）。按 D-184，维护者接受现有固定 Linux 实测的资源开销，停止后续资源压测与为旧预算继续优化；V-74 的 24/10/16 MiB 保留为历史比较值，首发按已取得的真实数据收口。V-33 对照压测取消新增运行，T-10.3 归档现有数据与决定。Session、队列、媒体及安装等运行时资源限额继续按各自契约执行。
 
 可开始实施的条件是关键行为已有确定契约与验收；发布条件是相关阻塞测试实际通过。测试失败必须修实现或回写有依据的规格修订，不用静默异常、伪默认值或新增兼容层掩盖问题。
 
@@ -663,12 +664,12 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 13.7 官方 Agent 插件页面与人格
 
-- 官方 Agent 提供人格、MCP、技能、数据与用户任务五个 `sdk/page` 页面（D-170、D-182，T-12.20，PR #252），使用 Agent 自己的嵌入资源与 en-US/zh-CN 的 `pages` 标题和 `messages` 文案。HTML 与数据路由经管理会话访问；套件与静态资源按 D-183 以公开静态资源模式提供，变更请求验证 Origin 与 CSRF；接口见 ADMIN-API §15.2，父桥见 ADMIN-API §7。
+- 官方 Agent 提供人格、MCP、技能、记忆与用户任务五个 `sdk/page` 页面（D-170、D-182，T-12.20，PR #252），使用 Agent 自己的嵌入资源与 en-US/zh-CN 的 `pages` 标题和 `messages` 文案。HTML 与数据路由经管理会话访问；套件与静态资源按 D-183 以公开静态资源模式提供，变更请求验证 Origin 与 CSRF；接口见 ADMIN-API §15.2，父桥见 ADMIN-API §7。
 - 人格保存为受管 SQLite `persona` 表中的名称与系统提示，名称唯一，提示允许空字符串；配置只保存 `default_persona` 名字（`string`、`profile: true`、选项来源 `@agent/personas`），目录在页面维护，配置文件页选择名字。`readPersona(ctx context.Context, name string) (persona, error)` 读取记录，`personaOptions(ctx context.Context, q options.Query) (options.Page, error)` 即时查询选项；普通对话和定时任务用 `personaPrompt(ctx context.Context, name string) (string, error)` 读取已提交提示，修改从下一轮生效。
 - 删除前通过 `sdk.ProfileOverrides`、基础配置及 `core.profile.list` 检查直接与继承引用，被引用时返回 409 并列出配置文件 ID、名称与会话数。检查按 D-182 尽力而为；空人格名使用内置提示 `You are AlonaBot, a helpful assistant. Reply in the user's language and keep answers concise.`，调用时名字已失效则记录 WARN 并使用同一提示；数据库错误保留错误链。
 - MCP 页面读取当前连接状态与最近成功工具目录，错误脱敏；手动重连在 gate 内回收旧连接并建立新连接，停止后拒绝重连及首次连接。刷新时读取当前 Session 的结束通知并显示 error，旧 Session 的通知按身份隔离。技能页列出技能与结构化校验问题，重新读取后原子替换快照；每轮提示与 `load_skill` 使用同一份轮次快照。
-- 数据页用 Agent 自有的 `conversation_record` 列出完整会话键，通过 `sdk/conversation.List` 逐页返回 Core 原样正文及真实序号，保留普通、成员与任务会话的完整文本、memory_snapshot 和图片编号。目录在正文追加成功后登记，空目录清理与追加/reset 共用会话锁；外部清除后的空目录在下次列出时收回，清除与回复交错后成功追加会恢复目录，失效 reset 代次继续跳过追加。Core 正文与 Agent 目录依次写入，失败保留错误链。
-- 数据页还按完整 `(target, scope, instance)` 管理会话笔记与用户档案，复用记忆事务与校验，分别限 2200、1375 个 Unicode 码点（含条目间换行），失败保留原记录；会话笔记冻结与每轮用户档案读取沿用 §13.4。用户任务页列出本 Agent 动态任务并按真实实例 key 取消，协作取消在途调用；任务创建、job scope、确认与目标语义沿用既有规则。
+- 记忆页用 Agent 自有的 `conversation_record` 列出完整会话键，通过 `sdk/conversation.List` 逐页返回 Core 原样正文及真实序号，保留普通、成员与任务会话的完整文本、memory_snapshot 和图片编号。目录在正文追加成功后登记，空目录清理与追加/reset 共用会话锁；外部清除后的空目录在下次列出时收回，清除与回复交错后成功追加会恢复目录，失效 reset 代次继续跳过追加。Core 正文与 Agent 目录依次写入，失败保留错误链。
+- 记忆页还按完整 `(target, scope, instance)` 管理会话笔记与用户档案，复用记忆事务与校验，分别限 2200、1375 个 Unicode 码点（含条目间换行），失败保留原记录；会话笔记冻结与每轮用户档案读取沿用 §13.4。用户任务页列出本 Agent 动态任务并按真实实例 key 取消，协作取消在途调用；任务创建、job scope、确认与目标语义沿用既有规则。
 
 ## 14. 日志
 

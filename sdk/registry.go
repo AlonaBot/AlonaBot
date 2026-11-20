@@ -509,20 +509,24 @@ func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request)) {
 
 // httpRegistry 收集 HTTP 路由；默认需要 Core 授权会话。
 type httpRegistry struct {
-	plugin   *Plugin
-	builders []*RouteBuilder
-	routes   []httpRoute
-	errs     []error
+	create     func([]httpRoute, *componentSession) httpRuntime // Route 登记后才保留 Listener 实现。
+	collectNow func()                                           // 同步按需保留页面资源收集路径。
+	plugin     *Plugin
+	builders   []*RouteBuilder
+	routes     []httpRoute
+	errs       []error
 }
 
 func (r *httpRegistry) Route(method, path string) *RouteBuilder {
 	r.plugin.checkRegistration()
+	r.create = newHTTPListener
+	r.collectNow = r.collectRoutesNow
 	b := &RouteBuilder{registry: r, method: method, route: httpRoute{Method: strings.ToUpper(method), Path: path, AuthMode: AuthCoreSession}}
 	r.builders = append(r.builders, b)
 	return b
 }
 
-func (r *httpRegistry) collect() {
+func (r *httpRegistry) collectRoutesNow() {
 	r.routes, r.errs = nil, nil
 	for _, b := range r.builders {
 		if b.handles != 1 || b.afterHandle {

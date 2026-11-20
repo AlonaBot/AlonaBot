@@ -18,6 +18,18 @@
 
 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链接上述清单的一个子集（D-52，D-68 修订），由审查时用下方的 `go list -deps` 命令核对：Core 允许 protobuf、modernc SQLite 及其依赖、GORM 与 libtnb/sqlite 及其依赖（jinzhu/inflection、jinzhu/now、golang.org/x/text）、yaml、x/sys、cobra 与 pflag、仅 Windows 链接的 mousetrap、jsonschema-go；SDK 根包只允许 protobuf、x/sys 与 jsonschema-go。MCP go-sdk、coder/websocket 只出现在官方插件、Agent 或 Adapter 中，openai-go 与 anthropic-sdk-go 只出现在 Agent 中；插件只在导入 `sdk/gormdb` 时链接 GORM。修改子集与修改已批准清单一样，需要维护者同意。
 
+### GORM 固定补丁来源
+
+2026-11-20 用户批准使用组织派生仓库 `github.com/AlonaBot/gorm` 的固定补丁。基线为上游 v1.31.2（`1d6ce99528060be18a42be09aca8d39efcb47f28`），补丁 commit 为 `34b98340007ddc2acd5cb8727a0b4b72ea295896`；仅将 `schema/schema.go` 的九种 hook 查找改为常量方法名，使 Go 链接器能裁剪无关方法。hook 顺序、签名检查、警告与 `gorm.io/gorm` 包身份保持。
+
+仓库保留 `require gorm.io/gorm v1.31.2`，以确切 pseudo-version 固定来源：
+
+```go
+replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d
+```
+
+独立组件的 `build`、`pack` 与开发构建将作者主 module 的 go.mod/go.sum 原样复制到临时 module，库模式构建直接沿用作者 module 上下文，仓库内示例因此继承该替换。正式 GORM 组件的 `build-info` 应同时列出 `gorm.io/gorm v1.31.2` 和上述替换来源。独立作者项目由自己的主 module 决定替换；需要使用相同补丁时，在该项目的 go.mod 中加入同一条 `replace`，再运行 `go mod download gorm.io/gorm` 更新 go.sum。
+
 ## 日常命令（仓库根目录）
 
 ```sh
@@ -292,7 +304,7 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 构建复用内部生成器与 `go build`，可执行文件写到 `<data_dir>/dev/bin/`，生成资源与薄入口通过 overlay 提供，作者目录中的源码和 module 文件保持原样。插件与 Agent 构建入口包；Adapter 工程导出 `New()` 并提供可导入的包，构建器为其生成调用 `sdk.RunAdapter(New())` 的薄入口。
 
-开发组件通过 supervisor 在独立进程中运行，缺省使用 TCP loopback，`--stdio` 切换本次开发进程的传输。组件固定使用 `dev:<组件 ID>` 代次，配置每次从 `<data_dir>/plugins/<id>/config.json` 读取，缺失时按空对象准备；准备后的配置保存在开发代次快照中。受管 SQLite 为同目录的 `dev.sqlite`，跨重启保留。Adapter 实例配置来自 `core_config.json` 的 `adapters`。开发日志缺省为 debug，显式 `log.sources` 设置优先。
+开发组件通过 supervisor 在独立进程中运行，缺省使用 TCP loopback，`--stdio` 切换本次全部 Native 独立进程的传输，覆盖开发组件、已安装组件及其候选、重启、重载、恢复和休眠唤醒。也可用 `alonabot run --stdio` 启动已安装组件；传输选择只作用于本次运行，纯静态 WebUI 与同进程组件沿用既有机制。组件固定使用 `dev:<组件 ID>` 代次，配置每次从 `<data_dir>/plugins/<id>/config.json` 读取，缺失时按空对象准备；准备后的配置保存在开发代次快照中。受管 SQLite 为同目录的 `dev.sqlite`，跨重启保留。Adapter 实例配置来自 `core_config.json` 的 `adapters`。开发日志缺省为 debug，显式 `log.sources` 设置优先。
 
 `--reload` 每 `DEV_RELOAD_POLL` 检查源码、`//go:embed` 资源、`go.mod`、`go.sum`、`plugin.yaml`、两个配置 Schema 和 `i18n/`，排除数据目录、vendor、testdata 及以 `.`、`_` 开头的目录。轮询间隔缺省为 500ms，例如 `--args DEV_RELOAD_POLL=1s` 可以覆盖。
 

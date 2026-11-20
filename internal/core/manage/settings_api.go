@@ -352,7 +352,7 @@ func (s *Service) adapterPackage(ctx context.Context, adapterID string) (string,
 }
 
 func (s *Service) writeInstance(ctx context.Context, adapterID, instanceID string, raw []byte) error {
-	if !instanceName.MatchString(instanceID) {
+	if len(instanceID) > validate.MaxPluginIDLen || !instanceName.MatchString(instanceID) {
 		return invalid("invalid adapter instance name")
 	}
 	s.instances.Lock()

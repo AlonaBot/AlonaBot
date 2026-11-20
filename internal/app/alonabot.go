@@ -57,7 +57,7 @@ type Options struct {
 	LogLevel           *slog.Level
 	LogFormat          *string
 	DefaultStderrLevel *slog.Level                         // 未显式传入 LogLevel 时的 stderr 阈值；nil 时沿用来源级别。
-	Stdio              bool                                // Executable 组件使用 stdio 传输
+	Stdio              bool                                // 本次全部 Native 独立进程使用 stdio；缺省 TCP。
 	WebUIs             []fs.FS                             // 开发 WebUI；多于一个或含 nil 时返回原有的用法错误
 	RuntimeAdapters    map[string]settings.AdapterSettings // 本次运行的内置 Adapter 归属与实例，不写入设置文件。
 	RuntimeAdmins      []settings.Admin                    // 追加到本次运行的 Core Admin，设置重载后仍保留。
@@ -70,6 +70,7 @@ type Core struct {
 	output          *logging.Output
 	logLevel        *slog.Level // 本次显式覆盖；nil 时随 core_config.json 的 log.level 刷新。
 	values          tune.Values
+	stdio           bool // 本次 Native 独立进程共用的传输选择。
 	components      []*runningComponent
 	development     []Component
 	developmentMu   sync.RWMutex       // HTTP 管理端读取 Schema 时，与开发资源替换同步。
@@ -137,7 +138,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return nil, err
 	}
 	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation), lifetime: ctx,
-		runtimeAdapters: o.RuntimeAdapters}
+		runtimeAdapters: o.RuntimeAdapters, stdio: o.Stdio}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {

@@ -5,3 +5,4 @@ version: 0.1.0
 author: AlonaBot
 source: github.com/AlonaBot/AlonaBot
 role: plugin
+sleep_capable: true

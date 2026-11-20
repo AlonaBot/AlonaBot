@@ -3,10 +3,13 @@ package supervisor
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
@@ -32,6 +35,8 @@ type Prepared struct {
 	snapshotRoutes bool
 	released       bool // 进程资源已释放或已移交 Running。
 	runtime        *runtimeRecord
+	startedAt      time.Time     // process.Start 前的单调起点，跨准备与激活阶段保留。
+	prepareElapsed time.Duration // host.Prepare 的实际调用区间。
 }
 
 // Activate 在提交回调成功后激活同一 Session，移交资源给返回的 Running。
@@ -54,6 +59,18 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 	if p.released || p.Registration == nil {
 		return nil, errors.New("candidate session is not prepared")
 	}
+	stage := "activate"
+	var activateElapsed time.Duration
+	activateCalled := false
+	defer func() {
+		if err != nil {
+			attrs := []any{"prepare_ns", p.prepareElapsed.Nanoseconds()}
+			if activateCalled {
+				attrs = append(attrs, "activate_ns", activateElapsed.Nanoseconds())
+			}
+			p.logStartupFailure(err, stage, attrs...)
+		}
+	}()
 	if p.spec.NewCandidate && commit == nil {
 		return p.activationFailed(ctx, nil, errors.New("candidate activation requires a commit callback"), handoffFailure)
 	}
@@ -71,10 +88,17 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 		}
 	}
 	opt.Commit = commit
+	activateStartedAt := time.Now()
 	in, err := host.Activate(ctx, p.conn, p.Registration, opt)
+	completedAt := time.Now()
+	activateElapsed, activateCalled = completedAt.Sub(activateStartedAt), true
 	if err != nil {
 		return p.activationFailed(ctx, in, err, handoffFailure)
 	}
+	// ACTIVATED 已核对；完整绑定及 Ready 的等待不计入冷启动耗时。
+	slog.Debug("cold start completed", append(p.coldStartAttrs(), "duration_ns", completedAt.Sub(p.startedAt).Nanoseconds(),
+		"prepare_ns", p.prepareElapsed.Nanoseconds(), "activate_ns", activateElapsed.Nanoseconds())...)
+	stage = "binding"
 	reason := "activated"
 	if spec.Bootstrap.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME {
 		reason = "resume"
@@ -109,6 +133,35 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 	}
 	p.released = true // 激活成功后，资源所有权移交给 Running。
 	return running, nil
+}
+
+func (p *Prepared) coldStartAttrs() []any {
+	reason := p.spec.Bootstrap.GetDatabaseDescriptor().GetActivationReason().String()
+	attrs := []any{"plugin_id", p.spec.PluginID, "generation_id", p.spec.GenerationID,
+		"activation_reason", strings.ToLower(strings.TrimPrefix(reason, "ACTIVATION_REASON_"))}
+	if p.process != nil {
+		attrs = append(attrs, "pid", p.process.Pid())
+	}
+	if p.Registration != nil {
+		attrs = append(attrs, "session_id", hex.EncodeToString(p.Registration.SessionID))
+	}
+	return attrs
+}
+
+func (p *Prepared) logStartupFailure(err error, stage string, attrs ...any) {
+	fields := append(p.coldStartAttrs(), "stage", stage, "elapsed_ns", time.Since(p.startedAt).Nanoseconds(), "error", err)
+	var phase *host.PhaseError
+	var validation *validate.Error
+	var call *wire.CallError
+	switch {
+	case errors.As(err, &phase):
+		fields = append(fields, "phase", phase.Phase.String(), "code", phase.Code.String())
+	case errors.As(err, &validation):
+		fields = append(fields, "code", validation.Code.String())
+	case errors.As(err, &call):
+		fields = append(fields, "code", call.ErrorInfo.GetCode().String())
+	}
+	slog.Debug("cold start failed", append(fields, attrs...)...)
 }
 
 func (p *Prepared) checkActiveRoutes(ctx context.Context) error {

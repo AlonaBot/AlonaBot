@@ -8,7 +8,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 ## 1. 运行模型与内存
 
 - 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
-- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。实测一个只用 SDK 的插件进程约 7.5 MiB（linux/amd64 PSS），每多链接一个库、多做一次初始化都会增加这个数。官方组件的预算见 TEST-MATRIX V-74（D-52）。
+- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 TEST-MATRIX V-74（D-184）。
 - 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。S-02.1 已接通 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒；S-02.2 已接通自动空闲退出与即时休眠策略，S-03.1 已接通正常休眠插件的静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
@@ -163,7 +163,7 @@ return &adapter.Descriptor{
 
 插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css` 与 `kit.js` 两条 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
-官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、数据与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)）。数据页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 的管理入口。
+官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、记忆与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)）。记忆页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 的管理入口。
 
 #### 套件挂载与引入
 

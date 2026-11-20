@@ -49,7 +49,7 @@ func execute(args []string) int {
 		flags.StringVar(&levelText, "log-level", "info", "global log level: debug, info, warn, error or critical")
 		flags.StringVar(&format, "log-format", string(logging.FormatText), "stderr log format: text or json")
 		flags.BoolVar(&reload, "reload", true, "rebuild and restart changed development components")
-		flags.BoolVar(&stdio, "stdio", false, "use stdio for development component sessions")
+		flags.BoolVar(&stdio, "stdio", false, "use stdio for all Native component processes in this run")
 		flags.BoolVar(&console, "console", false, "chat in this terminal (default: terminal stdin and no configured adapter instances)")
 	}
 	runCommand.RunE = func(cmd *cobra.Command, args []string) error {

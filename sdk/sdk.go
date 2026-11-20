@@ -223,11 +223,8 @@ func run(root *Plugin, l launch) (err error) {
 	l.entryPackage = entryPackage(root)
 
 	// 3. 连接 Core 并依次完成握手、准备与激活，然后进入服务循环。
-	l.http = newHTTPListener(reg.HTTP)
-	if l.http != nil {
-		l.http.runtime = l.runtime
-	}
-	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
+	l.http = root.http.newRuntime(reg.HTTP, l.runtime)
+	defer func() { l.closeHTTP(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
 		return err
