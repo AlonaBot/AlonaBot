@@ -32,6 +32,7 @@ func TestCrossComponentEndToEnd(t *testing.T) {
 		t.Run(transport, func(t *testing.T) {
 			t.Run("components", func(t *testing.T) { testCrossComponentPackages(t, transport) })
 			t.Run("capabilities", func(t *testing.T) { testCrossCapabilityPackages(t, transport) })
+			t.Run("boundaries", func(t *testing.T) { testCrossPermissionPackages(t, transport) })
 		})
 	}
 }
@@ -585,4 +586,89 @@ func packCrossComponentWebUI(t *testing.T) string {
 		}
 	}
 	return packAgentComponent(t, project, "alonabot-webui-admin")
+}
+
+func testCrossPermissionPackages(t *testing.T, transport string) {
+	projects := []struct{ directory, id string }{
+		{"../../adapters/telegram", "alonabot-adapter-telegram"},
+		{"../../examples/plugins/echo", "echo"},
+		{"../../examples/plugins/lifecycle", "demo"},
+	}
+	archives := make([]string, len(projects))
+	for i, project := range projects {
+		archives[i] = packAgentComponent(t, project.directory, project.id)
+	}
+	server := telegramtest.NewServer(t, "boundary-token")
+	server.SetMe(101, "boundary_bot")
+	dir := t.TempDir()
+	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"boundary_bot","instances":{"boundary_bot":{"token":"boundary-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
+	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json", "--log-level", "debug"}
+	if transport == "stdio" {
+		args = append(args, "--stdio")
+	}
+	c := startEmptyCore(t, dir, args...)
+	for i, project := range projects {
+		c.management(t, dir, "", "install", archives[i], "--yes")
+		c.management(t, dir, "", "enable", project.id)
+	}
+	put := func(path, body string) {
+		t.Helper()
+		if status, raw := fixtureHTTP(t, c, dir, http.MethodPut, path, body); status != http.StatusOK {
+			t.Fatalf("boundary policy %s: %d %s", path, status, raw)
+		}
+	}
+	// demo 的稳定名字排序胜出；echo 保留自己的真实 Handler 作为被遮蔽候选。
+	put("/api/v1/plugins/echo/commands/cmd.echo/names", `{"names":[["ping"]]}`)
+	status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/plugins/demo/policies")
+	var policies struct {
+		Shadows []struct {
+			Winner struct {
+				PluginID string `json:"plugin_id"`
+			} `json:"winner"`
+		} `json:"shadows"`
+	}
+	if err := json.Unmarshal(raw, &policies); err != nil || status != http.StatusOK || len(policies.Shadows) != 1 || policies.Shadows[0].Winner.PluginID != "demo" {
+		t.Fatalf("command shadow: %d %s %v", status, raw, err)
+	}
+	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
+	sequence := 0
+	send := func() {
+		sequence++
+		telegramMessage(t, server, sequence, map[string]any{"text": "/ping", "chat": map[string]any{"id": 9, "type": "private"}})
+	}
+	awaitReplies := func(want int) {
+		t.Helper()
+		telegramEventually(t, c, func() bool { return server.Calls("sendMessage") >= want })
+		if got := server.Calls("sendMessage"); got != want {
+			t.Fatalf("unexpected fallback reply count: %d want %d", got, want)
+		}
+		for _, request := range server.Requests() {
+			if request.Method == "sendMessage" && request.Params["text"] != "pong" {
+				t.Fatalf("shadowed Handler ran: %+v", request)
+			}
+		}
+	}
+	send()
+	awaitReplies(1)
+	for _, body := range []string{
+		`{"scope":{"kind":"route","route_id":"cmd.ping"},"enabled":false}`,
+		`{"scope":{"kind":"route","route_id":"cmd.ping"},"permissions":["admin"]}`,
+	} {
+		put("/api/v1/plugins/demo/policies", body)
+		before := strings.Count(c.log(), "command policy denied")
+		send()
+		telegramEventually(t, c, func() bool { return strings.Count(c.log(), "command policy denied") > before })
+		if got := server.Calls("sendMessage"); got != 1 {
+			t.Fatalf("rejected winner fell through: %d", got)
+		}
+	}
+	// 管理凭证仅修改策略；聊天 Actor 通过独立的 Core Admin 列表取得权限。
+	c.management(t, dir, "", "admin", "add", "telegram:88")
+	send()
+	awaitReplies(2)
+	c.management(t, dir, "", "admin", "remove", "telegram:88")
+	put("/api/v1/plugins/demo/policies", `{"scope":{"kind":"route","route_id":"cmd.ping"}}`)
+	send()
+	awaitReplies(3)
+	stopTestCore(t, c)
 }
