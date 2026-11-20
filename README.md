@@ -1,8 +1,14 @@
 <p align="center">
-  <img src="docs/brand/avatar.png" alt="AlonaBot" width="144">
+  <img src="docs/brand/mascot.png" alt="AlonaBot" width="200">
 </p>
 
 <h1 align="center">AlonaBot</h1>
+
+<p align="center">
+  <a href="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml"><img src="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml/badge.svg?branch=main" alt="Quality gate"></a>
+  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27.1"></a>
+  <a href="docs/release-notes/v0.1.0.md"><img src="https://img.shields.io/badge/v0.1.0-发布候选-22B8CF?style=flat-square" alt="v0.1.0 发布候选"></a>
+</p>
 
 <p align="center">轻量级、跨平台的 Go 聊天机器人框架。<br>按需安装组件，把机器人搭成你需要的样子。</p>
 
