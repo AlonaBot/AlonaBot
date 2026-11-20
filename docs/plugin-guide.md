@@ -163,7 +163,7 @@ return &adapter.Descriptor{
 
 插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css` 与 `kit.js` 两条 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
-官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、数据与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)）。数据页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 的管理入口。
+官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、记忆与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)）。记忆页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 的管理入口。
 
 #### 套件挂载与引入
 

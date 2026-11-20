@@ -664,12 +664,12 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 13.7 官方 Agent 插件页面与人格
 
-- 官方 Agent 提供人格、MCP、技能、数据与用户任务五个 `sdk/page` 页面（D-170、D-182，T-12.20，PR #252），使用 Agent 自己的嵌入资源与 en-US/zh-CN 的 `pages` 标题和 `messages` 文案。HTML 与数据路由经管理会话访问；套件与静态资源按 D-183 以公开静态资源模式提供，变更请求验证 Origin 与 CSRF；接口见 ADMIN-API §15.2，父桥见 ADMIN-API §7。
+- 官方 Agent 提供人格、MCP、技能、记忆与用户任务五个 `sdk/page` 页面（D-170、D-182，T-12.20，PR #252），使用 Agent 自己的嵌入资源与 en-US/zh-CN 的 `pages` 标题和 `messages` 文案。HTML 与数据路由经管理会话访问；套件与静态资源按 D-183 以公开静态资源模式提供，变更请求验证 Origin 与 CSRF；接口见 ADMIN-API §15.2，父桥见 ADMIN-API §7。
 - 人格保存为受管 SQLite `persona` 表中的名称与系统提示，名称唯一，提示允许空字符串；配置只保存 `default_persona` 名字（`string`、`profile: true`、选项来源 `@agent/personas`），目录在页面维护，配置文件页选择名字。`readPersona(ctx context.Context, name string) (persona, error)` 读取记录，`personaOptions(ctx context.Context, q options.Query) (options.Page, error)` 即时查询选项；普通对话和定时任务用 `personaPrompt(ctx context.Context, name string) (string, error)` 读取已提交提示，修改从下一轮生效。
 - 删除前通过 `sdk.ProfileOverrides`、基础配置及 `core.profile.list` 检查直接与继承引用，被引用时返回 409 并列出配置文件 ID、名称与会话数。检查按 D-182 尽力而为；空人格名使用内置提示 `You are AlonaBot, a helpful assistant. Reply in the user's language and keep answers concise.`，调用时名字已失效则记录 WARN 并使用同一提示；数据库错误保留错误链。
 - MCP 页面读取当前连接状态与最近成功工具目录，错误脱敏；手动重连在 gate 内回收旧连接并建立新连接，停止后拒绝重连及首次连接。刷新时读取当前 Session 的结束通知并显示 error，旧 Session 的通知按身份隔离。技能页列出技能与结构化校验问题，重新读取后原子替换快照；每轮提示与 `load_skill` 使用同一份轮次快照。
-- 数据页用 Agent 自有的 `conversation_record` 列出完整会话键，通过 `sdk/conversation.List` 逐页返回 Core 原样正文及真实序号，保留普通、成员与任务会话的完整文本、memory_snapshot 和图片编号。目录在正文追加成功后登记，空目录清理与追加/reset 共用会话锁；外部清除后的空目录在下次列出时收回，清除与回复交错后成功追加会恢复目录，失效 reset 代次继续跳过追加。Core 正文与 Agent 目录依次写入，失败保留错误链。
-- 数据页还按完整 `(target, scope, instance)` 管理会话笔记与用户档案，复用记忆事务与校验，分别限 2200、1375 个 Unicode 码点（含条目间换行），失败保留原记录；会话笔记冻结与每轮用户档案读取沿用 §13.4。用户任务页列出本 Agent 动态任务并按真实实例 key 取消，协作取消在途调用；任务创建、job scope、确认与目标语义沿用既有规则。
+- 记忆页用 Agent 自有的 `conversation_record` 列出完整会话键，通过 `sdk/conversation.List` 逐页返回 Core 原样正文及真实序号，保留普通、成员与任务会话的完整文本、memory_snapshot 和图片编号。目录在正文追加成功后登记，空目录清理与追加/reset 共用会话锁；外部清除后的空目录在下次列出时收回，清除与回复交错后成功追加会恢复目录，失效 reset 代次继续跳过追加。Core 正文与 Agent 目录依次写入，失败保留错误链。
+- 记忆页还按完整 `(target, scope, instance)` 管理会话笔记与用户档案，复用记忆事务与校验，分别限 2200、1375 个 Unicode 码点（含条目间换行），失败保留原记录；会话笔记冻结与每轮用户档案读取沿用 §13.4。用户任务页列出本 Agent 动态任务并按真实实例 key 取消，协作取消在途调用；任务创建、job scope、确认与目标语义沿用既有规则。
 
 ## 14. 日志
 
