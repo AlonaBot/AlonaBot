@@ -1025,9 +1025,9 @@ GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runn
 | V-29 | **通过（本机恢复分项）**。真实WAL备份独立候选/真实库=42；runtime.lock旧树/ENOSPC沿GN09 survivor与§3.2 T-09.11。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-30 | **通过（本机恢复分项）**。PREPARED/committed唯一Active直接库断言；脚本first/ready/gates七窗口、旧树锁与路由绑定均通过。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-31 | **通过（本机双传输）**。显式单次许可、停用保持、失败及崩溃不重跑未知外部副作用；普通restart/resume保留许可false。 | `cmd/alonabot/cross_external_local_test.go:TestCrossExternalMaintenanceLocal（D86）`；`go test -race ./cmd/alonabot -run '^TestCrossExternalMaintenanceLocal$' -count=1 -v` | GN46-10-external.log；3a0c04f5；darwin/arm64；PASS56.11s/包65.307s |
-| V-32 | **旧候选四平台完整实跑通过；最终候选三本地平台通过，linux/amd64 待运行；Windows 待运行**。goal47 原 linux/amd64 VM、linux/arm64 容器、darwin/arm64 原生及 darwin/amd64 Rosetta 仿真与 CGO 证据保留；固定最终产品候选 `5094592d` 的三个本地平台已重建并完整通过，linux/amd64 等待父窗口，详见§3.6。本机历史实跑及五目标构建保留；75的linux容器身份另列；Windows按用户留最后。 | `internal/wire、internal/core/host、sdk历史Session测试（§3.1；已按D86移出）`；`go test -race -count=1 ./...` | e802828；darwin/arm64；291项含子测试通过；当时带一次性PG，PG已按D48移出 |
+| V-32 | **旧候选及最终候选四平台完整实跑通过；Windows 待运行**。goal47 原 linux/amd64 VM、linux/arm64 容器、darwin/arm64 原生及 darwin/amd64 Rosetta 仿真与 CGO 证据保留；固定最终产品候选 `5094592d` 在四个可用环境已重建并完整通过，详见§3.6。本机历史实跑及五目标构建保留；75的linux容器身份另列；Windows按用户留最后。 | `internal/wire、internal/core/host、sdk历史Session测试（§3.1；已按D86移出）`；`go test -race -count=1 ./...` | e802828；darwin/arm64；291项含子测试通过；当时带一次性PG，PG已按D48移出 |
 | V-33 | **维护者取消新增测量（D-184）**。原四负载及 NoneBot2 对照按2026-11-20决定收口。 | 已有本地真实框架兼容预检保留；完整资源对照未运行 | goal48仅整理现有数据与决定 |
-| V-34 | **旧候选四平台百次启停及完整恢复通过；最终候选三本地平台通过，linux/amd64 待运行；Windows 待运行**。固定最终产品候选 `5094592d` 的三个本地平台各 104 runs 通过，linux/amd64 等待父窗口；各候选的进程/子树/端口/锁、强杀后恢复及 Active/Journal/业务 DB 见§3.6，darwin/amd64 明确为 Rosetta 仿真。本机既有异常退出/合作树/runtime锁/恢复证据保留；Windows各100次启停交47后续闭合。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
+| V-34 | **旧候选及最终候选四平台百次启停与完整恢复通过；Windows 待运行**。固定最终产品候选 `5094592d` 在四个可用环境各 104 runs 通过；各候选的进程/子树/端口/锁、强杀后恢复及 Active/Journal/业务 DB 见§3.6，darwin/amd64 明确为 Rosetta 仿真。本机既有异常退出/合作树/runtime锁/恢复证据保留；Windows各100次启停交47后续闭合。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-35 | **通过（模拟平台分项）**。UNKNOWN/PARTIAL/REJECTED与NOT_ATTEMPTED、零ID、相册/按钮预检保留原历史；GN07实际AfterSend错误不改外部事实；当前真实平台故障未运行。 | `telegram_local_test.go:TestTelegramFaultMatrix（§3.2 T-03.10，D86历史根包位置）`；`go test -race -count=1 -v . -run '^TestTelegramFaultMatrix$'` | goal9基线813a12e4+该切片；darwin/arm64；TCP/stdio通过；telegram-matrix-fixed.log（继承） |
 | V-36 | **通过（本机恢复分项）**。真实runtime锁、Core退出后旧树仍写DB不启动第二写入者；管理串行/双Core沿已有e2e/state；Windows锁交47。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-37 | **分项通过（当前D161）**。OnConfigLoad先于校正/required，实际配置快照/迁移；4MiB/SESSION_ERROR/ACTIVATED顺序沿§3.1历史。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/capabilities/{sqlite,configdb_gorm}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/capabilities/(sqlite\|configdb_gorm)$' -count=1 -v` | GN46-06-final.log；87e84f7a；darwin/arm64；PASS30.73s/包37.813s |
@@ -1170,7 +1170,7 @@ GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runn
 
 ### 3.6 五平台运行增量（T-10.2 / V-32、V-34）
 
-2026-11-20，goal47 的固定源码基于 goal46 `eb01ed6c75cdde59963c4acdcd1b6db5d94e6bd7`。本节保留该候选的实际平台结果。已通过 GN47-13 普通 merge 消费固定最终产品输入 goal46 `648d3d38`，新候选三个本地平台及 GORM 增量通过，linux/amd64 等待父预约；实际构建身份与结果见本节末。`scripts/platform` 仅经 `os/exec` 和 HTTP 驱动真实 Core、Adapter 与插件，fixture 源码、JSON、日志、overlay 和数据库留在 ignored `goal-47/evidence/`，随 PR 提供可复查位置。
+2026-11-20，goal47 的固定源码基于 goal46 `eb01ed6c75cdde59963c4acdcd1b6db5d94e6bd7`。本节保留该候选的实际平台结果。已通过 GN47-13 普通 merge 消费固定最终产品输入 goal46 `648d3d38`，新候选四个可用平台及 GORM 增量通过；实际构建身份与结果见本节末。`scripts/platform` 仅经 `os/exec` 和 HTTP 驱动真实 Core、Adapter 与插件，fixture 源码、JSON、日志、overlay 和数据库留在 ignored `goal-47/evidence/`，随 PR 提供可复查位置。
 
 #### linux/amd64：instabox VM 完整通过
 
@@ -1297,15 +1297,16 @@ GN47-11 共 19 个命令全部退出 0，会话总耗时 1051.866s；源码运�
 
 #### GN47-13 固定最终产品的增量验收
 
-普通 merge 固定 goal46 `648d3d38e3fc661c1838edfa01d0fcbfbf9766ed`，实际构建候选为 `5094592d0a08e22a112e070f596b6896225e685b`。该输入含 Core174 普通产品 `8b838dd8`、D-184 和正式 GORM fork。相比原平台候选，Core 生命周期/状态日志与指标装配、SDK 激活错误同步/HTTP 按需链接/内部 Adapter 接口、echo manifest 及 GORM 来源均有变化，因此在三个已可用本地环境重建 Core、验收程序、四普通组件、七恢复产物与 CGO 插件，完整执行原平台路径。新候选 `vcs.modified=false`；原 `a77824c3` 四平台 1082 步／104 runs 及 GN47-11 的 `45e14b27` 全仓 race 证据全部保留，分别按其原身份使用。
+普通 merge 固定 goal46 `648d3d38e3fc661c1838edfa01d0fcbfbf9766ed`，实际构建候选为 `5094592d0a08e22a112e070f596b6896225e685b`。该输入含 Core174 普通产品 `8b838dd8`、D-184 和正式 GORM fork。相比原平台候选，Core 生命周期/状态日志与指标装配、SDK 激活错误同步/HTTP 按需链接/内部 Adapter 接口、echo manifest 及 GORM 来源均有变化，因此在三个本地环境及父预约的 linux/amd64 VM 重建 Core、验收程序、四普通组件、七恢复产物与 CGO 插件，完整执行原平台路径。新候选 `vcs.modified=false`；原 `a77824c3` 四平台 1082 步／104 runs 及 GN47-11 的 `45e14b27` 全仓 race 证据全部保留，分别按其原身份使用。
 
 | 实际平台／环境 | 完整平台结果 | 构建及业务增量 | CGO 真实返回 |
 | --- | --- | --- | --- |
 | `darwin/arm64` / `native` | passed，1082 步／104 runs，54.056s | 21 命令 exit0，89.053s；GORM TCP/stdio exit0，16.217s | C 值 9、PID `55410`；`Apple LLVM 21.0.0 (clang-2100.3.34.2)` |
 | `linux/arm64` / `container` | passed，1082 步／104 runs，31.255s | 21 命令 exit0，71.827s；GORM TCP/stdio exit0，21.234s | C 值 9、PID `18804`；`14.2.0` |
 | `darwin/amd64` / `emulation` | passed，1082 步／104 runs，84.919s | 23 命令 exit0，132.130s；GORM TCP/stdio exit0，25.610s | C 值 9、PID `57523`；`Apple LLVM 21.0.0 (clang-2100.3.34.2)` |
+| `linux/amd64` / `vm` | passed，1082 步／104 runs，42.953s | 21 命令 exit0，122.211s；GORM TCP/stdio exit0，25.931s | C 值 9、PID `427740`；`14.2.0` |
 
-三组结果均覆盖真实无 TTY 认证、正式安装/启用、Adapter/echo 消息及 showcase HTTP、100 次循环启停、Core SIGKILL 后旧树释放与重启、CGO 安装和实际 C 调用。Bot API 仍为 loopback 模拟服务。每组 104 份非空 Core 日志、PID/进程组/合作子树、两端口与五锁（CGO 六锁）的逐次释放全部通过；management、七恢复窗口、survivor/started 保持原断言，events 52/136/16，七产物与 Core 同平台/同候选。每组 10 个状态库、19 个业务库（含三个原为空的 gateprobe 文件）、Active/Journal、恢复写入者与数据全部保留。
+四组结果均覆盖真实无 TTY 认证、正式安装/启用、Adapter/echo 消息及 showcase HTTP、100 次循环启停、Core SIGKILL 后旧树释放与重启、CGO 安装和实际 C 调用。Bot API 仍为 loopback 模拟服务。每组 104 份非空 Core 日志、PID/进程组/合作子树、两端口与五锁（CGO 六锁）的逐次释放全部通过；management、七恢复窗口、survivor/started 保持原断言，events 52/136/16，七产物与 Core 同平台/同候选。每组 10 个状态库、19 个业务库（含三个原为空的 gateprobe 文件）、Active/Journal、恢复写入者与数据全部保留。
 
 GORM 增量直接复用 `cmd/alonabot/t10_e2e_test.go` 的 `testCrossDatabasePackages`，本地 wrapper `TestFinalPlatformGORMLocal` 分别执行 TCP/stdio。真实 `configdb_gorm` 正式包归档的 build-info 均确认 `gorm.io/gorm v1.31.2 => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d`。配置规范化、真实 Adapter 笔记、候选启动写库后失败仍保持旧 Active/笔记、成功 reload、显式空配置均通过；每个传输的权威 SQLite 有三条 Journal（两 committed、一 cleaned），两个不同业务库的 startup 为 `First value`/空值、note 均为 `persisted`、迁移数均为 2。本地 wrapper 与全部业务 DB/正式归档保留在 ignored 证据，新增提交测试 0 行。
 
@@ -1313,7 +1314,13 @@ GORM 增量直接复用 `cmd/alonabot/t10_e2e_test.go` 的 `testCrossDatabasePac
 
 固定最终候选的全仓静态增量：`gofmt -l` 全部 tracked Go 文件无输出；darwin/arm64、windows/amd64、linux/amd64 的 `go vet ./...` 全部 exit0；五目标 `CGO_ENABLED=0 go build ./...` 全部 exit0。完整命令、环境、PID、原始输出与耗时见 `GN47-13/static-gates.json` 和 `static-logs/`。本轮未重跑全仓 race；GN47-11 全仓 race 仍对应其原 `45e14b27`，新 Core174 与46的有效功能/race证据沿各原记录，最终当前 head CI 由父审查者核对。
 
-**待执行项：** 最终候选 linux/amd64 的完整运行与 GORM 双传输尚未运行，等待父明确独占窗口。固定输入归档为 `GN47-13/goal47-final-5094592d.tar.gz`（21224013 字节），含 Git bundle、同一 tree/CGO fixture 和一次性入口；归档各输入文件逐字节复核，完整命令与预计 10–25 分钟/请求 30 分钟见 `linux-window-request.json`。父已完成上传至 `/data/home/user/goal47-final-5094592d.tar.gz`，运输承接见 `parent-upload.json`；窗口到达后直接消费该文件，当前尚未解包或执行。旧 GN10 本地完整库存已通过，见本节该候选的原始证据与回收记录。Windows 真实运行/CGO 与 Actions billing 继续留最后，最终 main 文档/祖先整合由父协调。WebUI 前端改动复用父实际浏览器验收；本轮未新增资源测量或性能优化。
+Linux 最终增量在父明确分配的 2026-11-20 06:33:35–07:03:35 UTC 独占窗口内执行。直接消费父已上传的固定输入 `/data/home/user/goal47-final-5094592d.tar.gz`（21224013 字节），解包至 `/data/home/user/goal47-final-input-5094592d`。首轮 job `638f2da1` / PID `419968` 在构建 Core 时退出 1：当前用户模块缓存缺少已批准的 GORM fork，`GOPROXY=off` 保留完整 `module lookup disabled` 原错，尚无产品运行。runner 用户目录和根盘构建缓存的权限错误同样留存；随后在本切片目录复用当前用户现存模块缓存及本机已验收的同版本 GORM 缓存字节（169389 字节补充归档），设置独立 `GOMODCACHE`，无工具安装、网络模块下载或产品修改。
+
+同一固定入口以新输出目录重跑：background job `3fb6cf77` / PID `420275` 退出 0，`run02/session.json` 的 21 命令全部 exit0；Go `1.27.1`、实际 Linux/x86_64 VM。完整结果及远端库存为 `/data/home/user/goal47-final-linux-amd64-5094592d-run02/{result.json,session.json,evidence-audit.json}`；本地三份原始 JSON 位于 `GN47-13/linux-amd64-run02/`。库存脚本原样复用，104 日志、29 DB、七 ELF、CGO 归档字节、原恢复事件和 GORM 双传输数据库均通过。`linux-amd64-control/process-release.json` 记录 06:40:46.627393Z 的退出核对：659 个已知 PID 均消失，本轮产品/构建/驱动路径无活跃进程，已先交回窗口再后台归档回收；完整命令、job/PID、原错与传输记录保留在同控制目录。
+
+完整 raw 归档 `/data/home/user/goal47-final-linux-amd64-5094592d-evidence.tar.xz` 为 572610432 字节，包含原 run01、成功 run02、缓存来源和退出凭据；归档 job `a560d6c1` 退出 0。本地完整归档仍由现有 pull 传输，后续本地还原及逐字节库存由本切片承接；当前远端完整库存及已回收的结果、失败原错继续有效。
+
+**待执行项：** Windows 真实运行/CGO 与 Actions billing 继续留最后，最终 main 文档/祖先整合由父协调，push/PR/CI 按父指令暂缓。旧 GN10 本地完整库存已通过，见本节该候选的原始证据与回收记录。WebUI 前端改动复用父实际浏览器验收；本轮未新增资源测量或性能优化。
 
 ## 4. 实施交接
 
