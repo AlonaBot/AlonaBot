@@ -11,9 +11,9 @@
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 已完成（PR #275） |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 已完成（PR #278；最终检查与合并门槛待核对） |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 已完成（PR #278，`46c35d0e`） |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 独立实施中；最终验收等待前置 |
-| goal-48 | T-10.3 | 现有资源实测与维护者决定归档 | T-10.1 | 等待文档收口（D-184） |
+| goal-48 | T-10.3 | 现有资源实测与维护者决定归档 | T-10.1 | 已完成（本 PR；D-184） |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
 
 ## 第 19 波
@@ -263,7 +263,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：实施与证据审查中（PR #278）。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，main `cb5acc79` 的 Quality gate（run 44647524835）已通过。跨组件实现、浏览器补验与 GN11 功能增量联验均已完成独立审查，PR #278 等待最终 head CI 与合并。GN11 已接入 goal-174 的固定产品候选；D-184 已接受当前资源开销，资源测量收口。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 已完成固定 Linux 实测并按 D-184 收口，最终消费稳定合并输入完成公开入口联验。
+状态：已完成（PR #278，`46c35d0e`）。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，main `cb5acc79` 的 Quality gate（run 44647524835）已通过。跨组件实现、浏览器补验与 GN11 功能增量联验均已完成独立审查，PR #278 最终 head `2914c391` 的 Quality44689318290（完整 Linux race、五目标构建）和 metadata44689318584 均通过，已锁定该 SHA squash 合并；合并后 main Quality44693804971 继续确认。GN11 已接入 goal-174 的固定产品候选；D-184 已接受当前资源开销，资源测量收口。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 已完成固定 Linux 实测并按 D-184 收口，最终消费稳定合并输入完成公开入口联验。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -343,7 +343,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-48 · T-10.3 现有资源实测与维护者决定归档
 
-状态：等待 goal-46 稳定输入后文档收口。2026-11-20 维护者接受当前开销并要求停止该方面测量（D-184）；原四负载及 NoneBot2 对照取消新增运行。已批准的两组基准依赖及本地兼容预检保留历史，不再扩展基准实现。
+状态：现有资源证据文档已完成，最终 PR 检查与合并由审查者确认。goal-46 已合入 main `46c35d0e`，后继 goal-49 读取 [docs/benchmarks.md](../benchmarks.md) 的三轮实测、中位数、环境和原始记录。2026-11-20 维护者接受当前开销并要求停止该方面测量（D-184）；原四负载及 NoneBot2 对照取消新增运行。已批准的两组基准依赖及本地兼容预检保留历史，不再扩展基准实现。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：现有资源实测与维护者决定归档）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。
