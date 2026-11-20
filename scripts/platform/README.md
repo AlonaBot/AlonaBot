@@ -40,6 +40,8 @@ uv run --no-project --offline --no-python-downloads scripts/platform/cgo_build.p
 
 程序为每次运行创建独立的临时 `cwd` 与 `data` 目录，并在 JSON 中留下绝对路径。命令从该 `cwd` 运行；输入路径按启动位置解析为绝对路径。程序和 Core 应构建为相同目标；Rosetta 验收时两者及组件都使用 `darwin/amd64`，环境填 `emulation`，宿主说明填写 Apple Silicon/Rosetta。容器填 `container`，同时说明实际宿主与容器发行版。
 
+Docker Desktop 验收时，将 `TMPDIR` 指向容器本地文件系统中的目录，运行后把完整工作区复制到证据目录。共享挂载可保留构建输入和最终 JSON；本次实际对照发现，共享文件系统上的 Core 锁观测与容器本地文件系统不同，原始失败与对照结果见 [TEST-MATRIX](../../spec/TEST-MATRIX.md) §3.6。
+
 JSON 包含运行时 OS/架构/Go 版本、系统版本原始输出、Core 与组件包的 Go build info、包路径与长度，以及各步骤的 UTC 时间、毫秒耗时、完整合并输出、退出码和错误。`host_description` 由操作者声明，系统命令输出与编译目标另行记录。`runs` 保存 Core 命令、PID、动态监听地址、完整日志位置和组件激活 PID/代次；`purpose` 区分首次业务、循环、强杀和恢复，`cycle` 记录 1–100，每一步的 `core_pid` 对应所属运行。`bot_calls` 保留本地 Bot API 模拟服务收到的真实请求。
 
 首次启动无 TTY，经 `admin-token show` 取得凭证后，使用 Cookie/Origin/CSRF 登录及启用组件；安装走真实 CLI Bearer 认证。程序显式配置受控的 `base_url`，按现有集成测试的方式转发 Host 到实际动态 Listener。管理 token、登录请求和成功登录响应的凭证值以 `output_redacted` 标记遮蔽；CLI 的私有 token 文件留在临时目录，供故障复现。首次登录后核对 `admin_token` 已删除。
