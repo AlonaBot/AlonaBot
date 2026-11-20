@@ -179,7 +179,11 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 			if previousOwner != nil {
 				// SDK 的跨代次锁仍负责拒绝重复启动，失败后恢复原 Session 的状态。
 				runtimeOwners.Store(key, previousOwner)
-				err = errors.Join(err, store.SetRuntimeStatus(statusCtx, spec.PluginID, previous))
+				restoreErr := store.SetRuntimeStatus(statusCtx, spec.PluginID, previous)
+				if restoreErr == nil {
+					logRuntimeChange(spec.PluginID, state.RuntimeWaking, previous.State, previous.Reason)
+				}
+				err = errors.Join(err, restoreErr)
 				return
 			}
 			err = errors.Join(err, runtime.write(statusCtx, state.RuntimeFailed, err.Error()))
@@ -297,23 +301,37 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 	}
 
 	// 4. 启动进程；之后任何失败都由 fail 终止并确认进程树清空再返回，无法确认时错误中带上原因。
+	p := &Prepared{store: store, spec: spec, listener: ln, messages: messages, snapshotRoutes: snapshotRoutes, runtime: runtime}
 	startedAt := time.Now()
+	p.startedAt = startedAt
 	proc, err := process.Start(process.Spec{PluginID: spec.PluginID, Path: spec.Executable, Dir: pluginDir,
 		Args: spec.Args, Env: env, Stdio: spec.Stdio}, spec.Log.Line)
 	if err != nil {
+		p.logStartupFailure(err, "process_start")
 		closeListener(ln)
 		return nil, err
 	}
+	p.process = proc
 	if spec.Waker != nil {
 		spec.Waker.started(spec.PluginID, startedAt)
 	}
-	p := &Prepared{store: store, spec: spec, process: proc, listener: ln, messages: messages, snapshotRoutes: snapshotRoutes, runtime: runtime}
+	stage := "connect"
+	prepareCalled := false
+	var sessionID []byte
 	fail := func(err error) (*Prepared, error) {
-		cleanupErr := p.close()
-		if !p.released {
-			return p, errors.Join(err, cleanupErr)
+		attrs := []any{}
+		if prepareCalled {
+			attrs = append(attrs, "prepare_ns", p.prepareElapsed.Nanoseconds())
 		}
-		return nil, errors.Join(err, cleanupErr)
+		if sessionID != nil {
+			attrs = append(attrs, "session_id", hex.EncodeToString(sessionID))
+		}
+		err = errors.Join(err, p.close())
+		p.logStartupFailure(err, stage, attrs...)
+		if !p.released {
+			return p, err
+		}
+		return nil, err
 	}
 
 	// 5. 建立连接，注册后抽取快照；新候选先持久化，restart 只核对且保持原代次不变。
@@ -364,10 +382,14 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 		}
 		return snapshot, nil
 	}
+	stage = "prepare"
+	prepareStartedAt := time.Now()
 	prep, err := host.Prepare(ctx, conn, exp, boot, spec.Limits)
+	p.prepareElapsed, prepareCalled = time.Since(prepareStartedAt), true
 	if err != nil {
 		return fail(err)
 	}
+	sessionID = prep.SessionID
 	for _, correction := range prep.Corrections {
 		slog.Warn("configuration corrected", "plugin_id", spec.PluginID, "path", correction.Path, "reason", correction.Reason)
 	}

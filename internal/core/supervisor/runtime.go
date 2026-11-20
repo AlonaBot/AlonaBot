@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ func (r *runtimeRecord) write(ctx context.Context, next state.RuntimeState, reas
 	if err != nil {
 		return err
 	}
+	previous := status.State
 	now := time.Now().UTC()
 	if next == state.RuntimeActive && status.State == state.RuntimeWaking {
 		status.LastWakeAt, status.LastWakeReason = now, reason
@@ -37,7 +39,17 @@ func (r *runtimeRecord) write(ctx context.Context, next state.RuntimeState, reas
 	if next == state.RuntimeSuspended {
 		status.LastSuspendAt = status.ChangedAt
 	}
-	return r.key.store.SetRuntimeStatus(ctx, r.key.id, status)
+	if err := r.key.store.SetRuntimeStatus(ctx, r.key.id, status); err != nil {
+		return err
+	}
+	logRuntimeChange(r.key.id, previous, next, reason)
+	return nil
+}
+
+func logRuntimeChange(id string, previous, next state.RuntimeState, reason string) {
+	if previous != next {
+		slog.Info("plugin runtime state changed", "plugin_id", id, "previous_state", previous, "state", next, "reason", reason)
+	}
 }
 
 func (r *runtimeRecord) writeIfCurrent(ctx context.Context, next state.RuntimeState, reason string) error {

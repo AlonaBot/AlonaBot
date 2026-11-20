@@ -7,9 +7,11 @@ package metrics
 import "sync"
 
 // Reason 标识 denied、cancelled、offline、dropped_queue、dropped_budget、cycle 或 depth。
+// 唤醒使用 started、ready、failed、cold_start、dropped_queue、dropped_bytes、
+// dropped_budget、cancelled、deadline、dropped_failed 和 dropped_other。
 type Reason string
 
-// Kind 标识 service、bus 或 event。
+// Kind 标识 service、bus、event 或 wake。
 type Kind string
 
 // Counters 保存进程内累计值；使用后应通过指针共享。

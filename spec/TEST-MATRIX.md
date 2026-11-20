@@ -1,7 +1,7 @@
 # AlonaBot v0.1 验收与故障注入矩阵
 
 版本：v0.6-review（原始矩阵 2026-10-21；发布前追踪更新 2026-11-20）
-状态：**已汇总全部149编号及本机TCP/stdio真实跨组件分项，见§3.4～§3.5；goal46仍待174稳定合并接口/固定Linux证据和最终head CI。** 原2026-10-21总述“仅T-01/T-02有分项证据，其余未执行”保留为§3.1的历史状态。真实凭据、目标平台、资源报告及D171后置项按逐行状态承接。
+状态：**已汇总全部149编号及本机TCP/stdio真实跨组件分项，见§3.4～§3.5；GN46-11已完成174合并输入的功能增量联验，待父独立审查与最终head CI。资源按D-184接受现有实测并收口。** 原2026-10-21总述“仅T-01/T-02有分项证据，其余未执行”保留为§3.1的历史状态。真实凭据、目标平台、资源报告及D171后置项按逐行状态承接。
 规范来源：[PLAN.md](PLAN.md)（T-01～T-16 详细工作包与 §7 的 S-01～S-06）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
@@ -40,7 +40,7 @@
 | V-30 | T-09 | Core崩溃于PREPARED、Active+COMMITTED提交前后、OnReady失败 | 未提交只恢复旧版；已提交只恢复新代次；旧进程退出未确认时不启动第二写入者；无双代次接单或静默回滚 |
 | V-31 | T-09 | 声明 `prepare_effects=external` 的插件（准备期写外部数据库），尝试自动 reload、update 与 rollback | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；真实 CLI/API 显式备份许可只对本次 Session/Generation/DB 有效，运行中或非 external 请求拒绝，成功与失败均保持停用；提交前后失败及 Core 恢复不重跑迁移，Active 按提交点保持准确；普通 restart 不受影响；无虚假无损回退承诺 |
 | V-32 | T-10 | Linux amd64/arm64、Windows amd64、macOS amd64/arm64 编译、启动/退出 | 五个组合都有真实记录；CGO 插件在不兼容平台标不支持而非虚假发布 |
-| V-33 | T-10 | 同一台固定机器、同一个本地 Bot API 模拟服务；NoneBot2 使用其 Telegram Adapter 与功能相同的插件。四种负载：空闲（Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟）；消息（每秒 20 条文本、持续 10 分钟，echo 逐条回复）；数据库（每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟）；HTTP（每秒 50 个请求访问插件路由，持续 10 分钟） | 每种负载报告 RSS/私有内存、Linux PSS、CPU 与回复或响应延迟的 P50/P95/P99，并记录版本、机器与负载参数；不借同 worker PoC 代替 |
+| V-33 | T-10 | 原计划为固定机器四负载与 NoneBot2 对照；2026-11-20 维护者按 D-184 取消新增资源测量 | 维护者取消新增运行；保留已有兼容预检与未取得指标，T-10.3 归档现有资源证据及决定 |
 | V-34 | T-10 | 100 次启停、多次异常退出、普通子进程树、外部副作用重试 | 无 Core 崩溃/会话泄漏，合作型子进程按平台能力清理，业务副作用默认不自动重试 |
 | V-35 | T-03 | 多物理消息、平台明确拒绝、先成功再超时、末尾相册带按钮在首发前拒绝、成功message_id=0 | ACCEPTED/PARTIAL/REJECTED/UNKNOWN与每part一致；已确认ID保留、0不当可编辑ID；未尝试列出；payload+error同时返回，不自动补发 |
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链后走完OnStop再退出，写管道不因SIGPIPE终止；runtime.lock未释放不打开DB/启动替代实例 |
@@ -81,7 +81,7 @@
 | V-71 | T-15 | 本地 OneBot 11 模拟服务：get_login_info、access_token 错误、断线重连、self_id 不符、字符串格式上报、私聊/群聊/匿名消息、撤回与成员变动、to_me 的三种情况（含 get_msg 失败）、入站图片取件、实例队列满；发送混合段、video 拆分、reference、base64 媒体、async、failed、请求写出后断线 | 401 与字符串格式使实例致命失败并给出 safe_error；重连不重放已提交的 Send；self_id 不符的事件被丢弃；匿名消息没有 Actor；无通用对应的段只在 platform_payload 中；队列满时丢弃并计数而读循环继续；PartResult 与物理消息一一对应，async 标记 message_ids_unavailable，写出后断线为 UNKNOWN 且后续 NOT_ATTEMPTED；真实 QQ 端只有维护者手测记录，没有时记为未运行 |
 | V-72 | T-03、T-15 | 同一插件经 Telegram 与 OneBot 11 模拟服务的两个实例收发同一组 Chain：纯文本、mention、reference、图片加文本、buttons、forward、file、markdown、Edit、`onebot11.face` extension、发往其他 Adapter 的 extension；同一组入站消息 | 通用片段在两边语义一致：顺序、引用位置、PartResult 与 segment indexes 对应；每个实例只用自己声明的 Capability，未声明的片段或组合在首个平台请求前返回 UNSUPPORTED，模拟服务没有收到请求；extension 只在所属 Adapter 上成功；入站的 text、mention、reference、image 在两边得到相同结构的 chain；插件代码不按 adapter_id 分支 |
 | V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/平台权限/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送的缺省许可与收紧后的拒绝、`plugintest.LLM` 替身（D-77）、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
-| V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
+| V-74 | T-10 | 固定 linux/amd64；Core-only 无插件/Adapter，echo 与 configdb GORM 在 ACTIVE 后空闲120s，三轮 smaps_rollup PSS，保留 RSS 与私有内存；rss 按 D-171 后置 | D-184 接受现有 Core 26.61328125 / echo 10.09375 / configdb GORM 16.21875 MiB；旧24/10/16 MiB及超标事实保留历史，停止新增资源测量与预算优化 |
 | V-75 | T-01、T-10 | 用 docs/development.md 的 `go list -deps` 命令，在五个目标上（设 GOOS/GOARCH）列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块 | 只含 docs/development.md 允许清单中的模块 |
 | V-76 | T-12 | 测试插件调用 `llm.generate`：`llm_service_allowed_plugins` 为缺省的 `["*"]`、改为名单后在与不在名单中、不指定模型、指定不存在的模型与非 chat 类型的模型、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、`chat_model` 为空、Agent 组件未启用、调用方经 `@agent` 调用 | 缺省时调用成功；改为名单后不在名单中返回 PERMISSION_DENIED，模拟服务没有收到请求（D-83）；不指定时使用 `chat_model`（D-154）；不存在或非 chat 类型的模型为 INVALID_ARGUMENT，`chat_model` 为空为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求（D-155 的重试不适用于本服务）；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、model 与用量，会话存储没有新增条目 |
 | V-77 | S-01.1、S-01.2、S-02.1、S-02.2、S-02.3；S-06.2 汇总 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；唤醒队列条数或字节满额；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、媒体、schedule、延续调用与多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠；注册了消息类事件路由或 Raw 路由的插件；插件策略为 `never` 或自带空闲时长；运行中修改全局与按插件的设置；plugin/agent 可休眠声明；Core 过滤的 to_me/会话类型/唤醒词 OR、triggers 多选为空、配置文件覆盖、仅 SDK Rule 与未过滤路由、快照中的新字段；固定冷却期 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；进入 QUIESCING 前复核 Session、Ready、零引用及真实活动结束时间，变化时撤销空闲决定并保留原唤醒时间；进入后新请求按原期限与预算等待旧树退出、SUSPENDED 及唯一新 Session 的 Ready；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑数据库迁移回调，配置继续加载、校正并核对完整快照；快照不含 Secret、Listener 与内部代理凭证，未提交快照及包摘要不一致时隔离路由；队列条数、字节或 Core 总预算满额返回 RESOURCE_EXHAUSTED，取消/到期立即归还预算，单个等待者取消后共享启动继续；ACTIVATED 后全部绑定完成才交付；活动引用按 Session 隔离且重复释放安全，HTTP 引用在代理返回时释放，空闲停止复用正常排空、一次 STOPPING、OnStop 与整树截止，HTTP/Bus 仍在执行的 SDK 回调沿用正常停止截止；同步活动准入与 Session 在途登记共用临界区，Handler 装配等待参与空闲复核，正常 WaitIdle 覆盖整个准入区间；在线 Bus 用订阅者身份持有至 EVENT 排队撤回或实际写出结束；未启用时生命周期与事件行为不变；未声明 Core 过滤的消息监听插件缺省不休眠，管理员显式给出时长后才休眠；Core 过滤未命中时常驻不交付、休眠不唤醒，命中后才交给 SDK Rule，按会话生效覆盖值匹配，覆盖更新无需唤醒；空条件不命中，读取失败保留诊断；过滤声明与路径进入快照且值不进入；plugin 与 agent 规则一致，Adapter/WebUI 常驻；超过冷启动阈值从触发时刻固定常驻 SLEEP_COLD_START_WINDOW，结束后恢复空闲判定；`never` 的插件不休眠，改为 `never` 时正在休眠的插件随即唤醒；按插件的空闲时长覆盖全局值；设置修改不重载插件，全部 Update/Reload（含命令前缀、Prune、BindAdapter、PrepareInstances 内部写回）与空闲判定串行发布，循环及文件锁、插件锁外等待恢复，聚合提交后错误与各插件失败；时长从下一次空闲判定起生效；冷启动记录按稳定序号消费确认，常驻/停用/休眠实例同样回收，固定冷却不因期间启动延长（D-153、D-179） |
@@ -286,7 +286,7 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 | T-03.5 / V-09 的上传分项 | [PR #38](https://github.com/AlonaBot/AlonaBot/pull/38)；`internal/core/media/upload_test.go` 的 `TestUpload`、`TestQuota`、`TestReferenceLifetime`、`TestUploadFileFailures`、`TestOpenCleanup`：临时目录上的真实 Store 经 AddServices/Mux 驱动三个服务；覆盖三块上传后 Commit 与 Lookup、错序 offset 终止并释放预留、大小或摘要不符被拒、第 5 个未完成上传被拒、Session 与 Core 配额超限、注入时钟过期后 NOT_FOUND 并释放、ReleaseSession 与跨 Session 隔离、并发准入、文件读写与删除故障（删除失败记 WARN，INTERNAL 的 safe_message 不含 Store 目录）、Open 清理遗留文件；SDK `Upload` 的本地测试使用真实配对 Session（PR 中另列，未提交） | darwin/arm64、Go 1.27.1 上 gofmt 无输出，`go vet ./...`、`go test -race -count=1 ./internal/core/... ./internal/wire/... ./sdk/...`、`go build ./...` 通过；审查者以本地测试确认 64 个 Session 并发 Begin 时 Core 配额无超额，并复现、确认 safe_message 路径泄露的修复；[head 6a5608d 的 Quality gate](https://github.com/AlonaBot/AlonaBot/actions/runs/40820335813) 通过 | IncomingMedia、Read、Grant、发送时消费租约与 Core 装配（T-03.6 起）；V-09 整体未闭合；其他目标平台实际运行未运行 |
 | T-11.3 / V-56 的存储与插件访问分项 | [PR #35](https://github.com/AlonaBot/AlonaBot/pull/35)；[`internal/core/supervisor/conversation_test.go`](https://github.com/AlonaBot/AlonaBot/blob/685de5025aef041a427cba86e976eab19343510b/internal/core/supervisor/conversation_test.go) 的 `TestConversationProcesses`：memory Adapter、Router、Mux、message.Service、conversation.Service、真实 SQLite 与两个 Native 插件进程；覆盖一次追加 3 条再追加 1 条、序号与内容原样，6 条约 1 MiB 条目跨帧多页读取不丢不重，同一会话键的插件隔离，含非对象 JSON 时整次拒绝，clear 后为空，关闭 Store 后重新 Open/Launch 数据保留，Service.Purge 只删本插件，日志不含条目内容；`contracts/wirespec_test.go` 固定会话消息字段编号。PR 中另列本地 `*_local_test.go`（未提交） | darwin/arm64、Go 1.27.1 上 gofmt 无输出，`go generate ./...` 后无差异，`go vet ./...`、`go test -race -count=1 ./contracts/... ./internal/... ./sdk/...`、`go build ./...` 通过；审查者以本地测试确认 40 路并发追加序号连续、近帧上限条目分页、超大 from_seq 与非法键被拒 | 管理 API/CLI/页面与卸载 `--purge` 流程（T-09.4、T-09.9）、Agent 组件使用会话（T-12.2）；V-56 整体未闭合；其他目标平台实际运行未运行 |
 
-发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 只对空闲常驻内存设预算（V-74），初值依据 D-52 记录的实测数据；吞吐与延迟不设通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
+发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。资源开销按 D-184 以现有实测及维护者接受决定收口；V-74 旧预算与超标事实保留历史，V-33 取消新增对照压测。吞吐与延迟沿用实际已取得的数据。
 
 | 切片 | 实现与证据 | 结果 | 尚未闭合 |
 | --- | --- | --- | --- |
@@ -697,6 +697,88 @@ uv run --no-project scripts/scenarios/run.py survivor --alonabot /tmp/alonabot-r
 
 **验收状态与后继输入。** 最终检查及上述专项与场景有效通过。正常停机时 remote.offline 已依次撤销 running、Registry 与命令同步，随后 bot.offline 遇到并行关闭的 Router，保留一条 `event router is closed` ERROR；父审查者按 CONTRACTS §4.2 确认该顺序与正常关停一致，Core 退出0、四组件 drained=true/killed=false，原日志在 `/private/tmp/alonabot-g45-admin.sswdf94y/core.log`。所有平台故障/锁实跑目前为 darwin/arm64；Windows、Linux/amd64、Linux/arm64、darwin/amd64 的实际运行、真实磁盘写满和真实外部数据库未运行。后继顺序75→46→47/48→49，按场景 README 在目标环境重新构建本平台产物，消费三类入口；原目录保留供来源与持久状态复核。
 
+### S-06.2 / V-74、V-77、V-78、V-81 指标、故障与固定机器证据
+
+2026-11-19～20，goal-174；固定产品候选 `a02780342b75a2a34dd689c0ad367690425e4315`。后续普通合入 main `cb5acc79` 的合并点为 `24ee3f9a`；同步范围为发行测试、文档及 Docker context，Core/SDK/示例产品源码与依赖输入保持。唯一提交集成测试 [TestSleepMetrics](../internal/app/sleep_metrics_test.go) 新增382行；其余自测与原始数据均在执行者 worktree 的忽略目录，下面的日志路径相对 `goal-174/`。原预算 Core24/echo10/configdb_gorm16MiB 保持，三项资源验收均 FAIL；goal-174 与 V-81 总体验收继续未完成。
+
+| 分项 | 实际入口与结果 | 命令、平台与证据 |
+| --- | --- | --- |
+| V-77/V-81 真实集成主路径 | 真实 Core、认证管理 API、正式安装的动态插件进程与 SQLite：自动 SUSPENDED→100并发请求共享一次恢复→再次休眠→always_on；Ready 前零交付，各编号仅交付一次；原代次、配置、路由快照、静态锚点/暂停状态、动态参数、业务标记、迁移一次保持。cold_start=3、started=ready=2，日志聚合与 Snapshot 相等，3个 Session 关联 Core 与 SDK 实际阶段耗时 | darwin/arm64、Go1.27.1，`go test -v -race -count=1 ./internal/app -run '^TestSleepMetrics$'` 通过13.225s，`gn04-test-final.log`。夹具显式 idle150ms、minimum uptime50ms、cold window1h/max100；首轮未保留 HTTP 策略覆盖导致夹具失败，修正后通过，原失败保留 |
+| V-77/V-78 真实故障与 STOPPING | 本地 `internal/app/sleep_metrics_failures_local_test.go`：OnReady 进程退出，8条/4MiB等待全部保留 ACTIVATE/UNAVAILABLE/EOF，共享 failed1、逐等待 dropped_failed8，预算归零且下一批完整复用；旧树与锁释放。OnStop 同步点冻结旧树，命令与自然到期项按原 deadline 等待，取消/过期退出，Ready 后唯一新 Session 各交付一次；IDLE停止一次，异常重启次数保持；原代次/任务/数据/迁移保持 | darwin/arm64、Go1.27.1，`go test -v -race -count=1 ./internal/app -run '^(TestSleepMetricsFailures\|TestSleepMetricsStopping)$'` 通过21.906s，`gn05-test-final.log`；本地短时长与截止覆盖记录在测试源码和卡片，固定机实测沿缺省值。首轮错误要求 ON_READY code 与中间夹具编译错误均保留 |
+| 指标、真实冷启动与 SDK 回调 | 本地 `TestWakeMetrics`/`TestCountersLocal`/`TestColdStartMetrics` 覆盖共享启动成功/失败、三种预算拒绝、取消/deadline/其他错误、锁外计数、快照并发复制及历史回收；`TestLifecycleCallbackMetrics` 覆盖两phase nil/成功/错误/panic/watchdog后实际返回和真实进程退出，缺回调/未实际完成保留缺项；`TestActivationFailureLocal` 确定性覆盖 error/panic/deadline 与发送成功/写失败的原始原因交接；`TestRecordRuntimeMetricsLocal` 用 SQLite 触发器核对失败不写伪状态日志 | darwin/arm64、Go1.27.1；`go test -race -count=1 ./internal/core/metrics ./internal/core/supervisor -run '^(TestWakeMetrics\|TestCountersLocal)$'` 通过3.000s/3.373s；supervisor `-run '^(TestColdStartMetrics\|TestWakeMetrics)$'` 通过6.060s；SDK `-run '^(TestActivationFailureLocal\|TestLifecycleCallbackMetrics)$'` 通过3.787s（`fix02-test.log`），app `-run '^TestRecordRuntimeMetricsLocal$'` 通过1.846s（`fix01-test.log`）。FIX01/02原始红证均保留；父独立 FIX02 race 绿证3.394s |
+| V-77/V-78/V-81 的已有专项复用 | S-06.1 / PR #269 的管理与设置保存失败、QUIESCING策略发布；S-02.2 / PR #249 的固定冷却截止与历史回收；S-03.1 / PR #256 的真实停止/Ready、SQLite写锁窗口内到期项保留、失败撤销计划和过期 at 清理 | 沿本节既有对应行及其原命令/平台/日志：`TestSleepRecovery` 16.886s；`TestIdleDecisionLocal`/`TestIdleCompactedHistoryLocal`/`TestIdleColdStartSequenceLocal` 的最终race证据；`TestLocalScheduler(FreezeWriteWindow\|WakeFailureRetiresPlan)` 17.752s、`TestLocalSchedulerQuiescingReady` 9.256s。已合并候选分别 b44051a9、b63b287a、a0bbe7be，本轮相关改动再由完整范围race覆盖 |
+
+**固定机器与普通构建。** instabox linux/amd64，kernel `6.18.60-instabox`，4逻辑CPU、内存8351281152字节、约4GiB swap；machine_id `1a054c8857e7bf24d75653790844ed62`，boot_id `24c67d24-7e21-a7eb-b70b-dae0cde52acd`，CLK_TCK100。作为 V-33/V-74 后续共同固定机，历史 V-33/V-74 无可复用的同机原始样本。cgroup session/user slice 无额外 memory/swap/CPU 配额，缺项原错随环境日志保留；managed120m平台窗口由审查者预约，CI/runner与采样串行。自然文件缓存、未主动 drop cache；普通构建无race/额外ldflags，Go1.27.1，CGO_ENABLED=0。
+
+GN08 从固定候选以 `env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o goal-174/gn08-artifacts/alonabot ./cmd/alonabot` 构建 Core；打包使用 darwin/arm64 同候选 host CLI，`pack ./examples/plugins/echo --target linux/amd64 --out goal-174/gn08-artifacts/echo` 与 `pack ./examples/plugins/configdb --tags configdb_gorm --target linux/amd64 --out goal-174/gn08-artifacts/configdb`。正式包分别为 `echo-0.1.0-linux-amd64.tar.gz`、`alonabot-plugin-configdb-0.1.0-linux-amd64.tar.gz`，保留 release.json 与实际插件/Core buildinfo。完整 argv/env/cwd/时间/退出码在 `gn08-artifacts/build-commands.jsonl`；Linux原路径映射在 `gn09-linux/gn09/transfer-path-mapping.json`，后续三轮沿原包、原Core与同一方法。
+
+Linux源码目录 `/data/home/user/alonabot-measure-a0278034/source`；从该目录实际执行 `go build ./scripts/sleep-measure`、`go test -count=1 ./scripts/sleep-measure`（含 ignored 解析/计算自测，0.015s）均通过。以下命令中的 ROOT 为 `/data/home/user/alonabot-measure-a0278034`，ART 为其 `source/goal-174/gn08-artifacts`；每phase使用全新 work/out，N=1/2/3 分别对应 GN10/11/12，未复用冷启动 data_dir。
+
+```text
+go run ./scripts/sleep-measure --alonabot $ART/alonabot --echo-package $ART/echo/echo-0.1.0-linux-amd64.tar.gz --configdb-package $ART/configdb/alonabot-plugin-configdb-0.1.0-linux-amd64.tar.gz --work-dir $ROOT/gn09-work --out $ROOT/gn09-cold --phase cold
+go run ./scripts/sleep-measure --alonabot $ART/alonabot --echo-package $ART/echo/echo-0.1.0-linux-amd64.tar.gz --configdb-package $ART/configdb/alonabot-plugin-configdb-0.1.0-linux-amd64.tar.gz --work-dir $ROOT/gnNN-resources-work --out $ROOT/gnNN-resources --phase resources --round N
+go run ./scripts/sleep-measure --alonabot $ART/alonabot --work-dir $ROOT/gnNN-core-work --out $ROOT/gnNN-core --phase core --round N
+```
+
+**冷启动，两组各100次尝试/100成功/0失败。** 独立安装/首次迁移后，always_on下串行 restart，activation_reason=resume，100独立PID/Session、原代次；起止为 Core process.Start 前→合法 ACTIVATED 成功返回，完整绑定另有门禁。成功ns升序，nearest-rank第50/95/99项；CLI/API耗时另存。结果与原日志位于 `gn09-linux/gn09-cold/{echo,configdb_gorm}/{cold.jsonl,summary.json}`；每组Core正常退出0。
+
+| 样本/阶段 | N | P50 ms | P95 ms | P99 ms | 状态 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| echo cold_start | 100 | 4.033370 | 5.367619 | 5.618309 | PASS，P95≤200ms初步目标 |
+| echo prepare | 100 | 0.685900 | 1.015320 | 1.096570 | 实测 |
+| echo activate | 100 | 0.278870 | 0.449730 | 0.685060 | 实测 |
+| configdb_gorm cold_start | 100 | 7.605960 | 9.001459 | 9.239750 | 实测 |
+| configdb_gorm prepare | 100 | 2.339390 | 2.945190 | 3.317359 | 实测 |
+| configdb_gorm activate | 100 | 0.550580 | 1.167960 | 1.505820 | 实测 |
+| configdb_gorm OnStart | 100 | 1.074400 | 1.397120 | 1.433980 | 实测 |
+
+两组 OnReady 与 echo OnStart 未配置，N=0，耗时保持null及not_executed原因。完整成功/失败阶段、SDK lifecycle_session_id、prepare_ns/activate_ns均保留原ns；控制job首次jq参数错误发生于采样前，修正后自测与实采各一次。
+
+**资源三轮。** GN10资源/独立Core为2026-11-19T16:39:23Z～17:15:26Z；GN11为22:13:49Z～22:49:51Z；GN12为23:35:23Z起（完整起止在run.json）。ACTIVE与SUSPENDED均稳定120s；原 idle15m/minimum uptime5m、默认tune与冷却保持，echo显式15m策略，原活动时刻起自动休眠。每轮两插件各新Core/data_dir，Core-only另起无插件/Adapter。PID+starttime前后核验，原树及进程组退出后再核休眠区间两端，插件树休眠内存/CPU均0；所有Core正常退出0。附属进程均0，Core+附属等于Core，总计为Core与插件树相加。
+
+| V-74 样本 | 轮1 PSS MiB | 轮2 PSS MiB | 轮3 PSS MiB | 中位数 MiB | 原预算 MiB | 状态 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Core-only | 28.8359375 | 28.37109375 | 28.40625 | 28.40625 | 24 | FAIL |
+| echo插件树 | 11.67578125 | 11.69140625 | 11.7421875 | 11.69140625 | 10 | FAIL |
+| configdb_gorm插件树 | 21.625 | 19.796875 | 19.98828125 | 19.98828125 | 16 | FAIL |
+
+下表内存为区间终点值，私有内存=Private_Clean+Private_Dirty；CPU由同120s区间utime+stime差/CLK_TCK/实际单调时间求得，100%为一个逻辑核，展示到6位小数，JSON保留完整值。PSS/RSS/private单位MiB，SUSPENDED行中的插件树四值均0。
+
+| 轮次 | 样本/状态 | Core PSS/RSS/private/CPU% | 插件树 PSS/RSS/private/CPU% |
+| --- | --- | --- | --- |
+| 1 | echo/ACTIVE | 32.2578125/32.265625/32.2578125/0.083315 | 11.67578125/11.68359375/11.67578125/0.000000 |
+| 1 | echo/SUSPENDED | 33.515625/33.5234375/33.515625/0.091646 | 0/0/0/0.000000 |
+| 1 | configdb_gorm/ACTIVE | 32.16796875/32.17578125/32.16796875/0.083326 | 21.625/21.6328125/21.625/0.000000 |
+| 1 | configdb_gorm/SUSPENDED | 34.0234375/34.03125/34.0234375/0.083326 | 0/0/0/0.000000 |
+| 1 | core/ACTIVE | 28.8359375/28.84375/28.8359375/0.066652 | — |
+| 2 | echo/ACTIVE | 32.50390625/32.51171875/32.50390625/0.083312 | 11.69140625/11.69921875/11.69140625/0.000000 |
+| 2 | echo/SUSPENDED | 33.46875/33.4765625/33.46875/0.066650 | 0/0/0/0.000000 |
+| 2 | configdb_gorm/ACTIVE | 32.296875/32.3046875/32.296875/0.074993 | 19.796875/19.8046875/19.796875/0.000000 |
+| 2 | configdb_gorm/SUSPENDED | 33.3359375/33.34375/33.3359375/0.074981 | 0/0/0/0.000000 |
+| 2 | core/ACTIVE | 28.37109375/28.37890625/28.37109375/0.066655 | — |
+| 3 | echo/ACTIVE | 31.8515625/31.859375/31.8515625/0.074996 | 11.7421875/11.75/11.7421875/0.000000 |
+| 3 | echo/SUSPENDED | 30.34375/30.3515625/30.34375/0.074981 | 0/0/0/0.000000 |
+| 3 | configdb_gorm/ACTIVE | 32.51171875/32.51953125/32.51171875/0.066661 | 19.98828125/19.99609375/19.98828125/0.000000 |
+| 3 | configdb_gorm/SUSPENDED | 32.92578125/32.93359375/32.92578125/0.074998 | 0/0/0/0.000000 |
+| 3 | core/ACTIVE | 28.40625/28.4140625/28.40625/0.058323 | — |
+
+原始逐PID stat/smaps_rollup、两端身份、ticks/单调时间、认证API、日志、实际策略/tune、正常退出与环境为 `gn{10,11,12}-linux/gnNN-{resources,core}/`、同轮控制目录与完整归档。GN10/11的 `uv run --no-project python goal-174/gnNN-check.py` 独立重算通过；GN12由审查者消费既有job并用同轮核算脚本复算通过；REVIEW4离线复核全部200冷启动与三轮中位数通过（`tmp/test/review4/{summary.json,check.log}`）。
+
+**归因与承接。** 同Go/flags/依赖的a669→a027静态Core LOAD仅增加30536B；DWARF位于非加载段。审查者DIAG02同机普通Core-only配对为27.17578125→27.03515625MiB（-0.140625MiB），两版均超24MiB；单次配对另存，三轮验收表保持原值。完整maps/smaps位于独立审查worktree的 `tmp/test/diag02-parent-evidence/alonabot-diag02-parent-20261120`。文件映射与匿名页继续按CONTRACTS §10归因，预算未调整；本地GORM固定hook查找探针仅有静态缩减和schema测试证据，正式依赖路径待维护者批准。
+
+DIAG03在父停runner后的同机独占窗口执行a669/a027原Core与匹配正式pack，顺序echo基线→候选、configdb基线→候选，各新data_dir、ACTIVE120s、原代次、正常退出。首job44631dc2因归档AppleDouble文件进入glob，在启动Core前失败；改为确切正式包名后job9b3c35a4完成四项exit0，原失败完整保留。实际命令为 `uv run --no-project python /data/home/user/alonabot-diag03-174-20261120/paired_plugins.py /data/home/user/alonabot-diag03-174-20261120/inputs/baseline /data/home/user/alonabot-measure-a0278034/source/goal-174/gn08-artifacts /data/home/user/alonabot-diag03-174-20261120/out-retry1`。完整109.9MiB归档取回 `goal-174/diag03-evidence.tar.gz`，原始目录 `goal-174/diag03-linux/alonabot-diag03-174-20261120`；`tmp/test/review4/{diag03-summary.json,diag03-check.log,diag03-pack-identity.json}`复核八份完整maps/smaps/rollup逐字段一致、PID身份、认证runtime与120s、全部正式包/release.json及安装文件逐字节相同，所有采样PID退出。父接回runner恢复权。
+
+| DIAG03 单次配对 | a669 PSS MiB | a027 PSS MiB | 差 MiB |
+| --- | ---: | ---: | ---: |
+| echo插件 | 11.36328125 | 11.72265625 | +0.359375 |
+| echo所在Core | 32.59765625 | 31.88671875 | -0.7109375 |
+| configdb_gorm插件 | 20.765625 | 19.578125 | -1.1875 |
+| configdb所在Core | 32.5625 | 31.29296875 | -1.26953125 |
+
+echo插件增量368KiB由可执行文件映射144KiB、匿名及内核224KiB组成；configdb插件下降1216KiB由文件映射下降184KiB、匿名及内核下降1032KiB组成。两版两插件均超原预算；本次配对独立于上面的三轮验收。GORM窄patch的七类模型对照中，九个hook的标志与完整警告均一致，涵盖指针/值/嵌入方法、错误参数/返回/同名异包DB和无hook（`hook-equivalence-{control,probe}.json`、`hook-equivalence-check.log`）；探针真实PSS未运行，正式依赖保持原值。
+
+**完成命令与未完成项。** 固定a027的darwin/arm64、Go1.27.1：`go vet ./internal/core/metrics/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/scheduler/... ./sdk/... ./internal/app/...`、`go build ./...`、`go test -race -count=1 ./internal/core/metrics/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/scheduler/... ./sdk/... ./internal/app/...` 全部通过（app231.646s），`go test -race -count=1 ./cmd/alonabot -run '^TestSleepPolicyManagement$'` 通过16.191s；日志 `gn08-{vet,build,race,management-race}.log`。rss 的 V-74/V-81 按D-171/goal-48随组件后置，help未纳入本轮样本；真实外部平台及其他OS实际资源运行未运行。S-06.3页面证据沿下一小节已合并PR #274；父负责本PR最终head CI与独立验收。Core/echo/configdb三项预算修复仍待完成，V-81保持未完成。
+
 ### S-06.3 / V-81 休眠策略与运行状态的页面证据
 
 PR #274；产品候选 `94803c7b868eaac62d47eca56bd420010061d881`，普通合并 main `96d46530` 后的 `ac86498d` 前端差异为空。2026-11-19，darwin/arm64、Go 1.27.1、Chrome 157.0.8103.79。产品差异为8个前端文件、413行新增与18行删除，提交测试新增0行；本地测试、浏览器脚本与截图均保留在执行者或独立审查 worktree 的忽略目录。
@@ -866,11 +948,27 @@ management 核对 DB 1→41→99、五条 committed Journal、restart/reload/upd
 
 两份SQLite均独立读回四个官方组件的0.1.0安装记录与原标记；保留无终端数据于 `tmp/test/v84-macos/data-no-tty/`、终端数据于 `~/Library/Application Support/AlonaBot/data/`。服务日志保留五次正常Core停止（包含首次验收脚本清理），无终端token未进入日志。程序、packages、plist与launchd标签均已移除，四个记录的服务PID均退出，7650端口释放。V-84真实Linux与macOS服务管理分项均已通过。
 
-#### goal174 的固定 Linux 依赖与未闭合项
+#### goal174 的历史资源结果与 GN46-11 合并联验
 
-2026-11-20，GN46-11 **待联验**：父/Core owner 尚未给出 goal174 的稳定合并点，原预算保留。父 RUN `goal174-three-rounds-median.json` 的固定 linux/amd64 三轮 PSS（MiB）为：Core 28.83594 / 28.37109 / 28.40625，中位数 28.40625（预算 24）；echo 11.67578 / 11.69141 / 11.74219，中位数 11.69141（预算 10）；configdb_gorm 21.625 / 19.79688 / 19.98828，中位数 19.98828（预算 16），三项均 **失败**。父随后给出的独立 GORM 诊断配对为 configdb 21.40→18.02 MiB、Core-only 27.63→27.11 MiB，仍超原预算；该配对作为诊断证据。用户已批准正式来源，AlonaBot/gorm@34b98340007ddc2acd5cb8727a0b4b72ea295896 已接入174候选f9accdb3，最终head CI44662020903通过；f9候选的单轮120秒真实Linux诊断PSS为Core-only26.078125、echo10.4453125、configdb_gorm16.4375 MiB，三项仍超原预算；五份smaps与rollup、PID/启动身份、正式pack文件、业务DB及正常退出由父独立复核。该单轮诊断未替换前述正式三轮结果。后继d58bb0f7将两处名称正则的长度检查前移，单进程初始化累计分配减少99848字节；ACTIVE驻留收益待测，174保持草稿。
+历史快照（2026-11-20，a027至d58）：GN46-11当时等待174稳定合并点及资源处理结论；以下原始数值与阶段判断保留，当前状态见后续GN46-11增量表。父 RUN `goal174-three-rounds-median.json` 的固定 linux/amd64 三轮 PSS（MiB）为：Core 28.83594 / 28.37109 / 28.40625，中位数 28.40625（预算 24）；echo 11.67578 / 11.69141 / 11.74219，中位数 11.69141（预算 10）；configdb_gorm 21.625 / 19.79688 / 19.98828，中位数 19.98828（预算 16），三项均 **失败**。父随后给出的独立 GORM 诊断配对为 configdb 21.40→18.02 MiB、Core-only 27.63→27.11 MiB，仍超原预算；该配对作为诊断证据。用户已批准正式来源，AlonaBot/gorm@34b98340007ddc2acd5cb8727a0b4b72ea295896 已接入174候选f9accdb3，最终head CI44662020903通过；f9候选的单轮120秒真实Linux诊断PSS为Core-only26.078125、echo10.4453125、configdb_gorm16.4375 MiB，三项仍超原预算；五份smaps与rollup、PID/启动身份、正式pack文件、业务DB及正常退出由父独立复核。该单轮诊断未替换前述正式三轮结果。后继d58bb0f7将两处名称正则的长度检查前移，单进程初始化累计分配减少99848字节；ACTIVE驻留收益待测，174保持草稿。
 
-V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、V-81 的固定机器冷启动 100 次与活跃/休眠 PSS、频繁唤醒，须消费稳定合并实现与对应固定输入的完整 Linux 结果后逐分项闭合。V-74 的发布预算及 V-33 比较报告继续交 goal48，RSS/PSS 和平台身份分别保留。46 本轮只执行本机已合并行为；父在固定 `d7a6aa34` 的独立正式 stdio 包上验证 enable→两次自动 SUSPENDED→HTTP 唤醒，旧 PID 均 ESRCH，新 PID 14644→14648→14650 实际返回 ALONABOT_TRANSPORT=stdio、Active 同代次，`go test -race ./cmd/alonabot -run '^TestReviewInstalledStdioWakeLocal$' -count=1 -v` 通过（测试 3.84s / 包 14.413s，RUN `review46-stdio-wake.log`），复用该证据。恢复条件：父提供174稳定合并点、固定 Linux 命令/产物/原错与预算处理结论；46 执行者再按合并公开面做增量联验。Linux/runner 预约及操作由父独占，46执行者未操作；本节V84补验由父单独预约。GN12～15独立工作已交审查，46整体保持未完成。
+2026-11-20，GN46-11 **功能增量联验通过**。输入为46父候选 `bf0dd2fa9e66542cd0f27701f863003d36a8a231` 普通合入174 `8b52bb89da10bc78b21e75edb91a9c43287d8505`；174普通产品固定 `8b838dd8`，D-184与正式GORM来源一并消费。`installedSpec` 的 `Stdio: c.stdio` 保留，候选与休眠恢复共用该入口；SDK私有HTTP运行时、内部Adapter单方法接口与metrics装配共同进入下列真实功能路径。执行平台为darwin/arm64、Go1.27.1，本轮无产品修复、新增提交测试或依赖变动。完整命令、原stdout/stderr、耗时和退出码在本切片 ignored `goal-46/evidence/GN46-11/{results.json,app-sleep.log,installed-stdio.log,faults.log}`；两份复用本地测试源码原样留存。
+
+| 分项 | 当前结果与实际覆盖 | 命令或复用来源、未运行条件 |
+| --- | --- | --- |
+| V-77 / 自动空闲与首请求、活动引用 | **通过（本轮）**。`TestIdle` 11.21s、`TestWake/{command,service,http}` 总11.27s：自动SUSPENDED、首命令/Service/认证HTTP唯一恢复，在途阻止停止，原代次/配置/路由/SQLite与迁移保持；never即时恢复。回环Adapter同时消费SDK内部接口。 | `go test -race ./internal/app -run '^Test(SleepMetrics\|Wake\|Idle\|SchedulerWake)$' -count=1 -v`，包59.812s、exit0，`app-sleep.log`。 |
+| V-77 / 共享唤醒与指标、always_on | **通过（本轮）**。`TestSleepMetrics` 15.91s：既有100请求功能同步点证明唯一新Session、Ready前零交付、逐编号一次，cold_start=3/started=ready=2与日志一致；切回always_on保持ACTIVE，完整快照、任务、业务DB与单次迁移保持。 | 同一app命令。此入口验证并发交付及指标契约；未新增资源采样或性能分布。 |
+| V-77、V-78、V-81 / 真实故障、STOPPING与原期限 | **通过（本轮）**。174已有 `TestSleepMetricsFailures` 7.44s、`TestSleepMetricsStopping` 11.48s：OnReady进程退出保留ACTIVATE/UNAVAILABLE/EOF，共享failed1/逐等待dropped_failed8、预算归零及下一批复用、旧树/锁释放；STOPPING命令与自然tick取消/过期，旧树退出和Ready前无交付、唯一恢复，异常次数保持。 | `go test -v -race -count=1 ./internal/app -run '^(TestSleepMetricsFailures\|TestSleepMetricsStopping)$'`，包20.972s、exit0，`faults.log`；原174首轮断言/编译失败仍见S-06.2原记录。 |
+| V-03、V-77 / 已安装包stdio与私有HTTP运行时 | **通过（本轮）**。父既有 `TestReviewInstalledStdioWakeLocal` 原样移入当前ignored测试：正式pack/install/enable→两次自动SUSPENDED→认证HTTP唤醒，PID33675→33680→33682均实际返回stdio；旧PID为ESRCH，Active始终 `gen-I6DJ3AOHND3VR65GU5ISHPQRWI`，Core正常停止。 | `go test -race ./cmd/alonabot -run '^TestReviewInstalledStdioWakeLocal$' -count=1 -v`，测试4.16s/包14.919s、exit0，`installed-stdio.log`。父原d7a6aa34上3.84s/包14.413s、PID14644→14648→14650的 `review46-stdio-wake.log` 原证据继续保留。 |
+| V-77 / 队列三预算、摘要/快照隔离、过滤、策略发布与固定冷却 | **通过（继承）**。条数/字节/Core预算拒绝、取消/期限、路由摘要不符拒绝、Core重启路由恢复、Session引用隔离、各活动类型、plugin/agent与常驻角色、过滤和覆盖、同步设置发布、固定冷却截止/历史回收沿已接受专项。 | §3.2 S-02.1 / PR241、S-02.2 / PR249、S-06.1 / PR269及本节S-06.2指标故障行，保留各原命令/候选/平台；本轮未重跑这些有效输入。OS进程树查询/SIGKILL自身失败注入仍**未运行**。 |
+| V-78 / 静态、动态计划与休眠活动 | **通过（本轮及继承）**。`TestSchedulerWake` 17.91s真实interval→休眠→动态at→再次休眠，原scheduled_at/anchor/paused/代次/任务/业务数据保持，运行时持有引用；cron、动态周期、异常离线tick跳过/不补、原期限与失败撤销计划沿S-03.1。 | 本轮同一app命令；其他分项沿§3.2 S-03.1 / PR256及S-06.2复用行。实际callback超时仍占槽、未来tick恢复复用GN46-08 `TestCrossRunningJobLocal` 双传输原证据；未追加调度性能测量。 |
+| V-81 / API、CLI与页面策略、运行状态及保存失败 | **通过（本轮及继承）**。本轮认证API与stdio CLI链路通过；原CLI全局/插件策略、读取不唤醒、manifest锁定/未启用/缺快照412、保存后失败的完整错误与GET实际状态，以及WebUI列表/详情策略原证据有效。 | `TestSleepPolicyManagement`、S-06.1 / PR269 的 `TestSleepRecovery`、S-06.3 / PR274页面及本轮上述命令；保留原候选身份，本轮未重新运行CLI策略和浏览器。 |
+| V-81 / 两组各100冷启动、CPU及休眠树 | **通过（继承已接受分项）**。echo/configdb_gorm各100成功/0失败，P50/P95/P99保留原表；echo P95=5.367619ms，configdb P95=9.001459ms。原三轮ACTIVE/SUSPENDED、CPU、休眠旧树归零及固定冷却/唤醒计数沿S-06.2有效记录。 | 固定a027同机 `gn09-linux` 200次与 `gn{10,11,12}-linux` 原始数据；本轮**未重跑**。新候选未新增冷启动、频繁唤醒资源或压力采样，按维护者指示收口。 |
+| V-81 / 频繁唤醒与固定冷却 | **功能分项通过；独立压测未运行并按D-184取消新增**。唯一恢复、唤醒/失败/丢弃计数沿本轮主路径与故障用例，固定冷却触发/保持/截止与历史回收沿PR249；未取得独立频繁唤醒压测的CPU/分布数据。 | 本轮 `TestSleepMetrics`、`TestSleepMetricsFailures/Stopping`；继承 `TestIdleDecisionLocal`、`TestIdleColdStartSequenceLocal`，来源及原命令见S-02.2；资源工作已按维护者指示停止。 |
+| V-74、V-81 / 最终资源开销 | **维护者接受（D-184）**。8b三轮中位数Core26.61328125/echo10.09375/configdb GORM16.21875MiB；旧24/10/16比较FAIL和全部历史结果保留。V-33取消新增四负载/NoneBot2比较，goal48只归档。 | 本文“S-06.2 最新资源实测与 D-184 接受决定”及原15对象raw/父独立核算；本轮**未测量**。 |
+| 真实外部平台与其他目标运行环境 | **未运行（本轮）**。当前真实Telegram/外部Provider凭据缺口保留，CLI其他既有未运行分项沿对应V行；五平台实际运行与100次启停由47承接。 | 本轮仅darwin/arm64、回环Adapter和本地HTTP；Linux/runner及最终CI由父负责，Windows/Billing保持用户安排。 |
+
+GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runner。GN12～15及父systemd/launchd、真实日志卷写满、浏览器有效证据保留；46待父独立增量审查、最终head CI与合并。
 
 #### GN46-15 最终候选检查与证据映射
 
@@ -928,7 +1026,7 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | V-30 | **通过（本机恢复分项）**。PREPARED/committed唯一Active直接库断言；脚本first/ready/gates七窗口、旧树锁与路由绑定均通过。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-31 | **通过（本机双传输）**。显式单次许可、停用保持、失败及崩溃不重跑未知外部副作用；普通restart/resume保留许可false。 | `cmd/alonabot/cross_external_local_test.go:TestCrossExternalMaintenanceLocal（D86）`；`go test -race ./cmd/alonabot -run '^TestCrossExternalMaintenanceLocal$' -count=1 -v` | GN46-10-external.log；3a0c04f5；darwin/arm64；PASS56.11s/包65.307s |
 | V-32 | **未运行（五平台整体）**。本机darwin/arm64实跑、历史五目标构建保留；75的linux容器身份另列；五平台原生/仿真与CGO实际支持交47，Windows按用户留最后。 | `internal/wire、internal/core/host、sdk历史Session测试（§3.1；已按D86移出）`；`go test -race -count=1 ./...` | e802828；darwin/arm64；291项含子测试通过；当时带一次性PG，PG已按D48移出 |
-| V-33 | **未运行**。固定机器四种10分钟负载与NoneBot2比较由goal48承接；本轮未操作Linux，依赖/负载/原预算保持。 | 未运行；无本轮命令 | 后继owner按本行条件执行 |
+| V-33 | **维护者取消新增测量（D-184）**。原四负载及 NoneBot2 对照按2026-11-20决定收口。 | 已有本地真实框架兼容预检保留；完整资源对照未运行 | goal48仅整理现有数据与决定 |
 | V-34 | **分项通过；100次未运行**。本机实际异常退出/合作树/runtime锁/恢复沿GN09及既有process；五平台各100次启停交47。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-35 | **通过（模拟平台分项）**。UNKNOWN/PARTIAL/REJECTED与NOT_ATTEMPTED、零ID、相册/按钮预检保留原历史；GN07实际AfterSend错误不改外部事实；当前真实平台故障未运行。 | `telegram_local_test.go:TestTelegramFaultMatrix（§3.2 T-03.10，D86历史根包位置）`；`go test -race -count=1 -v . -run '^TestTelegramFaultMatrix$'` | goal9基线813a12e4+该切片；darwin/arm64；TCP/stdio通过；telegram-matrix-fixed.log（继承） |
 | V-36 | **通过（本机恢复分项）**。真实runtime锁、Core退出后旧树仍写DB不启动第二写入者；管理串行/双Core沿已有e2e/state；Windows锁交47。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
@@ -974,14 +1072,14 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | V-71 | **随后续版本（D171）**。OneBot11产品保留既有T-15.1模拟证据，首发排除；后续进入发行版时消费本地模拟+真实凭据验收。 | 未运行；无本轮命令 | 后继owner按本行条件执行 |
 | V-72 | **随后续版本（D171）**。Telegram首发Chain分项见V08/V35；双Adapter对照和OneBot11目标分项后置，原验收要求保留。 | 未运行；无本轮命令 | 后继owner按本行条件执行 |
 | V-73 | **通过（继承软件分项）**。真实Core/Session、示例命令/Rule/身份/媒体/按钮/Wait/任务与LLM扩展；示例go test测试不冒充真实平台。 | `plugintest/plugintest_test.go:TestPluginHarness；examples/plugins/*/main_test.go；§3.2 T-16.2 / V-73 的按钮、等待、任务与示例分项`；`go test -race -count=2 ./plugintest/... ./examples/plugins/...` | PR #183（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
-| V-74 | **失败；固定机器最终报告待联验**。174三轮Core28.40625>24/echo11.69141>10/configdb_gorm19.98828>16MiB；最新诊断仍超原预算；rss按D171后置。固定机器完整报告交48，174稳定输入由父/Core负责。 | §3.4 GN11；父/Core的 `RUN/goal174-three-rounds-median.json` 与最新GORM诊断配对；本轮未运行Linux测量，完整命令随174稳定输入交付 | linux/amd64固定机父/Core证据；三轮中位数及最新配对均超原预算；原始结果保留，46未消费174稳定合并点 |
+| V-74 | **当前资源开销经维护者接受（D-184）**。确切8b三轮中位数Core26.61328125/echo10.09375/configdb GORM16.21875 MiB；历史24/10/16比较FAIL保留，资源测量已停止。 | 本文“S-06.2 最新资源实测与 D-184 接受决定”；PR277固定普通产品8b；十五对象raw/pack/SQLite/退出核算通过 | linux/amd64，九段120s、默认GC；goal48仅归档现有数据 |
 | V-75 | **分项通过（依赖审计）**。T-02.3历史五目标链接清单保留；本轮未新增依赖，darwin/arm64 Core/SDK实际链接模块符合批准子集。五目标当前审计由47按各目标承接；CI五构建的结果单独记录。 | `docs/development.md`批准子集；`go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk`（输出按原文排序去重）；同一模板单独检查 `./sdk`；`final-linked-modules.txt` / `final-sdk-linked-modules.txt` | GN15，产品3a0c04f5/文档622140c5；darwin/arm64/Go1.27.1，exit0；合计20个外部模块，SDK根包仅jsonschema-go/x/sys/protobuf三项，均符合清单 |
 | V-76 | **通过（模拟Provider分项）**。真实Core→Agent服务默认/显式模型、许可/缺模型/非chat/期限/脱敏/未启用与@agent；当前真实Provider未运行。 | `internal/app/agent_service_test.go:TestAgentServices；§3.2 T-12.15 / V-76、V-116 的 llm.models 分项、V-123`；历史：`go test -race ./agent -run '^TestAgentConversation$' -count=1`；`go test -race ./internal/app -run '^TestAgentServices$' -count=1`；本轮覆盖命令见下方 F46，`TestAgentServices` PASS0.56s、`TestAgentConversation` PASS8.47s（`final-race.jsonl`） | PR #207（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
-| V-77 | **分项通过；174待联验**。当前已合并命令/Service/HTTP生命周期与父stdio真实两次休眠唤醒有效；174稳定合并点及固定Linux故障汇总未交付，详§3.4依赖清单，禁止整项通过。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd$' -count=1 -v` | GN46-04-api.log；d7a6aa34+GN04；darwin/arm64；PASS49.07s/包57.711s |
-| V-78 | **分项通过；174待联验**。真实超时callback持槽与未来tick恢复已通过；休眠cron/interval/动态计划/唤醒耗时由既有S03.1分项+174最终固定输入联验闭合。 | `cmd/alonabot/cross_resources_local_test.go:TestCrossRunningJobLocal、internal/core/media/cross_lease_local_test.go:TestCrossMediaLeaseLocal（本地）`；`go test -race ./cmd/alonabot ./internal/core/media -run '^TestCross(RunningJob\|MediaLease)Local$' -count=1 -v` | GN46-08-resources.log；ae400141；darwin/arm64；job11.61s/CLI包21.709s/media包2.897s通过 |
+| V-77 | **功能分项通过（本轮及继承）**。174合并输入的首命令/Service/HTTP、自动空闲、100请求共享恢复与指标、真实崩溃/STOPPING取消到期、原代次/数据通过；队列/摘要/快照/过滤/固定冷却按§3.4逐分项引用。OS查询/SIGKILL自身失败注入及真实外部平台仍未运行。 | `internal/app/{sleep_metrics,wake,idle}_test.go` 与本地 `sleep_metrics_failures_local_test.go`、`cmd/alonabot/review_stdio_wake_local_test.go`；完整三命令见§3.4 GN46-11表 | bf0dd2fa普通合入8b52bb89；darwin/arm64/Go1.27.1；`GN46-11/{app-sleep,installed-stdio,faults}.log`均exit0，原专项候选证据保留 |
+| V-78 | **功能分项通过（本轮及继承）**。真实interval和动态at自动休眠恢复、原计划/业务DB/活动引用及STOPPING自然tick/绝对期限通过；cron、动态周期、异常离线和超时后实际占槽沿S-03.1/GN08有效专项，逐项来源见§3.4。 | `internal/app/scheduler_wake_test.go:TestSchedulerWake`、本地 `TestSleepMetricsStopping`；命令见§3.4；继承 `TestCrossRunningJobLocal` 双传输及PR256专项 | 同一合并输入；本轮SchedulerWake17.91s、Stopping11.48s；既有GN08 job11.61s/CLI包21.709s，原记录保留 |
 | V-79 | **已取消（D153）**。Adapter保持常驻；保留原编号，未运行取消场景。 | 未运行；无本轮命令 | 后继owner按本行条件执行 |
 | V-80 | **已取消（D153）**。Core保持常驻；保留原编号，未运行取消场景。 | 未运行；无本轮命令 | 后继owner按本行条件执行 |
-| V-81 | **分项通过；174待联验**。TestSleepPolicyManagement及S06.3实际页面沿原有效记录；固定Linux各100次冷启动/PSS/频繁唤醒与原预算仍依赖174，父/Core负责，当前无稳定合并点。 | 既有 `TestSleepPolicyManagement`/S06.3页面记录见§3.2；174固定Linux最终测量未运行于本切片 | 当前软件/页面分项沿原记录；原100次/资源门槛由父/Core提供最终固定输入后联验 |
+| V-81 | **功能分项通过，资源按D-184收口**。合并输入的认证策略/状态、always_on、唤醒崩溃与指标通过；CLI策略、页面、保存失败、固定冷却、200冷启动和三轮CPU/休眠证据按§3.4继承。8b资源中位数26.61328125/10.09375/16.21875MiB经维护者接受，旧预算FAIL保留；本轮未新增资源或冷启动采样。 | 本轮 `TestSleepMetrics`、`TestSleepMetricsFailures/Stopping`、`TestReviewInstalledStdioWakeLocal`；继承 `TestSleepPolicyManagement`/S-06.1/S-06.3和S-06.2固定Linux原数据 | 本轮darwin/arm64，三命令exit0；同机Linux原命令/候选/统计和真实外部平台未运行分项见§3.4及D-184接受记录 |
 | V-82 | **分项通过**。官方Agent/WebUI/Telegram正式启用与角色、@agent；完整--replace社区组件/来源语义沿TestManagementReplacement及T-09.11。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd$' -count=1 -v` | GN46-04-api.log；d7a6aa34+GN04；darwin/arm64；PASS49.07s/包57.711s |
 | V-83 | **通过（继承软件分项）**。当前SPA/API/资源路径和WebUI替换；D74仅取消历史图标构建检查，V83当前WebUI路由分项仍保留；GN03实际WebUI后台程序双传输。 | `internal/app/webui_test.go:TestWebUIComponents；§3.2 T-09.12 / V-83`；`GOMAXPROCS=2 go test -p 1 -race ./...` | PR #167（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
 | V-84 | **真实Linux与macOS分项通过**。systemd与launchd均实际完成全新安装、两版升级、摘要失败保留旧PID/程序/数据、管道有无终端、服务身份/token与卸载保留四个安装记录及数据；既有不支持平台检查沿原证据。 | `deploy/install.sh`；§3.4 V-84真实systemd与launchd补验中的完整uv命令与日志；继承`TestInstallScript*`及§3.2 | 2026-11-20，c2b85cf0；Debian13.7/Linuxamd64/systemd257；exit0/12.166s；macOS27.0.1/darwinarm64/UID501续接最终exit0；本地`tmp/test/v84-{systemd,macos}/result.json`与日志/数据库，验收脚本原始失败保留 |
@@ -1056,12 +1154,24 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | V-148 | **分项通过（D86继承）**。缺省ID/重复建议.ID、Context直传/Reply图片/RequireReply边界，套件资源按当前D183公开规则；GN04匿名kit与受保护页面实证、GN05当前SDK实际程序。 | `sdk/*_local_test.go与plugintest本地简化SDK回归（D86）；§3.2 T-04.20 / V-148 的 SDK 用法从简分项`；`GOMAXPROCS=2 go test -p=2 -race -count=1 ./sdk/... ./plugintest/... ./examples/... ./agent/... ./plugins/... ./web/admin/... ./internal/... ./adapters/...` | PR #251（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
 | V-149 | **通过（继承CLI本机分项）**。新工程/终端console/按钮#1/源码watch/--reload=false/日志级别与发布CLI资源；Windows实际终端交47且按用户留最后。 | `cmd/alonabot/dev_e2e_test.go:TestDevelopmentConsole；§3.2 T-13.7 / V-149`；`go test -race -count=1 ./cmd/alonabot/... ./internal/app/... ./internal/pluginkit/...` | PR #253（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
 
+#### S-06.2 最新资源实测与 D-184 接受决定
 
+2026-11-20，固定候选 `8b838dd8d3018154c663cc429354a526145f7640`，instabox 原 linux/amd64 机器，Go1.27.1、普通 CGO_ENABLED=0、自然文件缓存与默认 GC，正式 pack/install。CI 与测量串行，九个独立 data_dir，各 ACTIVE 后空闲120s；Core-only 未启用插件/Adapter。十五对象的 PID/starttime、六个 smaps/rollup 字段、正式包字节、SQLite 与正常退出均核对通过。
+
+| 进程 | 三轮 PSS（MiB） | 中位数（MiB） | 历史预算（MiB） |
+| --- | --- | --- | --- |
+| Core-only | 26.64453125 / 26.35546875 / 26.61328125 | 26.61328125 | 24 |
+| echo | 10.0859375 / 10.359375 / 10.09375 | 10.09375 | 10 |
+| configdb GORM | 16.1796875 / 16.21875 / 16.2578125 | 16.21875 | 16 |
+
+三项均超历史预算。维护者已看到这些结果并要求“别测了，这方面只要开销不夸张就行了”；D-184 据此接受当前开销，停止新增资源采样、对照压测与预算优化。原三轮28.40625/11.69140625/19.98828125 MiB及后续诊断失败保留原记录。
+
+原始数据位于该切片 ignored `goal-174/v74-8b-linux/alonabot-v74-8b-174-20261120/`，核算入口为 `tmp/test/v74-8b/check.py`，结果为 `summary.json` 与父独立核算的 `parent-summary.json`。执行命令为 `uv run --no-project python candidate_resources.py inputs out`，job `e0183236` 退出0；九段采样于05:18:30 UTC结束，15个被测PID与采样器均退出，CI runner随后恢复。每轮 RSS、私有内存、映射、构建来源与完整命令保留在原始记录。V-33 的四负载/NoneBot2 比较取消新增运行，T-10.3 继续文档归档。
 
 ## 4. 实施交接
 
 1. 当前交接对象为 goal46 / T-10.1 的草稿候选，基于已恢复的 main `cb5acc79`。原2026-10-21从T-01起实施的交接已由§3.1～§3.3各阶段记录和本轮逐V表接续；全部149编号、原验收门槛、D86历史身份与旧票据/配置来源保留。
 2. 46执行者交付唯一Unix正式集成 `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`，四类子测试均TCP/stdio；不同真实能力程序/SDK回归按D86留本地，源码/正式包/数据/完整错误均在本地卡、PR与§3.4可追踪。75不变发行资产、双架构镜像及浏览器结果复用，最终CI补充见上文。
-3. 父/Core owner提供174稳定合并点、固定Linux完整故障与资源证据及原预算处理结论后，46再做公开面增量联验。V74原预算仍失败，V77/78/81保留具体待联验，174保持草稿；正式fork来源已获批准并固定接入。Linux/runner预约归父；Windows/Billing按维护者留最后，本轮未探测。
+3. 46已接入174固定普通产品8b及D-184文档候选；GN46-11公开面增量联验已通过，V77/78/81按§3.4逐分项记录本轮、继承及未运行。原资源数值失败保留历史，当前开销经维护者接受。正式GORM fork来源已批准并固定。Linux/runner预约归父；Windows/Billing按维护者留最后。
 4. 父负责46独立增量审查、当前head CI、最终goals文档状态及squash/main恢复；`docs/goals/release.md`已同步独立实施与最终交付核对main恢复的条件。46保持草稿，整项目标未完成。需要维护者真实Telegram/Provider凭据的分项仍未运行，历史真实记录只按原候选复用。
-5. goal47承接五目标实际运行/CGO支持与100次启停；goal48承接固定机器四负载比较与原资源预算；goal49由维护者控制正式签名、公开Release与镜像发布。D171后置OneBot11/welcome/rss及Telegram后续分项随对应版本验收，原完整要求不变。后继派发条件由父按最终验收处理。
+5. goal47承接五目标实际运行/CGO支持与100次启停；goal48按D-184归档现有资源实测与接受决定；goal49由维护者控制正式签名、公开Release与镜像发布。D171后置OneBot11/welcome/rss及Telegram后续分项随对应版本验收，原完整要求不变。后继派发条件由父按最终验收处理。
