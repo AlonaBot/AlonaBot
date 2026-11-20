@@ -150,7 +150,7 @@ message ConfigCorrection {
 
 路由快照只保存以上 RouteDescriptor 的确定性编码、内容摘要及其插件/已提交代次/包身份，规则见 CONTRACTS §4.4；摘要复用 PREPARED 的 `route_descriptor_hash` 算法。REGISTER 中的配置、HTTP Listener 与任何 Session 认证材料均排除在快照外。唤醒重新 REGISTER 后在业务开放前核对摘要，HTTP 重新绑定本 Session 的 Listener 与凭证。
 
-官方 Agent 登记五条 GET 页面 `/pages/personas`、`/pages/mcp`、`/pages/skills`、`/pages/data`、`/pages/tasks`，显式挂载 `/pages/kit.css`、`/pages/kit.js` 与嵌入资源前缀 `/pages/assets/`，并用普通 HTTP 路由提供 `/pages/api/` 数据接口（ADMIN-API §15.2）。只有五条 HTML 路由设置 `page_title`；全部路由沿用管理认证与既有 RouteDescriptor，页面标题来自组件 i18n 的 `pages` 根节点（T-12.20，PR #252）。
+官方 Agent 登记五条 GET 页面 `/pages/personas`、`/pages/mcp`、`/pages/skills`、`/pages/memory`、`/pages/tasks`，显式挂载 `/pages/kit.css`、`/pages/kit.js` 与嵌入资源前缀 `/pages/assets/`，并用普通 HTTP 路由提供 `/pages/api/` 数据接口（ADMIN-API §15.2）。只有五条 HTML 路由设置 `page_title`；全部路由沿用管理认证与既有 RouteDescriptor，页面标题来自组件 i18n 的 `pages` 根节点（T-12.20，PR #252）。
 
 `sdk/page.Handler()` 提供的套件资源走插件登记的普通 GET 路由，沿用同一 Listener 和代理认证。浏览器 `postMessage` 消息定义在 [ADMIN-API §7](ADMIN-API.md#7-插件页面-postmessage-桥)，与 Session 帧分开。
 

@@ -8806,7 +8806,7 @@ internal/core/state
 
 2026-11-20 维护者裁定（D-184）：接受当前固定 Linux 资源开销，停止新增资源采样与预算优化。三轮中位数 Core 26.61328125 / echo 10.09375 / configdb GORM 16.21875 MiB 及旧 24/10/16 MiB 比较保留；资源分项按该决定收口。指标、故障注入与管理行为沿原契约，既有有效测试复用。以下原派发语句的资源重测和数值达标要求由本裁定取代。
 
-状态：已完成（PR #277；D-184）。实现、独立审查及文档同步完成，当前 PR 尚待最终 CI 与合并门槛。前置 S-06.1（goal-173，PR #269，`f4bfe5b8`）已合并。按 main `f4bfe5b8` 复核六个管理端点、`sleep-policy` CLI、设置锁外发布与运行诊断；以下指标、装配、测量与测试约定和当前代码一致。固定 linux/amd64 机器由审查者预约，CI 与采样串行；WebUI 页面由 goal-175 独立接续。
+状态：已完成（PR #277；D-184）。最终 head `306b7b0e` 的 Quality gate（44682185996 attempt 2）及 PR metadata 通过，已 squash 合并为 `34472fd5`；合并后 main Quality gate（44688639778）由审查者继续确认。前置 S-06.1（goal-173，PR #269，`f4bfe5b8`）已合并。按 main `f4bfe5b8` 复核六个管理端点、`sleep-policy` CLI、设置锁外发布与运行诊断；以下指标、装配、测量与测试约定和当前代码一致。固定 linux/amd64 机器由审查者预约，CI 与采样串行；WebUI 页面由 goal-175 独立接续。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-174（切片 S-06.2：休眠指标、故障注入与固定机器验收）。goal 目录 goal-174，分支 goal-174，worktree .worktrees/goal-174，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
