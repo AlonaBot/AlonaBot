@@ -842,6 +842,12 @@ management 核对 DB 1→41→99、五条 committed Journal、restart/reload/upd
 
 本地 `cmd/alonabot/cross_external_local_test.go:TestCrossExternalMaintenanceLocal` 完整沿用已提交 `TestManualMigrationApproval` 的真实独立程序与全部断言，逐 TCP/stdio 执行首装、restart、resume（许可均 false）、普通 reload/update/rollback 拒绝、运行中许可拒绝、停用后的单次许可及成功/迁移失败/OnReady 失败/PREPARED 与提交后崩溃恢复、external→managed。核对 Bootstrap 的 Session/Generation/DB 绑定、真实外部写入与业务 DB、Active 和停用状态，未知副作用未自动重跑。`go test -race ./cmd/alonabot -run '^TestCrossExternalMaintenanceLocal$' -count=1 -v` 通过，TCP 28.56s / stdio 27.55s / 总测试 56.11s / 包 65.307s，`GN46-10-external.log`；完整运行目录 `goal-46/evidence/external-{tcp,stdio}-*/` 保留 effects、bootstrap 审计、安装包与数据库。关联 V-31、V-39、V-40。
 
+#### goal174 的固定 Linux 依赖与未闭合项
+
+2026-11-20，GN46-11 **待联验**：父/Core owner 尚未给出 goal174 的稳定合并点，原预算保留。父 RUN `goal174-three-rounds-median.json` 的固定 linux/amd64 三轮 PSS（MiB）为：Core 28.83594 / 28.37109 / 28.40625，中位数 28.40625（预算 24）；echo 11.67578 / 11.69141 / 11.74219，中位数 11.69141（预算 10）；configdb_gorm 21.625 / 19.79688 / 19.98828，中位数 19.98828（预算 16），三项均 **失败**。父随后给出的独立 GORM 诊断配对为 configdb 21.40→18.02 MiB、Core-only 27.63→27.11 MiB，仍超原预算；该配对作为诊断证据，正式 fork 来源待维护者答复，174 保持草稿。
+
+V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、V-81 的固定机器冷启动 100 次与活跃/休眠 PSS、频繁唤醒，须消费稳定合并实现与对应固定输入的完整 Linux 结果后逐分项闭合。V-74 的发布预算及 V-33 比较报告继续交 goal48，RSS/PSS 和平台身份分别保留。46 本轮只执行本机已合并行为；父在固定 `d7a6aa34` 的独立正式 stdio 包上验证 enable→两次自动 SUSPENDED→HTTP 唤醒，旧 PID 均 ESRCH，新 PID 14644→14648→14650 实际返回 ALONABOT_TRANSPORT=stdio、Active 同代次，`go test -race ./cmd/alonabot -run '^TestReviewInstalledStdioWakeLocal$' -count=1 -v` 通过（测试 3.84s / 包 14.413s，RUN `review46-stdio-wake.log`），复用该证据。恢复条件：父提供174稳定合并点、固定 Linux 命令/产物/原错与预算处理结论；46 执行者再按合并公开面做增量联验。Linux/runner 预约及操作由父独占，本轮未操作；GN12～15独立工作继续，46整体保持未完成。
+
 ## 4. 实施交接
 
 1. 采用 v0.6-review 技术基线，按 PLAN 的 T-01 开始；任务完成条件及部分验收的后续承接以详细工作包为准。
