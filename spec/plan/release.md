@@ -20,7 +20,7 @@
 | T-14.4 | goal-74 | 首次运行：预装与默认启用（help 与 WebUI）、首次管理 token、内置包的可用更新 | T-14 步骤 4 | T-09.6、T-14.3 | V-66 | 已完成（PR #235；TEST-MATRIX §3.2） |
 | T-14.5 | goal-77 | 容器镜像：`Dockerfile` 多阶段构建、linux/amd64 与 linux/arm64、非 root、`/data` 卷、`ALONABOT_CONTAINER` 的监听规则、作为官方整合包入口的 `deploy/compose.yaml` | T-14 步骤 5 | T-07.6、T-14.3 | V-70 的镜像分项 | 已完成（PR #231；TEST-MATRIX §3.2） |
 | T-14.6 | goal-75 | 从发行归档与容器镜像到 Agent 对话的端到端验收，汇总证据 | T-14 步骤 6 | T-09.11、T-14.4、T-14.5 | V-66、V-67、V-70 | 已完成（PR #275；TEST-MATRIX §3.2） |
-| T-14.7 | goal-85 | `install.sh`：Linux（systemd）与 macOS（launchd）的安装、`SHA256SUMS` 校验、管理 token 初始化、服务注册、升级与 `--uninstall` | T-14 步骤 7 | T-14.3 | V-84 | 已完成（PR #236；V-84 真实环境未运行） |
+| T-14.7 | goal-85 | `install.sh`：Linux（systemd）与 macOS（launchd）的安装、`SHA256SUMS` 校验、管理 token 初始化、服务注册、升级与 `--uninstall` | T-14 步骤 7 | T-14.3 | V-84 | 已完成（PR #236；V-84 真实Linux通过，macOS未运行） |
 
 ## 3. 工作包
 
