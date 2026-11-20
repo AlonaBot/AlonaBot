@@ -1,7 +1,7 @@
 # AlonaBot v0.1 验收与故障注入矩阵
 
 版本：v0.6-review（原始矩阵 2026-10-21；发布前追踪更新 2026-11-20）
-状态：**已汇总全部149编号及本机TCP/stdio真实跨组件分项，见§3.4～§3.5；GN46-11功能增量及独立审查完成，PR #278 最终 head CI通过并合入main `46c35d0e`，合并后 Quality44693804971 已成功。资源按D-184接受现有实测并收口，数据见[资源实测记录](../docs/benchmarks.md)。** 原2026-10-21总述“仅T-01/T-02有分项证据，其余未执行”保留为§3.1的历史状态。真实凭据、目标平台、资源报告及D171后置项按逐行状态承接。
+状态：**已汇总全部149编号及本机TCP/stdio真实跨组件分项，见§3.4～§3.5；T-10.2四环境验收与T-10.4发行候选复验已接收；GN46-11功能增量及独立审查完成，PR #278 最终 head CI通过并合入main `46c35d0e`，合并后 Quality44693804971 已成功。资源按D-184接受现有实测并收口，数据见[资源实测记录](../docs/benchmarks.md)。** 原2026-10-21总述“仅T-01/T-02有分项证据，其余未执行”保留为§3.1的历史状态。真实凭据、目标平台、资源报告及D171后置项按逐行状态承接。
 规范来源：[PLAN.md](PLAN.md)（T-01～T-16 详细工作包与 §7 的 S-01～S-06）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
@@ -966,7 +966,7 @@ management 核对 DB 1→41→99、五条 committed Journal、restart/reload/upd
 | V-81 / 两组各100冷启动、CPU及休眠树 | **通过（继承已接受分项）**。echo/configdb_gorm各100成功/0失败，P50/P95/P99保留原表；echo P95=5.367619ms，configdb P95=9.001459ms。原三轮ACTIVE/SUSPENDED、CPU、休眠旧树归零及固定冷却/唤醒计数沿S-06.2有效记录。 | 固定a027同机 `gn09-linux` 200次与 `gn{10,11,12}-linux` 原始数据；本轮**未重跑**。新候选未新增冷启动、频繁唤醒资源或压力采样，按维护者指示收口。 |
 | V-81 / 频繁唤醒与固定冷却 | **功能分项通过；独立压测未运行并按D-184取消新增**。唯一恢复、唤醒/失败/丢弃计数沿本轮主路径与故障用例，固定冷却触发/保持/截止与历史回收沿PR249；未取得独立频繁唤醒压测的CPU/分布数据。 | 本轮 `TestSleepMetrics`、`TestSleepMetricsFailures/Stopping`；继承 `TestIdleDecisionLocal`、`TestIdleColdStartSequenceLocal`，来源及原命令见S-02.2；资源工作已按维护者指示停止。 |
 | V-74、V-81 / 最终资源开销 | **维护者接受（D-184）**。8b三轮中位数Core26.61328125/echo10.09375/configdb GORM16.21875MiB；旧24/10/16比较FAIL和全部历史结果保留。V-33取消新增四负载/NoneBot2比较，goal48只归档。 | 本文“S-06.2 最新资源实测与 D-184 接受决定”及原15对象raw/父独立核算；本轮**未测量**。 |
-| 真实外部平台与其他目标运行环境 | **未运行（本轮）**。当前真实Telegram/外部Provider凭据缺口保留，CLI其他既有未运行分项沿对应V行；五平台实际运行与100次启停由47承接。 | 本轮仅darwin/arm64、回环Adapter和本地HTTP；Linux/runner及最终CI由父负责，Windows/Billing保持用户安排。 |
+| 真实外部平台与其他目标运行环境 | **未运行（本轮）**。当前真实Telegram/外部Provider凭据缺口保留，CLI其他既有未运行分项沿对应V行；五平台实际运行与100次启停由47承接。 | 本轮仅darwin/arm64、回环Adapter和本地HTTP；Linux/runner及最终CI由父负责，Windows实际运行按D-185批准延期。公开模板hosted已实际执行；私有主仓库Windows run44695663481仍在分配runner前因payment/spending failure失败，具体状态及模板SDK认证缺口见T-10.4。 |
 
 GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runner。GN12～15及父systemd/launchd、真实日志卷写满、浏览器有效证据保留；46独立增量审查已完成，待最终head CI与合并。
 
@@ -1021,7 +1021,7 @@ GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runn
 | V-25 | **分项通过**。旧secret引用和值保持，rollback新代次恢复旧值、管理脱敏与日志无明文；未知secret/掩码/PATCH/表单沿§3.2 T-08.16/T-09.11历史当前契约。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/secrets`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery/secrets$' -count=1 -v` | GN46-10-secrets-immutable.log；3a0c04f5；darwin/arm64；PASS15.21s/包25.124s |
 | V-26 | **分项通过**。sqlitedb/configdb_gorm分别构建pack并迁移、写入读取真实DB；共享连接/重复迁移声明/不链接GORM沿T-08.5与D86本地历史。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/capabilities/{sqlite,configdb_gorm}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/capabilities/(sqlite\|configdb_gorm)$' -count=1 -v` | GN46-06-final.log；87e84f7a；darwin/arm64；PASS30.73s/包37.813s |
 | V-27 | **通过（继承来源/越界分项）**。路径/符号链接/重复条目/来源冲突拒绝；GN46正式pack安装成功路径另覆盖；保留原拒绝完整日志。 | `cmd/alonabot/t09_*_local_test.go:TestT09PackageRejectionLocal（§3.2 T-09.11历史本地）`；`go test -race -count=1 ./cmd/alonabot -run '^(TestT09PackageRejectionLocal\|TestT09ExternalRejectionLocal\|TestT09DevelopmentApprovalLocal)$' -v` | goal45正式流程候选（见§3.2 T-09.11）；darwin/arm64；通过；继承原日志 |
-| V-28 | **通过（继承预检分项）**。损坏/签名/OSarch/来源均在停旧前拒绝；公开Release正式签名交维护者49。 | `cmd/alonabot/t09_*_local_test.go:TestT09PackageRejectionLocal（§3.2 T-09.11历史本地）`；`go test -race -count=1 ./cmd/alonabot -run '^(TestT09PackageRejectionLocal\|TestT09ExternalRejectionLocal\|TestT09DevelopmentApprovalLocal)$' -v` | goal45正式流程候选（见§3.2 T-09.11）；darwin/arm64；通过；继承原日志 |
+| V-28 | **通过（继承预检及发行候选复验）**。GN49-03核五目标资产完整性；真实安装/更新链拒绝坏签名、异来源与异发布者且保持旧Active/业务数据，损坏digest/OSarch停旧前拒绝沿T-09.11。 | `scripts/release-check`实际命令与52项JSON见本文“T-10.4 / V-28、V-41 发布候选复验”；历史`TestT09PackageRejectionLocal`原记录保留 | 产品648d3d38/检查器2a3bbaf8；darwin/arm64真实安装链；五目标静态通过；正式官方签名待维护者 |
 | V-29 | **通过（本机恢复分项）**。真实WAL备份独立候选/真实库=42；runtime.lock旧树/ENOSPC沿GN09 survivor与§3.2 T-09.11。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-30 | **通过（本机恢复分项）**。PREPARED/committed唯一Active直接库断言；脚本first/ready/gates七窗口、旧树锁与路由绑定均通过。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/{prepared,committed}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery$' -count=1 -v` | GN46-09/formal-pinned-wal.log；fa916d99；darwin/arm64；PASS44.19s/包52.013s（加入secrets之前） |
 | V-31 | **通过（本机双传输）**。显式单次许可、停用保持、失败及崩溃不重跑未知外部副作用；普通restart/resume保留许可false。 | `cmd/alonabot/cross_external_local_test.go:TestCrossExternalMaintenanceLocal（D86）`；`go test -race ./cmd/alonabot -run '^TestCrossExternalMaintenanceLocal$' -count=1 -v` | GN46-10-external.log；3a0c04f5；darwin/arm64；PASS56.11s/包65.307s |
@@ -1034,7 +1034,7 @@ GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runn
 | V-38 | **分项通过（当前D161）**。运行校正/显式空值/未知路径；完整MergePatch/base_generation/required/类型矩阵沿T-08.16与T-09.11，本轮最终套件复验管理校正。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/capabilities/{sqlite,configdb_gorm}`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/capabilities/(sqlite\|configdb_gorm)$' -count=1 -v` | GN46-06-final.log；87e84f7a；darwin/arm64；PASS30.73s/包37.813s |
 | V-39 | **通过（本机分项）**。首装/restart/resume许可false，单次Session/代次/DB绑定与external→managed；双入口迁移失败无成功账本见GN06；旧PG已D48移出。 | `cmd/alonabot/cross_external_local_test.go:TestCrossExternalMaintenanceLocal（D86）`；`go test -race ./cmd/alonabot -run '^TestCrossExternalMaintenanceLocal$' -count=1 -v` | GN46-10-external.log；3a0c04f5；darwin/arm64；PASS56.11s/包65.307s |
 | V-40 | **通过（本机分项）**。rollback新代次与独立DB、恢复原值；GN09 management覆盖restart/reload/update/pin/disable/uninstall/reinstall与DB1→41→99，完整命令见§3.4。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/recovery/secrets`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/recovery/secrets$' -count=1 -v` | GN46-10-secrets-immutable.log；3a0c04f5；darwin/arm64；PASS15.21s/包25.124s |
-| V-41 | **通过（继承软件分项）**。真实包签名/来源/无签名确认和拒绝降级沿T-09.11；75发行签名为临时测试密钥，正式公开签名交49维护者。 | `cmd/alonabot/t09_*_local_test.go:TestT09PackageRejectionLocal（§3.2 T-09.11历史本地）`；`go test -race -count=1 ./cmd/alonabot -run '^(TestT09PackageRejectionLocal\|TestT09ExternalRejectionLocal\|TestT09DevelopmentApprovalLocal)$' -v` | goal45正式流程候选（见§3.2 T-09.11）；darwin/arm64；通过；继承原日志 |
+| V-41 | **通过（继承软件分项及发行候选复验）**。GN49-03独立可信公钥核20官方pack的签名确切字节、来源/版本/五平台/Schema；第三方实际链拒绝坏签名/换来源/换发布者。无签名确认及拒绝降级沿T-09.11，候选使用测试密钥。 | `scripts/release-check`实际命令与52项JSON见本文“T-10.4 / V-28、V-41 发布候选复验”；原`TestT09PackageRejectionLocal`完整命令/日志仍见§3.2 | 产品648d3d38/检查器2a3bbaf8；五目标静态与darwin/arm64链通过；官方签名/Release待维护者 |
 | V-42 | **通过（本机分项）**。满准入Request→Cancel顺序/迟到回收；GN08 Service三组实际双传输+历史Bus双界限均有对应证据。 | `cmd/alonabot/cross_protocol_local_test.go:TestCrossCancelOrderLocal（本地）`；`go test -race ./cmd/alonabot -run '^TestCrossCancelOrderLocal$' -count=1 -v` | GN46-08-cancel-once.log；ae400141；darwin/arm64；通过/包7.518s |
 | V-43 | **通过（本机分项）**。Core Admin与平台Actor telegram:88、命令策略/全局限制与被遮蔽路径；权限名集合/父禁用继承TestPipeline。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd/{tcp,stdio}/boundaries`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd/(tcp\|stdio)/boundaries$' -count=1 -v` | GN46-07-main-user88.log；25985642；darwin/arm64；PASS10.21s/包19.878s |
 | V-44 | **通过（模拟平台分项）**。惰性取件/多Session共享/首读取消与越界Target；GN08新消费lease真实Store证据；真实平台当前候选未运行。 | `telegram_local_test.go:TestTelegramFaultMatrix（§3.2 T-03.10，D86历史根包位置）`；`go test -race -count=1 -v . -run '^TestTelegramFaultMatrix$'` | goal9基线813a12e4+该切片；darwin/arm64；TCP/stdio通过；telegram-matrix-fixed.log（继承） |
@@ -1338,12 +1338,64 @@ The job was not started because recent account payments have failed or your spen
 
 GN47-12B 已普通 merge goal48 实际 main `44aeb7e5b1ebabd603e3a5bba0561e7f32c59ebd`（PR #279，2026-11-20 07:50:24 UTC）；该 PR 锁定 head `db980b75` 的 Quality44694052919（完整 Linux race、五目标构建，共 14m12s）及最新 metadata44697793408 均成功。48 的 `docs/benchmarks.md` 与原始数值、来源链接保持；46 合并后 main Quality44693804971 已成功。
 
-**交付待核对项：** PR #280 由父核对最终 head CI 与独立终审；旧 Quality `44694708167` 已由父取消，本次整合后普通 push 并 ready。四环境产品与完整 raw 库存复用原有效证据；旧 GN10 库存已通过，WebUI 复用父实际浏览器验收，本轮只同步裁定文档。
+**实际合并状态：** PR #280 已锁定 `736b4974`，于2026-11-20 08:22:48 UTC squash 为实际 main `fcf4105bbe0e2b7de309af3aef5e718d75c5ee52`；Quality44699418199（14m8s）与最终 metadata44701996922 均成功；48 main Quality44697923553 已成功。旧 Quality `44694708167` 已由父取消，原状态保留。四环境产品与完整 raw 库存复用原有效证据；旧 GN10 库存已通过，WebUI 复用父实际浏览器验收，本轮只同步裁定文档。
+
+### T-10.4 / V-28、V-41 发布候选复验
+
+2026-11-20，goal49 普通 merge 固定产品 `648d3d38e3fc661c1838edfa01d0fcbfbf9766ed`（merge `47387ed8`），检查器为 `2a3bbaf8562b3cf66e8805360bb541c11129bf76`。父已确认其与 goal46 的 `2914c391`、实际 main `46c35d0eebcb1a8ac698578189df9b251952d2de` 产品等价，PR278 的 Quality `44689318290` 和 metadata 通过；本轮沿用已接受资产。goal47 的 `tree_windows.go prepareTree` 另有 `CREATE_NEW_PROCESS_GROUP` 产品改动，已普通合入实际 main `fcf4105b`（PR #280，含48与D-185），Windows 发行物已完成补建和静态核对，详见下文最终增量。Windows 实际运行按D-185批准延期。
+
+**发行候选。** macOS darwin/arm64、Go1.27.1、Node26.5.1/npm11.17.0；正式 `scripts/dist` 用项目外测试私钥构建 Core 与四个0.1.0官方组件，生成五目标外层归档、20个官方平台包、各自的合并清单/签名/公钥、归档校验清单和安装脚本。组件更新候选从现有 configdb 经正式 pack 生成，同来源、同发布者0.1.0→0.1.1；异来源/异发布者包也各为有效签名资产。命令、输入、公钥与完整输出保存在 goal49 的 ignored `goal-49/evidence/GN49-03/`。
+
+| 已运行分项 | 实际结果与原始证据 |
+| --- | --- |
+| 五目标静态资产完整性 | **通过**。独立可信公钥核对签名确切字节、来源/版本、URL/长度/摘要、五平台和归档内外包字节；manifest、build-info、二进制平台及内嵌身份、Schema/i18n一致。`candidate-result/result.json`、`candidate.stdout.json`、`candidate-inventory.json`与`evidence-check.json`；五目标包括Windows静态检查。 |
+| 源码外干净安装与真实更新链 | **通过**。工作目录`/private/tmp/alonabot-release-run-648636523`，PATH无工具链；首次预装/help与WebUI激活、0600 token/管理登录、第三方安装/enable、pin拒绝/解除、坏签名/换来源/换发布者拒绝、0.1.1更新、卸载与同来源重装。共52项检查、25 CLI命令、六预期拒绝和14份真实SQLite响应；Active更新切换，重装精确保留原Active，业务数据保持。Core/组件共六PID正常退出、Core exit0；`check.py`独立核算通过。 |
+| 归档与双镜像完整业务 | **通过**。复用既有`releaseEndToEnd`全部断言：归档darwin/arm64 PASS4.11s；linux/arm64原生引擎镜像PASS1.88s；linux/amd64在ARM引擎经Rosetta仿真PASS3.25s。实际Cookie/CSRF登录、token删除、四包身份/初态、真实Telegram Adapter连接本地Bot API、合成Provider发现、Agent Pending/reload、流式首发/编辑、help/whoami、管理员持久化及正常停止。三份`*-e2e.log`和Core日志完整保留；外部服务为模拟服务。 |
+| 双镜像结构与部署 | **通过**。正式Dockerfile通过BuildKit secret构建固定`alonabot:gn49-03-648-{arm64,amd64}`，两构建exit0；UID10001、ENV/入口/CMD、`/data`卷、四发行层、16组件文件、CA224449B/150证书及私钥未进入最终层均核对。两容器/卷已清理，原镜像保留。固定tag compose config通过，install.sh与dist及已接受V84候选完全相同，`sh -n`通过；真实systemd/launchd安装、升级、失败保持与卸载，以及HTTPS/浏览器沿V84/G75有效证据。见`docker-build-results.json`、`image-check.json`、`deployment-check.json`。 |
+| 资产与密钥隔离 | **通过**。60文件候选清单；递归499文件/49归档核测试私钥未进入候选，`asset-key-check.json`。测试签名、公钥与结果按各自身份保留；官方私钥签名和公开发布由维护者执行。 |
+| release-check局部错误回归 | **通过**。FIX49-01同时CLI exit7和ENOTDIR时保留命令、完整stdout/stderr及错误类型；FIX49-02预期拒绝加EISDIR可靠失败。相关race分别PASS2.325s/2.713s，既有真实安装链PASS20.246s/24.164s；五目标检查器编译通过。`goal-49/evidence/FIX49-{01,02}/`保留原失败、父复现和修复后日志；Windows停止/DACL仅编译，实际运行未运行。 |
+
+实际发行入口为 `go run ./scripts/dist --version 0.1.0 --key <项目外测试私钥> --out <GN49-03/dist>`；完整 argv、环境与退出分别见 `dist.command.json`、`dist.exit.json`。实际race检查器命令如下，`evidence`为上述GN49-03绝对目录，执行cwd隔离源码且PATH为`/no-toolchain`；示例只展开已记录的输入路径：
+
+```fish
+$evidence/release-check --candidate $evidence/dist --version 0.1.0 \
+  --public-key $evidence/official.pub --out $evidence/candidate-result \
+  --install-candidate $evidence/initial --update-candidate $evidence/updated \
+  --wrong-source-candidate $evidence/wrong-source \
+  --wrong-publisher-candidate $evidence/wrong-publisher --runtime-timeout 2m
+```
+
+三个业务联验分别使用 `GN49_FINAL_EVIDENCE=<GN49-03绝对目录> GN49_FINAL_SCENARIO=<archive|docker-arm64|docker-amd64> go test -race ./cmd/alonabot -run '^TestFinalReleaseCandidateLocal$' -v`，宿主包分别18.267s/11.477s/13.200s通过。ignored wrapper只消费已构建候选；三个场景的业务断言沿既有发行集成，无新增提交测试。独立原始核算入口为 `uv run --no-project python goal-49/evidence/GN49-03/check.py` 与 `finalize.py`，均exit0，汇总在`summary.json`。GN03原始wrapper编译失败、Docker注入文件分类错误和网络探查错误保持原日志；后两项修正仅重新核对同一原始数据，未重跑有效业务。
+
+**消费 T-10.2 已接受数据。** goal47 固定最终产品 `5094592d0a08e22a112e070f596b6896225e685b`（文档交付`121ce4d4`）在下列四环境各通过1082步/104runs，含原有100次循环、正常停止/强杀恢复、合作树、端口/锁清理、management/七恢复窗口/survivor及实际CGO调用；本轮仅消费GN47-13/13A与GN12正文，未重跑。CGO支持结论对应本次数学库fixture，Bot API为loopback模拟服务。
+
+| 实际环境 | 平台原结果 | GORM TCP/stdio | CGO返回 |
+| --- | --- | --- | --- |
+| darwin/arm64原生，Go1.27.1 | 1082/104，54.056s | exit0，16.217s | 9，Apple LLVM21 |
+| linux/arm64容器，Go1.27.3 | 1082/104，31.255s | exit0，21.234s | 9，GCC14.2 |
+| darwin/amd64 Rosetta，Go1.27.1 | 1082/104，84.919s | exit0，25.610s | 9，Apple LLVM21 |
+| linux/amd64 VM，Go1.27.1 | 1082/104，42.953s | exit0，25.931s | 9，GCC14.2 |
+
+实际入口为 `platform --alonabot <Core> --packages <packages> --scenarios <checkout>/scripts/scenarios --cgo <build.json> --out <result.json> --environment <native|container|emulation|vm> --host <实际环境>`，Rosetta通过`arch -x86_64`启动。原命令、会话、104日志/29DB/七平台产物及库存位于goal47的`goal-47/evidence/GN47-13/`各环境目录；Linux完整归档572610432B已回收并完整还原/核算通过，见`linux-amd64-control/archive-recovery-terminal.json`。原失败与旧候选全仓race分别保持原身份；509静态门槛、四环境GORM业务均已通过，最终head CI仍由父核对。
+
+**GN49-06 本地最终门槛。** 固定`a21fe48c`，darwin/arm64、既有Go1.27.1、GOPROXY=off。全部tracked Go的`gofmt -l`无输出；`go vet ./scripts/release-check`、Windows交叉vet、五目标`CGO_ENABLED=0 go build -o <各目标文件> ./scripts/release-check`均exit0。`CGO_ENABLED=1 go test -race -count=1 -json ./scripts/release-check -skip '^(TestPrepareRuntimeLocal|TestRuntimeLifecycleLocal|TestOfficialPackLocal)$'`包25.039s通过，六项主测试/28子项、失败0/跳过0，覆盖签名/平台/资源/归档拒绝、独立CLI、参数与两项完整错误回归；三个排除入口分别是已接受资产准备、实际安装链与正式pack，沿用GN03/FIX的未变输入。产品与实际46main的源码/依赖/前端/构建部署差异为空，检查器自2a3bbaf8亦无变化，原产品门槛与GN03实际资产业务结果直接复用；本轮未重跑全仓产品race/资产矩阵。完整12命令、环境、原JSON和各目标日志见goal49的`goal-49/evidence/GN49-06/{gates.json,summary.json}`；当前49最终head CI仍待父协调推送后核对。
+
+**模板兼容补丁。** 官方模板仓库已公开。goal49在只读固定`10518a97`副本形成四文件patch：README、ci.yml、release.yml与scripts/release.sh。CLI先`go mod download github.com/AlonaBot/AlonaBot`，再`go -C "$(go list -m -f '{{.Dir}}' github.com/AlonaBot/AlonaBot)" install ./cmd/alonabot`，沿用GOBIN/PATH；check/test使用位置参数，release.sh一次重复五个`--target`、固定同tag的`--asset-base`并生成共享release.json，去旧五轮搬运与jq合并。当前workflow发布未签名包。
+
+本地Go1.27.3/文件代理以确切648源码作为候选SDK，独立modulecache，bash与fish安装均通过且CLI保留获批GORM fork；模板`check .`、`go vet ./...`、现有`go test ./...`（包0.978s）、`test .`及一次五目标pack全部exit0，归档大小/摘要/平台/manifest/资源/同tag URL与notes核对通过。错误tag/source先拒绝且保留原dist；YAML、bash语法及原只读模板的`git apply --check`通过。patch、真实命令/日志与summary位于goal49的`goal-49/evidence/GN49-05/`。首个本地缓存放于worktree内导致Go继承外层Git版本的取证断言失败原样保留；移到源码外缓存后核对下载模块身份和源码字节通过。父已在独立模板worktree实际应用兼容patch，并创建[模板PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3)，候选head为`e8f4ae7`，SDK固定真实已合46main的`v0.0.0-20261120071651-46c35d0eebcb`。父记录实际网络下载、同模块安装CLI、check/vet/现有集成/test/bash语法均通过；仅SDK版本变化，无新增依赖，沿用本轮五目标pack与两shell验证。2026-11-20公开模板该head的hosted CI `44694601377` 已分配GitHub Actions runner并实际执行setup-go。当前失败为下载私有主仓库SDK时`ALONABOT_SDK_TOKEN`为空，原错`fatal: could not read Username ... terminal prompts disabled`保留。按D-185，模板CI待主仓库正式公开后验收；已通过的候选SDK与本地功能结果保持，正式SDK tag由维护者在正式发行前替换。
+
+**最终 Windows 增量与证据复用。** 普通 merge 实际 main `fcf4105bbe0e2b7de309af3aef5e718d75c5ee52`；相对原648产品的唯一源码改动为 `internal/core/process/tree_windows.go` 添加 `CREATE_NEW_PROCESS_GROUP`。SDK、依赖、其余四目标、WebUI与镜像构建输入无变化；检查器与已接受的 `2a3bbaf8` 完全相同。原四目标静态、源码外安装链及双镜像业务直接复用，全部旧资产与原始失败保留。
+
+在 darwin/arm64 复用既有 Go1.27.1 与测试密钥，执行 `go run ./scripts/dist --version 0.1.0 --key <项目外测试私钥> --out <final/dist-windows> --platforms windows/amd64`，exit0，17.675s。随后在源码外 cwd、`PATH=/no-toolchain` 运行既有race检查器：`release-check --candidate <final/dist-windows> --version 0.1.0 --public-key <GN49-03/official.pub> --out <final/windows-result> --platforms windows/amd64`，exit0，7.882s，16项全部通过；`scope=asset-integrity`、`runtime_checks=not_run`。新Windows归档与四包的可信公钥、清单签名确切字节、来源、URL、大小/合同摘要、PE平台/CGO/build-info、manifest/Schema/i18n及归档内外副本均相符。四官方Windows tar.gz与原648资产逐字节相同；归档Core的`process.Start`反汇编在`tree_windows.go:22`含`MOVL $0x200`，确认进程组修复进入实际PE。
+
+新补建资产为明确的Windows子集，各清单仅声明该目标；原五目标候选及四个非Windows目标按原始目录/清单身份保留，最终候选库存逐一指向对应目录，未覆盖旧数据。命令、环境、PID、完整日志、静态JSON和PE反汇编位于goal49的`goal-49/evidence/GN49-06/final/`，汇总为`summary.json`。首次构建显式`GOTOOLCHAIN=local`选中基础Go1.26.3，因模块要求Go1.27.1在构建前失败；原`windows-dist-attempt1.*`保留，随后显式使用已缓存Go1.27.1完成。无依赖安装、资源测试、Windows实际运行或无变化矩阵重跑。
+
+**交付状态。** T-10.4候选资产、检查器、首发说明与矩阵已完成（PR #281）；REVIEW49-02契约/规范自审与增量文档检查见同目录。Windows实机/CGO及完整未运行项按D-185批准延期；模板PR#3保持46main候选及本地已验结果，模板CI主仓库正式公开后验收，原公开模板run44694601377因`ALONABOT_SDK_TOKEN`为空的SDK认证失败，以及私有主仓库Windows run44695663481在分配runner前的payment/spending failure（`steps=[]`、`runner_name`为空、artifact0）原样保留，完整缺项见§3.6。正式SDK tag、官方私钥签名、公开Release和镜像推送由维护者执行。D-184保持现有开销及历史预算FAIL，V-33取消新增运行；资源主入口为[资源实测记录](../docs/benchmarks.md)。
 
 ## 4. 实施交接
 
 1. goal46 / T-10.1 已通过 PR #278 锁定最终 head `2914c391` squash 为实际 main `46c35d0e`，最终 Quality44689318290/metadata44689318584 及合并后 main Quality44693804971 均成功。原2026-10-21起的历史状态和原候选证据由§3.1～§3.5接续；全部149编号、D-86身份和旧票据/配置来源保留。
 2. goal46交付唯一Unix正式集成 `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`，四类子测试均TCP/stdio；不同真实能力程序/SDK回归按D-86留本地。75不变发行资产、双架构镜像及浏览器结果复用，GN46-11的174固定产品增量联验、正式GORM fork来源及V77/78/81分项见§3.4。
 3. goal48 / T-10.3 已通过 PR #279 锁定 head `db980b75` squash 为实际 main `44aeb7e5`；该 head Quality44694052919/最新metadata44697793408均成功。现有三轮资源实测、中位数、来源与D-184接受决定归档在[资源实测记录](../docs/benchmarks.md)，原数值及历史失败保留，停止新增资源测量和优化。
-4. goal47 / T-10.2 按D-185以四环境实际运行/CGO与100次启停通过、Windows实跑批准延期完成，完整原始证据和缺项见§3.6；PR #280 待父独立终审、当前head CI与squash/main确认。需要真实Telegram/Provider凭据的既有分项仍未运行，历史真实记录按原候选复用。
-5. goal49等待goal47实际合并，消费47平台结果和D-185及48资源文档，在发布说明记录批准延期和完整未运行项。模板CI待主仓库正式公开后验收；已完成的候选SDK版本与本地功能核对保留，正式SDK tag由维护者发布前替换。正式签名、公开Release与镜像发布由维护者控制；D-171后置OneBot11/welcome/rss及Telegram分项随对应版本验收。后继派发由父按实际main和最终验收处理。
+4. goal47 / T-10.2 按D-185以四环境实际运行/CGO与100次启停通过、Windows实跑批准延期完成，完整原始证据和缺项见§3.6；PR #280 已锁定 `736b4974`，于2026-11-20 08:22:48 UTC squash 为实际 main `fcf4105bbe0e2b7de309af3aef5e718d75c5ee52`；Quality44699418199（14m8s）与最终 metadata44701996922 均成功。需要真实Telegram/Provider凭据的既有分项仍未运行，历史真实记录按原候选复用。
+5. goal49已普通整合实际main `fcf4105b`，消费47平台结果、D-185及48资源文档，完成受影响Windows发行资产补建/静态、候选检查器及发布说明；本切片候选交付已完成（PR #281），批准延期和完整未运行项保留。模板CI待主仓库正式公开后验收；已完成的候选SDK版本与本地功能核对保留，正式SDK tag由维护者发布前替换。正式签名、公开Release与镜像发布由维护者控制；D-171后置OneBot11/welcome/rss及Telegram分项随对应版本验收。
