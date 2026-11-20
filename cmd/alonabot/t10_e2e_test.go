@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +35,7 @@ func TestCrossComponentEndToEnd(t *testing.T) {
 			t.Run("components", func(t *testing.T) { testCrossComponentPackages(t, transport) })
 			t.Run("capabilities", func(t *testing.T) { testCrossCapabilityPackages(t, transport) })
 			t.Run("boundaries", func(t *testing.T) { testCrossPermissionPackages(t, transport) })
+			t.Run("recovery", func(t *testing.T) { testCrossRecoveryPackages(t, transport) })
 		})
 	}
 }
@@ -671,4 +674,164 @@ func testCrossPermissionPackages(t *testing.T, transport string) {
 	send()
 	awaitReplies(3)
 	stopTestCore(t, c)
+}
+
+// testCrossRecoveryPackages 在提交两侧中断正式 CLI 操作，核对真实 WAL 数据和唯一 Active。
+func testCrossRecoveryPackages(t *testing.T, transport string) {
+	fixture := t.TempDir()
+	binary, plugin := buildRecoveryFixture(t, fixture)
+	// 与管理场景相同，在既有临时恢复程序记录 SDK 注入的真实 Session 身份。
+	source := strings.Replace(recoveryFixtureSource, "p.OnReady(func(context.Context)error{", `p.OnReady(func(context.Context)error{slog.Info("OnReady");`, 1)
+	name := filepath.Join(fixture, "plugin.go")
+	developmentWrite(t, name, source)
+	command := exec.CommandContext(t.Context(), "go", fixtureBuildArgs("-overlay", filepath.Join(fixture, "overlay.json"), "-o", plugin, name)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build observed recovery fixture: %v\n%s", err, output)
+	}
+	archive := recoveryPackage(t, fixture, plugin, "1.0.0")
+	if transport == "stdio" {
+		// 沿原恢复启动器使用同一 CLI 选项，故障钩子与进程观察保持现有实现。
+		wrapper := filepath.Join(fixture, "stdio-core")
+		developmentWrite(t, wrapper, "#!/bin/sh\nexec '"+strings.ReplaceAll(binary, "'", "'\"'\"'")+"' \"$@\" --stdio\n")
+		if err := os.Chmod(wrapper, 0700); err != nil {
+			t.Fatal(err)
+		}
+		binary = wrapper
+	}
+	for _, phase := range []string{"prepared", "committed"} {
+		t.Run(phase, func(t *testing.T) {
+			// 1. 安装真实包并形成待恢复的旧代次与业务数据。
+			dir := t.TempDir()
+			c := startRecoveryCore(t, binary, dir, "")
+			c.management(t, dir, "", "install", archive, "--yes")
+			c.management(t, dir, "", "enable", "recovery")
+			old := findPackage(t, c, dir, "recovery").Active
+			pluginDir := filepath.Join(dir, "plugins", "recovery")
+			oldDatabase := filepath.Join(pluginDir, "generations", old, "db.sqlite")
+			status, body := fixtureHTTP(t, c, dir, http.MethodPut, "/plugins/recovery/value?n=41")
+			if status != 204 {
+				t.Fatalf("write WAL data: %d %s", status, body)
+			}
+			wal, err := os.Stat(oldDatabase + "-wal")
+			if err != nil || wal.Size() <= 32 {
+				t.Fatalf("live WAL: %v %v", wal, err)
+			}
+			stopTestCore(t, c)
+			c = startRecoveryCore(t, binary, dir, phase)
+			c.waitFor(`"msg":"plugin activated"`)
+			oldSession := lastSession(t, c)
+			// 2. 保留旧读快照，再写入新值，使真实 WAL 页一直保留到候选备份。
+			observer, err := sql.Open("sqlite", oldDatabase)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer observer.Close()
+			snapshot, err := observer.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer snapshot.Rollback()
+			var observed int
+			if err := snapshot.QueryRow("SELECT n FROM value WHERE id=1").Scan(&observed); err != nil || observed != 41 {
+				t.Fatalf("old snapshot: %d %v", observed, err)
+			}
+			status, body = fixtureHTTP(t, c, dir, http.MethodPut, "/plugins/recovery/value?n=42")
+			if status != 204 {
+				t.Fatalf("write pinned WAL: %d %s", status, body)
+			}
+			wal, err = os.Stat(oldDatabase + "-wal")
+			if err != nil || wal.Size() <= 32 {
+				t.Fatalf("pinned WAL: %v %v", wal, err)
+			}
+			developmentWrite(t, filepath.Join(pluginDir, "config.json"), "{}")
+			request := recoveryCommand(t, c, dir, "reload", "recovery")
+			var output bytes.Buffer
+			request.Stdout, request.Stderr = &output, &output
+			if err := request.Start(); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = request.Process.Kill() })
+			done := make(chan error, 1)
+			go func() { done <- request.Wait() }()
+			recoveryWait(t, func() bool {
+				select {
+				case err := <-done:
+					t.Fatalf("reload exited before checkpoint: %v\n%s\n%s", err, output.String(), c.log())
+				default:
+				}
+				_, err := os.Stat(filepath.Join(dir, "checkpoint"))
+				return err == nil
+			})
+			if err := c.cmd.Process.Kill(); err != nil {
+				t.Fatal(err)
+			}
+			<-c.done
+			if err := <-done; err == nil {
+				t.Fatalf("interrupted reload succeeded: %s", output.String())
+			}
+			waitRecoveryRuntime(t, pluginDir)
+			store := recoveryStore(t, dir)
+			records, err := store.Journals(t.Context(), "recovery")
+			if err != nil || len(records) != 2 {
+				t.Fatalf("crash journals: %+v %v", records, err)
+			}
+			operation := records[len(records)-1]
+			wantActive, wantPhase := old, "cleaned"
+			if phase == "committed" {
+				wantActive, wantPhase = operation.NewGeneration, "committed"
+			}
+			active, err := store.Active(t.Context(), "recovery")
+			if err != nil || active != wantActive || operation.Phase != phase || operation.ExpectedOld != old || len(operation.SessionID) == 0 {
+				t.Fatalf("crash authority: %s %+v %v", active, operation, err)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			// 3. 提交两侧都检查备份真实内容和独立文件身份。
+			for _, path := range []string{oldDatabase, operation.DatabasePath} {
+				db, err := sql.Open("sqlite", path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var value int
+				queryErr := db.QueryRow("SELECT n FROM value WHERE id=1").Scan(&value)
+				closeErr := db.Close()
+				if queryErr != nil || closeErr != nil || value != 42 {
+					t.Fatalf("crash database %s: %d %v %v", path, value, queryErr, closeErr)
+				}
+			}
+			a, err := os.Stat(oldDatabase)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.Stat(operation.DatabasePath)
+			if err != nil || os.SameFile(a, b) {
+				t.Fatalf("candidate reused old file: %v", err)
+			}
+			// 4. 恢复后只激活权威代次，核对数据、Session 与候选回收。
+			c = startRecoveryCore(t, binary, dir, "")
+			c.waitFor(`"msg":"plugin activated"`)
+			item := findPackage(t, c, dir, "recovery")
+			status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/recovery/value")
+			if item.Active != wantActive || item.State != "Activated" || status != 200 || string(body) != "42" || lastSession(t, c) == oldSession || lastSession(t, c) == hex.EncodeToString(operation.SessionID) {
+				t.Fatalf("recovered authority/data: %+v %d %s", item, status, body)
+			}
+			stopTestCore(t, c)
+			if count := strings.Count(c.log(), `"msg":"plugin activated"`); count != 1 {
+				t.Fatalf("activation count: %d", count)
+			}
+			store = recoveryStore(t, dir)
+			actual, err := store.GetJournal(t.Context(), operation.OpID)
+			if err != nil || actual.Phase != wantPhase {
+				t.Fatalf("recovered journal: %+v %v", actual, err)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			_, err = os.Stat(filepath.Join(pluginDir, "generations", operation.NewGeneration))
+			if phase == "prepared" && !errors.Is(err, os.ErrNotExist) || phase == "committed" && err != nil {
+				t.Fatalf("candidate after recovery: %v", err)
+			}
+		})
+	}
 }
