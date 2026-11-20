@@ -1,7 +1,7 @@
 # 按实际模块路径同步 PR 的 area 标签；一个 PR 可以涉及多个区域。
 "area: docs":
   - changed-files:
-      - any-glob-to-any-file: ["*.md", "docs/**", "spec/**"]
+      - any-glob-to-any-file: ["*.md", "docs/**", "spec/**", "changelog/**"]
 "area: contracts":
   - changed-files:
       - any-glob-to-any-file: ["contracts/**"]
@@ -10,16 +10,13 @@
       - any-glob-to-any-file: ["sdk/**", "examples/**"]
 "area: core":
   - changed-files:
-      - any-glob-to-any-file: ["internal/core/**", "internal/wire/**", "internal/oslock/**", "cmd/**", "go.mod", "go.sum"]
+      - any-glob-to-any-file: ["internal/core/**", "internal/app/**", "internal/wire/**", "internal/oslock/**", "cmd/**", "go.mod", "go.sum"]
 "area: adapters":
   - changed-files:
-      - any-glob-to-any-file: ["adapters/**"]
-"area: frontend":
-  - changed-files:
-      - any-glob-to-any-file: ["web/**"]
+      - any-glob-to-any-file: ["internal/core/adapter/**"]
 "area: tests":
   - changed-files:
-      - any-glob-to-any-file: ["**/*_test.go", "**/testdata/**"]
+      - any-glob-to-any-file: ["tests/**", "**/*_test.go", "**/testdata/**"]
 "area: github-actions":
   - changed-files:
       - any-glob-to-any-file: [".github/**"]

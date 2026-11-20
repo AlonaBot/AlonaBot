@@ -4,7 +4,7 @@
 
 ## 选择安装方式
 
-v0.1.0 当前为发布候选，正式发行归档与镜像待维护者发布。以下发行安装步骤在对应资产发布后使用；现在可以按 [README 的源码快速开始](../README.md#快速开始)运行本地示例。具体平台实跑与已知限制见[发布说明](release-notes/v0.1.0.md)。
+v0.1.0 当前为发布候选，正式发行归档与镜像待维护者发布。以下发行安装步骤在对应资产发布后使用；现在可以按 [README 的源码快速开始](../README.md#快速开始)运行本地示例。具体平台实跑与已知限制见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 | 方式 | 适用场景 |
 | --- | --- |
@@ -19,7 +19,7 @@ v0.1.0 当前为发布候选，正式发行归档与镜像待维护者发布。�
 ./alonabot run --data-dir ./data
 ```
 
-后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动自动安装四个官方组件并启用 help 与 WebUI。打开 `http://127.0.0.1:7650`，按[管理认证](#core-设置与-http-入口)领取首次 token 并登录。后台添加 Telegram 实例后 Adapter 自动启用，需要 AI 时再启用 Agent 并配置 Provider 与模型。
+后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动预装 WebUI 与 Agent，启用 WebUI。打开 `http://127.0.0.1:7650`，按[管理认证](#core-设置与-http-入口)领取首次 token 并登录。按需安装 Telegram 或 OneBot 11 Adapter 后配置实例；配置 Provider 与模型后再启用 Agent。
 
 ## 系统服务安装与升级
 
@@ -61,8 +61,8 @@ sh install.sh --uninstall
 
 从仓库根目录启动对应版本的官方整合包，然后读出首次登录的 token：
 ```fish
-docker compose -f deploy/compose.yaml up -d
-docker compose -f deploy/compose.yaml exec alonabot alonabot admin-token show --data-dir /data
+docker compose up -d
+docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
 打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将一次性 token 写入 `/data/admin_token`，首次登录成功后删除该文件。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
@@ -71,7 +71,7 @@ docker compose -f deploy/compose.yaml exec alonabot alonabot admin-token show --
 
 端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
 
-在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
+按需安装 Adapter 后，在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
 
 ## 管理组件
 ```fish
@@ -84,6 +84,9 @@ alonabot install pkg.tar.gz --yes             # release.json、签名和公钥�
 alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
 alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
 alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
+alonabot install --source AlonaBot/alonabot-adapter-telegram --yes
+alonabot install --source AlonaBot/alonabot-plugin-help --yes
+alonabot enable alonabot-plugin-help-official
 alonabot enable alonabot-plugin-hello
 alonabot list
 alonabot uninstall alonabot-plugin-hello --purge-data --yes      # 或 --purge；不带选项时只卸载

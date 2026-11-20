@@ -2,4 +2,4 @@
 
 package manage
 
-const coreChangelogMarkdown = "# 更新日志\n\n本项目的版本更新按 Keep a Changelog 记录，版本号遵循 SemVer。\n\n## [Unreleased]\n\n### Added\n\n- 提供组件与 Core 更新日志的管理 API。\n"
+const coreChangelogMarkdown = "# Changelog\n\n## [Unreleased]\n\n\n## Added\n\n- Provide component and Core changelog management APIs.\n"

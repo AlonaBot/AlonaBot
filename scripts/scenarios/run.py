@@ -10,9 +10,9 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TEST = ROOT / "cmd/alonabot/t09_e2e_test.go"
-HARNESS = ROOT / "cmd/alonabot/e2e_test.go"
-RECOVERY = ROOT / "cmd/alonabot/recover_e2e_test.go"
+TEST = ROOT / "tests/e2e/management_e2e_test.go"
+HARNESS = ROOT / "tests/e2e/e2e_test.go"
+RECOVERY = ROOT / "tests/e2e/recover_e2e_test.go"
 RECOVERY_TEMPLATE = Path(__file__).with_name("recovery.go.tmpl")
 
 
@@ -248,7 +248,7 @@ def run(args):
     overlay = evidence / "overlay.json"
     overlay.write_text(json.dumps({"Replace": replacements}, indent=2) + "\n")
     subprocess.run(["gofmt", "-w", *replacements.values()], check=True)
-    command = ["go", "test", "-overlay", str(overlay), "-count=1", "-v", "./cmd/alonabot", "-run", selected]
+    command = ["go", "test", "-overlay", str(overlay), "-count=1", "-v", "./e2e", "-run", selected]
     inputs = {
         "scenario": args.scenario,
         "platform": platform.platform(),
@@ -263,7 +263,7 @@ def run(args):
     (evidence / "inputs.json").write_text(json.dumps(inputs, indent=2) + "\n")
     print(f"Evidence: {evidence}", flush=True)
     with (evidence / "go-test.log").open("w") as log:
-        result = subprocess.run(command, cwd=ROOT, env=environment, stdout=log, stderr=subprocess.STDOUT)
+        result = subprocess.run(command, cwd=ROOT / "tests", env=environment, stdout=log, stderr=subprocess.STDOUT)
     print((evidence / "go-test.log").read_text(), end="", flush=True)
     return result.returncode
 

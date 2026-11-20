@@ -20,7 +20,7 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 | `--public-key` | 必填；标准 base64 编码的 Ed25519 公钥文件。资产旁的公钥须与此输入一致。 |
 | `--out` | 必填；尚不存在的证据目录，父目录须已存在，位置须在候选目录之外。已有目录原样保留。 |
 | `--platforms` | 逗号分隔的目标，缺省 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`。必须与发行归档和每个组件清单的目标集合一致。 |
-| `--asset-base` | 期望的资产 URL 前缀；缺省 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，与构建候选时的 `dist --asset-base` 对应。 |
+| `--asset-base` | 期望的资产 URL 前缀；缺省使用各组件仓库 `releases/download/v<组件版本>`，与构建候选时的 `dist --asset-base` 对应。 |
 | `--install-candidate` | 可选运行链的初始组件包目录：从现有 configdb 示例打包，使用独立第三方测试发布者。 |
 | `--update-candidate` | 同 ID、来源、发布者，组件自身 SemVer 严格递增的包目录。 |
 | `--wrong-source-candidate` | 同更新版本、ID、发布者，来源不同的有效签名包目录。 |
@@ -30,7 +30,7 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 
 检查顺序如下：
 
-1. 对四个首发官方组件的 `release.json` 确切字节验签，核对可信发布者、组件 ID 和绑定来源。保留 WebUI 的 `https://github.com/AlonaBot/AlonaBot` 来源原值，其余三项为 `github.com/AlonaBot/AlonaBot`。
+1. 对 WebUI 与 Agent 两个整合组件的 `release.json` 确切字节验签，核对可信发布者、组件 ID 和绑定来源。来源分别为 `github.com/AlonaBot/alonabot-webui` 与 `github.com/AlonaBot/alonabot-agent`。
 2. 核对每个目标包的完整 URL、归档长度与 SHA256，安全解包后读取入口的实际 Go build-info，要求包内 `build-info` 与其逐字一致，平台相符且 CGO 关闭。包目录只包含各目标包与三份发布元数据。
 3. 按 `pack` 的稳定输出核对包内 manifest 的 ID、版本、来源、角色、平台、入口和格式版本记录；检查二进制中作者 manifest 的共有身份记录。二进制内嵌作者 manifest，包内 manifest 增加了构建字段。此处针对正式 `dist/pack` 格式进行静态核对，完整 YAML、Schema 语义和运行时资源登记由候选 CLI 的安装、启用与握手验收。
 4. 对包内存在的 `config_schema.json`、`adapter_config_schema.json` 和直属 `i18n/*.json` 检查 JSON 格式及二进制中的确切资源字节；在 JSON 中列出实际检查的资源。Schema 使用 `pack` 已规范化的原文。
@@ -57,6 +57,6 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 
 `--platforms` 必须包含当前宿主。程序先完成全部静态检查，再在系统临时目录重新解包宿主归档，以独立空 cwd 和 data_dir 无 TTY 启动，不调用源码或构建工具。它通过 `admin-token show` 获取首次 token：Unix 核对文件权限 0600，Windows 核对从受保护 data_dir 继承的实际 DACL 只授予运行账号访问且允许读取。token 只留在内存和候选自身的私密文件中。管理 CLI 使用 Bearer token 文件；本机转发将随机监听端口的 Host/Origin 对齐候选实际 `base_url`。
 
-运行链核对官方四包的版本、来源、发布者和默认启用状态，以及 HTTP 返回的 Core 版本。随后安装并启用第三方 configdb，通过公开数据管理 API 写入 `configdb_note`，读取真实 SQLite 行与插件 OnStart 写入的 `configdb_startup`。错误签名、有效签名但来源不同、发布者不同与 pin 不匹配的更新均须被管理 CLI 拒绝；每次拒绝后核对身份、版本、Active 与数据库原内容。解除 pin 后执行真实高版本更新，要求 Active 变化、内容保留；普通卸载保留绑定与代次，拒绝异源/异发布者重装，再同源重装、启用，要求 Active 等于卸载前保留代次并读取原内容。
+运行链核对官方两包的版本、来源、发布者和默认启用状态，以及 HTTP 返回的 Core 版本。随后安装并启用第三方 configdb，通过公开数据管理 API 写入 `configdb_note`，读取真实 SQLite 行与插件 OnStart 写入的 `configdb_startup`。错误签名、有效签名但来源不同、发布者不同与 pin 不匹配的更新均须被管理 CLI 拒绝；每次拒绝后核对身份、版本、Active 与数据库原内容。解除 pin 后执行真实高版本更新，要求 Active 变化、内容保留；普通卸载保留绑定与代次，拒绝异源/异发布者重装，再同源重装、启用，要求 Active 等于卸载前保留代次并读取原内容。
 
 运行成功时 `scope=asset-integrity-and-lifecycle`、`runtime_checks=pass`。`runtime` 记录平台、保留的系统临时工作目录、Core PID/退出码和各阶段组件状态。`out/runtime/` 保留 Core 日志、管理 CLI 原始 stdout/stderr/参数/退出码、数据 API 原始响应；预期拒绝的原错同样保留。失败返回完整错误及已完成阶段；候选收到中断信号并等待退出，超过调用者给定截止时间则终止并记为失败。临时资产和 data_dir 保留供复查，整个程序成功也要求 Core 正常退出且日志未出现 token。真实平台运行结果由发布矩阵记录。

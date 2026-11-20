@@ -28,7 +28,7 @@ bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot
 ## 1. 运行模型与内存
 
 - 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
-- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 [发布说明](release-notes/v0.1.0.md#资源与依赖)。
+- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 [发布说明](../changelog/v0.1.0/zh-CN.md#资源与依赖)。
 - 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。支持 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒、自动空闲退出、即时休眠策略，以及静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
@@ -43,7 +43,7 @@ bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot
 
 ## 3. 存储
 
-- 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。只需 SQL 时优先 `sqlitedb`，可以减少 GORM 的链接与初始化开销；现有实测条件见[发布说明](release-notes/v0.1.0.md#资源与依赖)。
+- 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。只需 SQL 时优先 `sqlitedb`，可以减少 GORM 的链接与初始化开销；现有实测条件见[发布说明](../changelog/v0.1.0/zh-CN.md#资源与依赖)。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
 - 同代次 `RESUME` 复用原 generation、配置与业务 DB，SELF/VERSIONED 数据库迁移回调跳过，原迁移模式与账本保持；首次激活、更新与回退仍按迁移规则执行。配置继续执行 `OnConfigLoad`、补值/校正与 required 校验，完整结果须与原快照一致（CONTRACTS §4.5）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
@@ -164,7 +164,7 @@ return &adapter.Descriptor{
 
 省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证；`AuthStatic` 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
-查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](../plugins/help/help.go)。
+查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](https://github.com/AlonaBot/alonabot-plugin-help/blob/main/help.go)。
 
 ## 6. 跨插件协作
 

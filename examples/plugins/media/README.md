@@ -31,7 +31,8 @@
 在当前 shell 导出 `TELEGRAM_BOT_TOKEN_A` 与 `TELEGRAM_BOT_TOKEN_B`，值取自两个不同的 Bot；Core 保留文件中的占位符，将运行副本交给 Telegram Adapter。然后在仓库根运行：
 
 ```fish
-go run ./cmd/alonabot run adapters/telegram examples/plugins/echo examples/plugins/media --data-dir <data_dir>
+git clone https://github.com/AlonaBot/alonabot-adapter-telegram.git ../alonabot-adapter-telegram
+go run ./cmd/alonabot run ../alonabot-adapter-telegram examples/plugins/echo examples/plugins/media --data-dir <data_dir>
 ```
 
 追加 `--stdio` 可切换进程传输，追加 `--reload` 可监视源码与配置。回复语言跟随用户语言，缺失时使用 Core 默认语言。

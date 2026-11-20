@@ -118,7 +118,7 @@ func (r *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
 }
 ```
 
-注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `service.Serve`、`bus.Subscribe`、`button.On` 与 `task.On` 是各子包的包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `service.JSON`、`service.Proto`、`bus.Define` 声明成带类型的值，再注册或调用（§G，D-122）。根包只放插件对象、Handler 上下文、注册 builder、权限与运行入口；动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源分别在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options` 中（D-146）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，SDK 在收集注册时核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Actor、SendResult 与错误码由 SDK 自己定义；会话字符串、消息句柄与用户字符串（D-102、D-104、D-105）都是 `string`（D-144）。
+注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `service.Serve`、`bus.Subscribe`、`button.On` 与 `task.On` 是各子包的包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `service.JSON`、`service.Proto`、`bus.Define` 声明成带类型的值，再注册或调用（§G，D-122）。根包只放插件对象、Handler 上下文、注册 builder、权限与运行入口；动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源分别在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options` 中（D-146）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，SDK 在收集注册时核对 Handler 的参数类型；Adapter 的常量包（例如 `alonabot-adapter-onebot11/perm`、`alonabot-adapter-onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Actor、SendResult 与错误码由 SDK 自己定义；会话字符串、消息句柄与用户字符串（D-102、D-104、D-105）都是 `string`（D-144）。
 
 两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）；只回一段文本时用 `c.Reply(text)`，它不返回发送结果（D-118）。Handler 发往当前事件以外的会话时用 `c.SendTo(sid, content)`；包级 `sdk.Send(ctx, sid, content)` 只供没有 Handler 上下文的后台任务使用，只发一段文本时用 `sdk.SendText(ctx, sid, text)`（D-118、D-144）。触发者与所在会话用 `c.User()`、`c.Session()` 取得，分别是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，都是 `string`，可以原样保存和比较（D-120、D-144）。带错误码的错误用 `errcode.NotFound.New("…")` 构造、`errcode.Of(err)` 判断（D-123）。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
@@ -286,12 +286,12 @@ WebUI 是可替换的组件（§T），静态文件由 Core 提供，也可带�
 | --- | --- | --- |
 | Handler、Rule、Hook 与权限 | CONTRACTS §2/§3、MESSAGE-MODEL | `sdk/`、`internal/core/router/`、`hook/`、`policy/` |
 | 帧、Bootstrap、Session、错误与取消 | WIRE-FORMAT、CONTRACTS §1/§12 | `contracts/`、`internal/wire/`、`internal/core/host/` |
-| 消息、媒体、按钮与回执 | MESSAGE-MODEL、CONTRACTS §1.3 | `internal/core/message/`、`media/`、`buttons/`、`adapters/` |
+| 消息、媒体、按钮与回执 | MESSAGE-MODEL、CONTRACTS §1.3 | `internal/core/message/`、`media/`、`buttons/` 与独立 Adapter 仓库 |
 | 调度、HTTP 与生命周期 | CONTRACTS §4/§7/§12 | `internal/core/scheduler/`、`supervisor/`、`httpproxy/`、`idle/` |
 | 配置、secret、DB 与 Journal | CONTRACTS §5/§6/§12 | `internal/core/config/`、`secret/`、`state/`、`journal/` |
 | 构建、来源、安装与恢复 | CONTRACTS §9 | `internal/pluginkit/`、`internal/core/manage/`、`scripts/` |
 
-同一格中的缩写目录沿用前一完整路径的父目录。验证方法见[开发指南](../docs/development.md#验证改动)，现有候选结果见[发布说明](../docs/release-notes/v0.1.0.md)。
+同一格中的缩写目录沿用前一完整路径的父目录。验证方法见[开发指南](../docs/development.md#验证改动)，现有候选结果见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 ## M. Adapter：可安装的平台适配器
 
@@ -330,7 +330,7 @@ v0.1 只支持 Telegram long polling，先确定实际 bot 身份并校验 accou
 
 最小逻辑分层为 contracts、SDK、Core 和 CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
 
-**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP 与外部数据库驱动一律放在需要它们的插件或按需 SDK 包里；GORM 由 Core 状态库使用（D-68），插件仍只在导入 `sdk/gormdb` 时链接；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存按现有实测记录，维护者已接受当前开销并停止继续资源测量（[现有资源实测](../docs/release-notes/v0.1.0.md#资源与依赖)）；依赖由审查用 `go list -deps` 核对（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
+**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP 与外部数据库驱动一律放在需要它们的插件或按需 SDK 包里；GORM 由 Core 状态库使用（D-68），插件仍只在导入 `sdk/gormdb` 时链接；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存按现有实测记录，维护者已接受当前开销并停止继续资源测量（[现有资源实测](../changelog/v0.1.0/zh-CN.md#资源与依赖)）；依赖由审查用 `go list -deps` 核对（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
 
 CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
 
@@ -373,14 +373,14 @@ AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-
 | | 部署（用户） | 开发（开发者） |
 | --- | --- | --- |
 | 入口 | 从本仓库的 Release 用发行归档、`install.sh` 或 `docker compose` 安装（官方整合包），`alonabot run` 启动，在 `core_config.json` 或 WebUI 中配置 | `alonabot init` 创建组件工程，`alonabot run --reload` 在工程目录中运行 |
-| 包含 | Core、官方 Telegram Adapter、Agent、WebUI 与 help；首次运行自动安装，默认只启用 help 与 WebUI，Adapter 在 `core_config.json` 写了实例时启用，Agent 由管理员按需启用（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
+| 包含 | Core、Agent 与 WebUI；首次运行自动安装，默认启用 WebUI，Agent 由管理员按需启用；Adapter 与 help 从独立仓库按需安装（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
 | 组件进程 | 每个已启用的包一个独立进程（纯静态 WebUI 除外，官方 WebUI 含 Go 后台） | 开发中的组件也是独立进程；改动源码后自动重新构建，只重启该组件 |
 
 开发者只写组件本身，不写 `main.go`，也不写任何生成相关的代码（D-145）：`alonabot build` 生成正式入口，`run` 每次启动前都会构建。开发时与生产时的行为只差安装来源（dev）与固定代次。热部署时 Core 常驻，源码改动后重新编译，只重启变化的组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行；只改配置时不重新编译（CONTRACTS §15.4）。
 
 Go 不能在进程内替换已加载的代码，所以热部署通过重启子进程实现。需要断点调试时把调试器附加到组件进程，或改用库模式：在自己的 Go 程序中调用 `alonabot.Run` 或 `alonabot.Start`，组件与 Core 同进程运行。库模式也用于把 Core 嵌入其他 Go 服务与插件测试套件（CONTRACTS §15.5、§17）。
 
-官方组件只经 SDK 或 Admin API 与 Core 通信，`adapters/`、`agent/`、`plugins/` 与 `web/admin/` 不被本仓库其他包 import；v0.1 协议冻结后迁到独立仓库。
+官方组件已迁到各自独立仓库，只经 SDK 或 Admin API 与 Core 通信；主仓的 `tests/` 负责跨组件联验，生产代码只依赖 Core 与 SDK。
 
 ## T. 组件角色与替换
 
@@ -390,8 +390,8 @@ Go 不能在进程内替换已加载的代码，所以热部署通过重启子�
 | --- | --- | --- | --- |
 | `plugin`（插件） | 任意多个 | 每个一个 | help、welcome、rss |
 | `adapter` | 每个 `adapter_id` 一个 | 每个一个，承载全部实例 | Telegram、OneBot 11 |
-| `agent` | 一个 | 一个 | `agent/` |
-| `webui` | 一个 | 没有，Core 提供静态文件 | `web/admin/` |
+| `agent` | 一个 | 一个 | `alonabot-agent` |
+| `webui` | 一个 | 纯静态组件由 Core 提供文件；官方 WebUI 含 Go 后台 | `alonabot-webui` |
 
 官方 Adapter、Agent 与 WebUI 都可以换成社区组件：`alonabot install <id> --source owner/repo --replace` 在新组件通过下载、签名与静态检查后卸载旧组件并安装新组件，旧组件原来启用时新组件也随之启用，之后的 `update` 只从新来源取版本（CONTRACTS §9.3）。替换不迁移旧组件的数据：会话、记忆、按组件 ID 记录的策略与被替换 Adapter 的实例配置留在数据目录，按卸载保留规则可以从原来源重装找回；新 Adapter 的实例需要重新创建，因为实例配置按各自 Adapter 的 Schema 解释。
 

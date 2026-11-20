@@ -2,6 +2,10 @@
 **
 !go.mod
 !go.sum
+!components.lock.json
+!docker-compose.yml
+!changelog/
+!changelog/**
 !*.go
 !cmd/
 !cmd/**
@@ -11,16 +15,6 @@
 !internal/**
 !sdk/
 !sdk/**
-!adapters/
-!adapters/**
-!agent/
-!agent/**
-!plugins/
-!plugins/help/
-!plugins/help/**
-!web/
-!web/admin/
-!web/admin/**
 !scripts/
 !scripts/dist/
 !scripts/dist/**
@@ -28,7 +22,6 @@
 !deploy/install.sh
 **/.git
 **/node_modules
-web/admin/dist
 **/bin
 **/data
 **/logs
