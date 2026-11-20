@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
+	"github.com/AlonaBot/AlonaBot/sdk/agent"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/llm"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
@@ -75,7 +76,7 @@ func New() *sdk.Plugin {
 }
 
 func generateLLM(c *sdk.Context, usage string) (message.Content, error) {
-	response, err := llm.Generate(c, llm.Request{
+	response, err := agent.Generate(c, llm.Request{
 		Messages: []llm.Message{{Role: "user", Text: "first"}, {Role: "assistant", Text: "second"}, {Role: "user", Text: "third"}},
 		System:   "system prompt", Model: "synthetic", MaxOutputTokens: 37,
 	})

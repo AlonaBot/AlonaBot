@@ -1,6 +1,6 @@
 // Package llm 提供 Agent 文本生成服务的共享声明与调用辅助。
 //
-// [Generate] 发送完整请求，[Ask] 使用对话模型完成一问一答。
+// [Ask] 使用对话模型完成一问一答，完整请求通过 sdk/agent.Generate 发送。
 // 服务以 @agent 定位当前安装的 Agent，调用许可与期限见 CONTRACTS §13.5。
 package llm
 
@@ -50,16 +50,11 @@ type Response struct {
 // GenerateService 共享提供方与调用方的目标和输入输出类型。
 var GenerateService = service.JSON[Request, Response](AgentTarget + "/" + ServiceName)
 
-// Generate 经 Core 调用当前 Agent，沿用 ctx 的调用关联与期限。
-func Generate(ctx context.Context, req Request) (Response, error) {
-	return GenerateService.Call(ctx, req)
-}
-
 // Ask 将非空白 prompt 原样作为唯一 user 消息，返回对话模型的生成文本。
 func Ask(ctx context.Context, prompt string) (string, error) {
 	if strings.TrimSpace(prompt) == "" {
 		return "", errcode.InvalidArgument.New("prompt must not be blank")
 	}
-	response, err := Generate(ctx, Request{Messages: []Message{{Role: "user", Text: prompt}}})
+	response, err := GenerateService.Call(ctx, Request{Messages: []Message{{Role: "user", Text: prompt}}})
 	return response.Text, err
 }

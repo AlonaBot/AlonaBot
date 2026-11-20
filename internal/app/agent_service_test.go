@@ -25,6 +25,7 @@ import (
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
+	agentapi "github.com/AlonaBot/AlonaBot/sdk/agent"
 	"github.com/AlonaBot/AlonaBot/sdk/llm"
 	optionsapi "github.com/AlonaBot/AlonaBot/sdk/options"
 	serviceapi "github.com/AlonaBot/AlonaBot/sdk/service"
@@ -248,7 +249,7 @@ func startAgentServices(t *testing.T, configuration map[string]any) *Core {
 		p := sdk.NewPlugin()
 		genresources.Bind(p, agentServiceResources(t, id, "plugin"))
 		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+serviceGenerate)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
-			return llm.Generate(c.Context(), req)
+			return agentapi.Generate(c.Context(), req)
 		})
 		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+serviceAsk)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
 			text, err := llm.Ask(c.Context(), req.Messages[0].Text)
