@@ -3,13 +3,33 @@
 负责范围：插件作者（含本仓库的官方插件、Adapter、Agent 与示例）在依赖、存储、日志、生命周期与发布上必须遵守的规则，以及这样要求的原因。Adapter 与 Agent 是有进程的非插件组件（DESIGN §T），这里的规则同样适用于它们；WebUI 提供静态文件，也可带 Go 进程；静态发布遵守第 9 节与 CONTRACTS §7.5，进程部分沿用相应的 SDK 规则。行为的权威是 [CONTRACTS](../spec/CONTRACTS-v0.1.md)，本文只列规则并指向对应条款，两者冲突时以契约为准。
 更新时机：契约中影响插件作者的条款变化、SDK 新增按需包或依赖政策变化时。
 
-SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未全部实现；实际进度见 [spec/README.md](../spec/README.md)。
+## 从第一个命令开始
+
+在 AlonaBot 源码仓库中创建插件，可以直接复用仓库的 SDK module。准备 Go 后，在仓库根目录执行：
+
+```fish
+go build -o bin/alonabot ./cmd/alonabot
+bin/alonabot init ./alonabot-plugin-hello
+bin/alonabot check ./alonabot-plugin-hello
+bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
+```
+
+在同一个终端输入 `/hello`，预期回复 `Hello!`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 与 `i18n/` 提供配置及文案。发布前填写自己的来源仓库。
+
+```fish
+bin/alonabot test ./alonabot-plugin-hello
+bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot-plugin-hello/bin
+```
+
+`test` 执行离线准备检查；消息与生命周期的集成验证使用[插件测试套件](development.md#插件测试)。打包 target 换成实际支持的平台，签名与分发见[发布](#9-发布)。
+
+独立仓库中先建立自己的 Go module。正式 CLI 会写入对应 SDK 版本并整理依赖；当前源码构建的开发版需按提示选定可访问的 SDK 版本。详细说明见[开发运行](development.md#开发运行与热部署)。现成的[示例工程](../examples/plugins)可直接运行。
 
 ## 1. 运行模型与内存
 
 - 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
-- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 TEST-MATRIX V-74（D-184）。
-- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。S-02.1 已接通 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒；S-02.2 已接通自动空闲退出与即时休眠策略，S-03.1 已接通正常休眠插件的静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
+- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 [发布说明](release-notes/v0.1.0.md#资源与依赖)。
+- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。支持 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒、自动空闲退出、即时休眠策略，以及静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
 
@@ -23,7 +43,7 @@ SDK 仍在实施中，文中的包、配置项与命令以契约为准，尚未�
 
 ## 3. 存储
 
-- 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。没有特别需要时用 `sqlitedb`：它比 GORM 少约 1.5 MiB 常驻内存。
+- 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。只需 SQL 时优先 `sqlitedb`，可以减少 GORM 的链接与初始化开销；现有实测条件见[发布说明](release-notes/v0.1.0.md#资源与依赖)。
 - 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
 - 同代次 `RESUME` 复用原 generation、配置与业务 DB，SELF/VERSIONED 数据库迁移回调跳过，原迁移模式与账本保持；首次激活、更新与回退仍按迁移规则执行。配置继续执行 `OnConfigLoad`、补值/校正与 required 校验，完整结果须与原快照一致（CONTRACTS §4.5）。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。

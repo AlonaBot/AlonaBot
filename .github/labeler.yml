@@ -1,7 +1,7 @@
 # 按实际模块路径同步 PR 的 area 标签；一个 PR 可以涉及多个区域。
 "area: docs":
   - changed-files:
-      - any-glob-to-any-file: ["*.md", "docs/**", "spec/**", ".agents/**"]
+      - any-glob-to-any-file: ["*.md", "docs/**", "spec/**"]
 "area: contracts":
   - changed-files:
       - any-glob-to-any-file: ["contracts/**"]
