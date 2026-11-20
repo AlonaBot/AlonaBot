@@ -966,7 +966,7 @@ management 核对 DB 1→41→99、五条 committed Journal、restart/reload/upd
 | V-81 / 两组各100冷启动、CPU及休眠树 | **通过（继承已接受分项）**。echo/configdb_gorm各100成功/0失败，P50/P95/P99保留原表；echo P95=5.367619ms，configdb P95=9.001459ms。原三轮ACTIVE/SUSPENDED、CPU、休眠旧树归零及固定冷却/唤醒计数沿S-06.2有效记录。 | 固定a027同机 `gn09-linux` 200次与 `gn{10,11,12}-linux` 原始数据；本轮**未重跑**。新候选未新增冷启动、频繁唤醒资源或压力采样，按维护者指示收口。 |
 | V-81 / 频繁唤醒与固定冷却 | **功能分项通过；独立压测未运行并按D-184取消新增**。唯一恢复、唤醒/失败/丢弃计数沿本轮主路径与故障用例，固定冷却触发/保持/截止与历史回收沿PR249；未取得独立频繁唤醒压测的CPU/分布数据。 | 本轮 `TestSleepMetrics`、`TestSleepMetricsFailures/Stopping`；继承 `TestIdleDecisionLocal`、`TestIdleColdStartSequenceLocal`，来源及原命令见S-02.2；资源工作已按维护者指示停止。 |
 | V-74、V-81 / 最终资源开销 | **维护者接受（D-184）**。8b三轮中位数Core26.61328125/echo10.09375/configdb GORM16.21875MiB；旧24/10/16比较FAIL和全部历史结果保留。V-33取消新增四负载/NoneBot2比较，goal48只归档。 | 本文“S-06.2 最新资源实测与 D-184 接受决定”及原15对象raw/父独立核算；本轮**未测量**。 |
-| 真实外部平台与其他目标运行环境 | **未运行（本轮）**。当前真实Telegram/外部Provider凭据缺口保留，CLI其他既有未运行分项沿对应V行；五平台实际运行与100次启停由47承接。 | 本轮仅darwin/arm64、回环Adapter和本地HTTP；Linux/runner及最终CI由父负责，Windows/Billing保持用户安排。 |
+| 真实外部平台与其他目标运行环境 | **未运行（本轮）**。当前真实Telegram/外部Provider凭据缺口保留，CLI其他既有未运行分项沿对应V行；五平台实际运行与100次启停由47承接。 | 本轮仅darwin/arm64、回环Adapter和本地HTTP；Linux/runner及最终CI由父负责，Windows留最后。2026-11-19 Actions Billing故障现已恢复，模板SDK认证缺口见T-10.4。 |
 
 GN46-11已完成合并输入的必要功能联验，执行者未操作Linux/runner。GN12～15及父systemd/launchd、真实日志卷写满、浏览器有效证据保留；46独立增量审查已完成，待最终head CI与合并。
 
@@ -1206,11 +1206,13 @@ $evidence/release-check --candidate $evidence/dist --version 0.1.0 \
 
 实际入口为 `platform --alonabot <Core> --packages <packages> --scenarios <checkout>/scripts/scenarios --cgo <build.json> --out <result.json> --environment <native|container|emulation|vm> --host <实际环境>`，Rosetta通过`arch -x86_64`启动。原命令、会话、104日志/29DB/七平台产物及库存位于goal47的`goal-47/evidence/GN47-13/`各环境目录；Linux完整归档572610432B已回收并完整还原/核算通过，见`linux-amd64-control/archive-recovery-terminal.json`。原失败与旧候选全仓race分别保持原身份；509静态门槛、四环境GORM业务均已通过，最终head CI仍由父核对。
 
+**GN49-06 本地最终门槛。** 固定`a21fe48c`，darwin/arm64、既有Go1.27.1、GOPROXY=off。全部tracked Go的`gofmt -l`无输出；`go vet ./scripts/release-check`、Windows交叉vet、五目标`CGO_ENABLED=0 go build -o <各目标文件> ./scripts/release-check`均exit0。`CGO_ENABLED=1 go test -race -count=1 -json ./scripts/release-check -skip '^(TestPrepareRuntimeLocal|TestRuntimeLifecycleLocal|TestOfficialPackLocal)$'`包25.039s通过，六项主测试/28子项、失败0/跳过0，覆盖签名/平台/资源/归档拒绝、独立CLI、参数与两项完整错误回归；三个排除入口分别是已接受资产准备、实际安装链与正式pack，沿用GN03/FIX的未变输入。产品与实际46main的源码/依赖/前端/构建部署差异为空，检查器自2a3bbaf8亦无变化，原产品门槛与GN03实际资产业务结果直接复用；本轮未重跑全仓产品race/资产矩阵。完整12命令、环境、原JSON和各目标日志见goal49的`goal-49/evidence/GN49-06/{gates.json,summary.json}`；当前49最终head CI仍待父协调推送后核对。
+
 **模板兼容补丁。** 官方模板仓库已公开。goal49在只读固定`10518a97`副本形成四文件patch：README、ci.yml、release.yml与scripts/release.sh。CLI先`go mod download github.com/AlonaBot/AlonaBot`，再`go -C "$(go list -m -f '{{.Dir}}' github.com/AlonaBot/AlonaBot)" install ./cmd/alonabot`，沿用GOBIN/PATH；check/test使用位置参数，release.sh一次重复五个`--target`、固定同tag的`--asset-base`并生成共享release.json，去旧五轮搬运与jq合并。当前workflow发布未签名包。
 
-本地Go1.27.3/文件代理以确切648源码作为候选SDK，独立modulecache，bash与fish安装均通过且CLI保留获批GORM fork；模板`check .`、`go vet ./...`、现有`go test ./...`（包0.978s）、`test .`及一次五目标pack全部exit0，归档大小/摘要/平台/manifest/资源/同tag URL与notes核对通过。错误tag/source先拒绝且保留原dist；YAML、bash语法及原只读模板的`git apply --check`通过。patch、真实命令/日志与summary位于goal49的`goal-49/evidence/GN49-05/`。首个本地缓存放于worktree内导致Go继承外层Git版本的取证断言失败原样保留；移到源码外缓存后核对下载模块身份和源码字节通过。模板实际go.mod仍指旧伪版本，正式SDK tag到达后由父更新模板依赖并核该版本CI；本轮兼容patch由父独立模板worktree/PR接入。
+本地Go1.27.3/文件代理以确切648源码作为候选SDK，独立modulecache，bash与fish安装均通过且CLI保留获批GORM fork；模板`check .`、`go vet ./...`、现有`go test ./...`（包0.978s）、`test .`及一次五目标pack全部exit0，归档大小/摘要/平台/manifest/资源/同tag URL与notes核对通过。错误tag/source先拒绝且保留原dist；YAML、bash语法及原只读模板的`git apply --check`通过。patch、真实命令/日志与summary位于goal49的`goal-49/evidence/GN49-05/`。首个本地缓存放于worktree内导致Go继承外层Git版本的取证断言失败原样保留；移到源码外缓存后核对下载模块身份和源码字节通过。父已在独立模板worktree实际应用兼容patch，并创建[模板PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3)，候选head为`e8f4ae7`，SDK固定真实已合46main的`v0.0.0-20261120071651-46c35d0eebcb`。父记录实际网络下载、同模块安装CLI、check/vet/现有集成/test/bash语法均通过；仅SDK版本变化，无新增依赖，沿用本轮五目标pack与两shell验证。2026-11-20该head的hosted CI `44694601377` 已分配GitHub Actions runner并实际执行setup-go；2026-11-19的Billing故障已恢复。当前失败为下载私有主仓库SDK时`ALONABOT_SDK_TOKEN`为空，原错`fatal: could not read Username ... terminal prompts disabled`保留。维护者需配置既有只读SDK secret或正式公开主仓库，再完成该候选CI；正式SDK tag在正式发行前替换。
 
-**当前待办。** 最终47/48实际main到达后一次普通整合祖先/状态，核产品源差异并只补Windows受影响发行资产；Windows实机/CGO、真实Telegram/Provider凭据、Actions Billing和正式SDK tag/模板CI保持未运行。D-184接受资源现值26.61328125/10.09375/16.21875MiB，保留旧预算FAIL；V-33取消新增四负载与NoneBot2采样。T-10.3已审`27cad6`资源文档待父整合，合入后发布说明主要链接`docs/benchmarks.md`，矩阵保留历史原始来源。正式签名/tag/Release/镜像推送由维护者执行。
+**当前待办。** 最终47/48实际main到达后一次普通整合祖先/状态，核产品源差异并只补Windows受影响发行资产；Windows实机/CGO、真实Telegram/Provider凭据保持未运行；模板候选PR#3的GitHub CI因私有SDK下载缺少既有只读凭据失败，待维护者配置secret或正式公开主仓库后验证。Actions Billing已恢复，正式SDK tag待维护者发行前替换。D-184接受资源现值26.61328125/10.09375/16.21875MiB，保留旧预算FAIL；V-33取消新增四负载与NoneBot2采样。T-10.3已审`27cad6`资源文档待父整合，合入后发布说明主要链接`docs/benchmarks.md`，矩阵保留历史原始来源。正式签名/tag/Release/镜像推送由维护者执行。
 
 ## 4. 实施交接
 
@@ -1218,4 +1220,4 @@ $evidence/release-check --candidate $evidence/dist --version 0.1.0 \
 2. goal49交付`scripts/release-check`及README/首发说明、V28/V41发布复验；648五目标静态、源码外宿主安装更新链与归档/双镜像业务通过，详见本文T-10.4。候选、测试签名和原错误保持各自身份，独立审查、最终head CI、推送/PR及合并由父协调。
 3. goal47最终509459四环境各1082步/104runs、GORM双传输、实际CGO fixture及完整本地库存已接收；Windows实际/CGO留最后，Windows发行物须纳入进程组修复补建。最终47/48 main祖先与状态在父提供固定输入后一次整合，未变产品沿用有效结果。
 4. D-184接受现有资源开销，历史预算FAIL与原始数据保留，停止新增资源/冷启动/压力/基准/优化；goal48归档现有结果。真实Telegram/Provider凭据和其他外部平台缺口继续按逐行记录承接；D171后置组件/业务分项随对应版本。
-5. 模板四调用面兼容patch已本地验证，由父在独立模板worktree应用并交付PR；正式SDK tag到达后更新同版本依赖并核模板CI。维护者持有正式私钥，负责最终签名、公开Release与GHCR镜像推送；Actions Billing按维护者安排留最后。
+5. 模板四调用面兼容patch已由父应用并交付模板PR#3（候选e8f4ae7），SDK固定真实46main候选，网络下载与本地功能通过；hosted CI44694601377实际执行后因私有SDK认证失败，待维护者配置既有只读SDK secret或正式公开主仓库；2026-11-19 Billing故障已恢复。正式SDK tag由维护者发行前替换；维护者持有正式私钥，负责最终签名、公开Release与GHCR镜像推送。
