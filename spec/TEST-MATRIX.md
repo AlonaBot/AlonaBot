@@ -895,7 +895,7 @@ G75-08 的「完整 CI 未运行」保留为该次记录。后续固定最终 PR
 
 ### 3.4 发布前跨组件证据汇总
 
-当前 goal-46 候选基于 main `cb5acc79`；以下是 2026-11-20 在 darwin/arm64 上实际执行的增量证据。历史分项保留；完整逐 V 汇总随本切片后续任务更新。临时程序和 SDK 绑定回归按 D-86 保存在本地 `*_local_test.go`，源、正式包与完整日志保存在本地 `goal-46/evidence/`，PR 记录可复查位置。
+当前 goal-46 已普通合入 main `34472fd5`（PR #277）；相对已审固定产品 `648d3d38` 的 Go、模块与 WebUI 输入保持一致，仅同步实际祖先及文档状态。PR #277 最终 `306b7b0e` 的 Quality 44682185996 attempt 2 已通过全仓 race（1191s）及五目标构建（222s），先前磁盘写满失败保留；main Quality 44688639778 由审查者确认。以下是 2026-11-20 在 darwin/arm64 上实际执行的增量证据。历史分项保留；完整逐 V 汇总随本切片后续任务更新。临时程序和 SDK 绑定回归按 D-86 保存在本地 `*_local_test.go`，源、正式包与完整日志保存在本地 `goal-46/evidence/`，PR 记录可复查位置。
 
 | 分项 | 实际入口与命令 | 结果与具体观察 |
 | --- | --- | --- |
@@ -1322,7 +1322,9 @@ Linux 最终增量在父明确分配的 2026-11-20 06:33:35–07:03:35 UTC 独�
 
 GN47-13A 本地完整库存通过：`linux-amd64-control/restore_archive.py` 退出 0，原归档还原至 `GN47-13/linux-amd64-remote-full/`。本地副本的三条绝对 Core 链接重定位到同归档 Core，三个 checkpoint FIFO 原样还原；原始链接及本地映射记录于 `local-extraction-relocation.json`，原归档与 JSON 保持。两轮 session、最终 result/远端 audit、run01 的 build-core 原错及 process-release 凭据逐字节相等；原 `audit_evidence.py` 完整运行退出 0，再次核对 104 非空日志、七 ELF、10 状态库/19 业务库、52/136/16 events、CGO 原字段与归档字节及 GORM TCP/stdio 全部断言。解出树内 `evidence-audit.remote.json` 保留远端原记录，`evidence-audit.json` 为本地完整库存结果；原始失败与全部数据均可从本地直接消费，命令及日志见 `restore-archive01.*`、`local-audit.*`。
 
-**待执行项：** Windows 真实运行/CGO 与 Actions billing 继续留最后，最终 main 文档/祖先整合由父协调，push/PR/CI 按父指令暂缓。旧 GN10 本地完整库存已通过，见本节该候选的原始证据与回收记录。WebUI 前端改动复用父实际浏览器验收；本轮未新增资源测量或性能优化。
+GN47-12A 已正常 merge 实际 goal46 main `46c35d0eebcb1a8ac698578189df9b251952d2de`（PR #278）。该 main 相对固定父输入 `648d3d38` 仅更新四份文档，合并后相对实际构建候选 `5094592d` 的产品 Go、SDK、模块、WebUI、平台程序和场景源码保持一致；全部四环境产品证据按原候选身份复用。父已接受 GN47-13 与完整 raw 库存，并解除 push/PR/CI 暂缓，授权普通推送、创建草稿后转 ready 触发当前 head CI，CI 与最终合并由父统筹。
+
+**待执行项：** Windows 真实运行/CGO 与 Actions billing 继续留最后，goal47 尚未完成五平台全部验收。父独立终审及当前 head CI 继续按交付记录核对；旧 GN10 本地完整库存已通过，见本节该候选的原始证据与回收记录。WebUI 前端改动复用父实际浏览器验收；本轮未新增资源测量或性能优化。
 
 ## 4. 实施交接
 
