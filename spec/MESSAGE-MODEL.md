@@ -1,6 +1,6 @@
 # AlonaBot v0.1 事件与消息契约
 
-版本：v0.6-review · 2026-10-21。状态：**现行消息契约**。本文件补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §2/§8 和 [WIRE-FORMAT.md](WIRE-FORMAT.md)。实际平台验证范围见[发布说明](../docs/release-notes/v0.1.0.md)。
+版本：v0.6-review · 2026-10-21。状态：**现行消息契约**。本文件补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §2/§8 和 [WIRE-FORMAT.md](WIRE-FORMAT.md)。实际平台验证范围见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 ## 1. Event、Actor 与 Target
 

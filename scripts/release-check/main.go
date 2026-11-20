@@ -23,7 +23,6 @@ import (
 
 const (
 	defaultPlatforms = "linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64"
-	defaultAssetBase = "https://github.com/AlonaBot/AlonaBot/releases/download/v"
 	resultFile       = "result.json"
 	directoryMode    = 0o700
 	fileMode         = 0o600
@@ -206,9 +205,6 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 		return err
 	}
 	r.Publisher = release.KeyID(public)
-	if opt.assetBase == "" {
-		opt.assetBase = defaultAssetBase + opt.version
-	}
 	opt.assetBase = strings.TrimRight(opt.assetBase, "/")
 	if err := verifyAssets(opt, public, &r); err != nil {
 		return err

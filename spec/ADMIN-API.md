@@ -644,7 +644,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 | Method / path | 成功响应 | 语义 |
 | --- | --- | --- |
 | `GET /api/v1/packages/{id}/changelog` | `{"locale":"en-US","entries":[{"version":"1.2.1","date":"2026-11-17","markdown":"…"}]}` | 当前已安装版本包中的 changelog（D-166）。单文件按围栏代码块之外的 `## [版本] - 日期` 或 `## [版本]` 切分，版本须为 SemVer，省略 `[Unreleased]`；`locale` 为 `en-US`。目录形式逐版本选择语言，`locale` 为最新条目所用文件的标签，条目省略 `date` |
-| `GET /api/v1/core/changelog` | 同上 | 读取编进可执行文件的根 `CHANGELOG.md`，按单文件规则返回 |
+| `GET /api/v1/core/changelog` | 同上 | 读取从 `changelog/unreleased/en.md` 编进可执行文件的日志，按单文件规则返回 |
 
 条目按 SemVer 倒序，`markdown` 保留原文（单文件只返回节正文），日期缺省时省略 `date`。无发布条目时返回 `locale: "en-US"` 与 `entries: []`。
 
@@ -718,7 +718,7 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 ## 25. 官方 WebUI 后台
 
-以下路由由 `web/admin` 的 `New() *sdk.Plugin` 登记，公开前缀为 `/plugins/alonabot-webui-admin`；沿用管理会话，非 GET 校验 CSRF，响应带 `Cache-Control: no-store`。数据保存在 WebUI 自身受管 SQLite。Core 的组件、权限、日志、存储与会话数据继续通过前述 `/api/v1/` 接口操作。
+以下路由由 独立仓库 `alonabot-webui` 的 `New() *sdk.Plugin` 登记，公开前缀为 `/plugins/alonabot-webui-admin`；沿用管理会话，非 GET 校验 CSRF，响应带 `Cache-Control: no-store`。数据保存在 WebUI 自身受管 SQLite。Core 的组件、权限、日志、存储与会话数据继续通过前述 `/api/v1/` 接口操作。
 
 | Method / path（相对于公开前缀） | 请求或成功响应 | 语义 |
 | --- | --- | --- |
@@ -735,7 +735,7 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 每次商店或 Release 查询先刷新；源缓存按小写 source 隔离，Release 缓存按小写 repo 隔离。刷新失败而有成功缓存时，返回 `stale: true`、原 `fetched_at` 与完整 `error`；无缓存的一般失败返回 500 / `INTERNAL` 与实际错误。`/updates` 的 latest 404 总是返回 404 / `NO_RELEASE`；前端 `getLatestRelease(repo: string): Promise<LatestRelease | null>` 将其映射为 null。源 index.json 的 404 在无可用缓存时返回 404 / `SOURCE_INDEX_MISSING`。界面在对应商店或更新位置显示本地化短提示与缓存时间，API 客户端保留完整错误响应。
 
-远端请求的初始 URL 与每跳重定向均校验 HTTPS、主机与路径；只接受规定的 GitHub API、Release 下载及 Release CDN 资产路径，初始资产下载绑定索引声明的组件仓库。抓取与解包使用下列 `web/admin/store.go` 组件内安全常量（CONTRACTS §16）：
+远端请求的初始 URL 与每跳重定向均校验 HTTPS、主机与路径；只接受规定的 GitHub API、Release 下载及 Release CDN 资产路径，初始资产下载绑定索引声明的组件仓库。抓取与解包使用下列 `alonabot-webui/store.go` 组件内安全常量（CONTRACTS §16）：
 
 | 常量 | 值 | 作用 |
 | --- | --- | --- |

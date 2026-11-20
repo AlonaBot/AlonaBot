@@ -1,7 +1,7 @@
 # AlonaBot v0.1 RPC Wire Format
 
 版本：v0.6-review · 2026-10-21。状态：**现行传输协议**。
-权威范围：补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §1/§3/§12；消息载荷见 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。产品版本 v0.1 与传输协议版本 **1.0** 分开。协议源文件在 `contracts/proto/`，生成类型在 `contracts/pb/`，实际平台验证范围见[发布说明](../docs/release-notes/v0.1.0.md)。
+权威范围：补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §1/§3/§12；消息载荷见 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。产品版本 v0.1 与传输协议版本 **1.0** 分开。协议源文件在 `contracts/proto/`，生成类型在 `contracts/pb/`，实际平台验证范围见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 身份字段中的组件 ID 原样使用 CONTRACTS §9.1 的拼写（D-172），例如 HELLO 的 `plugin_id` 与 Envelope 的 `source_plugin_id` 为 `alonabot-plugin-configdb`，Service 目标为 `alonabot-plugin-configdb/<服务名>`；Adapter 包身份如 `alonabot-adapter-telegram`，其平台 `adapter_id` 仍为 `telegram`。本次只改变 ID 字符串的值，字段号、枚举值与 schema 版本保持不变。
 

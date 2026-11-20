@@ -82,7 +82,7 @@ func startRuntime(ctx context.Context, binary, cwd, data, evidence string) (*run
 					activated[event.PluginID] = true
 				}
 				// HTTP 开始监听先于预装激活；等两端正式握手后读取初始快照。
-				if !announced && started && activated["alonabot-plugin-help-official"] && activated["alonabot-webui-admin"] {
+				if !announced && started && activated["alonabot-webui-admin"] {
 					ready <- address
 					announced = true
 				}

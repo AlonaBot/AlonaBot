@@ -22,29 +22,28 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
+	"github.com/AlonaBot/AlonaBot/internal/releasenotes"
 )
 
 const (
 	defaultPlatforms  = "linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64"
-	defaultAssetBase  = "https://github.com/AlonaBot/AlonaBot/releases/download/v"
 	officialKeySymbol = "github.com/AlonaBot/AlonaBot/internal/core/trust.officialKey"
 	versionSymbol     = "github.com/AlonaBot/AlonaBot/internal/app.releaseVersion"
 	fileMode          = 0o644
 	directoryMode     = 0o755
 )
 
-const webuiDir = "web/admin"
+const webuiDir = "webui"
 
 type component struct {
 	dir, id string
 }
 
 var components = []component{
-	{"adapters/telegram", "alonabot-adapter-telegram"},
 	{"agent", "alonabot-agent-official"},
 	{webuiDir, "alonabot-webui-admin"},
-	{"plugins/help", "alonabot-plugin-help-official"},
 }
 
 type options struct {
@@ -76,14 +75,13 @@ func run(ctx context.Context, args []string) (err error) {
 	if strings.ContainsAny(opt.version, "/\\\x00 \t\n") || opt.version == "." || opt.version == ".." {
 		return errors.New("version must be a single path component")
 	}
-	if opt.assetBase == "" {
-		opt.assetBase = defaultAssetBase + opt.version
+	if opt.assetBase != "" {
+		base, err := url.Parse(opt.assetBase)
+		if err != nil || base.Scheme != "https" || base.Host == "" || base.RawQuery != "" || base.Fragment != "" {
+			return errors.New("--asset-base must be an absolute https URL without a query or fragment")
+		}
+		opt.assetBase = strings.TrimRight(opt.assetBase, "/")
 	}
-	base, err := url.Parse(opt.assetBase)
-	if err != nil || base.Scheme != "https" || base.Host == "" || base.RawQuery != "" || base.Fragment != "" {
-		return errors.New("--asset-base must be an absolute https URL without a query or fragment")
-	}
-	opt.assetBase = strings.TrimRight(opt.assetBase, "/")
 	targets := strings.Split(opt.platforms, ",")
 	slices.Sort(targets)
 	for i, target := range targets {
@@ -122,11 +120,36 @@ func run(ctx context.Context, args []string) (err error) {
 	if err := buildCore(ctx, host, runtime.GOOS, runtime.GOARCH, opt.version, public); err != nil {
 		return err
 	}
-	// WebUI 在暂存副本中安装依赖并构建，不改动工作区的 node_modules 与 dist。
-	webui := filepath.Join(staging, "project", webuiDir)
-	if err := stageWebUI(".", filepath.Join(staging, "project")); err != nil {
+	// 每个独立仓库按发行锁取源码；暂存副本承载 npm 产物与打包过程。
+	rawLock, err := os.ReadFile("components.lock.json")
+	if err != nil {
 		return err
 	}
+	var lock map[string]struct{ Module, Version string }
+	if err := json.Unmarshal(rawLock, &lock); err != nil {
+		return err
+	}
+	sources := make(map[string]string)
+	for _, component := range components {
+		source := lock[component.dir]
+		if source.Module == "" || source.Version == "" {
+			return fmt.Errorf("missing component lock for %s", component.dir)
+		}
+		output, err := command(ctx, ".", nil, "go", "mod", "download", "-json", source.Module+"@"+source.Version)
+		if err != nil {
+			return err
+		}
+		var downloaded struct{ Dir string }
+		if err := json.Unmarshal(output, &downloaded); err != nil {
+			return err
+		}
+		destination := filepath.Join(staging, "project", component.dir)
+		if err := copyProject(downloaded.Dir, destination); err != nil {
+			return err
+		}
+		sources[component.dir] = destination
+	}
+	webui := sources[webuiDir]
 	if _, err := command(ctx, webui, nil, "npm", "ci"); err != nil {
 		return err
 	}
@@ -150,9 +173,7 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	// 3. 每个组件只调用一次多平台 pack，再签名并将同一清单复制到各平台目录。
 	for _, component := range components {
-		if component.dir == webuiDir {
-			component.dir = webui
-		}
+		component.dir = sources[component.dir]
 		if err := packComponent(ctx, opt, component, host, staging, out, targets, roots, key); err != nil {
 			return fmt.Errorf("pack %s: %w", component.id, err)
 		}
@@ -181,7 +202,21 @@ func run(ctx context.Context, args []string) (err error) {
 	if err != nil {
 		return fmt.Errorf("read install script: %w", err)
 	}
-	return os.WriteFile(filepath.Join(out, "install.sh"), installer, fileMode)
+	if err := os.WriteFile(filepath.Join(out, "install.sh"), installer, fileMode); err != nil {
+		return err
+	}
+	compose, err := os.ReadFile("docker-compose.yml")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(out, "docker-compose.yml"), compose, fileMode); err != nil {
+		return err
+	}
+	notes, err := releasenotes.Render("changelog", "v"+opt.version)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(out, "release-notes.md"), notes, fileMode)
 }
 
 func buildCore(ctx context.Context, output, goos, goarch, version string, public ed25519.PublicKey) error {
@@ -211,7 +246,19 @@ func command(ctx context.Context, dir string, env []string, name string, args ..
 
 func packComponent(ctx context.Context, opt options, component component, host, staging, out string, targets []string, roots map[string]string, key ed25519.PrivateKey) error {
 	directory := filepath.Join(staging, "packed", component.id)
-	args := []string{"pack", component.dir, "--asset-base", opt.assetBase, "--out", directory}
+	assetBase := opt.assetBase
+	if assetBase == "" {
+		raw, err := os.ReadFile(filepath.Join(component.dir, "plugin.yaml"))
+		if err != nil {
+			return err
+		}
+		project, err := manifest.ParseProject(raw)
+		if err != nil {
+			return err
+		}
+		assetBase = "https://" + strings.TrimPrefix(project.Manifest.Source, "https://") + "/releases/download/v" + project.Manifest.Version
+	}
+	args := []string{"pack", component.dir, "--asset-base", assetBase, "--out", directory}
 	for _, target := range targets {
 		args = append(args, "--target", target)
 	}
@@ -293,26 +340,8 @@ func archiveDigest(path string) (digestBytes []byte, err error) {
 	return digest.Sum(nil), nil
 }
 
-// stageWebUI 保留根 module 的导入路径，让暂存的 WebUI 进程复用同一份 SDK 与协议。
-func stageWebUI(root, staging string) error {
-	if err := os.MkdirAll(staging, directoryMode); err != nil {
-		return err
-	}
-	for _, name := range []string{"go.mod", "go.sum"} {
-		if err := copyFile(filepath.Join(root, name), filepath.Join(staging, name), fileMode); err != nil {
-			return err
-		}
-	}
-	for _, name := range []string{"sdk", "contracts", "internal", webuiDir} {
-		if err := copyWebUI(filepath.Join(root, name), filepath.Join(staging, name)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// copyWebUI 复制 WebUI 工程到暂存目录，跳过已安装的依赖与旧的构建产物。
-func copyWebUI(from, to string) error {
+// copyProject 复制独立组件源码到暂存目录，跳过依赖与旧的构建产物。
+func copyProject(from, to string) error {
 	return filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

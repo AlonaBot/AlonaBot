@@ -7,7 +7,7 @@
 
 ## 模块与职责
 
-单 Go module `github.com/AlonaBot/AlonaBot`；内部按职责分包，不拆 module。
+Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用独立仓库与 module；`tests/` 隔离跨组件测试依赖，`components.lock.json` 固定整合发行源码。
 
 | 模块（路径） | 负责 | 不负责 |
 | --- | --- | --- |
@@ -23,15 +23,15 @@
 | `internal/generate/` | 构建期与测试期的扫描器：扫描入口包、检查资源与注册入口，生成经 overlay 编入的资源登记与正式入口；CLI 构建与 plugintest 的现场扫描共用（D-145） | 运行时资源读取（归 SDK）、写作者目录 |
 | `internal/generated/` | 组件资源登记表：按入口包导入路径登记、按对象绑定与查找 manifest 原文、配置与实例 Schema、Service Schema、i18n 与 Handler 参数名，并记录插件对象的入口包（D-145） | 扫描与生成（归 `internal/generate`） |
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口（D-32）：只有 CONTRACTS §15.5 的库模式接口，每个都是对 `internal/app` 的薄包装（D-148） | Core 装配、开发 CLI 专用能力（归 `internal/app`）、业务逻辑 |
-| `plugins/help/` | 首发预装插件（D-171），提供 `/help` 与 `/whoami`，只经 SDK 与 Core 通信 | 命令目录与权限判断（归 Core） |
-| `agent/` | 官方 Agent 组件（`role: agent`，D-27、D-59～D-61）：对话循环、Provider、工具与 MCP、记忆、技能、定时任务与 `llm.generate`；只经 SDK 与 Core 通信，可被社区 Agent 替换 | Core 的工具策略、确认与会话存储（归 Core） |
-| `adapters/telegram/` | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） |
-| `adapters/onebot11/` | 官方 OneBot 11 Adapter 程序：正向与反向（D-94，经 Core 统一端口）WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务（D-46） | Core 策略、命令路由与按钮 token（归 Core） |
+| [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) | 按需安装的官方插件，提供 `/help` 与 `/whoami`，只经 SDK 与 Core 通信 | 命令目录与权限判断（归 Core） |
+| [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | 官方 Agent 组件（`role: agent`，D-27、D-59～D-61）：对话循环、Provider、工具与 MCP、记忆、技能、定时任务与 `llm.generate`；只经 SDK 与 Core 通信，可被社区 Agent 替换 | Core 的工具策略、确认与会话存储（归 Core） |
+| [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射（D-26） | Core 策略、命令路由、游标持久化与按钮 token（归 Core） |
+| [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | 官方 OneBot 11 Adapter 程序：正向与反向（D-94，经 Core 统一端口）WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务（D-46） | Core 策略、命令路由与按钮 token（归 Core） |
 | `plugintest/` | 插件测试套件（D-47）：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 |
-| `web/admin/` | 官方 WebUI 组件（`role: webui`，D-62、D-162）：Vite + TypeScript + React 19 管理界面及 Go 后台进程；进程与同一份 `dist` 按平台同包发行 | Core 管理数据的所有权与写入规则（经 Admin API 操作，CONTRACTS §7.5） |
-| `Dockerfile`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） |
+| [alonabot-webui](https://github.com/AlonaBot/alonabot-webui) | 官方 WebUI 组件（`role: webui`，D-62、D-162）：Vite + TypeScript + React 19 管理界面及 Go 后台进程；进程与同一份 `dist` 按平台同包发行 | Core 管理数据的所有权与写入规则（经 Admin API 操作，CONTRACTS §7.5） |
+| `Dockerfile`、`docker-compose.yml`、`deploy/` | 官方容器镜像、compose 整合包入口与 `install.sh`（CONTRACTS §15.3、§15.6，D-64） | Core 行为（镜像与脚本只安装发行归档的内容） |
 | `spec/` | 现行行为契约、协议与技术设计 | — |
 
 生命周期所有者为每个 Core 唯一的 `supervisor.Waker`，由 `internal/app` 通过 `WakeOptions{Store, Global, QueueRequests, QueueBytes, Start}` 创建并注入 `supervisor.Spec.Waker`。`EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error)` 合并启动、管理三种等待预算并返回活动释放函数；`Ready(running *Running)` 在 ACTIVATED、摘要核对及 Router、Bus、HTTP、Scheduler 全部绑定后开放交付。`AcquireActivity(pluginID string, session *wire.Session) (func(), error)` 只取得当前 Session 引用，幂等释放始终归属原 Session。`Running.StopIdle(t0 time.Time, lastActivityAt time.Time) host.StopResult` 在逐插件锁与 Waker 活动门禁内复核管理状态、Session、Ready、零引用与实际活动结束时刻，变化时返回 Cancelled；进入 QUIESCING 后冻结新派发，新请求等待旧树退出、SUSPENDED 与下一次 Ready。wire 的 `Options.RequestActivity func(*wire.Inbound) (func(), *pb.ErrorInfo)` 经 host.ActivateOptions、supervisor.Prepare 同步接入 Waker，与 Session 在途登记共用临界区；正常 WaitIdle 覆盖整个准入区间。
@@ -60,7 +60,7 @@ S-06.1 的 `manage.Options.SleepPolicy` 由 app 注入只读策略：复用 `idl
 
 `internal/core/diagnostics` 负责诊断数据收集、脱敏与 zip 写入（CONTRACTS §14.7）。`internal/core/manage` 的诊断端点与 `cmd/alonabot` 的 `diagnose` 共用 `Write(ctx context.Context, w io.Writer, src Source, opts Options) error`。`Running` 复用当前 `state.Store`、运行状态与 schema 回调；`Directory` 对已有 `core.lock` 的只读句柄用 `x/sys` 取得与 Core 相同的 flock / LockFileEx 独占锁，用现有 GORM/SQLite 只读查询主库及已有 WAL 的临时副本。诊断包复用 `state` 的记录类型、`contracts/configschema` 的迁移与秘密路径及 `internal/core/secret` 的引用格式；认证、HTTP 响应与 CLI 输出替换由各入口负责。
 
-组件 changelog（D-166）由 `internal/pluginkit` 在 `check`、`build`、`pack` 的资源扫描中校验，`pack` 保留文件原文；`internal/core/packages` 在安装包解压后复核。`internal/core/manage` 通过 `GET /api/v1/packages/{id}/changelog` 读取当前安装包，通过 `GET /api/v1/core/changelog` 读取由根 `CHANGELOG.md` 生成并编入 Core 的 `changelog_core.go`。
+组件 changelog（D-166）由 `internal/pluginkit` 在 `check`、`build`、`pack` 的资源扫描中校验，`pack` 保留文件原文；`internal/core/packages` 在安装包解压后复核。`internal/core/manage` 通过 `GET /api/v1/packages/{id}/changelog` 读取当前安装包，通过 `GET /api/v1/core/changelog` 读取由 `changelog/unreleased/en.md` 生成并编入 Core 的 `changelog_core.go`。
 
 `sdk/service.Builder.Effect` 随 REGISTER 上报工具类别；`sdk/tool.List` 通过 `Info.Effect` 读回声明类别，Agent 将 MCP 注解换算后的类别交给 `sdk/tool.Confirm`。`internal/core/tool` 合并声明、确认记录与策略覆盖；管理层批量写入时先持有 catalog 锁，再按组件 ID 顺序取锁，与安装替换使用同一锁层级。`Catalog.SetPolicy(ctx, rows ...state.ToolPolicy)` 调用 `Store.SetToolPolicy(ctx, rows ...ToolPolicy)`，由状态库在同一事务内保存或删除覆盖。
 
@@ -70,7 +70,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 
 `sdk/page` 属于 SDK：根包在收集 `.Page(title)` 时调用 `page.Handler()`，自动补齐页面同目录的 GET `kit.css` 与 `kit.js`，以公开静态资源模式 `sdk.AuthStatic` 提供，页面 HTML 与数据路由继续要求管理会话，优先保留作者已登记的同方法、同路径路由；插件也可手动挂载 `Handler()`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责（[ADMIN-API §7](spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。`examples/plugins/showcase` 演示页面声明与套件使用。
 
-`agent/pages.go` 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、记忆、用户任务及嵌入资源，接口见 [ADMIN-API §15.2](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
+[Agent pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、记忆、用户任务及嵌入资源，接口见 [ADMIN-API §15.2](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
 
 `sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 从 ctx 所属 Session 的 Plugin 读取当前有效覆盖集合并返回深拷贝，HTTP 与生命周期共用该所有者，同进程多个插件各自隔离；独立进程沿用默认 Session。数据复用 Bootstrap/通知的原子发布，Agent 将其与基础配置、`core.profile.list` 合并计算人格引用（D-182）。
 
@@ -100,16 +100,16 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
 | `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> internal/tune` | 装配；`run` 经 `internal/app` 复用库模式的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
 | `internal/app -> internal/core/...`、`-> sdk/...`、`-> contracts`、`-> internal/wire` | 在同一进程中装配 Core 与开发中的组件 |
-| `internal/app` 测试 `-> agent/...`（仅集成测试） | 通过官方 Agent 与本地 Provider 验证文本生成服务及选项来源 |
+| `tests/app` overlay 测试 `-> alonabot-agent/...`（仅集成测试） | 通过官方 Agent 与本地 Provider 验证文本生成服务及选项来源 |
 | `internal/app -> internal/inproc`、`sdk/... -> internal/inproc` | 库模式把同进程组件的启动参数从 `internal/app` 交给 SDK，SDK 在 init 中向它登记运行入口供 `internal/app` 调用；`internal` 保证外部模块无法构造这些参数 |
 | `cmd/alonabot -> internal/generate` | `init`/`check`/`build`/`pack` 复用扫描与登记代码生成器 |
 | `internal/pluginkit -> internal/generate`、`plugintest -> internal/generate`；`sdk`、`sdk/internal/registry`、`sdk/genimpl`、`internal/app`、`plugintest`、`internal/generate -> internal/generated`；本 module 的测试代码 `-> internal/generated`（D-145） | 生成器在内部包中，由 CLI 构建与 plugintest 的现场扫描共用；资源登记表只 import 标准库 |
 | `根包 -> internal/app`、`cmd/alonabot -> internal/app`；`internal/app -> internal/core/...`、`-> sdk/...`、`-> contracts`、`-> internal/inproc`、`-> internal/tune`（D-148） | 根包只保留库模式接口，装配与开发 CLI 专用能力在 `internal/app`；`cmd/alonabot` 不 import 根包 |
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> internal/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
-| `cmd/alonabot -> adapters/telegram/telegramtest`（仅集成测试）；`根包 -> adapters/telegram`、`-> adapters/telegram/telegramtest`、`-> internal/pluginkit`（仅 `*_local_test.go`） | Telegram 目录运行集成测试与本地故障矩阵复用官方 Adapter、Bot API 模拟服务和开发构建装配 |
-| `scripts/dist -> contracts/release`、`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
-| `web/admin -> sdk`、`-> sdk/message`、`-> sdk/sqlitedb`、`-> contracts/manifest`、`-> contracts/pluginindex`、`-> contracts/release` | 官方 WebUI 后台通过公共 SDK 观察事件、发送回执与管理会话路由，只读写自身受管 SQLite；契约包解析插件源、版本与发行清单，Core 管理数据由浏览器经 Admin API 操作 |
+| `tests/e2e -> alonabot-adapter-telegram/telegramtest`（仅集成测试） | Telegram 目录运行集成测试与本地故障矩阵复用官方 Adapter、Bot API 模拟服务和开发构建装配 |
+| `scripts/dist -> contracts/manifest`、`-> contracts/release`、`-> internal/releasenotes`；`scripts/release-notes -> internal/releasenotes`；`internal/releasenotes -> contracts/manifest`；`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
+| `alonabot-webui -> sdk`、`-> sdk/message`、`-> sdk/sqlitedb`、`-> contracts/manifest`、`-> contracts/pluginindex`、`-> contracts/release` | 官方 WebUI 后台通过公共 SDK 观察事件、发送回执与管理会话路由，只读写自身受管 SQLite；契约包解析插件源、版本与发行清单，Core 管理数据由浏览器经 Admin API 操作 |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
 | `plugins/... -> sdk/...`、`-> contracts`；`agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`agent/provider` 另用 openai-go 与 anthropic-sdk-go（D-132） |
@@ -123,7 +123,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | --- | --- |
 | `<data_dir>/core.lock`、`state.sqlite`（安装、组件角色与来源、代次配置快照与校正记录、Journal、策略、secret 引用、工具策略、Agent 会话、按钮 token 映射 `button_token`、配置文件与指定及覆盖） | `internal/core` |
 | WebUI 组件、组件图标与配置示例图片（不可变包目录） | `internal/core` 只读提供；内容归组件发布者 |
-| 官方 WebUI 的主题、语言与侧栏偏好（按源保存于 `localStorage`） | `web/admin` 的浏览器端 |
+| 官方 WebUI 的主题、语言与侧栏偏好（按源保存于 `localStorage`） | `alonabot-webui` 的浏览器端 |
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
 | `_alonabot_kv` | `sdk/sqlitedb` 初始化表结构，插件经 `sdk/kv` 管理键值；表随受管 SQLite 处理 |

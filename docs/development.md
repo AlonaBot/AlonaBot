@@ -9,7 +9,7 @@
 | Go | 1.27.1，见 `go.mod` | Go 开发与组件构建 |
 | protoc | 36.0，输出 `libprotoc 36.0` | 修改 `.proto` 后重新生成 |
 | protoc-gen-go | v1.36.12，由 `go.mod` 的 `tool` 指令管理 | 协议生成，不需要全局安装 |
-| Node | 26.5.1，见 `web/admin/package.json` | 官方 WebUI 前端开发 |
+| Node | 26.5.1，见 WebUI 仓库 `package.json` | 官方 WebUI 前端开发 |
 | npm | 随 Node 提供 | 按前端锁文件安装依赖 |
 
 macOS 开发使用 asdf 管理 Go 与 Node。其他平台也需选择与上述版本相符的工具链。只改文档时无需准备全部运行时。
@@ -31,7 +31,7 @@ bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 
 ## 依赖管理
 
-使用 `go.mod`、`go.sum` 与 `web/admin/package-lock.json` 中的锁定版本。新增依赖或扩大链接范围前，说明必要性和替代方案，等待维护者批准。当前直接依赖的允许用途如下：
+Core 使用 `go.mod`、`go.sum` 中的锁定版本；官方组件各自维护 module 与锁文件，WebUI 另有 `package-lock.json`。新增依赖或扩大链接范围前，说明必要性和替代方案，等待维护者批准。当前直接依赖的允许用途如下：
 
 | 模块 | 允许用途 |
 | --- | --- |
@@ -63,55 +63,27 @@ replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b983
 
 独立组件的 build、pack 和开发构建沿用作者主 module 的 go.mod/go.sum，库模式直接使用作者 module。独立作者项目如需该补丁，须在自己的 go.mod 加入相同 replace，并运行 `go mod download gorm.io/gorm`。正式 GORM 组件的 build-info 同时列出原模块与替换来源。
 
-## 官方 WebUI 开发
+## 官方组件开发
 
-在仓库根目录执行：
+组件源码与 Go/npm 锁文件维护在各自仓库：
 
-```fish
-npm --prefix web/admin ci
-npm --prefix web/admin run dev
-```
+| 组件 | 开发入口 |
+| --- | --- |
+| WebUI | [源码开发](https://github.com/AlonaBot/alonabot-webui/blob/main/docs/development.md) |
+| Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) |
+| Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) |
+| OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) |
+| Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) |
 
-打开 Vite 输出的地址。`/dev/forms` 可以用本地 fixture 预览配置表单与 JSON Merge Patch。当前 Vite 配置没有 API 代理；真实管理页面从 Core 的同源入口打开并登录。路由登记在 `web/admin/src/routes.tsx`，界面文案通过 `web/admin/i18n/` 提供，主题与外壳复用 `src/theme/` 和 `src/shell/`。
-
-```fish
-npm --prefix web/admin run typecheck
-npm --prefix web/admin run test
-npm --prefix web/admin run build
-```
-
-生产静态文件输出到 `web/admin/dist/`。官方 WebUI 还有 `New() *sdk.Plugin` 后台，使用受管 SQLite 保存统计、用户目录、商店缓存与已读版本；安装时静态资源和进程一起打包：
+在组件工程执行 `alonabot check .`、`alonabot run .` 或 `alonabot pack .`。本仓库的 Core 与 SDK 保持独立 module，`components.lock.json` 固定整合构建使用的组件源码；跨组件测试位于独立的 `tests/go.mod`，模型 SDK 与 Adapter 实现依赖留在该测试 module 中。
 
 ```fish
-bin/alonabot check web/admin
-bin/alonabot build web/admin
-bin/alonabot pack web/admin --target darwin/arm64 --out web/admin/bin
+uv run --no-project python scripts/integration.py
+# 按改动选择测试，例如 Agent 服务：
+uv run --no-project python scripts/integration.py --run '^TestAgentServices$' --race
 ```
 
-将 target 换为需要的平台。完整联调时，先在独立终端运行 `bin/alonabot run --data-dir ./data`，按[管理认证](deployment.md#core-设置与-http-入口)为 CLI 提供 token，再安装并启用上一步的本机 WebUI 包：
-
-```fish
-bin/alonabot install web/admin/bin/alonabot-webui-admin-0.1.0-darwin-arm64.tar.gz --data-dir ./data --yes
-bin/alonabot enable alonabot-webui-admin --data-dir ./data
-```
-
-包名随组件版本与 target 调整。打开 Core 的 `http://127.0.0.1:7650` 入口检查页面、后台与插件桥。只预览静态页面时可在构建前端后运行 `bin/alonabot run web/admin --data-dir ./data`；开发 WebUI 目录仅挂载静态资源，带 Go 后台的行为通过安装包验证。浏览器通过同源 Cookie/CSRF 调用 Admin API，WebUI 后台通过 SDK 与 Core 通信；后端接口见 [ADMIN-API §25](../spec/ADMIN-API.md#25-官方-webui-后台)。
-
-### 页面接入外壳
-
-- 在 `web/admin/src/routes.tsx` 的 `routes` 登记 `RouteEntry`：`id`、`path`、`label`、`icon: LucideIcon`、`group: 'main' | 'bottom'`、`render: () => JSX.Element`。`label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 均定义的 `messages` 键，供导航、顶栏标题和搜索共用。已登记总览、插件、账号、模型、配置文件、会话、日志、权限与系统设置，权限子页共用同一导航入口；`/dev/forms` 仅在开发模式登记。登录后访问 `/` 跳转 `/overview`，未登录访问管理页跳转 `/login`。
-- 桌面侧栏将 `main` 条目的顺序、隐藏状态和侧栏折叠偏好保存在浏览器中，`bottom` 条目放在底部。侧栏以 `100vh` 固定高度贴顶，导航内部滚动，底部保留版本号与「关于」入口。手机固定入口按 `overview`、`plugins`、`profiles`、`logs` 的顺序取已登记的 `main` 条目；其余条目（含 `bottom`）只出现在「更多」，无剩余条目时省略「更多」。
-- `AppShell({ version, onLogout?, coreUpdate?, coreUpdateFailed?, children })` 装配导航和搜索，页面由入口按路径选择后作为 `children` 传入；传入 `onLogout` 才显示退出入口。`coreUpdate` 为 `{ version, releaseURL }`，`coreUpdateFailed` 在侧栏更新处显示局部失败提示。站内跳转用 `router.ts` 的 `navigate(path, options?)` 或 `Link`。`Link` 的 props 为 `to`、可选的 `className` 和 `children`；手机「更多」使用 Radix 菜单项的 `onSelect` 调用 `navigate`。
-- 已登记路由自动加入全局搜索，匹配当前语言的标题和路径。页面可通过 `SearchContext.register(items: SearchItem[]): () => void` 补充搜索项，卸载时调用返回的注销函数。搜索项包含 `id`、`title`、`section`、`run: () => void` 与可选 `keywords`；按标题和关键词做大小写不敏感的子串匹配，结果按 `section` 分组。按 Enter 或点击执行后清除查询、焦点和悬停状态。
-- `useTheme(): [ThemeChoice, (choice: ThemeChoice) => void]` 提供主题选择接口，面向用户的控件由系统设置页接入。桌面搜索在透明顶栏右端，同排展开；收起时为 40×40，内容右边距为 40px。手机顶栏高 54px。配置表单与开发预览沿用原有结构、字体、尺寸和间距，颜色、背景、描边及原生控件 `color-scheme` 随主题更新。
-
-插件详情提供详情页的数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；Agent 页面提供会话正文。外壳保留配置、任务与插件页面入口，共用 `/permissions/users` 用户页。
-
-父桥按 [ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥) 在每次 `translate` 请求时用当前语言和请求参数返回 `text`；`hello` 交付语言、主题与令牌，`locale` 事件交付语言。浏览器验证用沙箱 iframe 验证 showcase 首次翻译、切换语言后重新取词、主题与快捷键转发。
-
-配置文件的工具覆盖候选按 [ADMIN-API §18](../spec/ADMIN-API.md#18-工具调用策略) 的 `identities` 展开为 §23 的独立工具与操作；同名两类分别编辑，仅有旧全局覆盖的空身份行没有新增候选。已保存的配置文件覆盖按原身份继续读写。配置与配置文件页面共用 `src/api/admin.ts` 的 `ToolPolicy.identities: ('tool' | 'operation')[]`。
-
-配置页面使用 `PluginConfigPanel({id})` 与共享 `ConfigForm`：编辑基线为 `pending.config ?? active`，保存使用 `active_generation`，409 保留草稿并允许显式采用最新配置；secret 再认证、动态选项、回复示例及双语字段沿用同一表单。插件详情标签单行横滚，Agent 页面入口为 `pages/memory`（记忆），Core 数据标签保留。父桥在 layout effect 提前绑定，保留首次 hello 的主题与语言订阅。
+整合入口先运行 `tests/agent` 与 `tests/e2e`；需要 Core 私有装配入口的 Agent 服务测试通过临时 modfile 和 overlay 运行，依赖和测试文件均不写回 Core module。CLI 的端到端测试在 `tests/e2e`，`cmd/alonabot` 只保留正式命令。
 
 ## 代码生成
 
@@ -123,7 +95,7 @@ go generate ./...
 
 协议源文件位于 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。生成器核对 protoc 版本后重新生成 `contracts/pb/`，protoc-gen-go 通过 `go tool` 定位。
 
-更新根目录 CHANGELOG 后可定点运行 `go generate ./internal/core/manage`，一同交付生成的 `changelog_core.go`。
+更新 `changelog/unreleased/en.md` 后可定点运行 `go generate ./internal/core/manage`，一同交付生成的 `changelog_core.go`。
 
 ## 验证改动
 
@@ -136,7 +108,7 @@ go vet ./internal/core/router
 go test -race ./internal/core/router
 ```
 
-合并前 CI 的 Go 检查包括 `go vet ./...`、race 测试与五目标 pure-Go 构建；自托管 runner 串行测试包，命令以[工作流](../.github/workflows/ci.yml)为准。前端检查由贡献者运行，CI 当前只执行 Go 与仓库检查。手动需要完整检查时执行：
+合并前 CI 的 Go 检查包括 `go vet ./...`、race 测试与五目标 pure-Go 构建；GitHub-hosted runner 串行测试包，命令以[工作流](../.github/workflows/ci.yml)为准。WebUI 独立仓的 CI 另执行前端类型检查与构建。手动需要完整检查时执行：
 
 ```fish
 go build ./...
@@ -146,7 +118,7 @@ go test -race ./...
 
 改变插件页面套件时，运行 `go test -race -v ./sdk/page ./examples/plugins/showcase` 和 `node --check sdk/page/kit.js`，并在 WebUI 的 iframe 中检查关键交互、语言与主题。文档修改检查链接、锚点、代码块和实际命令。
 
-跨平台修改同时核对真实运行与交叉构建。五个发行目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64；构建结果与平台实跑结果分别记录，现有结果见[发布说明](release-notes/v0.1.0.md#发行内容)。真实 Telegram 或付费 Provider 验证使用授权的测试凭据，模拟服务在验证结果中明确注明。
+跨平台修改同时核对真实运行与交叉构建。五个发行目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64；构建结果与平台实跑结果分别记录，现有结果见[发布说明](../changelog/v0.1.0/zh-CN.md#发行内容)。真实 Telegram 或付费 Provider 验证使用授权的测试凭据，模拟服务在验证结果中明确注明。
 
 仓库只提交集成测试及协议编号检查。单元测试、临时复现与局部前端测试使用 `*_local_test.go`、`*.local.test.ts`、`*.local.test.tsx` 或 `tmp/test/`；完整规则见[编码规范](coding-standards.md#测试提交规则)。PR 记录测试位置、命令、平台、输入条件、结果与未运行原因，以及提交测试新增行数。
 
@@ -194,7 +166,7 @@ cat $DEVBOT_OUTPUT
 
 组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。
 
-验证官方 help 工程可运行 `bin/alonabot check ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
+验证官方 help 工程时先检出独立的 `alonabot-plugin-help` 仓库，执行 `bin/alonabot check <help 工程目录>`。使用回环 Adapter 试用时，在 `run` 的组件目录列表追加该工程目录，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`。
 
 先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
 

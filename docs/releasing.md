@@ -1,36 +1,47 @@
 # 发行维护
 
-本文面向发行维护者，说明从源码构建、核对候选到正式签名发布的步骤。组件作者使用[插件指南](plugin-guide.md#9-发布)发布自己的组件；用户安装见[部署指南](deployment.md)。
+整合发行保留在 Core 主仓，默认包含 Core、WebUI 与 Agent。Telegram、OneBot 11 Adapter 和 help 插件在各自仓库发布，用户按需安装。安装步骤见[部署指南](deployment.md)，组件作者的发布流程见[插件指南](plugin-guide.md#9-发布)。
 
-## 发布前准备
+## 固定源码与发行说明
 
-1. 固定已审查的源码提交与发行版本，确认该提交 CI 通过；核对 SDK、组件版本与说明一致。
-2. 阅读[当前发布说明](release-notes/v0.1.0.md)，保留真实平台结果、已知限制及已批准的延期项。
-3. 准备开发工具链和已锁定依赖，使用独立输出目录。先使用仓库外的临时测试签名密钥验证候选，正式私钥只由发行维护者控制。
-4. 解决下述组件在线元数据发布问题，确认 SDK tag、模板依赖与主仓库可访问性相符。主仓库正式公开后补验模板 CI，正式发行前替换候选 SDK 版本。
+1. 选择已审查的 Core 提交和发行版本，确认相应检查通过。
+2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试还使用其他条目。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
+3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`，约定见[更新日志](../changelog/README.zh-CN.md)。
+4. 正式发行前固定 SDK tag，并更新组件和插件模板的引用。主仓公开后补验模板 CI。
 
-## 发行构建
+生成的 Release 正文英文在前、简体中文在后，自动去掉 HTML 编辑注释：
 
-在仓库根目录生成包含 Core、Telegram Adapter、Agent、WebUI 与 help 的发行候选：
+```fish
+go run ./scripts/release-notes --version 0.1.0 > /tmp/alonabot-release-notes.md
+```
+
+## 构建整合归档
+
+在主仓根目录执行：
 
 ```fish
 go run ./scripts/dist --version 0.1.0 \
   --key ~/.config/alonabot/release.key --out ./dist
 ```
 
-构建机需要[开发指南](development.md#准备环境)中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序在暂存目录保留根 `go.mod`、`go.sum` 及 `sdk/`、`contracts/`、`internal/`、`web/admin/`，跳过 WebUI 的旧 `node_modules` 与 `dist`；在暂存 WebUI 中运行 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
+构建需要 Go、Node/npm 及已锁定的 Go/npm 依赖，版本见[开发环境](development.md#准备环境)。工具按发行锁下载 Agent 与 WebUI，在临时副本中构建前端和平台包；Core 源码取当前 checkout。源仓库中的 `node_modules`、`dist` 和依赖文件保持原样。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，用 `--platforms linux/amd64,linux/arm64` 选择子集。
 
-`--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，允许末尾空白。私钥放在仓库及组件资源目录之外，设置为仅发布维护者可读（0600），通过受控环境或离线介质保管和备份。程序只从该文件读取私钥，子进程不接收私钥；发行物只携带公钥与签名。发布前先用临时测试密钥验证流程，正式签名使用维护者控制的密钥。
+`--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，可带末尾空白。密钥置于仓库与组件资源之外，权限设为 0600。候选验收使用临时测试密钥，正式签名由维护者使用官方私钥执行。私钥只由 dist 读取，子进程只得到构建所需的公钥。
 
-`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；官方 WebUI 按五个目标平台出包，分别包含 `component`（Windows 为 `component.exe`）与同一份 `dist`。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
+每个平台生成 `alonabot-<version>-<os>-<arch>.tar.gz`，Windows 为 `.zip`；归档含 Core 与 `packages/<组件ID>/`。每个组件目录含本平台安装包和完整的 `release.json`、`release.json.sig`、`release.pub`。WebUI 包包含后台进程和同一份前端产物。
 
-安装包下载前缀默认取 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，可用 `--asset-base https://example.com/releases/v0.1.0` 覆盖。发行 Core 通过 `-ldflags -X` 嵌入官方公钥，安装官方签名包时免首次来源与发布者确认；签名与摘要仍按安装流程验证，已有发布者绑定继续生效。未注入公钥的开发构建保留原确认流程。
+`dist/packages/<组件ID>/` 汇集该组件全部平台包及三份元数据。默认下载 URL 指向该组件仓库的 `releases/download/v<组件版本>`；`--asset-base https://example.com/releases/v0.1.0` 可显式覆盖。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
 
-`--version` 决定发行归档名、默认下载前缀及注入的 Core 版本；`GET /api/v1/core` 返回该发行版本。开发构建沿用 Go module 构建信息，源码构建通常显示 `(devel)`。
+输出目录还包含：
+
+- `SHA256SUMS`：整合归档的完整性摘要。
+- `install.sh`：系统服务安装与升级入口。
+- `docker-compose.yml`：固定版本的整合镜像安装入口。
+- `release-notes.md`：从当前版本双语 changelog 生成的正式正文。
 
 ## 构建容器镜像
 
-自行构建时，使用[开发指南](development.md#准备环境)锁定的 Go、Node/npm 与 Docker BuildKit/buildx。`VERSION` 必填，签名私钥使用发行构建相同的 base64 Ed25519 格式，存放在构建上下文之外，权限为 0600；构建验收使用临时密钥，正式发行使用维护者控制的密钥。密钥通过必需的 BuildKit secret 挂载传入。构建阶段直接调用 `scripts/dist`，沿用其中的 npm ci/build、签名和四个官方包清单。BuildKit 的缓存判定忽略 secret 内容；命令使用 `--no-cache-filter build` 重新执行签名阶段，确保同版本更换密钥时使用本次密钥。
+根目录 Dockerfile 复用同一 dist 入口，镜像只预装 Core、WebUI 和 Agent。签名密钥通过 BuildKit secret 传入；签名阶段重新构建，使本次密钥生效：
 
 ```fish
 set version 0.1.0
@@ -41,47 +52,28 @@ docker buildx build --platform linux/amd64,linux/arm64 --no-cache-filter build \
   -t ghcr.io/alonabot/alonabot:$version .
 ```
 
-需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`；省略时沿用 `scripts/dist` 的 GitHub Release 地址。下面分别构建并在可运行相应平台的主机上启动本地镜像；跨架构运行需要 Docker 已配置的模拟器。
+需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`。本机验收可用 `--load` 构建单平台镜像，再执行根目录 `docker compose up -d`；Compose 默认使用正式 GHCR tag，验证本地候选时将 `image` 改为相应的本地 tag。
 
-```fish
-docker buildx build --platform linux/amd64 --load --no-cache-filter build \
-  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
-  -t alonabot:$version-amd64 .
-docker run -d --name alonabot-amd64 --platform linux/amd64 --init \
-  -p 127.0.0.1:7650:7650 -v alonabot-amd64-data:/data alonabot:$version-amd64
-docker exec alonabot-amd64 alonabot admin-token show --data-dir /data
-# 完成该平台验收后停止，释放宿主端口，再运行另一个平台。
-docker stop alonabot-amd64
+镜像采用 scratch、UID/GID 10001、独立 `/data` 卷与 init，端口只发布到 loopback。使用需要 shell、Node 或 Python 的 MCP stdio 工具时，自行构建含相应运行时的镜像。
 
-docker buildx build --platform linux/arm64 --load --no-cache-filter build \
-  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
-  -t alonabot:$version-arm64 .
-docker run -d --name alonabot-arm64 --platform linux/arm64 --init \
-  -p 127.0.0.1:7650:7650 -v alonabot-arm64-data:/data alonabot:$version-arm64
-docker exec alonabot-arm64 alonabot admin-token show --data-dir /data
-```
+## 核对候选
 
+[release-check](../scripts/release-check/README.md)读取实际归档、两组件的签名元数据、包内容和 build-info，并在新目录保存逐项结果。按改动影响选择目标和生命周期检查，复用仍适用的历史证据。
 
-## 核对发行候选
+跨组件测试运行 `uv run --no-project python scripts/integration.py`。平台、崩溃恢复与安装更新分别使用[平台工具](../scripts/platform/README.md)和[场景工具](../scripts/scenarios/README.md)。交叉构建结果与实际运行结果分别记录。Windows 实跑已批准延期，原结果见[v0.1.0 候选说明](../changelog/v0.1.0/zh-CN.md)。
 
-使用仓库提供的 [release-check](../scripts/release-check/README.md)读取实际归档、组件包、签名、公钥、manifest 与 build-info，保留原始 JSON 和完整错误。生命周期联验使用独立目录与测试组件包，操作入口和输入格式以检查器说明为准。
+修改 `install.sh` 后执行 `sh -n deploy/install.sh`。真实 systemd/launchd 安装、升级、校验失败和卸载在授权、可恢复的环境验收。
 
-五目标构建与运行验收使用[平台验收工具](../scripts/platform/README.md)，安装、更新与恢复场景使用[场景工具](../scripts/scenarios/README.md)。已有有效证据在来源与产物保持适用时复用，只补本轮改变或缺失的分项。
+## 发布组件与整合发行
 
-`install.sh` 修改后执行 `sh -n deploy/install.sh`，有 shellcheck 时一同检查；实际安装、升级、校验失败和卸载验收需要可恢复的 systemd 或 launchd 环境。所有测试使用授权环境，保留数据恢复路径。
+每个组件仓库的同版本 Release 上传该组件平台包，以及固定名称的 `release.json`、`release.json.sig`、`release.pub`。各组件有独立仓库，清单名称互不冲突。来源、组件 ID、签名公钥与归档摘要必须一致；用 `alonabot install --source AlonaBot/<组件仓库>` 验证公开下载与后续更新。
 
-## 组件在线元数据发布
+正式发布按以下顺序执行：
 
-正式发布前需确定四个官方组件各自的元数据入口。`scripts/dist` 将清单分别写到 `dist/packages/<组件ID>/release.json`，并生成同名的 `.sig` 和 `release.pub`；GitHub Release 的资产名称在同一次发布中唯一。在线 `install --source owner/repo` 与更新逻辑按来源仓库读取固定名称的 `release.json`，一份清单只描述一个组件。
+1. 发布正式 SDK tag，更新并验证组件与插件模板的 SDK 引用。
+2. 按固定源码和官方密钥构建组件；在对应仓库发布各组件的同版本签名资产。Adapter 与 help 使用各自的 `alonabot pack` 输出。
+3. 构建、核对整合归档，将五平台归档、`SHA256SUMS`、`install.sh` 和 `docker-compose.yml` 上传 Core Release；正文从 `dist/release-notes.md` 读取：`gh release create v0.1.0 --notes-file dist/release-notes.md ...`。
+4. 推送核对过的 linux/amd64、linux/arm64 镜像与多架构清单，确认版本 tag、latest 和 Compose 版本一致。
+5. 正式资产可用后更新 README 的默认安装入口。
 
-发行归档已将各组件清单放在各自的 `packages/<组件ID>/`，本地安装和首次预装使用这组元数据。外部组件包的在线安装、更新需要与读取入口、签名及来源绑定相符的发布安排；该安排确定并验证后，维护者再开放正式在线分发。现有候选验收覆盖归档和本地清单，尚缺这条公开下载链。
-
-## 正式发布
-
-1. 将 SDK 固定到正式 tag，更新插件模板及示例的相应引用并验证。
-2. 使用官方私钥，从同一固定源码运行 dist 入口，重新构建并签名正式资产；核对发行公钥与可信来源。
-3. 上传五平台归档、归档摘要、`install.sh` 及固定版本 `compose.yaml` 到同一 GitHub Release；归档内保留各组件的清单、签名与公钥。外部组件包及其元数据按上一节已解决并验证的发布安排上传。
-4. 推送已核对的 linux/amd64、linux/arm64 镜像与多架构清单，核对版本 tag、latest 与 compose 中的版本关系。
-5. 发布说明明确列出安装方法、升级与备份步骤、目标平台的真实验证结果及已知缺项。正式资产发布后再更新 README 的默认安装入口。
-
-当前候选使用测试密钥；正式 SDK tag、官方签名、GitHub Release 和 GHCR 发布由维护者执行。发布失败时保留错误、产物与当前线上版本，修复受影响步骤后再继续。
+当前仍为候选；正式 SDK tag、官方签名、GitHub Release 与 GHCR 发布由维护者执行。发布失败时保存完整错误、产物和当前线上版本，修复受影响步骤后继续。

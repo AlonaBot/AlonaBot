@@ -1,6 +1,6 @@
 # AlonaBot v0.1 技术契约
 
-状态：**现行行为契约**。产品版本与协议版本分别管理；发布状态和平台实跑范围见[发布说明](../docs/release-notes/v0.1.0.md)。
+状态：**现行行为契约**。产品版本与协议版本分别管理；发布状态和平台实跑范围见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为。修改实现时同步相关契约与验证，流程见[开发指南](../docs/development.md)；D/T/V 编号保留用于追溯既有规则。
 
@@ -436,7 +436,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 ## 8. Adapter、Target 与消息
 
 - Adapter 与插件一样以安装包分发，在 Core 之外以独立 Native 子进程运行，复用插件的握手、Session、准备/激活/停止状态机、代次、配置、Secret、安装与来源校验（D-26）。官方 Telegram Adapter 也是这样一个可卸载的安装包，Core 不静态链接任何平台实现。manifest 以 `role: adapter` 和 `adapter_id`（平台类型，例如 `telegram`）区分，同一 `adapter_id` 同时只能安装一个包；社区 Adapter 可以按 §9.3 的 `--replace` 替换同一 `adapter_id` 的官方 Adapter。
-- Adapter 的工程入口是可导入的 Go 包（例如 `adapters/telegram`），工程 `plugin.yaml`、`adapter_config_schema.json` 与生成的登记代码都位于该包目录（D-134）。`cmd/alonabot-adapter-<id>` 只保留调用 `sdk.RunAdapter` 的薄 main；独立进程与库模式（§15.5）共用该包的组件身份与资源。
+- Adapter 的工程入口是独立仓库的可导入 Go 包（例如 `github.com/AlonaBot/alonabot-adapter-telegram`），工程 `plugin.yaml`、`adapter_config_schema.json` 与生成的登记代码都位于该包目录（D-134）。`cmd/alonabot-adapter-<id>` 只保留调用 `sdk.RunAdapter` 的薄 main；独立进程与库模式（§15.5）共用该包的组件身份与资源。
 - 同一个 Adapter 包只运行一个进程，进程内承载该包的全部账号实例。实例配置（含凭证）写在 `core_config.json` 的 `adapters` 中（§15.1），由 Core 按 Adapter 包内 `adapter_config_schema.json` 补缺失值并校正（§5.5），经 `adapter.instance.start`/`adapter.instance.stop` 单独启停（停用只对本次运行有效，同一次运行中 Adapter 崩溃恢复后仍保持停用，Core 重启后按 `core_config.json` 启动全部已配置的实例；要持久停用就删除实例或停用 Adapter，D-139）；启停一个实例不重启进程，也不影响同包的其他实例。停用整个 Adapter 即按插件的停止流程停止该进程，全部实例随之停止。进程异常退出按插件的有限重启策略处理，重启后 Core 只重新启动仍处于启用状态的实例。
 - Core 只接受 Adapter 为它在本 Session 中已启动的实例交付的事件：Target 与事件中的 adapter_id、adapter_instance_id、account_id 必须与该实例一致，否则拒绝并记诊断。event_id 由 Core 生成；Actor 的权限集合由 Core 按 §2.3 计算，Adapter 只提供平台给出的身份与平台权限；平台权限中未声明的名字由 Core 丢弃并记诊断。同一 `adapter_id` 下的同一平台账号只能有一个已启动实例（唯一入站 owner），由 Core 依据 `adapter.instance.start` 返回的 account_id 检查。
 - 接收游标由 Core 持久化：Adapter 每交付一条事件都附带交付后的不透明游标，Core 先写状态库，再接纳事件并应答；Adapter 收到应答后才处理下一条。没有事件时的游标变化（例如空闲轮次重建）使用单独的游标保存调用。实例启动时，Core 把已保存的游标交给 Adapter。
@@ -477,7 +477,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
   - WebUI 必有静态文件：作者写 `id`、`name`、`version`、`role`、`source`、静态根目录 `assets`（包内相对目录，含 `index.html`）与 Admin API 主版本范围 `admin_api_min_major`/`admin_api_max_major`（§7.5）。只有静态文件时 `pack` 只补上 `manifest_version`，不写 `entrypoint`、协议主版本、`required_capabilities`，`os/arch` 写 `any`，归档名为 `<id>-<version>-any.tar.gz`。WebUI 工程也可以有 Go 入口（D-162），这时它另有一个与插件相同的进程：`build`/`pack` 照插件补全 manifest 并按平台出包，进程可以使用配置、受管 SQLite、事件路由、Hook 与 HTTP 路由，HTTP 路由要求管理会话，前端与之同源直接调用。
 - 任何角色都可以声明可选的 `icon`：包内图标文件的相对路径（§7.5）。
 - 插件作者可以在工程 `plugin.yaml` 声明布尔字段 `sleep_capable`，缺省 `false`，构建时原样保留到包内 manifest；对 `role: plugin` 与 `role: agent` 开放，Adapter 与 WebUI 不接受该字段。`false` 表示要求常驻，WebUI 锁定休眠时长选项并显示原因。`true` 仍受 §4.5 的活动、路由与管理策略约束。
-- 任何角色都可以带 changelog（D-166），二选一：工程根目录的 `CHANGELOG.md`（Keep a Changelog，以 `## [版本] - 日期` 或 `## [版本]` 分节，`[Unreleased]` 不返回，只有一种语言），或 `changelog/<版本>/<locale>.md`（版本目录名是不带 `v` 的 SemVer 且不高于 manifest 的 `version`；文件名按 §5.4 的规则为规范化的 BCP 47 标签，每个版本只含 `<locale>.md` 普通文件，且必须有 `en-US.md`）。`check`、`build` 与 `pack` 检查两种写法互斥、路径、版本、语言文件名、英文回落文件与 UTF-8；校验失败时指出路径。`pack` 原样放进安装包，安装包预检在解压后按同一规则复核。Core 通过管理 API 提供已安装包的 changelog 和编入可执行文件的仓库根 `CHANGELOG.md`（ADMIN-API §22）。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
+- 任何角色都可以带 changelog（D-166），二选一：工程根目录的 `CHANGELOG.md`（Keep a Changelog，以 `## [版本] - 日期` 或 `## [版本]` 分节，`[Unreleased]` 不返回，只有一种语言），或 `changelog/<版本>/<locale>.md`（版本目录名是不带 `v` 的 SemVer 且不高于 manifest 的 `version`；文件名按 §5.4 的规则为规范化的 BCP 47 标签，每个版本只含 `<locale>.md` 普通文件，且必须有 `en-US.md`）。`check`、`build` 与 `pack` 检查两种写法互斥、路径、版本、语言文件名、英文回落文件与 UTF-8；校验失败时指出路径。`pack` 原样放进安装包，安装包预检在解压后按同一规则复核。Core 通过管理 API 提供已安装包的 changelog 和从仓库 `changelog/unreleased/en.md` 编入可执行文件的 Core 日志（ADMIN-API §22）。插件可声明 `adapter_dependencies` 与 `plugin_dependencies`，语义见 §8。
 - `migration_mode` 取 `none/self/versioned`，由构建按代码中登记的迁移方式写入（§6.2）；`prepare_effects` 固定 `none/managed_db/external`，描述配置回调以外的迁移/OnStart 在准备期的副作用。`managed_db` 仅表示写所属的受管 SQLite，候选可隔离；`external` 表示会写框架外的数据（例如插件自管的外部数据库），不具备自动回退承诺，按 §6.3 的维护门槛更新。包内 manifest 缺少这两项时安装与更新照常进行，管理服务在安装与更新的结果中返回警告并记 WARN 日志，准备阶段按没有框架外副作用处理（与 `none` 相同）；取值不在规定集合内时拒绝，插件实际登记的迁移方式与 manifest 不符时准备失败（D-150）。它们是插件包静态声明，不是 WebUI 调参开关。
 - 命令、文本匹配与事件只在入口包的 `func New() *sdk.Plugin` 中对插件对象链式注册（D-79、D-114），生成器不扫描注册；`build` 检查并嵌入 manifest、`config_schema.json`、`i18n/`、Service Schema 与 Handler 的参数名（命令省略 `Args` 时使用，D-112），入口包必须声明 `func New() *sdk.Plugin`（缺少或签名不符时构建失败），配置 schema 只来自 `config_schema.json`（§5.1），重复 Handler/HTTP 路由失败。Schema/注册描述与 binary 来自同一构建，安装期检查能静态取得的 Schema/能力与自动注册项；实例方法显式注册的完整集合在本次启动 REGISTER 时校验，不要求静态推导任意 Go 控制流或重复手写整张路由表。最终路由在该 Session 固定，Schema/能力必须与包资源一致；Go 与 protoc 的版本已由 T-01 锁定，见 docs/development.md。
 - Adapter 的资源按工程 manifest 的 `role: adapter` 识别，以可导入的 Adapter 包的导入路径登记工程 `plugin.yaml` 原文与经检查的 `adapter_config_schema.json`，登记方式与插件相同（见下条，D-145）；Adapter 使用 `sdk/adapter.Adapter`，不要求插件的 `New() *sdk.Plugin` 入口（D-134）。库模式按 §15.5 取得同一份资源。
@@ -536,7 +536,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `sleep-policy [ID] [never\|auto\|时长]` | 无参数列出全局模式、全局空闲时长及各插件的配置策略、生效策略、运行状态与最近原因；只有 ID 时读取该插件。`never` 写入 `sleep.plugins.<ID>`，`auto` 删除该覆盖以跟随准入规则与全局值，正时长（Go duration，例如 `15m`）写入插件覆盖。经 ADMIN-API §24 的同一管理服务修改，立即生效。全局模式与全局时长经 Core 设置 API/WebUI 修改。 |
 | `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件须按 §6.3 显式维护，缺少许可返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
-管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。2026-11-20 的 Windows 实跑经维护者批准延期；四环境实跑、Windows 交叉构建与未运行项见[发布说明](../docs/release-notes/v0.1.0.md#发行内容)。
+管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。2026-11-20 的 Windows 实跑经维护者批准延期；四环境实跑、Windows 交叉构建与未运行项见[发布说明](../changelog/v0.1.0/zh-CN.md#发行内容)。
 
 签名实现依据：[Go crypto/ed25519](https://pkg.go.dev/crypto/ed25519)。
 
@@ -544,7 +544,7 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 
 每项改动同时完成实现与受影响验证，按[源码开发](../docs/development.md#验证改动)记录实际命令、平台、输入、结果和未运行原因。协议字段号由 `contracts/wirespec_test.go` 固定；集成测试通过真实协作方验证进程、数据库、路由和生命周期。
 
-数据库恢复、跨平台进程清理和发布场景使用[场景工具](../scripts/scenarios/README.md)、[平台验收](../scripts/platform/README.md)与[发行检查](../scripts/release-check/README.md)。现有候选的实际验证范围与延期项见[发布说明](../docs/release-notes/v0.1.0.md)。
+数据库恢复、跨平台进程清理和发布场景使用[场景工具](../scripts/scenarios/README.md)、[平台验收](../scripts/platform/README.md)与[发行检查](../scripts/release-check/README.md)。现有候选的实际验证范围与延期项见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/development.md) 列出的允许模块，由审查用 `go list -deps` 核对（V-75）。按 D-184，维护者接受现有固定 Linux 实测的资源开销，停止后续资源压测与为旧预算继续优化；V-74 的 24/10/16 MiB 保留为历史比较值，首发按已取得的真实数据收口。资源对照压测停止新增运行，既有数据与接受决定见发布说明。Session、队列、媒体及安装等运行时资源限额继续按各自契约执行。
 
@@ -562,10 +562,10 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 | §4 生命周期、调度与休眠 | `internal/core/host/`、`supervisor/`、`scheduler/`、`idle/`、`internal/app/` |
 | §5～§6 配置、secret、数据库与文案 | `internal/core/config/`、`secret/`、`profile/`、`state/`、`sdk/config/`、`sdk/sqlitedb/`、`sdk/gormdb/` |
 | §7 信任、HTTP 与认证 | `internal/core/process/`、`httpproxy/`、`adminauth/`、`manage/` |
-| §8 Adapter 与消息 | `internal/core/adapter/`、`sdk/adapter/`、`adapters/`、`internal/core/media/`、`buttons/` |
+| §8 Adapter 与消息 | `internal/core/adapter/`、`sdk/adapter/`、官方 Adapter 独立仓库、`internal/core/media/`、`buttons/` |
 | §9 构建、分发与管理 CLI | `cmd/alonabot/`、`internal/generate/`、`internal/pluginkit/`、`internal/core/packages/`、`manage/` |
 | §12 状态、锁与恢复 | `internal/core/state/`、`candidate/`、`journal/`、`internal/oslock/` |
-| §13 Agent 基础 | `internal/core/tool/`、`conversation/`、`agent/` |
+| §13 Agent 基础 | `internal/core/tool/`、`conversation/`、`AlonaBot/alonabot-agent` |
 | §14 日志 | `internal/core/logging/`、`sdk/` |
 | §15 运行方式 | 根包、`internal/app/`、`cmd/alonabot/`、`deploy/` |
 | §16 调优参数 | `internal/tune/` |
@@ -609,7 +609,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 
 ### 12.4 实证门槛
 
-协议编译、五 OS/arch 的进程锁与树回收、Core 被 kill 后的 SDK 断链退出、配置 OnStart 写 DB 后失败、SQLite 提交各节点崩溃恢复、Bootstrap/REGISTER 超限、满准入下 Response/Cancel 可完成、HTTP 端口与 Origin、真实平台媒体均需相应测试证据。新增或受影响场景按[验证要求](../docs/development.md#验证改动)记录；现有平台范围、资源数据与维护者接受的延期项见[发布说明](../docs/release-notes/v0.1.0.md)。
+协议编译、五 OS/arch 的进程锁与树回收、Core 被 kill 后的 SDK 断链退出、配置 OnStart 写 DB 后失败、SQLite 提交各节点崩溃恢复、Bootstrap/REGISTER 超限、满准入下 Response/Cancel 可完成、HTTP 端口与 Origin、真实平台媒体均需相应测试证据。新增或受影响场景按[验证要求](../docs/development.md#验证改动)记录；现有平台范围、资源数据与维护者接受的延期项见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 ## 13. Agent 基础
 
@@ -641,7 +641,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 13.4 记忆
 
-- 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-60）。官方 Agent 组件的记忆见 [DESIGN §R](DESIGN.md#r-agent-组件) 与 `agent/`，社区 Agent 可以采用其他实现。
+- 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-60）。官方 Agent 组件的记忆见 [DESIGN §R](DESIGN.md#r-agent-组件) 与 `AlonaBot/alonabot-agent`，社区 Agent 可以采用其他实现。
 - Agent 把写入记忆的操作注册为工具（§13.1），模型的调用照常经 `core.tool.invoke`，按 §3 的自身工具调用处理（D-142），管理员可以按工具设置策略。
 - 记忆的范围取自 Core 下发的可信上下文：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor，不采信模型或插件在参数中给出的范围。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。
 
@@ -776,17 +776,17 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 15.2 发行包、官方整合包与预装组件
 
-官方组件的包 ID 固定为 `alonabot-adapter-telegram`、`alonabot-adapter-onebot11`、`alonabot-agent-official`、`alonabot-webui-admin`、`alonabot-plugin-help-official`；示例使用 `alonabot-plugin-configdb`、`alonabot-plugin-devbot` 与 `alonabot-adapter-devbot`。`adapter_id` 仍为 `telegram`、`onebot11` 或 `devloop`。首个发行版的组件范围按 D-171，OneBot 11 留待后续版本。D-172 在首次发布前直接改名，状态库与开发数据目录需要重建；不提供旧市场 ID 别名或数据迁移。
+官方组件的包 ID 固定为 `alonabot-adapter-telegram`、`alonabot-adapter-onebot11`、`alonabot-agent-official`、`alonabot-webui-admin`、`alonabot-plugin-help-official`；示例使用 `alonabot-plugin-configdb`、`alonabot-plugin-devbot` 与 `alonabot-adapter-devbot`。`adapter_id` 仍为 `telegram`、`onebot11` 或 `devloop`。整合发行默认包含 WebUI 与 Agent；Adapter 与 help 独立发行并按需安装。D-172 在首次发布前直接改名，状态库与开发数据目录需要重建；不提供旧市场 ID 别名或数据迁移。
 
-- 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `deploy/compose.yaml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
-- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中是官方 Telegram Adapter、官方 Agent、官方 WebUI 与预装插件的组件包，以及各自归档外的 `release.json` 与 `.sig`（§9.2）。官方 OneBot 11 Adapter 不进入首个发行版，完成后随后续版本加入（D-171）。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
-- 官方 WebUI 分别提供 linux/amd64、linux/arm64、windows/amd64、darwin/amd64 与 darwin/arm64 平台包；每包携带相应的后台进程与同一份 dist。首次启用 help 与官方 WebUI 时各运行一个组件进程。
+- 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `docker-compose.yml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
+- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中包含官方 Agent 与官方 WebUI 的组件包，以及各自归档外的 `release.json`、`.sig` 与 `release.pub`（§9.2）。Adapter 和 help 在各自独立仓库发布，由用户按需安装。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
+- 官方 WebUI 分别提供 linux/amd64、linux/arm64、windows/amd64、darwin/amd64 与 darwin/arm64 平台包；每包携带相应的后台进程与同一份 dist。首次启用官方 WebUI 时运行其组件进程，Agent 默认保留未启用状态。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
-- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，只启用 help 插件与官方 WebUI；Agent 组件与 help 以外的预装插件（首个发行版没有，D-171）只安装不启用，不使用 AI 对话的部署不运行它们的进程（D-50、D-62）。发行包中的官方 Adapter 只安装，`core_config.json` 的 `adapters` 中有它的实例时自动启用；某个 Adapter 写了实例却尚未安装时，Core 从 `packages/` 安装，没有发行包（例如经 `go install` 取得的 `alonabot`）时从官方 Release 安装（D-82）。需要 AI 对话时，管理员在 WebUI 或 CLI 启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。
+- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，整合包默认启用官方 WebUI，Agent 只安装不启用。需要 AI 对话时，管理员配置 Provider 与模型后启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。Adapter 由用户按需安装；`core_config.json` 的 `adapters` 中有实例时自动启用。某个官方 Adapter 已配置实例但尚未安装时，Core 先查 `packages/`，缺失时从该 Adapter 独立仓库的最新 Release 下载，验证确切来源、组件 ID、官方公钥、签名和归档摘要后安装。首次预装与后续整合更新只信任组件 ID 对应的官方仓库。
 - 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 校正 `core_config.json`，不改写文件。
-- 首个发行版的预装插件只有 help。`plugins/help` 已实现 `New() *sdk.Plugin`，独立进程入口为 `plugins/help/cmd/alonabot-help`（D-171）。`/help` 与 `/whoami` 默认要求 `user`，均为零参数命令。`/help` 经 `command.List` 列出当前会话可用的主名、别名与本地化说明，参数用法由 Core 的 usage 回复给出；`/whoami` 回复用户字符串与收到消息的实例名，无 Actor 时回复对应提示。welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）完成后随后续版本加入预装。
-- 第一个 Core Admin 的产生：用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
+- 官方 help 插件由 `AlonaBot/alonabot-plugin-help` 独立发行，按需安装。组件导出 `New() *sdk.Plugin`，独立进程入口为 `cmd/alonabot-help`。`/help` 与 `/whoami` 默认要求 `user`，均为零参数命令。`/help` 经 `command.List` 列出当前会话可用的主名、别名与本地化说明，参数用法由 Core 的 usage 回复给出；`/whoami` 回复用户字符串与收到消息的实例名，无 Actor 时回复对应提示。welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）完成后按组件仓库独立发行。
+- 第一个 Core Admin 的产生：安装并启用 help 后，用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
 
 ### 15.3 容器镜像
 
@@ -794,7 +794,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 镜像以非 root 用户（UID 10001）运行 `alonabot run --data-dir /data`，数据目录 `/data` 是卷。容器须以 Docker 的 init 运行（`docker run --init` 或 compose 的 `init: true`），由它回收孤儿进程；Core 不承担 PID 1 的回收职责。
 - 镜像设置环境变量 `ALONABOT_CONTAINER=1`，`core_config.json` 的缺省 `listen` 改为 `0.0.0.0:7650`，`base_url` 的缺省值不变（`http://127.0.0.1:7650`）。只有在这个环境变量下，Core 才允许非本机的 listen 搭配本机 http 的 `base_url`；容器的端口只应发布到宿主的本机地址（`127.0.0.1:7650:7650`），Core 启动时为此输出一条 WARN 提示。远程访问按 §15.1 使用 SSH 隧道或 HTTPS 反向代理。Adapter 的凭证可以经 `${环境变量}` 从容器环境传入。
 - 容器首次启动时没有交互终端，Core 把一次性管理 token 写入 `/data/admin_token`（§7.4）。镜像不含 shell，用 `docker compose exec alonabot alonabot admin-token show` 读出它，登录成功后该文件被删除。
-- 仓库根目录的 `Dockerfile` 用多阶段构建产生镜像。`deploy/compose.yaml` 是官方整合包的 compose 入口，随每个 Release 发布：使用对应版本的官方镜像，包含卷、`init: true` 与只发布到宿主本机的端口；`docker compose up -d` 即可启动，不需要先单独初始化。
+- 仓库根目录的 `Dockerfile` 用多阶段构建产生镜像。`docker-compose.yml` 是官方整合包的 compose 入口，随每个 Release 发布：使用对应版本的官方镜像，包含卷、`init: true` 与只发布到宿主本机的端口；`docker compose up -d` 即可启动，不需要先单独初始化。
 
 ### 15.4 开发运行与热部署
 
@@ -861,7 +861,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 契约中可调的容量、期限与配额集中登记在 `internal/tune/params.go`：每项有名称、缺省值、单位与约束，缺省值就是本契约各节给出的数值。新增可调的值时，同时修改该文件与下表。
 - 以下不属于调优参数：协议双方必须一致的常量（帧上限、分块大小；配置文件覆盖集合沿用固定帧上限，见 §5.6）；安全相关的值（Secret 与 token 长度、管理会话与插件票据的期限）；平台规定的限制；SDK 的固定输入上限（§6.1 的 KV 键和值上限）；插件与 Adapter 自己的常量；日志级别与日志文件设置（§14、§15.1）；配置文件的平台与回复设置（§5.6、§15.1）；WebUI 在浏览器中保存的主题、语言与侧栏偏好（§7.5）。
 - 诊断包的时间范围、分组和脱敏选项按次传入（§14.7、ADMIN-API §19）。
-- 官方 WebUI 的远端抓取期限、响应与归档上限为 `web/admin/store.go` 的组件内安全常量，数值见 ADMIN-API §25；`internal/tune/params.go` 与下表沿用现有参数。
+- 官方 WebUI 的远端抓取期限、响应与归档上限为 `AlonaBot/alonabot-webui` 的 `store.go` 的组件内安全常量，数值见 ADMIN-API §25；`internal/tune/params.go` 与下表沿用现有参数。
 - 调优参数只在启动时覆盖，运行中不能修改，也不出现在 WebUI。`--args` 是 `alonabot` 根命令的全局参数，可以写在子命令之前或之后（例如 `alonabot --args REQUEST_TIMEOUT=2s run`），对所有子命令生效，可以重复使用：
   - 值中含 `=` 时是直接参数，多个参数用逗号分隔，例如 `--args DISPATCH_CONCURRENCY=1,REQUEST_TIMEOUT=2s`；
   - 否则是文本文件的路径，文件名任意，每行一个 `KEY=VALUE`，空行和以 `#` 开头的行忽略；

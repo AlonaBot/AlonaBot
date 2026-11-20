@@ -168,7 +168,7 @@ func verifyLifecycle(opt options, r *report) (err error) {
 		}
 		for _, expected := range r.Components {
 			item, ok := packages[expected.ID]
-			enabled := expected.ID == "alonabot-plugin-help-official" || expected.ID == "alonabot-webui-admin"
+			enabled := expected.ID == "alonabot-webui-admin"
 			if !ok || item.Version != expected.Version || item.Source != expected.Source || item.PublisherKeyID != r.Publisher || !item.Signed || item.Uninstalled || item.Enabled != enabled {
 				return fmt.Errorf("unexpected preinstalled state: %+v", item)
 			}
