@@ -11,8 +11,8 @@
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 已完成（PR #275） |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 待派发 |
-| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 实施与证据审查中（PR #278） |
+| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 独立实施中；最终验收等待前置 |
 | goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
 
@@ -263,7 +263,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：待派发。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，派发前确认合并后 main 的 Quality gate 通过。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 的固定 Linux 测量仍在途，按实际合并状态消费其公开入口并保留具体待联验项；由原 Core 执行者完成资源归因。
+状态：实施与证据审查中（PR #278）。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，main `cb5acc79` 的 Quality gate（run 44647524835）已通过。跨组件实现与矩阵候选已交草稿 PR #278，审查者继续补浏览器证据并核对最终 head CI；GN11 等待 goal-174 的稳定合并接口和原 24/10/16 MiB 内存预算闭合。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 的固定 Linux 测量仍在途，按实际合并状态消费其公开入口并保留具体待联验项；由原 Core 执行者完成资源归因。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -307,7 +307,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：等待前置（T-10.1 / goal-46）。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口与 GitHub Actions 计费恢复按维护者决定留到最后处理；其余可用平台继续实施和实跑。
+状态：独立实施中，最终验收等待 T-10.1 / goal-46。2026-11-20 从经父审查的 goal-46 候选 `eb01ed6c` 开始平台程序与可用环境的独立实施；最终以整合后的同一候选闭合五平台要求，后继候选变动补受影响验证。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口与 GitHub Actions 计费恢复按维护者决定留到最后处理；其余可用平台继续实施和实跑。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
