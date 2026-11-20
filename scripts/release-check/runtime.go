@@ -29,6 +29,12 @@ type runtimeHost struct {
 	sequence                                     int
 }
 
+// cliEvidenceError 区分证据保存失败，防止预期的命令拒绝掩盖它。
+type cliEvidenceError struct{ err error }
+
+func (e *cliEvidenceError) Error() string { return e.err.Error() }
+func (e *cliEvidenceError) Unwrap() error { return e.err }
+
 func startRuntime(ctx context.Context, binary, cwd, data, evidence string) (*runtimeHost, error) {
 	h := &runtimeHost{ctx: ctx, binary: binary, cwd: cwd, data: data, evidence: evidence, done: make(chan struct{})}
 	// 环境只保留平台运行所需变量，排除调用者的 token、调参及开发注入。
@@ -236,6 +242,9 @@ func (h *runtimeHost) cli(name string, args ...string) ([]byte, error) {
 		receipt.Error = err.Error()
 	}
 	writeErr = errors.Join(writeErr, writeJSON(prefix+".command.json", receipt))
+	if writeErr != nil {
+		writeErr = &cliEvidenceError{err: writeErr}
+	}
 	var commandErr error
 	if err != nil {
 		commandErr = fmt.Errorf("%s: %w; stderr: %s; stdout: %s", name, err, stderr.String(), stdout.String())

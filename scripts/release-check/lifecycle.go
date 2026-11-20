@@ -435,6 +435,10 @@ func (h *runtimeHost) rejectUnchanged(name, message string, args []string, befor
 	if err == nil {
 		return fmt.Errorf("%s unexpectedly succeeded", name)
 	}
+	var evidenceErr *cliEvidenceError
+	if errors.As(err, &evidenceErr) {
+		return err
+	}
 	if !strings.Contains(err.Error(), message) {
 		return fmt.Errorf("%s: expected rejection %q: %w", name, message, err)
 	}
