@@ -5,8 +5,13 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"syscall"
 )
+
+func prepareCore(*exec.Cmd) {}
+
+func interruptCore(process *os.Process) error { return process.Signal(os.Interrupt) }
 
 func processExists(pid int) (bool, error) {
 	err := syscall.Kill(pid, 0)

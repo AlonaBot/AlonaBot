@@ -64,6 +64,7 @@ func (r *report) startCore(ctx context.Context, opt options) (*coreProcess, erro
 		}
 		command := exec.Command(run.Command[0], run.Command[1:]...)
 		command.Dir, command.Stdout, command.Stderr = run.Directory, file, file
+		prepareCore(command)
 		if err := command.Start(); err != nil {
 			return errors.Join(err, file.Close())
 		}
@@ -158,7 +159,7 @@ func (c *coreProcess) stop() error {
 		return c.err
 	default:
 	}
-	if err := c.command.Process.Signal(os.Interrupt); err != nil {
+	if err := interruptCore(c.command.Process); err != nil {
 		killErr := c.command.Process.Kill()
 		<-c.done
 		return errors.Join(fmt.Errorf("interrupt Core: %w", err), killErr, c.err)

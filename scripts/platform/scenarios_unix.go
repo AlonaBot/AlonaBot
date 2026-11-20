@@ -15,41 +15,16 @@ import (
 
 func (r *report) runScenarios(ctx context.Context, opt options) error {
 	// 1. 构建带检查点的临时 Core 前，核对其产品源码与输入候选的提交相同。
-	source, err := filepath.EvalSymlinks(opt.scenarios)
+	fixtures, err := r.prepareScenarios(ctx, opt)
 	if err != nil {
 		return err
 	}
-	fixtures := &scenarioEvidence{
-		SourceRoot: filepath.Dir(filepath.Dir(source)), Runner: filepath.Join(source, "run.py"),
-		Executor: filepath.Join(r.Workspace, "scenario-exec"), BuildFlags: os.Getenv("GOFLAGS"),
-	}
-	r.Recovery = fixtures
-	for _, setting := range r.Core.Settings {
-		if setting.Key == "vcs.revision" {
-			fixtures.CandidateRevision = setting.Value
-		}
-	}
-	if err := r.step("scenario_source", func(step *stepResult) error {
-		if fixtures.CandidateRevision == "" {
-			return errors.New("recovery fixture provenance requires candidate vcs.revision build metadata")
-		}
+	fixtures.Executor = filepath.Join(r.Workspace, "scenario-exec")
+	if err := r.step("scenario_executor", func(step *stepResult) error {
 		script := "#!/bin/sh\ncd '" + strings.ReplaceAll(r.Directory, "'", "'\\''") + "' || exit\nprintf 'Platform test cwd: %s\\n' \"$PWD\"\nexec \"$@\"\n"
 		step.Output = script
 		return os.WriteFile(fixtures.Executor, []byte(script), privateDirectoryMode)
 	}); err != nil {
-		return err
-	}
-	if err := r.command(ctx, "scenario_source_head", "git", "-C", fixtures.SourceRoot, "rev-parse", "HEAD"); err != nil {
-		return err
-	}
-	fixtures.SourceHead = strings.TrimSpace(r.Steps[len(r.Steps)-1].Output)
-	if err := r.command(ctx, "scenario_candidate_source", "git", "-C", fixtures.SourceRoot, "diff", "--exit-code", fixtures.CandidateRevision, "--", "cmd", "internal", "sdk", "contracts", "go.mod", "go.sum"); err != nil {
-		return err
-	}
-	if err := r.command(ctx, "scenario_go_version", "go", "version"); err != nil {
-		return err
-	}
-	if err := r.command(ctx, "scenario_uv_version", "uv", "--version"); err != nil {
 		return err
 	}
 	// 2. build 与 build-recovery 复用原生成器；构建产物和全部 overlay 源码均留在工作区。

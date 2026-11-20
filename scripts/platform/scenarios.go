@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,44 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+func (r *report) prepareScenarios(ctx context.Context, opt options) (*scenarioEvidence, error) {
+	source, err := filepath.EvalSymlinks(opt.scenarios)
+	if err != nil {
+		return nil, err
+	}
+	fixtures := &scenarioEvidence{
+		SourceRoot: filepath.Dir(filepath.Dir(source)), Runner: filepath.Join(source, "run.py"),
+		BuildFlags: os.Getenv("GOFLAGS"),
+	}
+	r.Recovery = fixtures
+	for _, setting := range r.Core.Settings {
+		if setting.Key == "vcs.revision" {
+			fixtures.CandidateRevision = setting.Value
+		}
+	}
+	if err := r.step("scenario_source", func(*stepResult) error {
+		if fixtures.CandidateRevision == "" {
+			return errors.New("recovery fixture provenance requires candidate vcs.revision build metadata")
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := r.command(ctx, "scenario_source_head", "git", "-C", fixtures.SourceRoot, "rev-parse", "HEAD"); err != nil {
+		return nil, err
+	}
+	fixtures.SourceHead = strings.TrimSpace(r.Steps[len(r.Steps)-1].Output)
+	if err := r.command(ctx, "scenario_candidate_source", "git", "-C", fixtures.SourceRoot, "diff", "--exit-code", fixtures.CandidateRevision, "--", "cmd", "internal", "sdk", "contracts", "go.mod", "go.sum"); err != nil {
+		return nil, err
+	}
+	for _, command := range [][]string{{"go", "version"}, {"uv", "--version"}} {
+		if err := r.command(ctx, "scenario_"+command[0]+"_version", command...); err != nil {
+			return nil, err
+		}
+	}
+	return fixtures, nil
+}
 
 type scenarioEvidence struct {
 	SourceRoot        string         `json:"source_root"`

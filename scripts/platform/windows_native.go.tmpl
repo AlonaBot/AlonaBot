@@ -1,0 +1,186 @@
+package main
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"golang.org/x/sys/windows"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+	"unsafe"
+)
+
+// TestMain 使用指定产物；只有构建阶段保留源码 cwd，实际运行切到独立目录。
+func TestMain(m *testing.M) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	packageKey = key
+	if directory := os.Getenv("ALONABOT_PLATFORM_CWD"); directory != "" {
+		if err := os.Chdir(directory); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Platform test cwd: %s\n", directory)
+	}
+	os.Exit(m.Run())
+}
+
+func platformPrepare(command *exec.Cmd) {
+	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+}
+
+func stopTestCore(t *testing.T, c *core) {
+	t.Helper()
+	if err := windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(c.cmd.Process.Pid)); err != nil {
+		t.Fatal(err)
+	}
+	if code := c.wait(15 * time.Second); code != 0 {
+		t.Fatalf("Core exit %d: %s", code, c.log())
+	}
+}
+
+func platformKill(pid int) (err error) {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, process.Release()) }()
+	return process.Kill()
+}
+
+// platformHoldJob 延长临时命名 Job 的生命周期，让真实旧 SDK 在 Core 终止后继续持锁。
+func platformHoldJob(t *testing.T, c *core) {
+	t.Helper()
+	name, err := windows.UTF16PtrFromString(fmt.Sprintf("Local\\AlonaBotPlatformJob-%d", c.cmd.Process.Pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := windows.NewLazySystemDLL("kernel32.dll").NewProc("OpenJobObjectW")
+	const jobQuery = 0x0004
+	handle, _, err := open.Call(jobQuery, 0, uintptr(unsafe.Pointer(name)))
+	if handle == 0 {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := windows.CloseHandle(windows.Handle(handle)); err != nil {
+			t.Error(err)
+		}
+	})
+	scenarioRecord(t, "retained-job", map[string]any{"core_pid": c.cmd.Process.Pid, "job": fmt.Sprintf("Local\\AlonaBotPlatformJob-%d", c.cmd.Process.Pid)})
+}
+
+func scenarioRecoveryRelease(t *testing.T, dir string) {
+	t.Helper()
+	name := strings.TrimSpace(string(scenarioRecoveryRead(t, filepath.Join(dir, "checkpoint"))))
+	pointer, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, pointer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signalErr := windows.SetEvent(event)
+	if err := errors.Join(signalErr, windows.CloseHandle(event)); err != nil {
+		t.Fatal(err)
+	}
+	scenarioRecord(t, "released-event", map[string]string{"event": name, "directory": dir})
+}
+
+// buildRecoveryFixture 只在临时源码注入检查点、旧进程持锁和命名 Job，正式源码保持原样。
+func buildRecoveryFixture(t *testing.T, dir string) (string, string) {
+	t.Helper()
+	replacements := map[string]string{}
+	for name, edits := range map[string][][2]string{
+		"internal/core/journal/commit.go": {
+			{"import (", "import (\n\"fmt\"\n\"golang.org/x/sys/windows\""},
+			{"running, err := o.commit(ctx, r, &committed)", "recoveryCheckpoint(\"prepared\")\n\trunning, err := o.commit(ctx, r, &committed)"},
+			{"*committed = true", "recoveryCheckpoint(\"committed\")\n\t\t*committed = true"},
+		},
+		"internal/core/journal/journal.go": {{"// 3. 原停止链", "recoveryCheckpoint(\"started\")\n\t// 3. 原停止链"}},
+		"sdk/sdk.go": {
+			{"\"log/slog\"", "\"log/slog\"\n\"os\"\n\"golang.org/x/sys/windows\""},
+			{"defer func() { err = errors.Join(err, lock.Unlock()) }()", `defer func(){
+ if err!=nil {if _,statErr:=os.Stat("hold-runtime");statErr==nil{
+  event,eventErr:=windows.CreateEvent(nil,1,0,nil);if eventErr!=nil{panic(eventErr)}
+  if writeErr:=os.WriteFile("runtime-held",[]byte(fmt.Sprint(os.Getpid())),0600);writeErr!=nil{panic(writeErr)}
+  if _,waitErr:=windows.WaitForSingleObject(event,windows.INFINITE);waitErr!=nil{panic(waitErr)}
+  if closeErr:=windows.CloseHandle(event);closeErr!=nil{panic(closeErr)}
+ }}
+ err=errors.Join(err,lock.Unlock())
+}()`},
+		},
+		"internal/core/process/tree_windows.go": {
+			{"\"os/exec\"", "\"os/exec\"\n\"os\"\n\"fmt\""},
+			{"job, err := windows.CreateJobObject(nil, nil)", `var name *uint16
+ if os.Getenv("ALONABOT_TEST_CRASH_PHASE")=="started" {
+  var err error
+  name,err=windows.UTF16PtrFromString(fmt.Sprintf("Local\\AlonaBotPlatformJob-%d",os.Getpid()));if err!=nil{return nil,err}
+ }
+ job, err := windows.CreateJobObject(nil, name)`},
+		},
+	} {
+		original := filepath.Join(os.Getenv("ALONABOT_PLATFORM_SOURCE"), filepath.FromSlash(name))
+		raw, err := os.ReadFile(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(raw)
+		for _, edit := range edits {
+			if strings.Count(source, edit[0]) != 1 {
+				t.Fatalf("ambiguous native recovery hook: %s: %s", name, edit[0])
+			}
+			source = strings.Replace(source, edit[0], edit[1], 1)
+		}
+		if name == "internal/core/journal/commit.go" {
+			source += platformCheckpointSource
+		}
+		modified := filepath.Join(dir, strings.ReplaceAll(name, "/", "_"))
+		if err := os.WriteFile(modified, []byte(source), 0600); err != nil {
+			t.Fatal(err)
+		}
+		replacements[original] = modified
+	}
+	raw, err := json.Marshal(map[string]any{"Replace": replacements})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlay := filepath.Join(dir, "overlay.json")
+	if err := os.WriteFile(overlay, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	pluginSource := filepath.Join(dir, "plugin.go")
+	if err := os.WriteFile(pluginSource, []byte(recoveryFixtureSource), 0600); err != nil {
+		t.Fatal(err)
+	}
+	binary, plugin := filepath.Join(dir, "core.exe"), filepath.Join(dir, "plugin.exe")
+	for target, source := range map[string]string{binary: ".", plugin: pluginSource} {
+		command := exec.CommandContext(context.Background(), "go", fixtureBuildArgs("-overlay", overlay, "-o", target, source)...)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("build native recovery fixture: %v\n%s", err, output)
+		}
+	}
+	return binary, plugin
+}
+
+const platformCheckpointSource = `
+func recoveryCheckpoint(phase string){
+ if os.Getenv("ALONABOT_TEST_CRASH_PHASE")!=phase{return}
+ name:="Local\\AlonaBotPlatformEvent-"+fmt.Sprint(os.Getpid())
+ event,err:=windows.CreateEvent(nil,1,0,windows.StringToUTF16Ptr(name));if err!=nil{panic(err)}
+ defer func(){if err:=windows.CloseHandle(event);err!=nil{panic(err)}}()
+ if err:=os.WriteFile(os.Getenv("ALONABOT_TEST_CHECKPOINT"),[]byte(name),0600);err!=nil{panic(err)}
+ select {}
+}
+`

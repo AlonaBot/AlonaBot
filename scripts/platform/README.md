@@ -1,6 +1,6 @@
 # 平台验收
 
-`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复；整体状态为 `incomplete`，CGO 验收继续补齐。
+`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复；整体状态为 `incomplete`，CGO 验收继续补齐。Windows 当前完成交叉构建，实际运行尚未执行。
 
 先从候选源码构建验收程序、Core 与三个示例组件包，并准备下文约定的本地 `platform-tree` 插件。fixture 源码和产物放在 git 忽略的本地目录，随本次证据保留。以下为本机 fish 命令；交叉构建时分别为验收程序与 Core 设置目标，并为 `pack` 指定同一 `--target OS/arch`。
 
@@ -47,13 +47,17 @@ Telegram Adapter 与 echo、showcase 均为独立真实组件进程；Bot API �
 
 首次业务运行后，程序复用同一 data_dir 完成 100 次实际启动／停止。每次读取管理状态和激活日志，核对所有组件的持久 Active、代次与 PID，再访问子树状态。`running` 和 `released` 记录 Core、四组件、子 PID、Unix 进程组、五把锁及 Core／子进程监听端口：运行时要求存活、锁被持有且可连接；停止后要求 PID 和进程组消失、既有锁可真实取得、原端口可重新绑定。Unix 负 PID 表示进程组；僵尸仍视为存在。锁文件使用既有路径打开，检查结束即释放并保留文件。
 
-循环结束后强杀 Core，核对实际 SIGKILL 退出与原始 `signal: killed`，确认旧树、端口和锁已释放后再重启；恢复时逐个比对相同 Active 并执行同样的停止检查。正常停止、Core 强杀、完整事务恢复与 CGO 的结果分别保留。观察期限沿用现有真实进程集成测试的 20 秒与停止 15 秒；每 20ms 按实际响应、OS 状态和取锁结果观察。当前 Unix 使用 interrupt／SIGKILL／flock；Windows 原生停止和观测路径后续补齐，实际运行保持未运行。
+循环结束后强杀 Core，Unix 核对 SIGKILL 退出与原始 `signal: killed`，Windows 核对 TerminateProcess 的退出码 1；确认旧树、端口和锁已释放后再重启，恢复时逐个比对相同 Active 并执行同样的停止检查。正常停止、Core 强杀、完整事务恢复与 CGO 的结果分别保留。观察期限沿用现有真实进程集成测试的 20 秒与停止 15 秒；每 20ms 按实际响应、OS 状态和取锁结果观察。Unix 使用 interrupt／SIGKILL／flock。Windows 使用定向 CTRL_BREAK、TerminateProcess、进程句柄等待与 LockFileEx 首字节锁；需从连接控制台的终端启动验收程序，Core 独立进程组接收正常停止信号，组件通过协议停止并由 Job 回收。
 
 Unix 随后经 `os/exec` 运行[原有场景入口](../scenarios/README.md)，自动构建三版管理包与带检查点的 Core，再运行 `management`、`recovery` 七个窗口及 `survivor/started`。原入口的全部断言保留：管理流程的真实 DB 值、Active／Session 与五条 committed Journal；PREPARED／提交／OnReady 失败后的 DB、资源引用和候选回收；六类业务门禁；残存写入者持锁期间的 Degraded、启动计数和相同 Active／DB 恢复。
 
 该阶段需要已有 Go、Git、gofmt 与 `uv`，使用 checkout 已批准的 Go 依赖。Python 通过 `uv run --no-project --offline --no-python-downloads` 执行。候选须含 `vcs.revision`；程序记录源码 HEAD，并用 Git 核对 `cmd`、`internal`、`sdk`、`contracts`、`go.mod` 与 `go.sum` 相对候选提交无变化。构建继承 `GOFLAGS`，显式指定验收程序的 OS／架构，并读取七个产物的 build info 核对目标。源码差异、工具缺失或构建失败均保留原错。
 
 编译仍使用源码 checkout；运行场景时通过 `go test -exec` 的临时入口，将测试进程和其启动的 Core／CLI 切到独立 `cwd`。每个场景使用单独数据目录。运行中的场景收到验收取消后，先按原有测试清理自有 Core 和持锁插件，再返回取消错误；中断后需等待清理完成。
+
+Windows 使用 `windows_sources.py` 加载原场景的源码生成函数，按 Go AST 选择入口引用的完整声明与原断言，再编译成五个原生 `scenario-test.exe`；实际执行通过 Go 测试程序完成。构建阶段保留源码 cwd，管理／恢复／残存写入者运行阶段在 TestMain 切到独立 cwd。归档入口使用 `.exe`，只读 DB 使用 Windows 文件 URI。检查点由命名 Event 阻塞和释放。残存写入者场景的临时 Core 为 Job 命名，验收程序保留额外 Job 句柄，Core 强杀后真实旧 SDK 仍持有 runtime.lock；原有 Degraded、启动计数、Active／Journal／业务 DB 断言继续执行，随后终止旧 PID 并验证恢复。该钩子只存在于保留的临时 overlay 中。
+
+Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部目标组件包；Core 与验收程序使用 `.exe` 文件名。源码生成输入、有效 Go 声明、overlay、测试可执行文件及每场景运行参数均留在 `scenario-evidence`。交叉构建证据单独记录，实际 Windows 运行仍标记「未运行」。
 
 JSON 的 `recovery` 保存源码与候选提交、构建参数、七个产物的身份、三个场景的输入和完整 `events.jsonl`；每个场景另留 `go-test.log`、overlay、真实 `state.sqlite` 与业务数据库。程序同时核对所需测试名的成功记录和独立 cwd 标记，证据缺失即失败；部分事件和损坏输入的原始字节也保留在失败结果中。所有构建、运行目录与证据路径均位于 JSON 的 `workspace` 下，目录内容沿用原场景入口的布局。
 
