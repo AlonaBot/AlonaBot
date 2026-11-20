@@ -118,7 +118,7 @@ func (r *RSS) Poke(c *sdk.Context, e *obevent.PokePayload) error {
 }
 ```
 
-注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `service.Serve`、`bus.Subscribe`、`button.On` 与 `task.On` 是各子包的包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `service.JSON`、`service.Proto`、`bus.Define` 声明成带类型的值，再注册或调用（§G，D-122）。根包只放插件对象、Handler 上下文、注册 builder、权限与运行入口；动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源分别在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options` 中（D-146）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，SDK 在收集注册时核对 Handler 的参数类型；Adapter 的常量包（例如 `adapters/onebot11/perm`、`adapters/onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Actor、SendResult 与错误码由 SDK 自己定义；会话字符串、消息句柄与用户字符串（D-102、D-104、D-105）都是 `string`（D-144）。
+注册采用链式构建（D-70、D-112）：命令、文本匹配、事件、Service、Event Bus 订阅、Hook、定时任务与 HTTP 路由都由插件对象（或子插件）的方法开始，`Handle` 结束；漏写 `Handle` 是注册错误。带类型参数的 `service.Serve`、`bus.Subscribe`、`button.On` 与 `task.On` 是各子包的包级函数，第一个参数收 `sdk.Registrar`，即插件对象或子插件；Service 与 Event Bus 事件先用 `service.JSON`、`service.Proto`、`bus.Define` 声明成带类型的值，再注册或调用（§G，D-122）。根包只放插件对象、Handler 上下文、注册 builder、权限与运行入口；动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作与选项来源分别在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action` 与 `sdk/options` 中（D-146）。命令参数名缺省取 Handler 的参数名，由生成器记录（Go 运行时取不到参数名），只在需要另起名字时写 `Args`；订阅的路由 ID 缺省为事件名。分组上设置的权限由组内路由继承。Permission 是不可变的值，用 `Or` 组合，满足其中任一即可（D-69）；Rule 是在 SDK 内执行的 Go 函数，`Rule(...)` 多个时全部满足，`sdk.Any` 表示任一。事件常量带 payload 的 Go 类型，SDK 在收集注册时核对 Handler 的参数类型；Adapter 的常量包（例如 `alonabot-adapter-onebot11/perm`、`alonabot-adapter-onebot11/event`）只含常量与数据类型，插件导入它们不链接 Adapter 的运行时。插件 API 不暴露生成的 pb 类型，Message、Actor、SendResult 与错误码由 SDK 自己定义；会话字符串、消息句柄与用户字符串（D-102、D-104、D-105）都是 `string`（D-144）。
 
 两类 Handler 保留：返回 `(Content,error)` 的自动回复型成功时由 Core 在 Handler 返回后发一次非空内容，Content 是 Chain 或单个片段，每种片段都有构造函数（D-108）；两种 Handler 都可以在内部多次 `c.Send`（D-70）；只回一段文本时用 `c.Reply(text)`，它不返回发送结果（D-118）。Handler 发往当前事件以外的会话时用 `c.SendTo(sid, content)`；包级 `sdk.Send(ctx, sid, content)` 只供没有 Handler 上下文的后台任务使用，只发一段文本时用 `sdk.SendText(ctx, sid, text)`（D-118、D-144）。触发者与所在会话用 `c.User()`、`c.Session()` 取得，分别是用户字符串 `<adapter_id>:<external_user_id>` 与会话字符串，都是 `string`，可以原样保存和比较（D-120、D-144）。带错误码的错误用 `errcode.NotFound.New("…")` 构造、`errcode.Of(err)` 判断（D-123）。`c.StopPropagation()` 锁存传播结果，由 SDK 统一编码到 HandlerOutcome；不会给开发者增加第三套 Handler 签名。
 
@@ -286,7 +286,7 @@ WebUI 是可替换的组件（§T），静态文件由 Core 提供，也可带�
 | --- | --- | --- |
 | Handler、Rule、Hook 与权限 | CONTRACTS §2/§3、MESSAGE-MODEL | `sdk/`、`internal/core/router/`、`hook/`、`policy/` |
 | 帧、Bootstrap、Session、错误与取消 | WIRE-FORMAT、CONTRACTS §1/§12 | `contracts/`、`internal/wire/`、`internal/core/host/` |
-| 消息、媒体、按钮与回执 | MESSAGE-MODEL、CONTRACTS §1.3 | `internal/core/message/`、`media/`、`buttons/`、`adapters/` |
+| 消息、媒体、按钮与回执 | MESSAGE-MODEL、CONTRACTS §1.3 | `internal/core/message/`、`media/`、`buttons/` 与独立 Adapter 仓库 |
 | 调度、HTTP 与生命周期 | CONTRACTS §4/§7/§12 | `internal/core/scheduler/`、`supervisor/`、`httpproxy/`、`idle/` |
 | 配置、secret、DB 与 Journal | CONTRACTS §5/§6/§12 | `internal/core/config/`、`secret/`、`state/`、`journal/` |
 | 构建、来源、安装与恢复 | CONTRACTS §9 | `internal/pluginkit/`、`internal/core/manage/`、`scripts/` |

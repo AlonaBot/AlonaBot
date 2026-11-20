@@ -718,7 +718,7 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 ## 25. 官方 WebUI 后台
 
-以下路由由 独立仓库 `alonabot-webui` 的 `New() *sdk.Plugin` 登记，公开前缀为 `/plugins/alonabot-webui-admin`；沿用管理会话，非 GET 校验 CSRF，响应带 `Cache-Control: no-store`。数据保存在 WebUI 自身受管 SQLite。Core 的组件、权限、日志、存储与会话数据继续通过前述 `/api/v1/` 接口操作。
+以下路由由独立仓库 `alonabot-webui` 的 `New() *sdk.Plugin` 登记，公开前缀为 `/plugins/alonabot-webui-admin`；沿用管理会话，非 GET 校验 CSRF，响应带 `Cache-Control: no-store`。数据保存在 WebUI 自身受管 SQLite。Core 的组件、权限、日志、存储与会话数据继续通过前述 `/api/v1/` 接口操作。
 
 | Method / path（相对于公开前缀） | 请求或成功响应 | 语义 |
 | --- | --- | --- |

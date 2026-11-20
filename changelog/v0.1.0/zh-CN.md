@@ -51,7 +51,7 @@ Linux 服务的程序目录为 `/opt/alonabot`、数据目录为 `/var/lib/alona
 - 声明 `prepare_effects=external` 的组件需显式维护、备份许可及组件专用恢复流程；外部写入和已发送消息按各自业务处理。
 - 候选业务联验使用本地 Telegram Bot API 与合成 Provider。最终候选的真实 Telegram、付费 LLM Provider 凭据未运行；Windows 实跑与 CGO 已批准延期，原计费失败和未运行项保留在历史验收记录。
 - 首次发布前的组件 ID、状态结构与初始迁移直接更新；已有开发数据先保留完整备份，再按契约重建。
-- 官方[插件模板](https://github.com/AlonaBot/alonabot-plugin-template)的修复位于 [PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3)，当前固定候选 SDK `v0.0.0-20261120071651-46c35d0eebcb`。网络下载与本地功能验证通过；公开模板 CI 下载私有主仓库 SDK 时认证失败，维护者决定待主仓库正式公开后再验收，正式发行前替换为正式 SDK tag。
+- 官方[插件模板](https://github.com/AlonaBot/alonabot-plugin-template)的修复位于 [PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3)，当前固定候选 SDK `v0.0.0-20261120071651-46c35d0eebcb`。网络下载与本地功能验证通过；首次 CI 因主仓库私有而认证失败，2026-11-20 主仓库公开后，同一候选的模板 PR 与 main CI 均通过，PR #3 已合并。正式发行前替换为正式 SDK tag。
 - 官方组件各自使用独立仓库和 Release，分别上传自己的 `release.json`、签名、公钥及平台包。整合归档只预装 WebUI 与 Agent；正式公开下载与更新链仍须在组件 Release 发布后验收。
 - 维护者仍须使用正式 SDK tag 与官方私钥构建签名资产，发布 GitHub Release 与 `ghcr.io/alonabot/alonabot:0.1.0`、`:latest`。当前候选使用测试密钥，操作步骤见[发行维护](https://github.com/AlonaBot/AlonaBot/blob/main/docs/releasing.md)。
 

@@ -52,8 +52,18 @@ func TestReleaseEndToEnd(t *testing.T) {
 			if err := os.WriteFile(keyFile, []byte(base64.StdEncoding.EncodeToString(private)), 0o600); err != nil {
 				t.Fatal(err)
 			}
+			target := runtime.GOOS + "/" + runtime.GOARCH
+			if scenario.arch != "" {
+				target = "linux/" + scenario.arch
+			}
+			optional := releaseOptionalPackages(t, keyFile, target)
 			if scenario.arch != "" {
 				asset := releaseContainer(t, scenario.arch, keyFile)
+				for i, archive := range optional {
+					destination := fmt.Sprintf("/optional-%d", i)
+					releaseDocker(t, "cp", filepath.Dir(archive), asset.container+":"+destination)
+					asset.optional = append(asset.optional, destination+"/"+filepath.Base(archive))
+				}
 				releaseEndToEnd(t, asset, release.KeyID(public))
 				return
 			}
@@ -72,7 +82,7 @@ func TestReleaseEndToEnd(t *testing.T) {
 			}
 			asset := filepath.Join(extracted, root)
 			t.Logf("release assets: %s", asset)
-			for _, id := range []string{"alonabot-plugin-help-official", "alonabot-webui-admin", "alonabot-agent-official", "alonabot-adapter-telegram"} {
+			for _, id := range []string{"alonabot-webui-admin", "alonabot-agent-official"} {
 				metadata := releaseRead(t, filepath.Join(asset, "packages", id, "release.json"))
 				signature := releaseRead(t, filepath.Join(asset, "packages", id, "release.json.sig"))
 				if _, err := release.Verify(metadata, signature, public); err != nil {
@@ -84,7 +94,7 @@ func TestReleaseEndToEnd(t *testing.T) {
 			t.Setenv("T14_TELEGRAM_TOKEN", "synthetic-telegram-token")
 			binary, data := filepath.Join(asset, "alonabot"), filepath.Join(dir, "data")
 			c := startRecoveryCore(t, binary, data, "")
-			releaseEndToEnd(t, releaseAsset{core: c, binary: binary, data: data, address: c.address()}, release.KeyID(public))
+			releaseEndToEnd(t, releaseAsset{core: c, binary: binary, data: data, address: c.address(), optional: optional}, release.KeyID(public))
 		})
 	}
 }
@@ -93,17 +103,39 @@ func TestReleaseEndToEnd(t *testing.T) {
 type releaseAsset struct {
 	core                  *core
 	binary, data, address string
-	container             string // 空串表示宿主归档进程。
+	container             string   // 空串表示宿主归档进程。
+	optional              []string // 按需安装的独立仓库组件包，路径属于当前宿主或容器。
+}
+
+// releaseOptionalPackages 单独构建按需组件，整合归档与镜像保持默认的两组件布局。
+func releaseOptionalPackages(t *testing.T, keyFile, target string) []string {
+	t.Helper()
+	var archives []string
+	for _, name := range []string{"help", "telegram"} {
+		out := t.TempDir()
+		command := exec.CommandContext(t.Context(), filepath.Join(binDir, "alonabot"), "pack", componentDirectories[name], "--target", target, "--key", keyFile, "--out", out)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("pack optional %s: %v\n%s", name, err, output)
+		}
+		files, err := filepath.Glob(filepath.Join(out, "*.tar.gz"))
+		if err != nil || len(files) != 1 {
+			t.Fatalf("optional %s archives: %v, %v", name, files, err)
+		}
+		// Docker 按目录原权限复制，容器内的非 root CLI 需要读取公开的测试资产。
+		if err := os.Chmod(out, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		archives = append(archives, files[0])
+	}
+	return archives
 }
 
 func releaseEndToEnd(t *testing.T, asset releaseAsset, publisher string) {
 	t.Helper()
 	c := asset.core
 	t.Cleanup(func() { t.Logf("Core log:\n%s", c.log()) })
-	// 1. 首次预装必须启动真实 help 与 WebUI 后台，并通过文件交付凭证。
-	for _, id := range []string{"alonabot-plugin-help-official", "alonabot-webui-admin"} {
-		c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"` + id + `"`)
-	}
+	// 1. 首次预装启动真实 WebUI 后台，并通过文件交付凭证。
+	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"alonabot-webui-admin"`)
 	tokenFile := asset.file(t, adminauth.FirstTokenFile)
 	info, err := os.Stat(tokenFile)
 	if err != nil {
@@ -189,10 +221,10 @@ func releaseEndToEnd(t *testing.T, asset releaseAsset, publisher string) {
 	var api, listed []manage.Package
 	releaseDecode(t, call(http.MethodGet, "/api/v1/packages", nil), &api)
 	releaseDecode(t, output, &listed)
-	if len(api) != 4 || !reflect.DeepEqual(api, listed) {
+	if len(api) != 2 || !reflect.DeepEqual(api, listed) {
 		t.Fatalf("package states: API=%+v CLI=%+v", api, listed)
 	}
-	want := map[string]bool{"alonabot-plugin-help-official": true, "alonabot-webui-admin": true, "alonabot-agent-official": false, "alonabot-adapter-telegram": false}
+	want := map[string]bool{"alonabot-webui-admin": true, "alonabot-agent-official": false}
 	for _, item := range api {
 		enabled, exists := want[item.ID]
 		if !exists || item.Enabled != enabled || item.Uninstalled || !item.Signed || item.PublisherKeyID != publisher || item.Version != "0.1.0" || item.AvailableUpdate != "" {
@@ -202,13 +234,19 @@ func releaseEndToEnd(t *testing.T, asset releaseAsset, publisher string) {
 			t.Fatalf("initial activation: %+v", item)
 		}
 	}
-	if strings.Count(c.log(), `"msg":"plugin activated"`) != 2 {
+	if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 {
 		t.Fatalf("unexpected initial component processes:\n%s", c.log())
 	}
 	t.Logf("initial packages: %+v; core: %s", api, call(http.MethodGet, "/api/v1/core", nil))
 	if raw := call(http.MethodGet, "/", nil); !bytes.Contains(raw, []byte("<html")) {
 		t.Fatalf("static WebUI: %s", raw)
 	}
+	// 账号和帮助功能按独立签名包安装，覆盖整合包之外的正常 CLI 安装链。
+	for _, archive := range asset.optional {
+		asset.cli(t, []string{"ALONABOT_ADMIN_TOKEN=" + token}, "install", archive, "--admin-url", cliURL)
+	}
+	call(http.MethodPost, "/api/v1/packages/enable", map[string]string{"id": "alonabot-plugin-help-official"})
+	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"alonabot-plugin-help-official"`)
 	// 3. 实例配置保留环境引用，运行副本展开秘密，管理读取只返回设置状态。
 	bot := telegramtest.NewServer(t, "synthetic-telegram-token")
 	bot.SetMe(101, "release_bot")

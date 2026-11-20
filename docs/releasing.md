@@ -7,7 +7,7 @@
 1. 选择已审查的 Core 提交和发行版本，确认相应检查通过。
 2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试还使用其他条目。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
 3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`，约定见[更新日志](../changelog/README.zh-CN.md)。
-4. 正式发行前固定 SDK tag，并更新组件和插件模板的引用。主仓公开后补验模板 CI。
+4. 正式发行前固定 SDK tag，并更新组件和插件模板的引用。模板已在公开 Core 上通过 CI；更换 SDK tag 后核对对应检查。
 
 生成的 Release 正文英文在前、简体中文在后，自动去掉 HTML 编辑注释：
 

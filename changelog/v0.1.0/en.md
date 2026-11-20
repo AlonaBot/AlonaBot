@@ -43,7 +43,7 @@ Builds use Go 1.27.1, Node 26.5.1 and locked npm dependencies; Linux ARM platfor
 - Components declaring `prepare_effects=external` require explicit maintenance, backup permission and component-specific recovery.
 - Business acceptance used a local Telegram Bot API and synthetic Provider. Final-candidate live Telegram and paid LLM credentials were not exercised. Windows runtime and CGO checks remain deferred.
 - Before the first release, component IDs, state layouts and initial migrations may change directly; preserve backups before rebuilding development data.
-- The [plugin template PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3) pins SDK `v0.0.0-20261120071651-46c35d0eebcb`. Local functionality and network download passed; template CI is awaiting the public Core repository, followed by a production SDK tag.
+- The [plugin template PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3) pins SDK `v0.0.0-20261120071651-46c35d0eebcb`. Local functionality and network download passed. After Core became public on 2026-11-20, the pinned candidate passed template PR and main CI, and PR #3 was merged. Replace the candidate with a production SDK tag before release.
 - Public component download/update checks require the actual component Releases. The maintainer must still build official signatures and publish the GitHub Release and GHCR `0.1.0`/`latest` images. Candidate signatures use temporary test keys.
 
 See [release maintenance](https://github.com/AlonaBot/AlonaBot/blob/main/docs/releasing.md) and [release-check](https://github.com/AlonaBot/AlonaBot/blob/main/scripts/release-check/README.md) for the operational steps.

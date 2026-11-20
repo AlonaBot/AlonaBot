@@ -97,7 +97,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `sdk/kv -> sdk/sqlitedb`、`sdk/kv -> sdk/errcode` | 复用受管 SQLite 的 Session 连接与 SDK 错误码 |
 | `sdk/message -> contracts/validate` | 会话、消息句柄与用户字符串复用 Adapter ID 的校验规则 |
 | `sdk -> sdk/internal/messagecodec`、`sdk/message -> sdk/internal/messagecodec`、`sdk/internal/convert -> sdk/internal/messagecodec` | 跨包传递按钮与片段的编码错误，在发送前报告；保留引用目标的省略信息 |
-| `adapters/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
+| `alonabot-adapter-{telegram,onebot11}/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
 | `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> internal/tune` | 装配；`run` 经 `internal/app` 复用库模式的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
 | `internal/app -> internal/core/...`、`-> sdk/...`、`-> contracts`、`-> internal/wire` | 在同一进程中装配 Core 与开发中的组件 |
 | `tests/app` overlay 测试 `-> alonabot-agent/...`（仅集成测试） | 通过官方 Agent 与本地 Provider 验证文本生成服务及选项来源 |
@@ -112,8 +112,8 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `alonabot-webui -> sdk`、`-> sdk/message`、`-> sdk/sqlitedb`、`-> contracts/manifest`、`-> contracts/pluginindex`、`-> contracts/release` | 官方 WebUI 后台通过公共 SDK 观察事件、发送回执与管理会话路由，只读写自身受管 SQLite；契约包解析插件源、版本与发行清单，Core 管理数据由浏览器经 Admin API 操作 |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
-| `plugins/... -> sdk/...`、`-> contracts`；`agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`agent/provider` 另用 openai-go 与 anthropic-sdk-go（D-132） |
-| `plugins/...`、`agent/...`、`examples/plugins/...`、`plugintest -> adapters/<adapter_id>/perm`、`-> adapters/<adapter_id>/event`、`-> adapters/<adapter_id>/action` | 引用 Adapter 声明的权限、扩展事件与平台动作（D-69、D-71、D-92）；这三个包只含常量与数据类型，只 import `sdk` 根包，不链接 Adapter 的运行时 |
+| `alonabot-plugin-help -> sdk/...`、`-> contracts`；`alonabot-agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`alonabot-agent/provider` 另用 openai-go 与 anthropic-sdk-go（D-132） |
+| `alonabot-plugin-*/...`、`alonabot-agent/...`、`examples/plugins/...`、`plugintest -> alonabot-adapter-<adapter_id>/perm`、`-> alonabot-adapter-<adapter_id>/event`、`-> alonabot-adapter-<adapter_id>/action` | 引用 Adapter 声明的权限、扩展事件与平台动作（D-69、D-71、D-92）；这三个包只含常量与数据类型，只 import `sdk` 根包，不链接 Adapter 的运行时 |
 
 明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`sdk` 根包 -> 分类子包（`sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`，D-146）；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters（上表的常量包除外）| cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | internal/app | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
 
