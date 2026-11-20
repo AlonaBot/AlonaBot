@@ -146,7 +146,7 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	}
 	running := &runningComponent{id: in.PluginID, install: in, caller: router.NewCaller(in.PluginID, boot.GenerationId), schemas: schemas}
 	spec := supervisor.Spec{Role: in.Role, AdapterID: in.AdapterID, PluginID: in.PluginID, PluginDir: filepath.Join(c.dir, "plugins", in.PluginID),
-		Executable: executable, BuildDigest: in.BuildDigest, GenerationID: boot.GenerationId, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
+		Executable: executable, Stdio: c.stdio, BuildDigest: in.BuildDigest, GenerationID: boot.GenerationId, Bootstrap: boot, ConfigSchema: resources.ConfigSchema, I18n: resources.I18n,
 		DefaultLocale: c.assembly.settings.Settings().DefaultLocale, Handler: c.assembly.handler(running, in), Global: c.assembly.global,
 		Limits: host.NewLimits(c.values), Stop: host.NewStopTiming(c.values), Log: c.output.Plugin(in.PluginID, boot.GenerationId, componentLogAttrs(in)...), Scheduler: c.assembly.scheduler, HTTP: c.assembly.http,
 		MemorySoftLimit: c.values.PluginMemorySoftLimit, ExtraEnv: c.environment, Detach: func() { c.assembly.detach(running) }}
