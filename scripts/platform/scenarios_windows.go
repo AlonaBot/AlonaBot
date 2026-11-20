@@ -64,18 +64,18 @@ func (r *report) runScenarios(ctx context.Context, opt options) error {
 			return err
 		}
 		overlay := filepath.Join(evidence, "overlay.json")
-		if err := writeScenarioJSON(overlay, map[string]any{"Replace": map[string]string{filepath.Join(fixtures.SourceRoot, "cmd", "alonabot", "platform_native_test.go"): generated}}); err != nil {
+		if err := writeScenarioJSON(overlay, map[string]any{"Replace": map[string]string{filepath.Join(fixtures.SourceRoot, "tests", "e2e", "platform_native_test.go"): generated}}); err != nil {
 			return err
 		}
 		executable := filepath.Join(evidence, "scenario-test.exe")
-		command = exec.Command("go", "test", "-overlay", overlay, "-c", "-o", executable, "./cmd/alonabot")
-		command.Dir = fixtures.SourceRoot
+		command = exec.Command("go", "test", "-overlay", overlay, "-c", "-o", executable, "./e2e")
+		command.Dir = filepath.Join(fixtures.SourceRoot, "tests")
 		if err := r.nativeCommand(ctx, "scenario_"+name+"_compile", command); err != nil {
 			return err
 		}
 		// 2. Windows Event、Job 句柄和运行锁由原生场景拥有；取消时等场景清理后返回。
 		command = exec.Command(executable, "-test.v", "-test.count=1", "-test.run="+selection)
-		command.Dir = filepath.Join(fixtures.SourceRoot, "cmd", "alonabot")
+		command.Dir = filepath.Join(fixtures.SourceRoot, "tests", "e2e")
 		env := []string{"ALONABOT_SCENARIO_MODE=" + name, "ALONABOT_SCENARIO_OUT=" + directory, "ALONABOT_SCENARIO_DATA_DIR=" + directory, "ALONABOT_SCENARIO_EVIDENCE=" + evidence,
 			"ALONABOT_PLATFORM_SOURCE=" + fixtures.SourceRoot, "ALONABOT_PLATFORM_CORE=" + opt.core,
 			"ALONABOT_SCENARIO_OVERLAY_CORE=" + filepath.Join(fault, "fault-core.exe"),

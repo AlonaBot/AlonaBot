@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -22,12 +23,17 @@ type component struct {
 	id, role, source string
 }
 
-// 首发清单与 scripts/dist 相同；WebUI 保留其工程声明的 https 来源。
+// 整合清单与 scripts/dist 相同，Adapter 与 help 由各自仓库按需安装。
 var components = []component{
-	{"alonabot-adapter-telegram", "adapter", "github.com/AlonaBot/AlonaBot"},
-	{"alonabot-agent-official", "agent", "github.com/AlonaBot/AlonaBot"},
-	{"alonabot-webui-admin", "webui", "https://github.com/AlonaBot/AlonaBot"},
-	{"alonabot-plugin-help-official", "plugin", "github.com/AlonaBot/AlonaBot"},
+	{"alonabot-agent-official", "agent", "github.com/AlonaBot/alonabot-agent"},
+	{"alonabot-webui-admin", "webui", "github.com/AlonaBot/alonabot-webui"},
+}
+
+func componentAssetBase(opt options, c component, version string) string {
+	if opt.assetBase != "" {
+		return opt.assetBase
+	}
+	return "https://" + strings.TrimPrefix(c.source, "https://") + "/releases/download/v" + version
 }
 
 func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
@@ -119,8 +125,9 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 					return fmt.Errorf("missing release asset for %s", target)
 				}
 				name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", c.id, publication.Version, goos, goarch)
-				if asset.URL != opt.assetBase+"/"+name {
-					return fmt.Errorf("asset URL = %q; want %q", asset.URL, opt.assetBase+"/"+name)
+				base := componentAssetBase(opt, c, publication.Version)
+				if asset.URL != base+"/"+name {
+					return fmt.Errorf("asset URL = %q; want %q", asset.URL, base+"/"+name)
 				}
 				filename := filepath.Join(opt.candidate, "packages", c.id, name)
 				size, digest, err := archiveDigest(filename)
@@ -219,7 +226,11 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 			expected := []string{rootName + "/" + coreName}
 			for _, c := range components {
 				asset, _ := publications[c.id].Asset(goos, goarch) // 独立包检查已验证该平台存在。
-				for _, file := range []string{"release.json", "release.json.sig", "release.pub", strings.TrimPrefix(asset.URL, opt.assetBase+"/")} {
+				address, err := url.Parse(asset.URL)
+				if err != nil {
+					return err
+				}
+				for _, file := range []string{"release.json", "release.json.sig", "release.pub", filepath.Base(address.Path)} {
 					rel := filepath.Join("packages", c.id, file)
 					outside, err := readRegular(filepath.Join(opt.candidate, rel))
 					if err != nil {
