@@ -130,7 +130,7 @@ go vet ./internal/core/router
 go test -race ./internal/core/router
 ```
 
-合并前 CI 的 Go 检查包括 `go vet ./...`、race 测试与五目标 pure-Go 构建；自托管 runner 串行测试包，命令以[工作流](../.github/workflows/ci.yml)为准。前端检查由贡献者运行，CI 当前只执行 Go 与仓库检查。手动需要完整检查时执行：
+合并前 CI 的 Go 检查包括 `go vet ./...`、race 测试与五目标 pure-Go 构建；所有工作流使用 GitHub 托管的 `ubuntu-latest` runner，Go 测试按包串行执行，命令以[工作流](../.github/workflows/ci.yml)为准。前端检查由贡献者运行，CI 当前只执行 Go 与仓库检查。手动需要完整检查时执行：
 
 ```fish
 go build ./...

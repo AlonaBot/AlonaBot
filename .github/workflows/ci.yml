@@ -19,7 +19,7 @@ concurrency:
 jobs:
   repository:
     name: Repository
-    runs-on: [self-hosted, linux, x64, alonabot]
+    runs-on: ubuntu-latest
     outputs:
       has_go: ${{ steps.sources.outputs.has_go }}
     steps:
@@ -73,7 +73,7 @@ jobs:
     name: Go quality
     needs: repository
     if: needs.repository.outputs.has_go == 'true'
-    runs-on: [self-hosted, linux, x64, alonabot]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -81,8 +81,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
-          # 自托管 runner 复用本机 Go 缓存，避免重复归档上传占用临时磁盘。
-          cache: false
       - name: 检查产品 Go 格式
         shell: bash
         run: |
@@ -112,7 +110,7 @@ jobs:
       - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'
-        # 8 GiB runner 上串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
+        # 串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
         run: GOMAXPROCS=2 go test -p 1 -race ./...
       - name: 五目标平台 pure-Go 构建
         shell: bash
