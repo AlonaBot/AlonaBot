@@ -697,6 +697,88 @@ uv run --no-project scripts/scenarios/run.py survivor --alonabot /tmp/alonabot-r
 
 **验收状态与后继输入。** 最终检查及上述专项与场景有效通过。正常停机时 remote.offline 已依次撤销 running、Registry 与命令同步，随后 bot.offline 遇到并行关闭的 Router，保留一条 `event router is closed` ERROR；父审查者按 CONTRACTS §4.2 确认该顺序与正常关停一致，Core 退出0、四组件 drained=true/killed=false，原日志在 `/private/tmp/alonabot-g45-admin.sswdf94y/core.log`。所有平台故障/锁实跑目前为 darwin/arm64；Windows、Linux/amd64、Linux/arm64、darwin/amd64 的实际运行、真实磁盘写满和真实外部数据库未运行。后继顺序75→46→47/48→49，按场景 README 在目标环境重新构建本平台产物，消费三类入口；原目录保留供来源与持久状态复核。
 
+### S-06.2 / V-74、V-77、V-78、V-81 指标、故障与固定机器证据
+
+2026-11-19～20，goal-174；固定产品候选 `a02780342b75a2a34dd689c0ad367690425e4315`。后续普通合入 main `cb5acc79` 的合并点为 `24ee3f9a`；同步范围为发行测试、文档及 Docker context，Core/SDK/示例产品源码与依赖输入保持。唯一提交集成测试 [TestSleepMetrics](../internal/app/sleep_metrics_test.go) 新增382行；其余自测与原始数据均在执行者 worktree 的忽略目录，下面的日志路径相对 `goal-174/`。原预算 Core24/echo10/configdb_gorm16MiB 保持，三项资源验收均 FAIL；goal-174 与 V-81 总体验收继续未完成。
+
+| 分项 | 实际入口与结果 | 命令、平台与证据 |
+| --- | --- | --- |
+| V-77/V-81 真实集成主路径 | 真实 Core、认证管理 API、正式安装的动态插件进程与 SQLite：自动 SUSPENDED→100并发请求共享一次恢复→再次休眠→always_on；Ready 前零交付，各编号仅交付一次；原代次、配置、路由快照、静态锚点/暂停状态、动态参数、业务标记、迁移一次保持。cold_start=3、started=ready=2，日志聚合与 Snapshot 相等，3个 Session 关联 Core 与 SDK 实际阶段耗时 | darwin/arm64、Go1.27.1，`go test -v -race -count=1 ./internal/app -run '^TestSleepMetrics$'` 通过13.225s，`gn04-test-final.log`。夹具显式 idle150ms、minimum uptime50ms、cold window1h/max100；首轮未保留 HTTP 策略覆盖导致夹具失败，修正后通过，原失败保留 |
+| V-77/V-78 真实故障与 STOPPING | 本地 `internal/app/sleep_metrics_failures_local_test.go`：OnReady 进程退出，8条/4MiB等待全部保留 ACTIVATE/UNAVAILABLE/EOF，共享 failed1、逐等待 dropped_failed8，预算归零且下一批完整复用；旧树与锁释放。OnStop 同步点冻结旧树，命令与自然到期项按原 deadline 等待，取消/过期退出，Ready 后唯一新 Session 各交付一次；IDLE停止一次，异常重启次数保持；原代次/任务/数据/迁移保持 | darwin/arm64、Go1.27.1，`go test -v -race -count=1 ./internal/app -run '^(TestSleepMetricsFailures\|TestSleepMetricsStopping)$'` 通过21.906s，`gn05-test-final.log`；本地短时长与截止覆盖记录在测试源码和卡片，固定机实测沿缺省值。首轮错误要求 ON_READY code 与中间夹具编译错误均保留 |
+| 指标、真实冷启动与 SDK 回调 | 本地 `TestWakeMetrics`/`TestCountersLocal`/`TestColdStartMetrics` 覆盖共享启动成功/失败、三种预算拒绝、取消/deadline/其他错误、锁外计数、快照并发复制及历史回收；`TestLifecycleCallbackMetrics` 覆盖两phase nil/成功/错误/panic/watchdog后实际返回和真实进程退出，缺回调/未实际完成保留缺项；`TestActivationFailureLocal` 确定性覆盖 error/panic/deadline 与发送成功/写失败的原始原因交接；`TestRecordRuntimeMetricsLocal` 用 SQLite 触发器核对失败不写伪状态日志 | darwin/arm64、Go1.27.1；`go test -race -count=1 ./internal/core/metrics ./internal/core/supervisor -run '^(TestWakeMetrics\|TestCountersLocal)$'` 通过3.000s/3.373s；supervisor `-run '^(TestColdStartMetrics\|TestWakeMetrics)$'` 通过6.060s；SDK `-run '^(TestActivationFailureLocal\|TestLifecycleCallbackMetrics)$'` 通过3.787s（`fix02-test.log`），app `-run '^TestRecordRuntimeMetricsLocal$'` 通过1.846s（`fix01-test.log`）。FIX01/02原始红证均保留；父独立 FIX02 race 绿证3.394s |
+| V-77/V-78/V-81 的已有专项复用 | S-06.1 / PR #269 的管理与设置保存失败、QUIESCING策略发布；S-02.2 / PR #249 的固定冷却截止与历史回收；S-03.1 / PR #256 的真实停止/Ready、SQLite写锁窗口内到期项保留、失败撤销计划和过期 at 清理 | 沿本节既有对应行及其原命令/平台/日志：`TestSleepRecovery` 16.886s；`TestIdleDecisionLocal`/`TestIdleCompactedHistoryLocal`/`TestIdleColdStartSequenceLocal` 的最终race证据；`TestLocalScheduler(FreezeWriteWindow\|WakeFailureRetiresPlan)` 17.752s、`TestLocalSchedulerQuiescingReady` 9.256s。已合并候选分别 b44051a9、b63b287a、a0bbe7be，本轮相关改动再由完整范围race覆盖 |
+
+**固定机器与普通构建。** instabox linux/amd64，kernel `6.18.60-instabox`，4逻辑CPU、内存8351281152字节、约4GiB swap；machine_id `1a054c8857e7bf24d75653790844ed62`，boot_id `24c67d24-7e21-a7eb-b70b-dae0cde52acd`，CLK_TCK100。作为 V-33/V-74 后续共同固定机，历史 V-33/V-74 无可复用的同机原始样本。cgroup session/user slice 无额外 memory/swap/CPU 配额，缺项原错随环境日志保留；managed120m平台窗口由审查者预约，CI/runner与采样串行。自然文件缓存、未主动 drop cache；普通构建无race/额外ldflags，Go1.27.1，CGO_ENABLED=0。
+
+GN08 从固定候选以 `env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o goal-174/gn08-artifacts/alonabot ./cmd/alonabot` 构建 Core；打包使用 darwin/arm64 同候选 host CLI，`pack ./examples/plugins/echo --target linux/amd64 --out goal-174/gn08-artifacts/echo` 与 `pack ./examples/plugins/configdb --tags configdb_gorm --target linux/amd64 --out goal-174/gn08-artifacts/configdb`。正式包分别为 `echo-0.1.0-linux-amd64.tar.gz`、`alonabot-plugin-configdb-0.1.0-linux-amd64.tar.gz`，保留 release.json 与实际插件/Core buildinfo。完整 argv/env/cwd/时间/退出码在 `gn08-artifacts/build-commands.jsonl`；Linux原路径映射在 `gn09-linux/gn09/transfer-path-mapping.json`，后续三轮沿原包、原Core与同一方法。
+
+Linux源码目录 `/data/home/user/alonabot-measure-a0278034/source`；从该目录实际执行 `go build ./scripts/sleep-measure`、`go test -count=1 ./scripts/sleep-measure`（含 ignored 解析/计算自测，0.015s）均通过。以下命令中的 ROOT 为 `/data/home/user/alonabot-measure-a0278034`，ART 为其 `source/goal-174/gn08-artifacts`；每phase使用全新 work/out，N=1/2/3 分别对应 GN10/11/12，未复用冷启动 data_dir。
+
+```text
+go run ./scripts/sleep-measure --alonabot $ART/alonabot --echo-package $ART/echo/echo-0.1.0-linux-amd64.tar.gz --configdb-package $ART/configdb/alonabot-plugin-configdb-0.1.0-linux-amd64.tar.gz --work-dir $ROOT/gn09-work --out $ROOT/gn09-cold --phase cold
+go run ./scripts/sleep-measure --alonabot $ART/alonabot --echo-package $ART/echo/echo-0.1.0-linux-amd64.tar.gz --configdb-package $ART/configdb/alonabot-plugin-configdb-0.1.0-linux-amd64.tar.gz --work-dir $ROOT/gnNN-resources-work --out $ROOT/gnNN-resources --phase resources --round N
+go run ./scripts/sleep-measure --alonabot $ART/alonabot --work-dir $ROOT/gnNN-core-work --out $ROOT/gnNN-core --phase core --round N
+```
+
+**冷启动，两组各100次尝试/100成功/0失败。** 独立安装/首次迁移后，always_on下串行 restart，activation_reason=resume，100独立PID/Session、原代次；起止为 Core process.Start 前→合法 ACTIVATED 成功返回，完整绑定另有门禁。成功ns升序，nearest-rank第50/95/99项；CLI/API耗时另存。结果与原日志位于 `gn09-linux/gn09-cold/{echo,configdb_gorm}/{cold.jsonl,summary.json}`；每组Core正常退出0。
+
+| 样本/阶段 | N | P50 ms | P95 ms | P99 ms | 状态 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| echo cold_start | 100 | 4.033370 | 5.367619 | 5.618309 | PASS，P95≤200ms初步目标 |
+| echo prepare | 100 | 0.685900 | 1.015320 | 1.096570 | 实测 |
+| echo activate | 100 | 0.278870 | 0.449730 | 0.685060 | 实测 |
+| configdb_gorm cold_start | 100 | 7.605960 | 9.001459 | 9.239750 | 实测 |
+| configdb_gorm prepare | 100 | 2.339390 | 2.945190 | 3.317359 | 实测 |
+| configdb_gorm activate | 100 | 0.550580 | 1.167960 | 1.505820 | 实测 |
+| configdb_gorm OnStart | 100 | 1.074400 | 1.397120 | 1.433980 | 实测 |
+
+两组 OnReady 与 echo OnStart 未配置，N=0，耗时保持null及not_executed原因。完整成功/失败阶段、SDK lifecycle_session_id、prepare_ns/activate_ns均保留原ns；控制job首次jq参数错误发生于采样前，修正后自测与实采各一次。
+
+**资源三轮。** GN10资源/独立Core为2026-11-19T16:39:23Z～17:15:26Z；GN11为22:13:49Z～22:49:51Z；GN12为23:35:23Z起（完整起止在run.json）。ACTIVE与SUSPENDED均稳定120s；原 idle15m/minimum uptime5m、默认tune与冷却保持，echo显式15m策略，原活动时刻起自动休眠。每轮两插件各新Core/data_dir，Core-only另起无插件/Adapter。PID+starttime前后核验，原树及进程组退出后再核休眠区间两端，插件树休眠内存/CPU均0；所有Core正常退出0。附属进程均0，Core+附属等于Core，总计为Core与插件树相加。
+
+| V-74 样本 | 轮1 PSS MiB | 轮2 PSS MiB | 轮3 PSS MiB | 中位数 MiB | 原预算 MiB | 状态 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Core-only | 28.8359375 | 28.37109375 | 28.40625 | 28.40625 | 24 | FAIL |
+| echo插件树 | 11.67578125 | 11.69140625 | 11.7421875 | 11.69140625 | 10 | FAIL |
+| configdb_gorm插件树 | 21.625 | 19.796875 | 19.98828125 | 19.98828125 | 16 | FAIL |
+
+下表内存为区间终点值，私有内存=Private_Clean+Private_Dirty；CPU由同120s区间utime+stime差/CLK_TCK/实际单调时间求得，100%为一个逻辑核，展示到6位小数，JSON保留完整值。PSS/RSS/private单位MiB，SUSPENDED行中的插件树四值均0。
+
+| 轮次 | 样本/状态 | Core PSS/RSS/private/CPU% | 插件树 PSS/RSS/private/CPU% |
+| --- | --- | --- | --- |
+| 1 | echo/ACTIVE | 32.2578125/32.265625/32.2578125/0.083315 | 11.67578125/11.68359375/11.67578125/0.000000 |
+| 1 | echo/SUSPENDED | 33.515625/33.5234375/33.515625/0.091646 | 0/0/0/0.000000 |
+| 1 | configdb_gorm/ACTIVE | 32.16796875/32.17578125/32.16796875/0.083326 | 21.625/21.6328125/21.625/0.000000 |
+| 1 | configdb_gorm/SUSPENDED | 34.0234375/34.03125/34.0234375/0.083326 | 0/0/0/0.000000 |
+| 1 | core/ACTIVE | 28.8359375/28.84375/28.8359375/0.066652 | — |
+| 2 | echo/ACTIVE | 32.50390625/32.51171875/32.50390625/0.083312 | 11.69140625/11.69921875/11.69140625/0.000000 |
+| 2 | echo/SUSPENDED | 33.46875/33.4765625/33.46875/0.066650 | 0/0/0/0.000000 |
+| 2 | configdb_gorm/ACTIVE | 32.296875/32.3046875/32.296875/0.074993 | 19.796875/19.8046875/19.796875/0.000000 |
+| 2 | configdb_gorm/SUSPENDED | 33.3359375/33.34375/33.3359375/0.074981 | 0/0/0/0.000000 |
+| 2 | core/ACTIVE | 28.37109375/28.37890625/28.37109375/0.066655 | — |
+| 3 | echo/ACTIVE | 31.8515625/31.859375/31.8515625/0.074996 | 11.7421875/11.75/11.7421875/0.000000 |
+| 3 | echo/SUSPENDED | 30.34375/30.3515625/30.34375/0.074981 | 0/0/0/0.000000 |
+| 3 | configdb_gorm/ACTIVE | 32.51171875/32.51953125/32.51171875/0.066661 | 19.98828125/19.99609375/19.98828125/0.000000 |
+| 3 | configdb_gorm/SUSPENDED | 32.92578125/32.93359375/32.92578125/0.074998 | 0/0/0/0.000000 |
+| 3 | core/ACTIVE | 28.40625/28.4140625/28.40625/0.058323 | — |
+
+原始逐PID stat/smaps_rollup、两端身份、ticks/单调时间、认证API、日志、实际策略/tune、正常退出与环境为 `gn{10,11,12}-linux/gnNN-{resources,core}/`、同轮控制目录与完整归档。GN10/11的 `uv run --no-project python goal-174/gnNN-check.py` 独立重算通过；GN12由审查者消费既有job并用同轮核算脚本复算通过；REVIEW4离线复核全部200冷启动与三轮中位数通过（`tmp/test/review4/{summary.json,check.log}`）。
+
+**归因与承接。** 同Go/flags/依赖的a669→a027静态Core LOAD仅增加30536B；DWARF位于非加载段。审查者DIAG02同机普通Core-only配对为27.17578125→27.03515625MiB（-0.140625MiB），两版均超24MiB；单次配对另存，三轮验收表保持原值。完整maps/smaps位于独立审查worktree的 `tmp/test/diag02-parent-evidence/alonabot-diag02-parent-20261120`。文件映射与匿名页继续按CONTRACTS §10归因，预算未调整；本地GORM固定hook查找探针仅有静态缩减和schema测试证据，正式依赖路径待维护者批准。
+
+DIAG03在父停runner后的同机独占窗口执行a669/a027原Core与匹配正式pack，顺序echo基线→候选、configdb基线→候选，各新data_dir、ACTIVE120s、原代次、正常退出。首job44631dc2因归档AppleDouble文件进入glob，在启动Core前失败；改为确切正式包名后job9b3c35a4完成四项exit0，原失败完整保留。实际命令为 `uv run --no-project python /data/home/user/alonabot-diag03-174-20261120/paired_plugins.py /data/home/user/alonabot-diag03-174-20261120/inputs/baseline /data/home/user/alonabot-measure-a0278034/source/goal-174/gn08-artifacts /data/home/user/alonabot-diag03-174-20261120/out-retry1`。完整109.9MiB归档取回 `goal-174/diag03-evidence.tar.gz`，原始目录 `goal-174/diag03-linux/alonabot-diag03-174-20261120`；`tmp/test/review4/{diag03-summary.json,diag03-check.log,diag03-pack-identity.json}`复核八份完整maps/smaps/rollup逐字段一致、PID身份、认证runtime与120s、全部正式包/release.json及安装文件逐字节相同，所有采样PID退出。父接回runner恢复权。
+
+| DIAG03 单次配对 | a669 PSS MiB | a027 PSS MiB | 差 MiB |
+| --- | ---: | ---: | ---: |
+| echo插件 | 11.36328125 | 11.72265625 | +0.359375 |
+| echo所在Core | 32.59765625 | 31.88671875 | -0.7109375 |
+| configdb_gorm插件 | 20.765625 | 19.578125 | -1.1875 |
+| configdb所在Core | 32.5625 | 31.29296875 | -1.26953125 |
+
+echo插件增量368KiB由可执行文件映射144KiB、匿名及内核224KiB组成；configdb插件下降1216KiB由文件映射下降184KiB、匿名及内核下降1032KiB组成。两版两插件均超原预算；本次配对独立于上面的三轮验收。GORM窄patch的七类模型对照中，九个hook的标志与完整警告均一致，涵盖指针/值/嵌入方法、错误参数/返回/同名异包DB和无hook（`hook-equivalence-{control,probe}.json`、`hook-equivalence-check.log`）；探针真实PSS未运行，正式依赖保持原值。
+
+**完成命令与未完成项。** 固定a027的darwin/arm64、Go1.27.1：`go vet ./internal/core/metrics/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/scheduler/... ./sdk/... ./internal/app/...`、`go build ./...`、`go test -race -count=1 ./internal/core/metrics/... ./internal/core/supervisor/... ./internal/core/idle/... ./internal/core/scheduler/... ./sdk/... ./internal/app/...` 全部通过（app231.646s），`go test -race -count=1 ./cmd/alonabot -run '^TestSleepPolicyManagement$'` 通过16.191s；日志 `gn08-{vet,build,race,management-race}.log`。rss 的 V-74/V-81 按D-171/goal-48随组件后置，help未纳入本轮样本；真实外部平台及其他OS实际资源运行未运行。S-06.3页面证据沿下一小节已合并PR #274；父负责本PR最终head CI与独立验收。Core/echo/configdb三项预算修复仍待完成，V-81保持未完成。
+
 ### S-06.3 / V-81 休眠策略与运行状态的页面证据
 
 PR #274；产品候选 `94803c7b868eaac62d47eca56bd420010061d881`，普通合并 main `96d46530` 后的 `ac86498d` 前端差异为空。2026-11-19，darwin/arm64、Go 1.27.1、Chrome 157.0.8103.79。产品差异为8个前端文件、413行新增与18行删除，提交测试新增0行；本地测试、浏览器脚本与截图均保留在执行者或独立审查 worktree 的忽略目录。
