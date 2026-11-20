@@ -40,7 +40,7 @@
 | V-30 | T-09 | Core崩溃于PREPARED、Active+COMMITTED提交前后、OnReady失败 | 未提交只恢复旧版；已提交只恢复新代次；旧进程退出未确认时不启动第二写入者；无双代次接单或静默回滚 |
 | V-31 | T-09 | 声明 `prepare_effects=external` 的插件（准备期写外部数据库），尝试自动 reload、update 与 rollback | 返回 NEEDS_MANUAL_MIGRATION，提示维护/备份流程；真实 CLI/API 显式备份许可只对本次 Session/Generation/DB 有效，运行中或非 external 请求拒绝，成功与失败均保持停用；提交前后失败及 Core 恢复不重跑迁移，Active 按提交点保持准确；普通 restart 不受影响；无虚假无损回退承诺 |
 | V-32 | T-10 | Linux amd64/arm64、Windows amd64、macOS amd64/arm64 编译、启动/退出 | 五个组合都有真实记录；CGO 插件在不兼容平台标不支持而非虚假发布 |
-| V-33 | T-10 | 同一台固定机器、同一个本地 Bot API 模拟服务；NoneBot2 使用其 Telegram Adapter 与功能相同的插件。四种负载：空闲（Core 与 echo、configdb、HTTP 示例三个插件运行 10 分钟）；消息（每秒 20 条文本、持续 10 分钟，echo 逐条回复）；数据库（每秒 20 条命令，每条在 SQLite 中写入并读取一行，持续 10 分钟）；HTTP（每秒 50 个请求访问插件路由，持续 10 分钟） | 每种负载报告 RSS/私有内存、Linux PSS、CPU 与回复或响应延迟的 P50/P95/P99，并记录版本、机器与负载参数；不借同 worker PoC 代替 |
+| V-33 | T-10 | 原计划为固定机器四负载与 NoneBot2 对照；2026-11-20 维护者按 D-184 取消新增资源测量 | 维护者取消新增运行；保留已有兼容预检与未取得指标，T-10.3 归档现有资源证据及决定 |
 | V-34 | T-10 | 100 次启停、多次异常退出、普通子进程树、外部副作用重试 | 无 Core 崩溃/会话泄漏，合作型子进程按平台能力清理，业务副作用默认不自动重试 |
 | V-35 | T-03 | 多物理消息、平台明确拒绝、先成功再超时、末尾相册带按钮在首发前拒绝、成功message_id=0 | ACCEPTED/PARTIAL/REJECTED/UNKNOWN与每part一致；已确认ID保留、0不当可编辑ID；未尝试列出；payload+error同时返回，不自动补发 |
 | V-36 | T-02、T-08、T-09 | 同data_dir双Core、同插件并发enable/update、Core被kill而子进程仍写DB | 独占锁/管理串行及预期代次检查生效；SDK断链后走完OnStop再退出，写管道不因SIGPIPE终止；runtime.lock未释放不打开DB/启动替代实例 |
@@ -81,7 +81,7 @@
 | V-71 | T-15 | 本地 OneBot 11 模拟服务：get_login_info、access_token 错误、断线重连、self_id 不符、字符串格式上报、私聊/群聊/匿名消息、撤回与成员变动、to_me 的三种情况（含 get_msg 失败）、入站图片取件、实例队列满；发送混合段、video 拆分、reference、base64 媒体、async、failed、请求写出后断线 | 401 与字符串格式使实例致命失败并给出 safe_error；重连不重放已提交的 Send；self_id 不符的事件被丢弃；匿名消息没有 Actor；无通用对应的段只在 platform_payload 中；队列满时丢弃并计数而读循环继续；PartResult 与物理消息一一对应，async 标记 message_ids_unavailable，写出后断线为 UNKNOWN 且后续 NOT_ATTEMPTED；真实 QQ 端只有维护者手测记录，没有时记为未运行 |
 | V-72 | T-03、T-15 | 同一插件经 Telegram 与 OneBot 11 模拟服务的两个实例收发同一组 Chain：纯文本、mention、reference、图片加文本、buttons、forward、file、markdown、Edit、`onebot11.face` extension、发往其他 Adapter 的 extension；同一组入站消息 | 通用片段在两边语义一致：顺序、引用位置、PartResult 与 segment indexes 对应；每个实例只用自己声明的 Capability，未声明的片段或组合在首个平台请求前返回 UNSUPPORTED，模拟服务没有收到请求；extension 只在所属 Adapter 上成功；入站的 text、mention、reference、image 在两边得到相同结构的 chain；插件代码不按 adapter_id 分支 |
 | V-73 | T-13、T-16 | 用 `plugintest` 测试示例插件：命令回复、Rule、普通用户/平台权限/Core Admin 的权限、Capability 子集下的 UNSUPPORTED、按钮点击、多轮等待、schedule 触发、后台发送的缺省许可与收紧后的拒绝、`plugintest.LLM` 替身（D-77）、配置与 `dev.sqlite`；`go test -count=2 -race`；`alonabot.Start` 的激活失败与 ctx 取消 | 每次注入在分发结束或进入多轮等待后返回，结果完整，不依赖 sleep；行为与独立进程运行相同；测试之间的数据目录互不影响；Start 失败或停止后不残留组件 goroutine、core.lock 与子进程 |
-| V-74 | T-10 | linux/amd64，与 V-33 同一台机器；各进程 Activated 后空闲 2 分钟，读 `/proc/<pid>/smaps_rollup` 的 Pss，取 3 轮中位数：只运行 Core（不启用任何插件与 Adapter）；echo 示例插件进程；rss 插件进程（`sqlitedb`，有一个订阅）；configdb 示例的 `gormdb` 变体进程 | Core ≤ 24 MiB，echo ≤ 10 MiB，rss ≤ 14 MiB，configdb ≤ 16 MiB；同时记录 RSS 与私有内存。超出视为回归，按 CONTRACTS §10 处理 |
+| V-74 | T-10 | 固定 linux/amd64；Core-only 无插件/Adapter，echo 与 configdb GORM 在 ACTIVE 后空闲120s，三轮 smaps_rollup PSS，保留 RSS 与私有内存；rss 按 D-171 后置 | D-184 接受现有 Core 26.61328125 / echo 10.09375 / configdb GORM 16.21875 MiB；旧24/10/16 MiB及超标事实保留历史，停止新增资源测量与预算优化 |
 | V-75 | T-01、T-10 | 用 docs/development.md 的 `go list -deps` 命令，在五个目标上（设 GOOS/GOARCH）列出 Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）链接的模块 | 只含 docs/development.md 允许清单中的模块 |
 | V-76 | T-12 | 测试插件调用 `llm.generate`：`llm_service_allowed_plugins` 为缺省的 `["*"]`、改为名单后在与不在名单中、不指定模型、指定不存在的模型与非 chat 类型的模型、模拟 Provider 出错与中途断开、调用方期限短于生成耗时、`chat_model` 为空、Agent 组件未启用、调用方经 `@agent` 调用 | 缺省时调用成功；改为名单后不在名单中返回 PERMISSION_DENIED，模拟服务没有收到请求（D-83）；不指定时使用 `chat_model`（D-154）；不存在或非 chat 类型的模型为 INVALID_ARGUMENT，`chat_model` 为空为 FAILED_PRECONDITION；出错与断开为 UNAVAILABLE，safe_message 不含 API Key，模拟服务只收到一次请求（D-155 的重试不适用于本服务）；期限到达时调用方得到 DEADLINE_EXCEEDED；Agent 未启用时按目标未激活失败；`@agent` 解析到已安装的 Agent 组件；成功时返回 text、model 与用量，会话存储没有新增条目 |
 | V-77 | S-01.1、S-01.2、S-02.1、S-02.2、S-02.3；S-06.2 汇总 | 插件声明可休眠且空闲达到阈值后退出；休眠后首条命令、Service 调用与 HTTP 请求；同一插件 100 个并发唤醒；唤醒队列条数或字节满额；等待中取消与 deadline 到达；STOPPING 期间到达请求；唤醒后 REGISTER 的路由摘要与快照不一致；在途 Handler、Service、HTTP、媒体、schedule、延续调用与多轮等待阻止休眠；Core 重启后从快照恢复路由；未启用休眠；注册了消息类事件路由或 Raw 路由的插件；插件策略为 `never` 或自带空闲时长；运行中修改全局与按插件的设置；plugin/agent 可休眠声明；Core 过滤的 to_me/会话类型/唤醒词 OR、triggers 多选为空、配置文件覆盖、仅 SDK Rule 与未过滤路由、快照中的新字段；固定冷却期 | 首条请求按原权限、Target、Trace 与 deadline 交付一次；并发唤醒只产生一个新 Session；冷启动不延长请求期限，取消的请求不交付；进入 QUIESCING 前复核 Session、Ready、零引用及真实活动结束时间，变化时撤销空闲决定并保留原唤醒时间；进入后新请求按原期限与预算等待旧树退出、SUSPENDED 及唯一新 Session 的 Ready；摘要不一致时停止激活；空闲退出记 `SUSPENDED`、StopReason 为 `IDLE`，不计入异常退出，不更新 ActiveGeneration、不重跑数据库迁移回调，配置继续加载、校正并核对完整快照；快照不含 Secret、Listener 与内部代理凭证，未提交快照及包摘要不一致时隔离路由；队列条数、字节或 Core 总预算满额返回 RESOURCE_EXHAUSTED，取消/到期立即归还预算，单个等待者取消后共享启动继续；ACTIVATED 后全部绑定完成才交付；活动引用按 Session 隔离且重复释放安全，HTTP 引用在代理返回时释放，空闲停止复用正常排空、一次 STOPPING、OnStop 与整树截止，HTTP/Bus 仍在执行的 SDK 回调沿用正常停止截止；同步活动准入与 Session 在途登记共用临界区，Handler 装配等待参与空闲复核，正常 WaitIdle 覆盖整个准入区间；在线 Bus 用订阅者身份持有至 EVENT 排队撤回或实际写出结束；未启用时生命周期与事件行为不变；未声明 Core 过滤的消息监听插件缺省不休眠，管理员显式给出时长后才休眠；Core 过滤未命中时常驻不交付、休眠不唤醒，命中后才交给 SDK Rule，按会话生效覆盖值匹配，覆盖更新无需唤醒；空条件不命中，读取失败保留诊断；过滤声明与路径进入快照且值不进入；plugin 与 agent 规则一致，Adapter/WebUI 常驻；超过冷启动阈值从触发时刻固定常驻 SLEEP_COLD_START_WINDOW，结束后恢复空闲判定；`never` 的插件不休眠，改为 `never` 时正在休眠的插件随即唤醒；按插件的空闲时长覆盖全局值；设置修改不重载插件，全部 Update/Reload（含命令前缀、Prune、BindAdapter、PrepareInstances 内部写回）与空闲判定串行发布，循环及文件锁、插件锁外等待恢复，聚合提交后错误与各插件失败；时长从下一次空闲判定起生效；冷启动记录按稳定序号消费确认，常驻/停用/休眠实例同样回收，固定冷却不因期间启动延长（D-153、D-179） |
@@ -286,7 +286,7 @@ T-02.4 按 D-86 删除的测试及测试插件只保留历史运行证据，相�
 | T-03.5 / V-09 的上传分项 | [PR #38](https://github.com/AlonaBot/AlonaBot/pull/38)；`internal/core/media/upload_test.go` 的 `TestUpload`、`TestQuota`、`TestReferenceLifetime`、`TestUploadFileFailures`、`TestOpenCleanup`：临时目录上的真实 Store 经 AddServices/Mux 驱动三个服务；覆盖三块上传后 Commit 与 Lookup、错序 offset 终止并释放预留、大小或摘要不符被拒、第 5 个未完成上传被拒、Session 与 Core 配额超限、注入时钟过期后 NOT_FOUND 并释放、ReleaseSession 与跨 Session 隔离、并发准入、文件读写与删除故障（删除失败记 WARN，INTERNAL 的 safe_message 不含 Store 目录）、Open 清理遗留文件；SDK `Upload` 的本地测试使用真实配对 Session（PR 中另列，未提交） | darwin/arm64、Go 1.27.1 上 gofmt 无输出，`go vet ./...`、`go test -race -count=1 ./internal/core/... ./internal/wire/... ./sdk/...`、`go build ./...` 通过；审查者以本地测试确认 64 个 Session 并发 Begin 时 Core 配额无超额，并复现、确认 safe_message 路径泄露的修复；[head 6a5608d 的 Quality gate](https://github.com/AlonaBot/AlonaBot/actions/runs/40820335813) 通过 | IncomingMedia、Read、Grant、发送时消费租约与 Core 装配（T-03.6 起）；V-09 整体未闭合；其他目标平台实际运行未运行 |
 | T-11.3 / V-56 的存储与插件访问分项 | [PR #35](https://github.com/AlonaBot/AlonaBot/pull/35)；[`internal/core/supervisor/conversation_test.go`](https://github.com/AlonaBot/AlonaBot/blob/685de5025aef041a427cba86e976eab19343510b/internal/core/supervisor/conversation_test.go) 的 `TestConversationProcesses`：memory Adapter、Router、Mux、message.Service、conversation.Service、真实 SQLite 与两个 Native 插件进程；覆盖一次追加 3 条再追加 1 条、序号与内容原样，6 条约 1 MiB 条目跨帧多页读取不丢不重，同一会话键的插件隔离，含非对象 JSON 时整次拒绝，clear 后为空，关闭 Store 后重新 Open/Launch 数据保留，Service.Purge 只删本插件，日志不含条目内容；`contracts/wirespec_test.go` 固定会话消息字段编号。PR 中另列本地 `*_local_test.go`（未提交） | darwin/arm64、Go 1.27.1 上 gofmt 无输出，`go generate ./...` 后无差异，`go vet ./...`、`go test -race -count=1 ./contracts/... ./internal/... ./sdk/...`、`go build ./...` 通过；审查者以本地测试确认 40 路并发追加序号连续、近帧上限条目分页、超大 from_seq 与非法键被拒 | 管理 API/CLI/页面与卸载 `--purge` 流程（T-09.4、T-09.9）、Agent 组件使用会话（T-12.2）；V-56 整体未闭合；其他目标平台实际运行未运行 |
 
-发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。v0.1 只对空闲常驻内存设预算（V-74），初值依据 D-52 记录的实测数据；吞吐与延迟不设通过阈值，T-10 只报告 V-33 的实测结果；**不杜撰 100 MB 等硬性能指标**。
+发布阻塞：协议/Session 鉴权、Core 全局权限、数据代次唯一性、回滚/维护的真实性、安装包越界/来源安全及目标五平台构建失败，均不能通过文案豁免。资源开销按 D-184 以现有实测及维护者接受决定收口；V-74 旧预算与超标事实保留历史，V-33 取消新增对照压测。吞吐与延迟沿用实际已取得的数据。
 
 | 切片 | 实现与证据 | 结果 | 尚未闭合 |
 | --- | --- | --- | --- |
@@ -886,6 +886,21 @@ env ALONABOT_BROWSER_ASSET=docker go test -race -count=1 -timeout=0 ./cmd/alonab
 | V-07 | `internal/core/message/permissions_test.go` 的 `TestSendPermissions`：临时 data_dir 的真实状态库、policy、message.Service 与 memory Adapter，17 个表驱动场景；覆盖原 Target 默认/显式回复豁免、跨插件附件无豁免、其他目标授权前拒绝/授权后放行/撤销后下一次拒绝、后台发送、A/B 实例隔离、同实例 chat/thread、thread 改变需许可、账号与 adapter 绑定、许可先于实例查询、NO_DEFAULT_TARGET；断言回执与实际发送数量、完整目标及链。已有 `TestEchoBothTransports` 验证真实插件 TCP/stdio 回复 | `gofmt -l` 无输出；`go vet ./...`、`go test -race ./internal/core/... ./sdk/...`、`go build ./...` 通过；[产品代码 head 的 Quality gate](https://github.com/AlonaBot/AlonaBot/actions/runs/40687478509) 通过 | 真实 Telegram 未运行，交后续 Adapter 切片验收；V-07 整体未闭合 |
 
 本地自测（`*_local_test.go`，未提交）也随上述 race 命令通过：state 的 `TestPermissionsRoundTripLocal` 覆盖许可空集、字典序、授权/撤销幂等、插件隔离、关闭重开持久化和安装外键；policy 的 `TestCheckSendLocal` 覆盖回复豁免、跨插件附件、后台授权/撤销及查询取消时的完整错误；sdk 的 `TestSendBeforeReadyLocal` 覆盖无 Session、尚未就绪与 stopping 时的 FAILED_PRECONDITION。
+
+
+#### S-06.2 最新资源实测与 D-184 接受决定
+
+2026-11-20，固定候选 `8b838dd8d3018154c663cc429354a526145f7640`，instabox 原 linux/amd64 机器，Go1.27.1、普通 CGO_ENABLED=0、自然文件缓存与默认 GC，正式 pack/install。CI 与测量串行，九个独立 data_dir，各 ACTIVE 后空闲120s；Core-only 未启用插件/Adapter。十五对象的 PID/starttime、六个 smaps/rollup 字段、正式包字节、SQLite 与正常退出均核对通过。
+
+| 进程 | 三轮 PSS（MiB） | 中位数（MiB） | 历史预算（MiB） |
+| --- | --- | --- | --- |
+| Core-only | 26.64453125 / 26.35546875 / 26.61328125 | 26.61328125 | 24 |
+| echo | 10.0859375 / 10.359375 / 10.09375 | 10.09375 | 10 |
+| configdb GORM | 16.1796875 / 16.21875 / 16.2578125 | 16.21875 | 16 |
+
+三项均超历史预算。维护者已看到这些结果并要求“别测了，这方面只要开销不夸张就行了”；D-184 据此接受当前开销，停止新增资源采样、对照压测与预算优化。原三轮28.40625/11.69140625/19.98828125 MiB及后续诊断失败保留原记录。
+
+原始数据位于该切片 ignored `goal-174/v74-8b-linux/alonabot-v74-8b-174-20261120/`，核算入口为 `tmp/test/v74-8b/check.py`，结果为 `summary.json` 与父独立核算的 `parent-summary.json`。执行命令为 `uv run --no-project python candidate_resources.py inputs out`，job `e0183236` 退出0；九段采样于05:18:30 UTC结束，15个被测PID与采样器均退出，CI runner随后恢复。每轮 RSS、私有内存、映射、构建来源与完整命令保留在原始记录。V-33 的四负载/NoneBot2 比较取消新增运行，T-10.3 继续文档归档。
 
 ## 4. 实施交接
 
