@@ -70,7 +70,7 @@ CGO fixture 源码和产物留在 ignored 目录。它是使用当前候选 SDK 
 
 `cgo_build.py` 需要已有 Go、C 编译器与 uv，`--root` 指向候选源码 checkout，`--source` 指向上述单个 Go 源文件，`--target` 为本次 `os/arch`，`--out` 必须为尚未存在的目录。它保留 `go env` 的目标、CC/CXX、CGO 参数和 GOFLAGS，执行实际 C 编译器 `--version` 及 `go build -x -work`，完整命令、cwd、起止耗时、stdout/stderr 和退出码写入 `build.json`；Go 构建临时工作区也保留。宿主版描述器只读取目标文件的 build-info。构建或编译器失败仍写记录，保留原错；缺工具时先取得安装授权。
 
-构建记录中的 `source`、`binary`、`archive` 均为绝对路径；`environment` 为上述构建环境对象，`compiler_version`、`build` 为含 `command`、`directory`、`started`、`duration_ms`、`output`、`exit_code`、`status` 和可选 `error` 的命令结果。验收程序只读取这些命令作为证据，核对成功状态与目标、实际二进制的 `CGO_ENABLED=1`，直接比对归档入口和二进制字节，再从 Mach-O／ELF／PE 读取直接动态依赖。PE 的 DLL 名从命名导入符号取得。未完成的 CGO 构建保持失败证据，平台支持范围由实际构建和运行结果确定。
+构建记录中的 `source`、`binary`、`archive` 均为绝对路径；`environment` 为上述构建环境对象，`compiler_version`、`build` 为含 `command`、`directory`、`started`、`duration_ms`、`output`、`exit_code`、`status` 和可选 `error` 的命令结果，`output` 完整保留合并的原始 stdout/stderr。本地构建器还写入同一格式的 `go_env`：探测失败时保留实际命令、原错、退出码及已知输入（含 `GOEXPERIMENT`），仍写 `build.json`。外部构建记录可直接提供环境值。验收程序优先报告已记录的环境命令失败，再检查编译器、构建与产物路径；核对成功状态与目标、实际二进制的 `CGO_ENABLED=1`，直接比对归档入口和二进制字节，再从 Mach-O／ELF／PE 读取直接动态依赖。PE 的 DLL 名从命名导入符号取得。未完成的 CGO 构建保持失败证据，平台支持范围由实际构建和运行结果确定。
 
 CGO 运行单独记录为 `purpose=cgo`：在百次启停和强杀恢复结束后，再启动一次真实 Core，安装启用该包，经管理会话访问 C 函数路由并比对激活 PID。原有四组件一同运行，停止后检查五组件与合作子树、六把锁和端口释放。完整结果共 104 次业务 Core 运行；省略 CGO 时保留原有 103 次。`cgo` 保存构建记录、二进制身份、直接链接库和该项状态，HTTP 原始响应在 `steps` 中。
 

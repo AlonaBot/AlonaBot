@@ -58,15 +58,21 @@ def main():
     out.mkdir(mode=0o700)
     goos, goarch = args.target.split("/")
     environment = dict(os.environ, GOOS=goos, GOARCH=goarch, CGO_ENABLED="1")
-    keys = ("GOOS", "GOARCH", "CGO_ENABLED", "CC", "CXX", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS", "GOGCCFLAGS", "GOFLAGS")
-    settings = json.loads(checked(["go", "env", "-json", *keys], root, environment))
-    compiler = shlex.split(settings["CC"])
-    compiler[0] = shutil.which(compiler[0]) or compiler[0]
+    keys = ("GOOS", "GOARCH", "CGO_ENABLED", "CC", "CXX", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS", "GOGCCFLAGS", "GOFLAGS", "GOEXPERIMENT")
     binary = out / ("component.exe" if goos == "windows" else "component")
     archive = out / f"platform-cgo-0.1.0-{goos}-{goarch}.tar.gz"
-    record = {"source": str(source), "binary": str(binary), "archive": str(archive), "environment": settings}
-    record["compiler_version"] = execute([*compiler, "--version"], root, environment)
+    # 环境探测也会失败；先保存明确输入，使原始命令和错误始终有结构化落点。
+    record = {"source": str(source), "binary": str(binary), "archive": str(archive),
+              "environment": {key: environment[key] for key in keys if key in environment}}
     try:
+        record["go_env"] = execute(["go", "env", "-json", *keys], root, environment)
+        if record["go_env"]["status"] != "passed":
+            raise RuntimeError(json.dumps(record["go_env"], indent=2))
+        settings = json.loads(record["go_env"]["output"])
+        record["environment"] = settings
+        compiler = shlex.split(settings["CC"])
+        compiler[0] = shutil.which(compiler[0]) or compiler[0]
+        record["compiler_version"] = execute([*compiler, "--version"], root, environment)
         if record["compiler_version"]["status"] != "passed":
             raise RuntimeError(json.dumps(record["compiler_version"], indent=2))
         record["build"] = execute(["go", "build", "-x", "-work", "-o", str(binary), str(source)], root, environment)

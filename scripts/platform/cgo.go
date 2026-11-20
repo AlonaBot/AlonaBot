@@ -24,12 +24,13 @@ const cgoPackageID = "platform-cgo"
 
 // cgoBuildRecord 接收操作者保留的真实构建输入与完整命令结果；其中的命令只作为证据读取。
 type cgoBuildRecord struct {
-	Source          string            `json:"source"`
-	Binary          string            `json:"binary"`
-	Archive         string            `json:"archive"`
-	Environment     map[string]string `json:"environment"`
-	CompilerVersion stepResult        `json:"compiler_version"`
-	Build           stepResult        `json:"build"`
+	Source             string            `json:"source"`
+	Binary             string            `json:"binary"`
+	Archive            string            `json:"archive"`
+	Environment        map[string]string `json:"environment"`
+	EnvironmentCommand *stepResult       `json:"go_env,omitempty"` // 外部构建记录可直接提供环境值；本地构建器同时保留探测命令。
+	CompilerVersion    stepResult        `json:"compiler_version"`
+	Build              stepResult        `json:"build"`
 }
 
 type cgoEvidence struct {
@@ -53,12 +54,17 @@ func (r *report) prepareCGO(path string) error {
 			return err
 		}
 		build := &evidence.Build
-		for _, command := range []stepResult{build.CompilerVersion, build.Build} {
+		var commands []stepResult
+		if build.EnvironmentCommand != nil {
+			commands = append(commands, *build.EnvironmentCommand)
+		}
+		commands = append(commands, build.CompilerVersion, build.Build)
+		for _, command := range commands {
 			if command.Status != statusPassed || (command.ExitCode != nil && *command.ExitCode != 0) {
 				return fmt.Errorf("CGO input command failed: %v: %s\n%s", command.Command, command.Error, command.Output)
 			}
 			if len(command.Command) == 0 || command.Directory == "" || command.ExitCode == nil {
-				return errors.New("CGO evidence requires compiler and build commands, directories and exit codes")
+				return errors.New("CGO evidence requires commands, directories and exit codes")
 			}
 		}
 		if build.CompilerVersion.Output == "" {
