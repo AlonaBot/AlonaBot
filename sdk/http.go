@@ -37,11 +37,11 @@ type httpListener struct {
 	closeOnce  sync.Once
 }
 
-func newHTTPListener(routes []httpRoute) *httpListener {
+func newHTTPListener(routes []httpRoute, runtime *componentSession) httpRuntime {
 	if len(routes) == 0 {
 		return nil
 	}
-	return &httpListener{routes: routes}
+	return &httpListener{routes: routes, runtime: runtime}
 }
 
 func (h *httpListener) start(boot *pb.Bootstrap) error {
@@ -247,3 +247,7 @@ func (h *httpListener) connectionState(conn net.Conn, state http.ConnState) {
 		_ = tracked.Close() // 停止快照之后才完成的 Hijack 同样回收。
 	}
 }
+
+func (h *httpListener) activate(a *activation) { h.activation.Store(a) }
+
+func (h *httpListener) registrations() []httpRoute { return h.routes }

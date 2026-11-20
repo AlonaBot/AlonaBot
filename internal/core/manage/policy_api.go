@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 )
@@ -36,7 +37,7 @@ func (s *Service) accessRoutes(mux *http.ServeMux) {
 			return
 		}
 		for _, id := range request.Instances {
-			if !instanceName.MatchString(id) {
+			if len(id) > validate.MaxPluginIDLen || !instanceName.MatchString(id) {
 				respond(w, nil, invalid("invalid adapter instance name"))
 				return
 			}

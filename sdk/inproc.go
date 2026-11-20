@@ -72,7 +72,7 @@ var defaultSession atomic.Pointer[componentSession]
 
 func init() {
 	inproc.Plugin = func(plugin any, l *inproc.Launch) error { return runInProcess(plugin.(*Plugin), l) }
-	inproc.Adapter = func(a any, l *inproc.Launch) error { return runAdapterInProcess(a.(adapter.Adapter), l) }
+	inproc.Adapter = adapterRunner{}
 	dbhook.Logger = componentLogger
 	registry.Parent = func(ctx context.Context) (*wire.Inbound, bool) {
 		c, ok := ctx.Value(serviceContextKey{}).(*Context)
@@ -92,6 +92,13 @@ func init() {
 		l := componentFor(ctx).active.Load().l
 		return l.pluginID, l.entryPackage, l.serviceSchemas
 	}
+}
+
+type adapterRunner struct{}
+
+// Run 将内部桥接调用交给同进程 Adapter 生命周期。
+func (adapterRunner) Run(a any, l *inproc.Launch) error {
+	return runAdapterInProcess(a.(adapter.Adapter), l)
 }
 
 func newComponentSession(inProcess bool) *componentSession {

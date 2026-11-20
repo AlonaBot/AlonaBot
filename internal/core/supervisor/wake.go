@@ -22,6 +22,7 @@ type WakeOptions struct {
 	QueueRequests int
 	QueueBytes    int64
 	Start         func(context.Context, string) (*Running, error) // 使用 Core 生命周期，返回前完成全部业务绑定。
+	Count         func(pluginID string, reason string)            // 可选；在活动锁外同步累加内存计数。
 }
 
 // Waker 合并逐插件的启动，并唯一持有等待预算与当前 Session 的活动记录。
@@ -64,8 +65,9 @@ func (p *wakePlugin) notify() {
 }
 
 // EnsureActive 等待原代次完整绑定并取得一次活动引用；取消只撤回本等待者。
-func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (func(), error) {
+func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error) {
 	queued := false
+	dropReason := ""
 	defer func() {
 		if queued {
 			w.mu.Lock()
@@ -74,6 +76,19 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 			p.bytes -= payloadBytes
 			w.opt.Global.Release(payloadBytes)
 			w.mu.Unlock()
+			if err != nil {
+				if dropReason == "" {
+					switch {
+					case errors.Is(err, context.DeadlineExceeded):
+						dropReason = "deadline"
+					case errors.Is(err, context.Canceled):
+						dropReason = "cancelled"
+					default:
+						dropReason = "dropped_other"
+					}
+				}
+				w.count(pluginID, dropReason)
+			}
 		}
 	}()
 	for {
@@ -128,6 +143,7 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 		}
 		if p.failure != nil {
 			err := p.failure
+			dropReason = "dropped_failed"
 			w.mu.Unlock()
 			return nil, err
 		}
@@ -146,16 +162,21 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 		// 3. 每份等待载荷只预留一次；取消、失败和就绪走同一个归还出口。
 		if !queued {
 			reason := ""
+			metricReason := ""
 			switch {
 			case p.count >= w.opt.QueueRequests:
 				reason = "wake request queue is full"
+				metricReason = "dropped_queue"
 			case payloadBytes > w.opt.QueueBytes-p.bytes:
 				reason = "wake payload queue is full"
+				metricReason = "dropped_bytes"
 			case !w.opt.Global.Acquire(payloadBytes):
 				reason = "Core global payload budget is full"
+				metricReason = "dropped_budget"
 			}
 			if reason != "" {
 				w.mu.Unlock()
+				w.count(pluginID, metricReason)
 				slog.Warn("wake request rejected", "plugin_id", pluginID, "reason", reason)
 				return nil, wakeError(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, reason)
 			}
@@ -179,6 +200,7 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 }
 
 func (w *Waker) start(ctx context.Context, id string, p *wakePlugin) {
+	w.count(id, "started")
 	running, err := w.opt.Start(ctx, id)
 	w.mu.Lock()
 	if err == nil && (p.current == nil || p.current.running != running || !p.current.ready) {
@@ -187,11 +209,21 @@ func (w *Waker) start(ctx context.Context, id string, p *wakePlugin) {
 	w.mu.Unlock()
 	if err != nil {
 		err = wakeFailure(err)
+		w.count(id, "failed")
+	} else {
+		w.count(id, "ready")
 	}
 	w.mu.Lock()
 	p.waking, p.failure = false, err
 	p.notify()
 	w.mu.Unlock()
+}
+
+func (w *Waker) count(id, reason string) {
+	if w.opt.Count != nil {
+		w.opt.Count(id, reason)
+		slog.Debug("wake metric", "plugin_id", id, "reason", reason)
+	}
 }
 
 // preparing/failed 也覆盖管理启动与候选激活，使等待者观察到共享启动以外的失败。
