@@ -22,12 +22,14 @@ import (
 
 // TestCrossComponentEndToEnd 通过正式包和管理入口联验真实组件进程。
 func TestCrossComponentEndToEnd(t *testing.T) {
-	t.Run("tcp", func(t *testing.T) {
-		t.Run("components", testCrossComponentPackages)
-	})
+	for _, transport := range []string{"tcp", "stdio"} {
+		t.Run(transport, func(t *testing.T) {
+			t.Run("components", func(t *testing.T) { testCrossComponentPackages(t, transport) })
+		})
+	}
 }
 
-func testCrossComponentPackages(t *testing.T) {
+func testCrossComponentPackages(t *testing.T, transport string) {
 	// 1. pack 读取真实工程，安装时只消费正式产物。
 	projects := []struct{ directory, id string }{
 		{"echo", "echo"},
@@ -39,7 +41,11 @@ func testCrossComponentPackages(t *testing.T) {
 		archives[i] = packAgentComponent(t, filepath.Join("../../examples/plugins", project.directory), project.id)
 	}
 	dir := t.TempDir()
-	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
+	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
+	if transport == "stdio" {
+		args = append(args, "--stdio")
+	}
+	c := startEmptyCore(t, dir, args...)
 	address := c.address()
 	tokenFile := filepath.Join(dir, adminauth.FirstTokenFile)
 	info, err := os.Stat(tokenFile)

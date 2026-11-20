@@ -37,7 +37,7 @@
 
 #### 按顺序实施
 
-1. 汇总 V-01～V-76 与 V-82～V-117 的证据，逐项标记已通过、失败、未运行或待联验。不进入首个发行版的组件（官方 OneBot 11 Adapter、welcome、rss 与 Telegram 的后续切片，D-171）的分项标为「随后续版本」，不阻塞本次发布。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio。
+1. 汇总 V-01～V-76 与 V-82～V-117 的证据，逐项标记已通过、失败、未运行或待联验。不进入首个发行版的组件（官方 OneBot 11 Adapter、welcome、rss 与 Telegram 的后续切片，D-171）的分项标为「随后续版本」，不阻塞本次发布。先补齐组件之间的联验：首次管理登录→安装启用→配置/权限→真实消息→插件 HTTP→重载/升级/回退；覆盖 TCP 与 stdio（现有 `run --stdio` 对本次全部 Native 独立进程生效，见 CONTRACTS §1.1）。
 2. 使用不同的真实插件二进制验证命令、文本匹配、多轮等待、主动 Send、Service、Event Bus、Scheduler、HTTP、`sqlitedb` 与 GORM 两个数据库入口，以及官方 Agent 组件与 WebUI 组件。示例既覆盖无配置/无 DB 插件，也覆盖实际写入与迁移的插件；不以同一个 worker 的多份进程代替。
 3. 执行协议、权限和资源边界测试：伪造/过期 Session、命令遮蔽、无 Actor、实例许可、Hook 递归、媒体租约、满准入、Cancel 顺序、超时仍运行的 job。验证错误回执与已经确认的外部结果保持一致。
 4. 执行完整恢复故障注入：停止与持锁、SQLite WAL 备份、候选 OnStart 写入后失败、PREPARED/提交前后 Core 退出、不可变 secret、external 插件的维护许可与 resume、显式 rollback 的新代次。核对数据库内容和权威指针，不能只检查日志出现“恢复成功”。

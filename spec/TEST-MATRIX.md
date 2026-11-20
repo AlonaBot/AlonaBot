@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | V-01 | T-01、T-04、T-09、T-14 | 解析 manifest，市场与本地 ID、缺失/重复 ID、OS/arch 不匹配；工程 manifest 写了构建字段、包内 manifest 缺少构建字段、`metadata` 翻译 | 四角色连字符市场 ID 与 role 匹配且可用，后缀拒绝下划线、连续或首尾连字符，最长 64 字符（D-172）；本地规则保持 `^[a-z][a-z0-9_-]{0,63}$`，非前缀安全 slug 仅警告，旧市场拼写只作本地 ID 且不映射新身份；路径穿越与缺失 ID 拒绝；重复 ID 的先后顺序稳定；工程 manifest 只接受作者信息，构建字段由 build 与 pack 写入，包内 manifest 仍严格校验（D-78）；Adapter 的工程 manifest 与实例声明从可导入包读取，构建 cmd 薄入口，打包后资源位于归档根目录（D-134，T-09.3/T-14.3） |
 | V-02 | T-01、T-02、T-04 | Protocol 1.0、枚举零值、Major/Minor、未知必需能力、Schema 缺失 | Major/required 不兼容明确拒绝；UNSPECIFIED/未知kind不视为成功；Minor正确取交集，无注册残留 |
-| V-03 | T-02 | TCP 和 stdio 使用同样的 Length-Prefixed Protobuf fixture | 双传输序列化语义一致；4 MiB 限额、零帧及错帧正确拒绝；没有 TCP 独占功能 |
+| V-03 | T-02 | TCP 和 stdio 使用同样的 Length-Prefixed Protobuf fixture | 双传输序列化语义一致；`run --stdio` 覆盖开发与已安装组件的启用、候选、重启、重载、恢复及唤醒，缺省 TCP；4 MiB 限额、零帧及错帧正确拒绝；没有 TCP 独占功能 |
 | V-04 | T-02 | 伪造 Session Secret、跨插件 Session、旧 Generation 请求 | 校验失败不激活；旧代次不接受请求；身份错误不会泄漏 Secret |
 | V-05 | T-02、T-07 | 双向相同call_id、乱序/重复/Cancel迟到Response、父调用已完成 | 三元键不串号；用户父上下文失效后子请求不能沿用Actor；迟到结果不二次完成（scheduled只释放实际运行槽） |
 | V-06 | T-02 | stderr/stdout 混入日志、单插件崩溃/退出 | TCP 日志带插件 ID；插件退出前的最后输出不丢；stdio stdout 非协议字节隔离会话；3 次异常崩溃限重启，正常退出不重启 |
