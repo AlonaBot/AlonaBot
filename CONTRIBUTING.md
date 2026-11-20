@@ -38,17 +38,22 @@ PR 中记录实际命令、平台、结果，以及本地运行但未提交的�
 ## 提交 PR
 
 1. 使用简体中文 commit message，说明改了什么和必要原因，无固定类型前缀要求。
-2. 将 PR 指向 main，按[PR 模板](.github/PULL_REQUEST_TEMPLATE.md)填写变更原因、验证、兼容性与风险，并完成清单。关联 Issue 时使用 `Closes #编号`。
-3. 核对 diff：仅包含本次改动及必要相邻修改，排除凭据、个人工作记录、运行数据和临时测试。
-4. 等待当前 head 的检查与维护者审阅；根据意见补充修正和受影响验证。
+2. PR 标题统一为 `type/scope: 中文摘要`，例如 `fix/scheduler: 修复休眠唤醒后的任务交付`。`type` 使用 `feat`、`fix`、`docs`、`refactor`、`test`、`ci`、`build`、`chore`、`perf` 或 `revert`；`scope` 使用实际模块的小写英文名称，可用连字符连接。摘要说明技术变化，省略任务编号、模型与执行工具署名。
+3. 将 PR 指向 main，按[PR 模板](.github/PULL_REQUEST_TEMPLATE.md)填写变更原因、验证、兼容性与风险，并完成清单。关联 Issue 时使用 `Closes #编号`。
+4. 核对 diff：仅包含本次改动及必要相邻修改，排除凭据、个人工作记录、运行数据和临时测试。
+5. 等待当前 head 的检查与维护者审阅；根据意见补充修正和受影响验证。
 
 维护者确认范围、实现、验证及延期项后使用 squash 合并，并核对合并后 main 的检查。贡献者通过 PR 交付；正式版本、签名和发布由维护者控制。
 
 ## CI 与审查
 
 - [Quality gate](.github/workflows/ci.yml) 检查空白、main 文件范围、Go 格式、生成一致性、vet、race 与五目标 pure-Go 构建。前端验证由改动者按开发指南执行。
-- [PR metadata](.github/workflows/pr-metadata.yml) 检查非草稿 PR 的必要说明与确认项；维护者审查其实际内容。
+- [PR metadata](.github/workflows/pr-metadata.yml) 检查打开且非草稿 PR 的标题格式、必要说明与确认项；维护者审查其实际内容。
 - 路径标签、指派与审阅请求由 GitHub 自动化处理；元数据工作流保持代码与 secret 隔离。
 - main 保存产品、现行规范和公共工程资料。个人 Agent 配置、任务调度记录、历史实施与验收材料由 CI 路径检查拒绝。
 
 分支保护配置由维护者管理；具体 CI 命令与权限以工作流为准。
+
+## 贡献许可
+
+AlonaBot 与官方组件采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。提交贡献时，请确认你有权以该许可证提供相关代码与文档；引用第三方材料时保留其版权与许可声明。插件模板使用其独立仓库声明的许可证。
