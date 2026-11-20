@@ -47,7 +47,7 @@ PR 中记录实际命令、平台、结果，以及本地运行但未提交的�
 
 ## CI 与审查
 
-- [Quality gate](.github/workflows/ci.yml) 检查空白、main 文件范围、Go 格式、生成一致性、vet、race 与五目标 pure-Go 构建。前端验证由改动者按开发指南执行。
+- [Quality gate](.github/workflows/ci.yml) 检查空白与 main 文件范围；修改 Go 源码、协议或依赖时，再运行 Go 格式、生成一致性、vet、race 与五目标 pure-Go 构建。前端验证由改动者按开发指南执行。
 - [PR metadata](.github/workflows/pr-metadata.yml) 检查打开且非草稿 PR 的标题格式、必要说明与确认项；维护者审查其实际内容。
 - 路径标签、指派与审阅请求由 GitHub 自动化处理；元数据工作流保持代码与 secret 隔离。
 - main 保存产品、现行规范和公共工程资料。个人 Agent 配置、任务调度记录、历史实施与验收材料由 CI 路径检查拒绝。
