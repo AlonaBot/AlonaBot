@@ -858,7 +858,13 @@ management 核对 DB 1→41→99、五条 committed Journal、restart/reload/upd
 
 无终端全新安装后，真实服务以 `alonabot:alonabot`、`UMask=0077`、`WorkingDirectory=/opt/alonabot` 执行契约的 `run --data-dir /var/lib/alonabot`，自动启用，首次token文件为0600，`admin-token show` 与认证管理请求成功。将升级摘要改为不匹配值后，脚本exit1并保留原PID225556、程序完整字节、设置、四个安装记录及token文件；恢复原摘要后，经无终端管道并省略版本的 `/latest` 入口完成实际版本升级，PID变为225728，原设置/安装记录/标记文件/token保持。卸载删除服务、程序及相邻packages，保留完整数据。随后在新的数据目录验证真实PTY下的管道安装，token只在终端出现一次，服务启动后无token文件；再次有终端升级保持原凭证，PID225934→226078，卸载同样保留数据。systemd journal确认四次Core均正常停止、没有token原文；服务定义和程序已移除，服务账号无剩余进程，runner已恢复。两份测试数据分别保留在 `/var/lib/alonabot-v84-no-tty-20261120` 与 `/var/lib/alonabot` 并归档回本地。
 
-真实 macOS launchd 安装、升级、失败保持和卸载尚需专用可恢复环境，当前开发机保留既有模拟证据。
+#### V-84 真实 macOS launchd 补验
+
+2026-11-20，候选产品 `c2b85cf0`，macOS 27.0.1、darwin/arm64，当前用户 UID501。维护者明确授权本开发机进行真实验收；执行前确认程序目录、数据、LaunchAgent 和服务标签均不存在，7650端口空闲。沿用上述正式dist入口生成同两版darwin/arm64归档，以loopback HTTPS和测试CA分发原资产，原安装脚本未修改。命令为 `uv run --no-project python tmp/test/v84-macos/check.py`，终端分项续接为 `uv run --no-project python tmp/test/v84-macos/check-tty.py`，最终只读核对为 `uv run --no-project python tmp/test/v84-macos/finalize.py`；源、原始失败、遮蔽token后的命令日志、完整JSON、两版归档与无终端数据位于本worktree的ignored `tmp/test/v84-macos/`。新增提交测试0行。
+
+无终端首装与认证管理请求通过，token文件0600；真实launchd以当前用户执行契约ProgramArguments、WorkingDirectory、RunAtLoad与Umask63。摘要不匹配exit1，原PID73246、程序完整字节、设置、四条安装记录及token保持；经无终端管道 `/latest` 升至第二版，PID73349，数据及凭据保持，卸载保留数据。真实PTY管道首装仅出现一次token，无token文件；BSD script回显EOF控制前缀使首轮取证正则误拒绝，原失败保留。修正临时解析后，在同一数据上重新安装核验原token认证、未再次输出token，再升级到第二版，PID74127→74501，原凭据、设置、安装记录与标记保持；卸载通过。续接脚本末尾记录变量缺失导致的NameError原样保留，已通过的产品分项未重跑，最终只读核对exit0。完整result状态passed，包含两次验收脚本错误；118.302s为含续接的墙钟总时长。
+
+两份SQLite均独立读回四个官方组件的0.1.0安装记录与原标记；保留无终端数据于 `tmp/test/v84-macos/data-no-tty/`、终端数据于 `~/Library/Application Support/AlonaBot/data/`。服务日志保留五次正常Core停止（包含首次验收脚本清理），无终端token未进入日志。程序、packages、plist与launchd标签均已移除，四个记录的服务PID均退出，7650端口释放。V-84真实Linux与macOS服务管理分项均已通过。
 
 #### goal174 的固定 Linux 依赖与未闭合项
 
@@ -878,7 +884,7 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | `go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk` 与同模板单独的 `./sdk`；各输出按开发指南 `sort -u` | exit0；`final-linked-modules.txt`合计20项均在Core批准子集，`final-sdk-linked-modules.txt`仅jsonschema-go/x/sys/protobuf三项。五目标实际运行/逐目标审计交47，本轮无新增依赖。 |
 | 新增149行逐条核对当前文件、Test符号、已列子测试与原JSON；历史命令对应原候选保留，D86历史位置单列；`git diff --check` | 当前引用均有效，原主表149与新增追踪149连续唯一、四列表格完整；`final-matrix-reference-audit.json`保留位置/历史/实际PASS映射。V76/109/123的Services路径正确，原Conversation过滤命令另保留，补实际Services命令与本轮PASS0.56s（Conversation8.47s）。 |
 
-本轮结果保留V74预算失败、V77/78/81等待174稳定合并点与固定Linux故障/指标。V126模型页及V146主题/外壳的父补验已完成，见§3.5；V68真实日志卷写满补验见本节。真实凭据、macOS专用服务管理环境、五平台/100次与比较报告保留各自未运行项；V84真实Linux分项见本节。46以草稿交父独立审查，c2b85cf0的Quality44665987038已通过Linux race与五目标pure-Go构建；后继文档候选的最终head CI由父核对；已恢复的cb5 main CI为原合并点证据，后续候选的最终main恢复由父核对。公开签名、Release与镜像发布由维护者执行。
+本轮结果保留V74预算失败、V77/78/81等待174稳定合并点与固定Linux故障/指标。V126模型页及V146主题/外壳的父补验已完成，见§3.5；V68真实日志卷写满补验见本节。真实凭据、五平台/100次与比较报告保留各自未运行项；V84真实Linux与macOS分项均见本节。46以草稿交父独立审查，c2b85cf0的Quality44665987038已通过Linux race与五目标pure-Go构建；后继文档候选的最终head CI由父核对；已恢复的cb5 main CI为原合并点证据，后续候选的最终main恢复由父核对。公开签名、Release与镜像发布由维护者执行。
 
 ### 3.5 全部 V 编号的发布前追踪
 
@@ -978,7 +984,7 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | V-81 | **分项通过；174待联验**。TestSleepPolicyManagement及S06.3实际页面沿原有效记录；固定Linux各100次冷启动/PSS/频繁唤醒与原预算仍依赖174，父/Core负责，当前无稳定合并点。 | 既有 `TestSleepPolicyManagement`/S06.3页面记录见§3.2；174固定Linux最终测量未运行于本切片 | 当前软件/页面分项沿原记录；原100次/资源门槛由父/Core提供最终固定输入后联验 |
 | V-82 | **分项通过**。官方Agent/WebUI/Telegram正式启用与角色、@agent；完整--replace社区组件/来源语义沿TestManagementReplacement及T-09.11。 | `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`；`go test -race ./cmd/alonabot -run '^TestCrossComponentEndToEnd$' -count=1 -v` | GN46-04-api.log；d7a6aa34+GN04；darwin/arm64；PASS49.07s/包57.711s |
 | V-83 | **通过（继承软件分项）**。当前SPA/API/资源路径和WebUI替换；D74仅取消历史图标构建检查，V83当前WebUI路由分项仍保留；GN03实际WebUI后台程序双传输。 | `internal/app/webui_test.go:TestWebUIComponents；§3.2 T-09.12 / V-83`；`GOMAXPROCS=2 go test -p 1 -race ./...` | PR #167（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
-| V-84 | **真实Linux分项通过；macOS待验**。systemd实际全新安装、两版升级、摘要失败保留旧PID/程序/数据、管道有无终端、服务身份/token及卸载保留四个安装记录与数据均通过；launchd仍需专用可恢复环境。既有模拟与不支持平台的检查沿原证据。 | `deploy/install.sh`；§3.4 V-84真实systemd补验中的完整uv命令与日志；继承`TestInstallScript*`及§3.2 | 2026-11-20，c2b85cf0；Debian13.7/Linuxamd64/systemd257；exit0/12.166s；本地`tmp/test/v84-systemd/result.json`与日志/数据库归档；macOS真实分项未运行 |
+| V-84 | **真实Linux与macOS分项通过**。systemd与launchd均实际完成全新安装、两版升级、摘要失败保留旧PID/程序/数据、管道有无终端、服务身份/token与卸载保留四个安装记录及数据；既有不支持平台检查沿原证据。 | `deploy/install.sh`；§3.4 V-84真实systemd与launchd补验中的完整uv命令与日志；继承`TestInstallScript*`及§3.2 | 2026-11-20，c2b85cf0；Debian13.7/Linuxamd64/systemd257；exit0/12.166s；macOS27.0.1/darwinarm64/UID501续接最终exit0；本地`tmp/test/v84-{systemd,macos}/result.json`与日志/数据库，验收脚本原始失败保留 |
 | V-85 | **分项通过；OneBot随后续版本**。Core权限集合与Telegram声明/隐含关系已验证；GN07CoreAdmin独立授权；OneBot11按D171后置，当前真实Telegram未运行。 | `adapters/telegram/telegram_test.go:TestPlatformPermissions；§3.2 T-03.11 / V-85 的 Telegram 分项`；`go test -race ./adapters/...` | PR #106（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
 | V-86 | **分项通过（继承软件证据）**。扩展事件Schema/Actor/未声明/版本与依赖预检保留；其他Adapter真实平台未运行，OneBot11分项D171后置。 | `internal/core/adapter/remote/remote_test.go；sdk历史D86；§3.2 T-04.6 / V-85、V-86、V-87 的 Core 分项`；`go test -race -count=1 ./...` | PR #78（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
 | V-87 | **通过（继承当前D168分项）**。命令前缀已按配置文件取值，旧按实例键历史保留；Admin/usage/invalid/隐藏消费与回复设置由T-04.19复验。 | `cmd/alonabot/manage_e2e_test.go:TestManagementInstancesAndCommands；§3.2 T-04.19 / V-87、V-142 的配置文件前缀与回复分项`；`go test -race -count=1 ./internal/core/... ./internal/app/...`；本轮 F46：`TestManagementInstancesAndCommands` PASS7.46s | PR #250（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
