@@ -26,6 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: 检查 main 文件范围
         if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
         shell: bash
@@ -44,17 +45,28 @@ jobs:
           exit "$rejected"
       - name: 检查空白错误
         run: git diff --check
-      - name: 检查是否已有产品 Go 源码
+      - name: 按改动范围选择 Go 检查
         id: sources
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         shell: bash
         run: |
           set -euo pipefail
-          sources=$(git ls-files -- '*.go')
-          if [ -n "$sources" ]; then
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
             echo 'has_go=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'has_go=false' >> "$GITHUB_OUTPUT"
-            echo '当前提交没有产品 Go 源码，Go 检查未运行。' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git diff --name-only -z "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths"
+          has_go=false
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              go.mod|go.sum|*.go|*.proto) has_go=true ;;
+            esac
+          done < "$RUNNER_TEMP/changed-paths"
+          echo "has_go=$has_go" >> "$GITHUB_OUTPUT"
+          if [ "$has_go" = false ]; then
+            echo '本次未修改 Go 源码、协议或依赖，跳过 Go 全仓检查。' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   go:
