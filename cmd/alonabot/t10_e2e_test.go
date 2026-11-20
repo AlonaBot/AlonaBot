@@ -698,6 +698,7 @@ func testCrossRecoveryPackages(t *testing.T, transport string) {
 		}
 		binary = wrapper
 	}
+	t.Run("secrets", func(t *testing.T) { testCrossSecretPackages(t, transport) })
 	for _, phase := range []string{"prepared", "committed"} {
 		t.Run(phase, func(t *testing.T) {
 			// 1. 安装真实包并形成待恢复的旧代次与业务数据。
@@ -833,5 +834,126 @@ func testCrossRecoveryPackages(t *testing.T, transport string) {
 				t.Fatalf("candidate after recovery: %v", err)
 			}
 		})
+	}
+}
+
+// testCrossSecretPackages 用真实配置插件核对旧快照引用与回退后的数据指针。
+func testCrossSecretPackages(t *testing.T, transport string) {
+	const id = "alonabot-plugin-configdb"
+	archive := packAgentComponent(t, "../../examples/plugins/configdb", id)
+	dir := t.TempDir()
+	config := filepath.Join(dir, "plugins", id, "config.json")
+	developmentWrite(t, config, `{"greeting":"original","token":"first-private-value"}`)
+	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
+	if transport == "stdio" {
+		args = append(args, "--stdio")
+	}
+	c := startEmptyCore(t, dir, args...)
+	c.management(t, dir, "", "install", archive, "--yes")
+	c.management(t, dir, "", "enable", id)
+	first := findPackage(t, c, dir, id).Active
+	// 1. 新值进入新代次；公开读取只显示设置状态。
+	developmentWrite(t, config, `{"greeting":"changed","token":"second-private-value"}`)
+	c.management(t, dir, "", "reload", id)
+	second := findPackage(t, c, dir, id).Active
+	if second == first {
+		t.Fatal("secret reload reused generation")
+	}
+	checkRedacted := func() {
+		t.Helper()
+		status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/plugins/"+id+"/config")
+		if status != 200 || bytes.Contains(raw, []byte("first-private-value")) || bytes.Contains(raw, []byte("second-private-value")) || !bytes.Contains(raw, []byte(`"$secret_set":true`)) {
+			t.Fatalf("secret configuration redaction failed: status=%d", status)
+		}
+	}
+	checkRedacted()
+	c.management(t, dir, "", "rollback", id, first, "--yes")
+	rolled := findPackage(t, c, dir, id).Active
+	if rolled == first || rolled == second {
+		t.Fatal("secret rollback did not create a new generation")
+	}
+	checkRedacted()
+	stopTestCore(t, c)
+	priorLog := c.log()
+	c = startEmptyCore(t, dir, args...)
+	c.waitFor(`"msg":"plugin activated"`)
+	if findPackage(t, c, dir, id).Active != rolled {
+		t.Fatal("Core resume changed rollback generation")
+	}
+	checkRedacted()
+	stopTestCore(t, c)
+	// 2. 直接查询不可变快照与所属 secret，旧引用和值持续保持。
+	store := recoveryStore(t, dir)
+	defer store.Close()
+	references := make([]string, 3)
+	for i, generation := range []string{first, second, rolled} {
+		snapshot, err := store.GenerationConfig(t.Context(), generation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var configuration struct {
+			Token map[string]string `json:"token"`
+		}
+		if err := json.Unmarshal([]byte(snapshot), &configuration); err != nil {
+			t.Fatal(err)
+		}
+		references[i] = configuration.Token["$secret_ref"]
+		if references[i] == "" || strings.Contains(snapshot, "private-value") {
+			t.Fatal("snapshot did not retain an opaque secret reference")
+		}
+		secret, err := store.GetSecret(t.Context(), id, references[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "first-private-value"
+		if i == 1 {
+			want = "second-private-value"
+		}
+		if string(secret.Value) != want {
+			t.Fatal("immutable secret value changed")
+		}
+	}
+	if references[0] == references[1] || references[1] == references[2] {
+		t.Fatal("changed secret reused the current secret version")
+	}
+	active, err := store.Active(t.Context(), id)
+	if err != nil || active != rolled {
+		t.Fatalf("secret Active: %s %v", active, err)
+	}
+	records, err := store.Journals(t.Context(), id)
+	if err != nil || len(records) != 3 {
+		t.Fatalf("secret journals: %+v %v", records, err)
+	}
+	found := false
+	for _, record := range records {
+		if record.NewGeneration == rolled {
+			found = record.Kind == "rollback" && record.Phase == "committed" && record.ExpectedOld == second && record.DatabasePath == filepath.Join(dir, "plugins", id, "generations", rolled, "db.sqlite")
+		}
+	}
+	if !found {
+		t.Fatal("rollback Journal does not own the active database")
+	}
+	// 3. 回退的实际 DB 文件与源文件各自独立，OnStart 读到旧配置。
+	oldFile, err := os.Stat(filepath.Join(dir, "plugins", id, "generations", first, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(dir, "plugins", id, "generations", rolled, "db.sqlite")
+	newFile, err := os.Stat(dbPath)
+	if err != nil || os.SameFile(oldFile, newFile) {
+		t.Fatalf("secret rollback database identity: %v", err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var startup string
+	queryErr := db.QueryRow("SELECT value FROM configdb_startup WHERE key='startup'").Scan(&startup)
+	closeErr := db.Close()
+	if queryErr != nil || closeErr != nil || startup != "original" {
+		t.Fatalf("rollback startup: %q %v %v", startup, queryErr, closeErr)
+	}
+	if strings.Contains(priorLog+c.log(), "private-value") {
+		t.Fatal("secret leaked to Core log")
 	}
 }
