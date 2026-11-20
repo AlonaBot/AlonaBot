@@ -1,6 +1,6 @@
 # 平台验收
 
-`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复；整体状态为 `incomplete`，CGO 验收继续补齐。Windows 当前完成交叉构建，实际运行尚未执行。
+`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。Windows 当前完成交叉构建，实际运行尚未执行。
 
 先从候选源码构建验收程序、Core 与三个示例组件包，并准备下文约定的本地 `platform-tree` 插件。fixture 源码和产物放在 git 忽略的本地目录，随本次证据保留。以下为本机 fish 命令；交叉构建时分别为验收程序与 Core 设置目标，并为 `pack` 指定同一 `--target OS/arch`。
 
@@ -13,10 +13,14 @@ go build -o "$artifacts/alonabot" ./cmd/alonabot
 "$artifacts/alonabot" pack adapters/telegram --out "$artifacts/packages/telegram"
 # 将 tree_source 设置为本地 platform-tree 工程的绝对路径。
 "$artifacts/alonabot" pack "$tree_source" --out "$artifacts/packages/tree"
+# cgo_source 指向下文约定的 ignored 本地 CGO 插件 main.go。
+uv run --no-project --offline --no-python-downloads scripts/platform/cgo_build.py \
+    --root "$PWD" --source "$cgo_source" --target darwin/arm64 --out "$artifacts/cgo"
 "$artifacts/platform" \
     --alonabot "$artifacts/alonabot" \
     --packages "$artifacts/packages" \
     --scenarios "$PWD/scripts/scenarios" \
+    --cgo "$artifacts/cgo/build.json" \
     --out "$artifacts/result.json" \
     --environment native \
     --host 'macOS Apple Silicon'
@@ -29,6 +33,7 @@ go build -o "$artifacts/alonabot" ./cmd/alonabot
 | `--alonabot` | 待验收 Core 的可执行文件路径 |
 | `--packages` | 当前平台组件包目录；分别包含 echo、showcase、alonabot-adapter-telegram、platform-tree 的唯一目标 `.tar.gz`，每包保留相邻 `release.json`；递归记录归档路径与长度 |
 | `--scenarios` | 候选源码 checkout 内的 `scripts/scenarios` 目录，含 `run.py` 与恢复模板 |
+| `--cgo` | 本地 `platform-cgo` 的构建记录 JSON；可选，省略时整体验收为 `incomplete` |
 | `--out` | 新建 JSON 文件；父目录须存在，已有文件会被拒绝 |
 | `--environment` | `native`、`vm`、`container` 或 `emulation`，必填 |
 | `--host` | 操作者填写的宿主或 VM 说明，单独记为 `host_description` |
@@ -60,5 +65,15 @@ Windows 使用 `windows_sources.py` 加载原场景的源码生成函数，按 G
 Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部目标组件包；Core 与验收程序使用 `.exe` 文件名。源码生成输入、有效 Go 声明、overlay、测试可执行文件及每场景运行参数均留在 `scenario-evidence`。交叉构建证据单独记录，实际 Windows 运行仍标记「未运行」。
 
 JSON 的 `recovery` 保存源码与候选提交、构建参数、七个产物的身份、三个场景的输入和完整 `events.jsonl`；每个场景另留 `go-test.log`、overlay、真实 `state.sqlite` 与业务数据库。程序同时核对所需测试名的成功记录和独立 cwd 标记，证据缺失即失败；部分事件和损坏输入的原始字节也保留在失败结果中。所有构建、运行目录与证据路径均位于 JSON 的 `workspace` 下，目录内容沿用原场景入口的布局。
+
+CGO fixture 源码和产物留在 ignored 目录。它是使用当前候选 SDK 的独立 `package main`，以 `genimpl.Register("main", genimpl.Resources{})` 登记资源并经 `sdk.Run` 启动；真实 `GET /native?value=81` 路由解析输入、调用 C 数学库的 `sqrt`，返回 `{"value":9,"compiler":"C __VERSION__","os":"darwin","arch":"arm64","pid":123}`，平台、PID 和编译器字符串均取实际值。Linux／Windows 的 C 入口通过 `#cgo linux windows LDFLAGS: -lm` 链接数学库。`build/pack` 固定 `CGO_ENABLED=0`；本地 `cgo_build.py` 为此单独编译已有 CGO 源文件并生成 unsigned 安装包，fixture ID 固定为 `platform-cgo`、版本 `0.1.0`，使用标准归档、外置 `release.json` 和必需的完整性字段。
+
+`cgo_build.py` 需要已有 Go、C 编译器与 uv，`--root` 指向候选源码 checkout，`--source` 指向上述单个 Go 源文件，`--target` 为本次 `os/arch`，`--out` 必须为尚未存在的目录。它保留 `go env` 的目标、CC/CXX、CGO 参数和 GOFLAGS，执行实际 C 编译器 `--version` 及 `go build -x -work`，完整命令、cwd、起止耗时、stdout/stderr 和退出码写入 `build.json`；Go 构建临时工作区也保留。宿主版描述器只读取目标文件的 build-info。构建或编译器失败仍写记录，保留原错；缺工具时先取得安装授权。
+
+构建记录中的 `source`、`binary`、`archive` 均为绝对路径；`environment` 为上述构建环境对象，`compiler_version`、`build` 为含 `command`、`directory`、`started`、`duration_ms`、`output`、`exit_code`、`status` 和可选 `error` 的命令结果。验收程序只读取这些命令作为证据，核对成功状态与目标、实际二进制的 `CGO_ENABLED=1`，直接比对归档入口和二进制字节，再从 Mach-O／ELF／PE 读取直接动态依赖。PE 的 DLL 名从命名导入符号取得。未完成的 CGO 构建保持失败证据，平台支持范围由实际构建和运行结果确定。
+
+CGO 运行单独记录为 `purpose=cgo`：在百次启停和强杀恢复结束后，再启动一次真实 Core，安装启用该包，经管理会话访问 C 函数路由并比对激活 PID。原有四组件一同运行，停止后检查五组件与合作子树、六把锁和端口释放。完整结果共 104 次业务 Core 运行；省略 CGO 时保留原有 103 次。`cgo` 保存构建记录、二进制身份、直接链接库和该项状态，HTTP 原始响应在 `steps` 中。
+
+本地三种环境分别准备独立资产目录，Core、四个普通组件包和验收程序使用同一目标：macOS 原生为 `darwin/arm64`，Docker Linux 容器内为 `linux/arm64`，Rosetta 为 `darwin/amd64`。普通组件 `pack --target` 和 CGO 构建器 `--target` 均显式传入对应值；Linux CGO 在容器内使用其已有 C 工具链，Rosetta 的 x86_64 产物实际运行留在该执行环境核对。各环境的 `--packages`、`--cgo`、独立工作区和构建身份写入各自 JSON，交叉构建单列。
 
 退出码 0 表示当前已执行步骤成功；整体验收状态以 JSON 的 `status` 为准。步骤失败时退出非零，JSON 标为 `failed` 并保留原始错误。缺少 `--out`、参数解析失败或结果文件创建失败时，错误直接输出到 stderr。运行目录与证据文件保留供排查；本程序无需新增依赖或安装工具。

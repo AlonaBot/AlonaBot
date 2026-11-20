@@ -7,6 +7,7 @@
 // [botServer] 拥有本地 Bot API 服务与请求等待。[coreProcess] 拥有 Core 进程和日志，
 // [report.lifecycle] 检查启停、异常恢复及合作型进程树，平台观测由 inspect 文件实现。
 // [report.runScenarios] 驱动平台恢复场景，[scenarioEvidence] 保留产物来源与原始断言证据。
+// [cgoEvidence] 保存独立 CGO 构建与真实插件运行的支持证据。
 package main
 
 import (
@@ -41,6 +42,7 @@ type options struct {
 	core        string
 	packages    string
 	scenarios   string
+	cgo         string // 可选的本机 CGO 构建记录；省略时保持 incomplete。
 	out         string
 	environment string
 	host        string // 操作者提供的宿主或虚拟机说明，单独保留声明来源。
@@ -100,6 +102,7 @@ type report struct {
 	Components  []candidate       `json:"components"`
 	BotCalls    []botCall         `json:"bot_calls"`
 	Recovery    *scenarioEvidence `json:"recovery,omitempty"`
+	CGO         *cgoEvidence      `json:"cgo,omitempty"`
 	currentRun  *coreRun          // 仅业务生命周期阶段给步骤标记 Core PID；场景使用各自的进程证据。
 }
 
@@ -123,6 +126,7 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 	flags.StringVar(&opt.core, "alonabot", "", "candidate Core executable (required)")
 	flags.StringVar(&opt.packages, "packages", "", "current-platform example package directory (required)")
 	flags.StringVar(&opt.scenarios, "scenarios", "", "scripts/scenarios directory (required)")
+	flags.StringVar(&opt.cgo, "cgo", "", "CGO fixture build record JSON; omitted means incomplete")
 	flags.StringVar(&opt.out, "out", "", "new JSON result file; parent directory must exist (required)")
 	flags.StringVar(&opt.environment, "environment", "", "execution environment: native, vm, container or emulation (required)")
 	flags.StringVar(&opt.host, "host", "", "operator-provided host or VM description (required)")
@@ -167,6 +171,13 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 				return err
 			}
 			*path = absolute
+		}
+		if opt.cgo != "" {
+			absolute, err := filepath.Abs(opt.cgo)
+			if err != nil {
+				return err
+			}
+			opt.cgo = absolute
 		}
 		r.Core.Path, r.Packages, r.Scenarios = opt.core, opt.packages, opt.scenarios
 		for _, directory := range []string{opt.packages, opt.scenarios} {
@@ -233,10 +244,21 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 	if err := r.command(ctx, "core_help", opt.core, "--help"); err != nil {
 		return err
 	}
+	if opt.cgo != "" {
+		if err := r.prepareCGO(opt.cgo); err != nil {
+			return err
+		}
+	}
 	if err := r.business(ctx, opt); err != nil {
 		return err
 	}
-	return r.runScenarios(ctx, opt)
+	if err := r.runScenarios(ctx, opt); err != nil {
+		return err
+	}
+	if r.CGO != nil && r.CGO.Status == statusPassed {
+		r.Status = statusPassed
+	}
+	return nil
 }
 
 func executableCandidate(path string) (result candidate, err error) {

@@ -183,14 +183,10 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 		return err
 	}
 	// 3. 动态监听地址沿用集成测试的 Host 转发器，认证仍由真实 Core 完成。
-	target, err := url.Parse("http://" + core.run.Address)
+	cli, err := session.cliProxy()
 	if err != nil {
 		return err
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	director := proxy.Director
-	proxy.Director = func(request *http.Request) { director(request); request.Host = base.Host }
-	cli := httptest.NewServer(proxy)
 	defer cli.Close()
 	for _, id := range ids {
 		if err := r.command(ctx, "install_"+id, opt.core, "install", archives[id], "--yes", "--admin-url", cli.URL, "--token-file", cliToken); err != nil {
@@ -276,7 +272,24 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 	} else if !bytes.Contains(raw, []byte("postMessage")) {
 		return errors.New("showcase bridge script is missing postMessage")
 	}
-	return r.lifecycle(ctx, opt, session, ids)
+	if err := r.lifecycle(ctx, opt, session, ids); err != nil {
+		return err
+	}
+	if r.CGO != nil {
+		return r.runCGO(ctx, opt, session, ids, cliToken)
+	}
+	return nil
+}
+
+func (s *adminSession) cliProxy() (*httptest.Server, error) {
+	target, err := url.Parse("http://" + s.core.run.Address)
+	if err != nil {
+		return nil, err
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	director := proxy.Director
+	proxy.Director = func(request *http.Request) { director(request); request.Host = s.base.Host }
+	return httptest.NewServer(proxy), nil
 }
 
 func (s *adminSession) request(ctx context.Context, name, method, path string, input any, expected int, credential bool) ([]byte, error) {
