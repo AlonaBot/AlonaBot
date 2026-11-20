@@ -1,6 +1,6 @@
 # 可重复执行的管理与恢复场景
 
-这里的场景供 T-10 使用指定的二进制、临时 `data_dir` 和测试包验收正式管理流程、崩溃恢复与残存写入者。正式流程复用 [管理集成测试](../../cmd/alonabot/t09_e2e_test.go) 的全部断言，残存场景复用 [恢复集成测试](../../cmd/alonabot/recover_e2e_test.go) 的 `started` 子项，额外恢复与门禁断言位于 [场景模板](recovery.go.tmpl)。临时 Go overlay 替换输入、增加取证；管理动作始终调用 `--alonabot` 指定的程序。
+这里的场景供 T-10 使用指定的二进制、临时 `data_dir` 和测试包验收正式管理流程、崩溃恢复与残存写入者。正式流程复用 [管理集成测试](../../tests/e2e/management_e2e_test.go) 的全部断言，残存场景复用 [恢复集成测试](../../tests/e2e/recover_e2e_test.go) 的 `started` 子项，额外恢复与门禁断言位于 [场景模板](recovery.go.tmpl)。临时 Go overlay 替换输入、增加取证；管理动作始终调用 `--alonabot` 指定的程序。
 
 ## 构建三版测试包并执行正式流程
 

@@ -1,6 +1,6 @@
 # AlonaBot v0.1 事件与消息契约
 
-版本：v0.6-review · 2026-10-21。状态：**现行消息契约**。本文件补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §2/§8 和 [WIRE-FORMAT.md](WIRE-FORMAT.md)。实际平台验证范围见[发布说明](../docs/release-notes/v0.1.0.md)。
+版本：v0.6-review · 2026-10-21。状态：**现行消息契约**。本文件补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §2/§8 和 [WIRE-FORMAT.md](WIRE-FORMAT.md)。实际平台验证范围见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 ## 1. Event、Actor 与 Target
 
@@ -184,7 +184,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 ### 6.5 平台动作、撤回与命令菜单
 
-- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`adapters/telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
+- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`alonabot-adapter-telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
 - 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果。`telegram.send_chat_action` 带 message_thread_id；`telegram.set_message_reaction` 把本机器人在该消息上的回应设为给出的列表（空列表为撤销）；`telegram.send_message_draft` 只用于私聊，其他会话在调用平台前返回 UNSUPPORTED，参数在实施时按 Bot API 原文核对。
 - 命令菜单（D-96、D-138）：Core 以 CommandBuilder.Description 登记的英文原文提供 en-US，其他语言按 CONTRACTS §8 的 commands 完整规范路径覆盖与回落规则选择；生成器不扫描注册，check/build 只检查顶层 commands 的结构（键为字符串，值为含字符串 description 的对象）；SDK 的 Collect 对没有对应已注册命令或命令未用 Description 登记英文原文的覆盖路径拒绝注册，错误为英文并带出路径。`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
 
@@ -274,7 +274,7 @@ Bot API 中描述为 service message 的 Message 字段（例如 `new_chat_membe
 | chat（群或私聊） | `onebot11.get_msg`、`onebot11.get_forward_msg`、`onebot11.poke`（`group_poke` 或 `friend_poke`，实现端扩展） |
 | account | `onebot11.set_friend_add_request`、`onebot11.set_group_add_request`、`onebot11.get_stranger_info`、`onebot11.get_friend_list`、`onebot11.get_group_list`、`onebot11.send_like` |
 
-实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。`adapters/onebot11/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包。
+实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。`alonabot-adapter-onebot11/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包。
 
 ## 8. 验收与依据
 

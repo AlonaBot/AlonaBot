@@ -18,12 +18,12 @@ def main():
     scenario = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scenario)
     root = args.scenarios.resolve().parents[1]
-    read = lambda name: (root / "cmd/alonabot" / name).read_text()
+    read = lambda name: (root / "tests/e2e" / name).read_text()
     sources = {name: read(name) for name in ("e2e_test.go", "manage_e2e_test.go", "recover_e2e_test.go")}
     if args.mode == "build":
-        sources["flow.go"] = scenario.fixture_source(read("t09_e2e_test.go"))
+        sources["flow.go"] = scenario.fixture_source(read("management_e2e_test.go"))
     elif args.mode == "management":
-        sources["flow.go"] = scenario.management_source(read("t09_e2e_test.go"))
+        sources["flow.go"] = scenario.management_source(read("management_e2e_test.go"))
     else:
         sources["flow.go"] = (args.scenarios / "recovery.go.tmpl").read_text() + scenario.EVIDENCE_HELPERS
     if args.mode == "survivor":
