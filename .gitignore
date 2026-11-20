@@ -21,3 +21,11 @@ goal-*/
 node_modules/
 web/admin/dist/
 web/admin/node_modules/
+
+# 个人工具与本地维护运行目录
+/.claude/
+/.codex/
+/.serena/
+/.playwright-cli/
+/delegation-skills-workspace/
+/experiments/

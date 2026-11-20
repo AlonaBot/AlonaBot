@@ -26,6 +26,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: 检查 main 文件范围
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git ls-files -z > "$RUNNER_TEMP/main-paths"
+          rejected=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              AGENTS.md|CLAUDE.md|.agents/*|.claude/*|.codex/*|.serena/*|.playwright-cli/*|docs/goals/*|docs/execution-order.md|docs/benchmarks.md|spec/PLAN.md|spec/plan/*|spec/TEST-MATRIX.md|spec/adr/*|goal-[0-9]*/*|delegation-skills-workspace/*|experiments/*)
+                printf 'main 包含个人维护资料：%q\n' "$path"
+                rejected=1
+                ;;
+            esac
+          done < "$RUNNER_TEMP/main-paths"
+          exit "$rejected"
       - name: 检查空白错误
         run: git diff --check
       - name: 检查是否已有产品 Go 源码

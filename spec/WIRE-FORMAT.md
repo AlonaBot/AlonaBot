@@ -1,7 +1,7 @@
 # AlonaBot v0.1 RPC Wire Format
 
-版本：v0.6-review · 2026-10-21。状态：**现行实施基线，待实施验证**。
-权威范围：补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §1/§3/§12；消息载荷见 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。产品版本 v0.1 与传输协议版本 **1.0** 分开。T-01 按本文件生成可编译 `.proto` 和兼容 fixture；本文不代表编译或平台测试已通过。
+版本：v0.6-review · 2026-10-21。状态：**现行传输协议**。
+权威范围：补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §1/§3/§12；消息载荷见 [MESSAGE-MODEL.md](MESSAGE-MODEL.md)。产品版本 v0.1 与传输协议版本 **1.0** 分开。协议源文件在 `contracts/proto/`，生成类型在 `contracts/pb/`，实际平台验证范围见[发布说明](../docs/release-notes/v0.1.0.md)。
 
 身份字段中的组件 ID 原样使用 CONTRACTS §9.1 的拼写（D-172），例如 HELLO 的 `plugin_id` 与 Envelope 的 `source_plugin_id` 为 `alonabot-plugin-configdb`，Service 目标为 `alonabot-plugin-configdb/<服务名>`；Adapter 包身份如 `alonabot-adapter-telegram`，其平台 `adapter_id` 仍为 `telegram`。本次只改变 ID 字符串的值，字段号、枚举值与 schema 版本保持不变。
 
@@ -298,6 +298,6 @@ Core 媒体服务固定为 BeginUpload/WriteChunk/CommitUpload/Read/Grant：Read
 
 ## 6. 实施验证与依据
 
-T-01 将字段表转换为 `.proto`，冻结控制 Payload/RouteDescriptor 的字段号和 fixture；T-02 验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度和 ready gate。T-03/T-05/T-06 验证 payload+error、HandlerOutcome、Hook 约束和 Event Bus；对应 [TEST-MATRIX.md](TEST-MATRIX.md)。T-01/T-02 的运行结果见 TEST-MATRIX §3.1；T-03/T-05/T-06 的部分尚未执行。
+字段号与枚举值由 `contracts/wirespec_test.go` 固定；`internal/wire/` 和 Core 集成测试验证双向编号、乱序响应、失败阶段、帧上限、父调用关联、读循环进度与 ready gate，以及 payload+error、HandlerOutcome、Hook 约束和 Event Bus。修改时同步协议源文件并重新生成，按[开发指南](../docs/development.md#代码生成)验证生成一致性和受影响测试。
 
 Protobuf 枚举零值与字段存在性依据：[官方 proto3 指南](https://protobuf.dev/programming-guides/proto3/)。权限和准备期限制是 AlonaBot 的协议选择，不代表对同宿主恶意 Native 代码提供 OS 沙箱。

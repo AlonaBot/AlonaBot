@@ -1,15 +1,14 @@
 # AlonaBot v0.1 技术契约
 
-版本：v0.6-review · 2026-10-21  
-状态：**现行实施基线，待实施验证**。本轮按用户“自动完善剩余细节、审阅可行性并修复缺陷”的授权收敛，不提升版本编号。
+状态：**现行行为契约**。产品版本与协议版本分别管理；发布状态和平台实跑范围见[发布说明](../docs/release-notes/v0.1.0.md)。
 
-本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为；[PLAN.md](PLAN.md) 是唯一执行入口。保留 D-01～D-36，历史 PDF 与讨论记录只作背景，不覆盖当前规则。规格审阅不是运行时测试报告。
+本文件与 [WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 共同定义首发行为。修改实现时同步相关契约与验证，流程见[开发指南](../docs/development.md)；D/T/V 编号保留用于追溯既有规则。
 
 ## 0. 范围和明确取舍
 
-v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包（含 D-87 对标补齐的平台能力）、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、受管 SQLite（`database/sql` 与 GORM 两种入口）、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，组件的四种角色与同类替换（§9.1、§9.3）、可替换的 WebUI 组件与组件图标（§7.5），Agent 基础（§13）与官方 Agent 组件，统一日志（§14），发行包、容器镜像、install.sh、预装插件、开发运行与库模式（§15），调优参数（§16），以及插件测试套件（§17）。保留 D-01～D-36；Telegram 与 OneBot 11 之外的官方 Adapter、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收，以及由框架托管的 PostgreSQL 等外部数据库（插件可自带驱动自行管理，§6.1）均不在 v0.1 范围内。
+框架实现 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Adapter 包（含 D-87 对标补齐的平台能力）、Native Go 插件与 Adapter SDK/子进程、双传输 RPC、命令/文本匹配/事件/权限、延续调用与基础多轮等待、Event Bus、Service Call、调度、插件 HTTP、受管 SQLite（`database/sql` 与 GORM 两种入口）、配置/WebUI、用户可见文案的 i18n、预构建安装/更新与有明确边界的回退，组件的四种角色与同类替换（§9.1、§9.3）、可替换的 WebUI 组件与组件图标（§7.5），Agent 基础（§13）与官方 Agent 组件，统一日志（§14），发行包、容器镜像、install.sh、预装插件、开发运行与库模式（§15），调优参数（§16），以及插件测试套件（§17）。首发整合包按 §15.2 仅包含 Telegram Adapter，OneBot 11 留待后续发行；Telegram 与 OneBot 11 之外的官方 Adapter、WebUI 交互沙盒、TUI、WASM、插件实例池、蓝绿零停机、持久化的多轮会话状态与暂停 DSL、动态跨插件命令 Router、复杂表单、Telegram webhook 接收，以及由框架托管的 PostgreSQL 等外部数据库（插件可自带驱动自行管理，§6.1）均不在 v0.1 范围内。
 
-运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。缺省值是初始实现边界，须通过 TEST-MATRIX 实测后调整，不是性能保证；运维与测试可以在启动时覆盖，不提供 WebUI 或逐插件的调参。现行技术细节按本轮用户授权完成，保留 v0.6-review 编号。
+运行时容量、期限和配额有固定的缺省值，统一登记为调优参数（§16）。运维与测试可以在启动时覆盖；调整默认值需依据实际场景验证，不提供 WebUI 或逐插件的调参。
 
 ## 1. RPC、握手、错误、媒体
 
@@ -104,7 +103,7 @@ v0.1 交付 Core、可安装的 Adapter 机制与官方 Telegram、OneBot 11 Ada
 - 静态条件为 `to_me`、`chat_types` 与 `wake_words_config`，三者按 OR 组合，任一命中即交付：`to_me` 读取 message.created 的可信字段（私聊、@ 或回复机器人，MESSAGE-MODEL §1.1）；`chat_types` 为 PRIVATE、GROUP、CHANNEL 的集合；`wake_words_config` 是本插件配置中字符串列表字段的点分路径。text 片段按顺序拼接，包含任一非空唤醒词即命中，位置不限，拉丁字母不区分大小写，消息内容保持原样。事件未提供 to_me 或文本时，对应条件不命中；chat_type 未知时不命中会话类型条件。一个条件都没有（没有 to_me、chat_types、wake_words_config，也没有 triggers_config）的过滤器在 REGISTER 时拒绝。
 - 可选的 `triggers_config` 指向本插件字符串多选字段，按 D-167 的值选择条件：`mention` 为 GROUP 且 to_me，`private` 为 PRIVATE，`wake_word` 为上述唤醒词匹配；任一选中项命中即交付，空列表不匹配。使用此字段时不同时声明静态 `to_me` 或 `chat_types`，并提供 `wake_words_config`；未选中 `wake_word` 时不读取唤醒词值。SDK 注册只声明字段路径，配置值变化不改变 REGISTER 或路由摘要。
 - REGISTER 在信任边界校验事件类型、会话类型、字段路径及字段类型：配置路径只能指向本插件顶层或 object 子字段，唤醒词为字符串 list，触发方式为 options 仅含 mention、private、wake_word 的字符串 list，均须为非 secret 字段。声明错误拒绝整份注册。运行时只读当前 Active 的配置，排除 Pending；按 §5.6 解析本事件会话所用的配置文件，先应用有效覆盖再匹配。覆盖更新立即作用于后续匹配，不唤醒插件取值，也不把覆盖值写进路由快照。读取失败记实际错误并跳过该路由，不按未过滤交付。
-- 过滤在 PreEvent 之后、取得唤醒名额之前执行；常驻和快照候选共用 Router 的 `MessageConfig` 注入点。S-02.1 沿用 Active 配置读取；T-04.18（goal-161）接入会话配置时，保留 `Resolve` 与有效 `Overrides`，通过该注入点提供生效配置。
+- 过滤在 PreEvent 之后、取得唤醒名额之前执行；常驻和快照候选共用 Router 的 `MessageConfig` 注入点。按会话配置文件的 `Resolve` 与有效 `Overrides` 提供生效配置。
 
 ## 3. 跨插件调用、动态 Router 与权限
 
@@ -214,7 +213,7 @@ Core 无法观察插件私建的 goroutine 与连接，作者仅在没有独立�
 
 同代次 RESUME 继续执行配置加载、补值/校正与 required 校验，并核对完整结果与原配置快照一致；SELF/VERSIONED 数据库迁移回调跳过，迁移模式、后端及已应用迁移 ID 仍核对并保留。首次激活、更新与回退按原规则执行数据库迁移。最近唤醒时间与原因只在 WAKING→ACTIVE 时更新，进入 QUIESCING 前撤销空闲决定保留原值；活动时间记录实际活动归零的时刻，空闲停止时间在确认退出并写入 SUSPENDED 时更新。
 
-Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 TEST-MATRIX V-81。
+Core 记录运行状态变化、唤醒/空闲停止原因、冷启动次数、失败与等待丢弃数；冷启动耗时从启动插件进程至 Core 确认 ACTIVATED，分别记录 OnStart、OnReady 耗时。固定机器验收记录冷启动 P50/P95/P99、活跃与休眠的 PSS/RSS 及 CPU，规则见 [开发指南的验证要求](../docs/development.md#验证改动)。
 
 - 管理员可经 ADMIN-API §20 列出当前 Session 登记的静态任务，并用同一持久状态暂停或恢复（D-164）。
 
@@ -432,7 +431,7 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 - WebUI 持有管理员会话，能执行全部管理动作，安装与替换界面展示这一点；签名只证明发布来源（§9.2）。
 - 官方 WebUI 的 Go 入口为 `package admin` 的 `New() *sdk.Plugin`，进程与静态 `dist` 同包按平台发行。后台用自身受管 SQLite 保存小时统计、见过的用户、源/Release 缓存与已读版本，Core 管理数据经 Admin API 操作。PreEvent 在等待与命令截断前记录入站，统计写入失败记日志后继续传播原载荷；AfterSend 排除编辑，按实际回执账号记录成功发送与发送错误；命令统计来自 `command.invoked`。小时键保留绝对时刻以区分夏令时回拨，查询返回采集起点之后的真实零值桶。后台接口及抓取限制见 ADMIN-API §25。
 - 官方 WebUI 的数据页提供数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；数据库保留代次只读，表行编辑按 rowid 写入，PATCH 只提交修改列。用户页合并见过的用户、Core Admin 与全局禁止列表。更新前从已绑定来源预览 Release 正文，更新后按 SemVer 展示尚未读过的包内 changelog；已读版本在后台 SQLite 事务中比较并单调推进，主动查看可读取完整更新内容，HTML 按文本渲染。
-- 官方 WebUI 随包提供标志、站点图标、JetBrains Mono 2.304 的 Regular 与 Medium woff2 及 SIL OFL 1.1 许可，中文使用系统字体栈（D-169）。浅色、深色及跟随系统的偏好保存在浏览器中，缺省跟随 `prefers-color-scheme`。首页脚本在首帧前设置根元素的 `data-theme`，外壳与配置表单按其应用视觉令牌；界面语言优先使用已保存选项，无保存值时按浏览器语言选择。页面接入规则见 [WebUI 实施计划 §3](plan/webui.md#3-页面接入外壳)。
+- 官方 WebUI 随包提供标志、站点图标、JetBrains Mono 2.304 的 Regular 与 Medium woff2 及 SIL OFL 1.1 许可，中文使用系统字体栈（D-169）。浅色、深色及跟随系统的偏好保存在浏览器中，缺省跟随 `prefers-color-scheme`。首页脚本在首帧前设置根元素的 `data-theme`，外壳与配置表单按其应用视觉令牌；界面语言优先使用已保存选项，无保存值时按浏览器语言选择。页面接入规则见 [页面接入外壳](../docs/development.md#页面接入外壳)。
 
 ## 8. Adapter、Target 与消息
 
@@ -537,41 +536,43 @@ Core 由 `alonabot run` 启动（§15.1），开发中的组件也由它运行�
 | `sleep-policy [ID] [never\|auto\|时长]` | 无参数列出全局模式、全局空闲时长及各插件的配置策略、生效策略、运行状态与最近原因；只有 ID 时读取该插件。`never` 写入 `sleep.plugins.<ID>`，`auto` 删除该覆盖以跟随准入规则与全局值，正时长（Go duration，例如 `15m`）写入插件覆盖。经 ADMIN-API §24 的同一管理服务修改，立即生效。全局模式与全局时长经 Core 设置 API/WebUI 修改。 |
 | `rollback` | 明确选择保留代次为输入，停机建立新的恢复候选 Generation；SQLite 从所选快照复制独立 DB，复用对应程序/配置/secret，走同一 Prepared/提交流程，不复用历史 Generation ID 或直接写保留快照；在执行前列明将舍弃该快照之后的本地写入，要求显式确认。声明 `prepare_effects=external` 的插件须按 §6.3 显式维护，缺少许可返回 NEEDS_MANUAL_MIGRATION，外部已发送消息不会撤回。 |
 
-管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。2026-11-20 的 Windows 实跑按 [D-185](adr/DECISIONS.md) 批准延期；四环境实际通过、Windows 交叉构建及完整未运行项见 TEST-MATRIX §3.6。
+管理动作按插件串行；安装顺序、来源、pin、卸载保留与恢复目标均持久化，Core 重启不能靠无序目录遍历重新决定。安装器初始固定上限为压缩包 256 MiB、展开总量 1 GiB、10,000 个条目，超限在写入/激活前报 RESOURCE_EXHAUSTED；T-01 验证计数覆盖流式解压，不新增用户调参页面。发布验收至少覆盖当前五个目标平台，CGO 插件由发布者提供对应产物，不自动假称能跨编译。2026-11-20 的 Windows 实跑经维护者批准延期；四环境实跑、Windows 交叉构建与未运行项见[发布说明](../docs/release-notes/v0.1.0.md#发行内容)。
 
 签名实现依据：[Go crypto/ed25519](https://pkg.go.dev/crypto/ed25519)。
 
 ## 10. 实施验收与停止条件
 
-沿用 T-01～T-16，不新建平行实施计划；全部 V 编号和通过条件集中维护在 [TEST-MATRIX.md](TEST-MATRIX.md)。每个任务同时完成对应实现与最小验证，不要求先跑尚不存在的应用测试。
+每项改动同时完成实现与受影响验证，按[源码开发](../docs/development.md#验证改动)记录实际命令、平台、输入、结果和未运行原因。协议字段号由 `contracts/wirespec_test.go` 固定；集成测试通过真实协作方验证进程、数据库、路由和生命周期。
 
-详细步骤、拟目录、交付物和失败停止条件见 [PLAN.md](PLAN.md)。SDK/Proto 编译、数据库恢复、跨平台进程清理、Telegram 集成及真实性能在相应任务中取得证据；跨阶段用例的分工与最终闭合点按 TEST-MATRIX 执行。
+数据库恢复、跨平台进程清理和发布场景使用[场景工具](../scripts/scenarios/README.md)、[平台验收](../scripts/platform/README.md)与[发行检查](../scripts/release-check/README.md)。现有候选的实际验证范围与延期项见[发布说明](../docs/release-notes/v0.1.0.md)。
 
-Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/development.md) 列出的允许模块，由审查用 `go list -deps` 核对（V-75）。按 D-184，维护者接受现有固定 Linux 实测的资源开销，停止后续资源压测与为旧预算继续优化；V-74 的 24/10/16 MiB 保留为历史比较值，首发按已取得的真实数据收口。V-33 对照压测取消新增运行，T-10.3 归档现有数据与决定。Session、队列、媒体及安装等运行时资源限额继续按各自契约执行。
+Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/development.md) 列出的允许模块，由审查用 `go list -deps` 核对（V-75）。按 D-184，维护者接受现有固定 Linux 实测的资源开销，停止后续资源压测与为旧预算继续优化；V-74 的 24/10/16 MiB 保留为历史比较值，首发按已取得的真实数据收口。资源对照压测停止新增运行，既有数据与接受决定见发布说明。Session、队列、媒体及安装等运行时资源限额继续按各自契约执行。
 
 可开始实施的条件是关键行为已有确定契约与验收；发布条件是相关阻塞测试实际通过。测试失败必须修实现或回写有依据的规格修订，不用静默异常、伪默认值或新增兼容层掩盖问题。
 
 ## 11. 契约交付与集成位置
 
-各任务的具体动作由 [PLAN.md](PLAN.md) 维护，本节将契约实现定位到对应工作包。历史决策及 P/Q 处置集中保存于 [adr/DECISIONS.md](adr/DECISIONS.md)。
+下表定位各条契约的主要实现入口。模块职责、允许的依赖边与数据所有者见[架构地图](../ARCHITECTURE.md)。
 
 | 契约范围 | 实现与集成位置 |
 | --- | --- |
-| §1、WIRE 字段/控制帧/会话 | T-01 生成类型，T-02 实现双 IPC；媒体交 T-03 |
-| §2、MESSAGE 分发/权限/Hook | T-03 发送，T-04 命令/文本匹配/策略，T-05 事件链、延续调用与多轮等待；间接 Hook 约束在 T-06 闭合 |
-| §3 服务/广播 | T-06 接入真实父调用链、编码校验与有界广播 |
-| §4 生命周期/调度 | T-02 生命周期原语，T-07 调度/HTTP，T-08 准备回调，T-09 正式更新集成；S-01～S-03 插件休眠、快照、唤醒与调度，S-06 管理与测量 |
-| §5～§6 配置/Secret/数据库/文案 | T-01 先验驱动路径，T-08 候选准备与文案目录，T-08.11 `config_schema.json`，T-08.12 Adapter 实例配置与 Core 设置，T-08.16 去掉配置版本并改为校正（D-161），T-09 提交与恢复；Telegram locale 映射在 T-03 |
-| §7 信任/HTTP/认证 | T-02 进程，T-07 代理与授权检查，T-07.7 插件页面的沙箱隔离，T-07.6 首次 token 文件，T-09 首次登录及管理入口；T-09.12 WebUI 组件、组件图标、Admin API 参考与插件页面桥 |
-| §8 Adapter/消息 | T-03 Adapter 进程与 SDK、官方 Telegram Adapter 包、Target、媒体、按钮、extension 片段、回执、消息编辑、bot 上下线事件与依赖解析；T-15 官方 OneBot 11 Adapter 包与跨 Adapter 一致性验收；T-09 Adapter 包与实例的正式管理及启用时的依赖检查 |
-| §9 构建/分发/管理 CLI | T-01 契约，T-03.8 manifest 角色解析，T-04 生成器，T-04.9 删除构建期标记，T-09.16 作者 manifest 与构建信息，T-09 完整工具、来源检查（含无签名来源）与同类组件替换 |
-| §12 状态/锁/恢复 | T-02 建立共同原语，T-08 准备资源，T-09 复用原语完成正式 Journal 和恢复 |
-| §13 Agent 基础 | T-11 工具目录、策略、确认与会话存储；T-06 `@agent` 目标解析；T-12 官方 Agent 组件（含记忆与 `llm.generate` 服务）；T-09 工具策略与会话清除的管理页 |
-| §14 日志 | T-02.1 日志基线与日志文件；T-07.6 `core_config.json` 中的级别设置；T-09.10 按来源级别的写回、最近记录、按日期查询、管理 API 与 CLI，T-09.15 日志页；各切片按 §14 记录 |
-| §15 运行方式 | T-07.6 `core_config.json` 与首次 token；T-09.4 `alonabot run` 与管理服务；T-13 开发运行、热部署与库模式；T-14 发行包、容器镜像、install.sh 与预装插件 |
-| §17 插件测试套件 | T-13.1 根包 `Start`；T-16 `plugintest` 与示例插件的测试；T-16.3 LLM 替身 |
-| §16 调优参数 | T-02.2 参数表、`--args` 与 Bootstrap 下发；之后的切片把新增的可调值登记到同一参数表 |
-| 全部发布门槛 | 各任务积累证据，T-10 汇总 V-01～V-76、V-82～V-117 和五目标运行结果 |
+| §1、WIRE 字段、控制帧与会话 | `contracts/proto/`、`contracts/pb/`、`internal/wire/`、`sdk/` |
+| §2、MESSAGE 分发、权限与 Hook | `internal/core/router/`、`policy/`、`message/`、`hook/`、`continuation/` |
+| §3 服务与广播 | `internal/core/broker/`、`bus/`、`sdk/service/`、`sdk/bus/` |
+| §4 生命周期、调度与休眠 | `internal/core/host/`、`supervisor/`、`scheduler/`、`idle/`、`internal/app/` |
+| §5～§6 配置、secret、数据库与文案 | `internal/core/config/`、`secret/`、`profile/`、`state/`、`sdk/config/`、`sdk/sqlitedb/`、`sdk/gormdb/` |
+| §7 信任、HTTP 与认证 | `internal/core/process/`、`httpproxy/`、`adminauth/`、`manage/` |
+| §8 Adapter 与消息 | `internal/core/adapter/`、`sdk/adapter/`、`adapters/`、`internal/core/media/`、`buttons/` |
+| §9 构建、分发与管理 CLI | `cmd/alonabot/`、`internal/generate/`、`internal/pluginkit/`、`internal/core/packages/`、`manage/` |
+| §12 状态、锁与恢复 | `internal/core/state/`、`candidate/`、`journal/`、`internal/oslock/` |
+| §13 Agent 基础 | `internal/core/tool/`、`conversation/`、`agent/` |
+| §14 日志 | `internal/core/logging/`、`sdk/` |
+| §15 运行方式 | 根包、`internal/app/`、`cmd/alonabot/`、`deploy/` |
+| §16 调优参数 | `internal/tune/` |
+| §17 插件测试套件 | `plugintest/`、`examples/plugins/` |
+| 发布核对 | `scripts/dist/`、`scripts/release-check/`、`scripts/platform/`、`scripts/scenarios/` |
+
+同一格中缩写的目录沿用该格第一个完整路径的父目录。
 
 ## 12. 跨层状态机与恢复不变量
 
@@ -608,7 +609,7 @@ Core 可执行文件与 SDK 根包只链接 [docs/development.md](../docs/develo
 
 ### 12.4 实证门槛
 
-协议编译、五 OS/arch 的进程锁/树回收、Core 被 kill 后的 SDK 断链退出、配置 OnStart 写 DB 后失败、SQLite 提交各节点崩溃恢复、Bootstrap/REGISTER 超限、满准入下 Response/Cancel 可完成、HTTP 端口与两个 Origin、真实平台媒体和资源基准，都需要实施时的测试证据；本次规格修订不把它们记为已运行。对应场景合入现有 TEST-MATRIX，不另建平行验收体系。
+协议编译、五 OS/arch 的进程锁与树回收、Core 被 kill 后的 SDK 断链退出、配置 OnStart 写 DB 后失败、SQLite 提交各节点崩溃恢复、Bootstrap/REGISTER 超限、满准入下 Response/Cancel 可完成、HTTP 端口与 Origin、真实平台媒体均需相应测试证据。新增或受影响场景按[验证要求](../docs/development.md#验证改动)记录；现有平台范围、资源数据与维护者接受的延期项见[发布说明](../docs/release-notes/v0.1.0.md)。
 
 ## 13. Agent 基础
 
@@ -640,7 +641,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 13.4 记忆
 
-- 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-60）。官方 Agent 组件的记忆见 DESIGN §R 与 PLAN T-12 步骤 5，社区 Agent 可以采用其他实现。
+- 记忆由 Agent 组件自己实现和存储，Core 不提供记忆服务（D-60）。官方 Agent 组件的记忆见 [DESIGN §R](DESIGN.md#r-agent-组件) 与 `agent/`，社区 Agent 可以采用其他实现。
 - Agent 把写入记忆的操作注册为工具（§13.1），模型的调用照常经 `core.tool.invoke`，按 §3 的自身工具调用处理（D-142），管理员可以按工具设置策略。
 - 记忆的范围取自 Core 下发的可信上下文：会话按默认 Target（adapter_instance_id、chat_id、thread_id），用户按 Actor，不采信模型或插件在参数中给出的范围。缺少所需的 Actor 或默认 Target 时返回 FAILED_PRECONDITION。
 

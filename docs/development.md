@@ -1,243 +1,161 @@
-# 开发与验证
+# 源码开发
 
-负责范围：环境准备、日常命令、外部测试环境、规则与检查的对照。
-更新时机：工具链或依赖版本变化、新增或调整检查入口、测试环境变化时。
+从源码运行一个插件，再按改动范围进入 Core、SDK、Adapter、Agent 或 WebUI。贡献流程见[贡献指南](../CONTRIBUTING.md)，模块与数据所有者见[架构地图](../ARCHITECTURE.md)。本文维护开发环境、命令和验证方法；部署操作见[安装与部署](deployment.md)。
 
-## 环境
+## 准备环境
 
-| 工具 | 版本与来源 | 备注 |
+| 工具 | 版本 | 何时需要 |
 | --- | --- | --- |
-| Go | 1.27.1（asdf，`~/.tool-versions`） | `go.mod` 的 go 指令固定为该版本 |
-| protoc | 36.0（`protoc --version` 输出 `libprotoc 36.0`；生成文件头记为 v7.36.0） | 版本不符时 `contracts/internal/protocgen` 拒绝生成 |
-| protoc-gen-go | v1.36.12（`go.mod` 的 `tool` 指令，与 `google.golang.org/protobuf` 同版本） | 通过 `go tool -n protoc-gen-go` 定位，不全局安装 |
-| Node（前端） | 26.5.1（asdf） | 供 `web/admin` 使用，见[官方 WebUI 开发](#官方-webui-开发) |
+| Go | 1.27.1，见 `go.mod` | Go 开发与组件构建 |
+| protoc | 36.0，输出 `libprotoc 36.0` | 修改 `.proto` 后重新生成 |
+| protoc-gen-go | v1.36.12，由 `go.mod` 的 `tool` 指令管理 | 协议生成，不需要全局安装 |
+| Node | 26.5.1，见 `web/admin/package.json` | 官方 WebUI 前端开发 |
+| npm | 随 Node 提供 | 按前端锁文件安装依赖 |
 
-已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx，以及 internal/core/process 在 Darwin 上查询进程组成员；Cobra v1.10.2、pflag v1.0.9、仅 Windows 链接的 mousetrap v1.1.0。
+macOS 开发使用 asdf 管理 Go 与 Node。其他平台也需选择与上述版本相符的工具链。只改文档时无需准备全部运行时。
 
-已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`（`gorm.io/driver/postgres` 的批准于 2026-10-27 随 D-48 撤销）；2026-10-25 批准 `github.com/modelcontextprotocol/go-sdk`，只用于官方 Agent 组件（`agent/`）的 MCP 客户端，T-12.3 验证后锁定 v1.3.1；2026-10-26 批准 `github.com/spf13/cobra`（随之引入 `github.com/spf13/pflag`），只用于 `cmd/alonabot` 的命令树与全局参数，T-02.2 已锁定 Cobra v1.10.2、pflag v1.0.9 与仅 Windows 链接的 mousetrap v1.1.0；2026-10-26 批准 `github.com/google/jsonschema-go`（MCP go-sdk 也直接依赖它），用于 JSON Schema 的表示、序列化、`Resolve`、`ApplyDefaults` 与 `Validate`：配置 Schema（`sdk/config`、构建期生成器、Core 的配置与表单 Schema）、Service 与工具的输入 Schema、Adapter 声明的扩展事件、extension 与平台动作的 Schema（`sdk/adapter` 用 `For` 从 Go 类型推导，D-113）、`agent/`。配置 Schema 由生成器构造，不用 `For`/`ForType` 推导（D-43）；版本在首个使用它的切片引入时锁定。2026-10-27 批准 `github.com/coder/websocket`，只用于官方 OneBot 11 Adapter（`adapters/onebot11/`）的 WebSocket 连接，T-15.1 已锁定 v1.8.15（D-46）。2026-11-10 批准 `github.com/openai/openai-go/v3` 与 `github.com/anthropics/anthropic-sdk-go/v2`，只用于官方 Agent 组件的 Provider 客户端（`agent/provider`），不导入两者的 Azure、Bedrock、Vertex 等云厂商子包；T-12.12 锁定 openai-go v3.98.0、anthropic-sdk-go v2.9.0。实际链接的传递依赖为 bahlo/generic-list-go v0.2.0、buger/jsonparser v1.1.2、coder/websocket v1.8.15、go-logr/logr v1.4.2、go-logr/stdr v1.2.2、invopop/jsonschema v0.14.0、pb33f/ordered-map/v2 v2.3.1、standard-webhooks/standard-webhooks/libraries v0.0.1、tidwall/gjson v1.20.0、tidwall/match v1.1.1、tidwall/pretty v1.2.1、tidwall/sjson v1.2.5、go.opentelemetry.io/auto/sdk v1.1.0、go.opentelemetry.io/otel（含 metric、trace）v1.33.0、go.yaml.in/yaml/v4 v4.0.0-rc.2、golang.org/x/sync v0.24.0。MVS 将 x/text 从 v0.39.0 抬至 v0.42.0；coder/websocket 保持 v1.8.15；MCP go-sdk 的模块下限为 v1.3.1，当前 Provider 未链接 MCP 包。前端已批准：Vite（含 `@vitejs/plugin-react`）、TypeScript、React 19、vitest；2026-11-05 批准开发依赖 `@types/react@19`、`@types/react-dom@19`（PR #91），只用于类型检查。T-08.7 锁定 react 与 react-dom 19.3.1、@types/react 与 @types/react-dom 19.3.0、@vitejs/plugin-react 6.2.1、TypeScript 7.0.2、Vite 8.3.5、vitest 5.1.0；DOM 测试环境（jsdom、happy-dom）与 Testing Library 未批准。2026-11-17 批准（D-169）：`lucide-react`、`@dnd-kit/core`、`@dnd-kit/sortable`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-popover`、`@radix-ui/react-tooltip` 与 `recharts`，版本在首个使用它的切片引入时锁定；JetBrains Mono 的 woff2（SIL OFL 1.1）作为静态资源随 WebUI 包提供，不是 npm 依赖。新增清单外依赖需要先征得维护者同意。
+```fish
+git clone https://github.com/AlonaBot/AlonaBot.git
+cd AlonaBot
+go mod download
+go build -o bin/alonabot ./cmd/alonabot
+```
 
-Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链接上述清单的一个子集（D-52，D-68 修订），由审查时用下方的 `go list -deps` 命令核对：Core 允许 protobuf、modernc SQLite 及其依赖、GORM 与 libtnb/sqlite 及其依赖（jinzhu/inflection、jinzhu/now、golang.org/x/text）、yaml、x/sys、cobra 与 pflag、仅 Windows 链接的 mousetrap、jsonschema-go；SDK 根包只允许 protobuf、x/sys 与 jsonschema-go。MCP go-sdk、coder/websocket 只出现在官方插件、Agent 或 Adapter 中，openai-go 与 anthropic-sdk-go 只出现在 Agent 中；插件只在导入 `sdk/gormdb` 时链接 GORM。修改子集与修改已批准清单一样，需要维护者同意。
+直接运行已有示例可以复用仓库的 module 与资源，无需创建外部工程或模型凭据：
+
+```fish
+bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
+```
+
+在同一个终端输入 `/ping`，预期回复 `pong`；Ctrl-C 正常停止。要并行运行多个 Core，为每个实例选择独立数据目录与监听端口。首次管理认证和监听设置见[部署指南](deployment.md#core-设置与-http-入口)。
+
+## 依赖管理
+
+使用 `go.mod`、`go.sum` 与 `web/admin/package-lock.json` 中的锁定版本。新增依赖或扩大链接范围前，说明必要性和替代方案，等待维护者批准。当前直接依赖的允许用途如下：
+
+| 模块 | 允许用途 |
+| --- | --- |
+| protobuf、x/sys、google/jsonschema-go | 协议、操作系统能力及 Schema；SDK 根包仅链接这三组模块及其依赖 |
+| modernc.org/sqlite、libtnb/sqlite、GORM | Core 状态库与按需导入的 SQLite/GORM SDK 包 |
+| go.yaml.in/yaml/v3 | manifest、技能元数据等 YAML |
+| Cobra、pflag、go-isatty；Windows 的 mousetrap | CLI、终端识别 |
+| modelcontextprotocol/go-sdk | 官方 Agent 的 MCP 客户端 |
+| openai-go/v3、anthropic-sdk-go/v2 | Agent Provider；不导入 Azure、Bedrock、Vertex 等厂商子包 |
+| coder/websocket | OneBot 11 Adapter；Agent 依赖的传递使用随现行锁文件保留 |
+
+Core 可执行文件允许链接协议、SQLite/GORM、yaml、x/sys、Schema 与 CLI 所需模块；模型 SDK、MCP 和平台连接客户端归对应组件。插件只在导入 `sdk/gormdb` 时链接 GORM。审查时核对实际链接范围：
+
+```fish
+go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u
+```
+
+前端使用已锁定的 React、Vite、TypeScript、vitest、Lucide、dnd-kit 和 Radix；Recharts 已批准但尚未进入当前锁文件。DOM 测试环境和 Testing Library 需要另行批准。JetBrains Mono 静态字体按其 SIL OFL 1.1 许可分发。
 
 ### GORM 固定补丁来源
 
-2026-11-20 用户批准使用组织派生仓库 `github.com/AlonaBot/gorm` 的固定补丁。基线为上游 v1.31.2（`1d6ce99528060be18a42be09aca8d39efcb47f28`），补丁 commit 为 `34b98340007ddc2acd5cb8727a0b4b72ea295896`；仅将 `schema/schema.go` 的九种 hook 查找改为常量方法名，使 Go 链接器能裁剪无关方法。hook 顺序、签名检查、警告与 `gorm.io/gorm` 包身份保持。
-
-仓库保留 `require gorm.io/gorm v1.31.2`，以确切 pseudo-version 固定来源：
+`gorm.io/gorm v1.31.2` 固定替换为组织派生仓库的补丁版本：
 
 ```go
 replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d
 ```
 
-独立组件的 `build`、`pack` 与开发构建将作者主 module 的 go.mod/go.sum 原样复制到临时 module，库模式构建直接沿用作者 module 上下文，仓库内示例因此继承该替换。正式 GORM 组件的 `build-info` 应同时列出 `gorm.io/gorm v1.31.2` 和上述替换来源。独立作者项目由自己的主 module 决定替换；需要使用相同补丁时，在该项目的 go.mod 中加入同一条 `replace`，再运行 `go mod download gorm.io/gorm` 更新 go.sum。
+该补丁基于上游 v1.31.2（`1d6ce99528060be18a42be09aca8d39efcb47f28`），补丁提交为 `34b98340007ddc2acd5cb8727a0b4b72ea295896`，仅将九种 hook 查找改为常量方法名，保留 hook 顺序、签名检查与包身份，让链接器裁剪无关方法。
 
-## 日常命令（仓库根目录）
-
-```sh
-go generate ./...   # 重新生成协议代码和 Core changelog
-go test ./...
-go build ./...
-go vet ./...
-go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u   # Core 与 SDK 根包链接的模块，对照允许清单（D-52）
-```
-
-协议生成器（入口：`contracts/doc.go` → `contracts/internal/protocgen`）会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
-
-更新仓库根目录的 [`CHANGELOG.md`](../CHANGELOG.md) 后，运行 `go generate ./internal/core/manage`，将生成的 `internal/core/manage/changelog_core.go` 一同提交。
-
-修改插件页面套件后，用 `go test -race -v ./sdk/page ./examples/plugins/showcase` 检查受影响的 Go 包，并用 `node --check sdk/page/kit.js` 检查脚本语法。资源由 `sdk/page` 直接嵌入 Go 产物，无需 npm 构建。主题、语言和快捷键的端到端验收在 WebUI 的沙箱 iframe 中用 [showcase](../examples/plugins/showcase/main.go) 联验（V-130）。
-
-交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
-
-```sh
-for p in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
-  GOOS=${p%/*} GOARCH=${p#*/} CGO_ENABLED=0 go build ./... && echo "OK $p" || echo "FAIL $p"
-done
-GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
-```
+独立组件的 build、pack 和开发构建沿用作者主 module 的 go.mod/go.sum，库模式直接使用作者 module。独立作者项目如需该补丁，须在自己的 go.mod 加入相同 replace，并运行 `go mod download gorm.io/gorm`。正式 GORM 组件的 build-info 同时列出原模块与替换来源。
 
 ## 官方 WebUI 开发
 
-在仓库根目录安装锁定的依赖并启动 Vite：
+在仓库根目录执行：
 
-```sh
+```fish
 npm --prefix web/admin ci
 npm --prefix web/admin run dev
 ```
 
-打开 Vite 输出的地址，管理页要求登录；登录后首页跳转到 `/overview`。直接访问 `/dev/forms` 可使用 `web/admin/fixtures/` 切换语言并查看表单提交生成的 JSON Merge Patch，无需启动 Core。接入新页面时按 [WebUI 实施计划 §3](../spec/plan/webui.md#3-页面接入外壳) 登记路由和文案。
-
-本地运行 `npm --prefix web/admin run typecheck`、`npm --prefix web/admin run test` 和 `npm --prefix web/admin run build`。测试使用被忽略的 `*.local.test.ts`，无本地测试时命令也通过；CI 不运行前端检查。生产静态文件输出到 `web/admin/dist/`，其中包括站点图标、标志、JetBrains Mono woff2 和许可。
-
-官方 WebUI 另有 `package admin` 的 `New() *sdk.Plugin` 后台入口。先构建前端，用 `alonabot check web/admin` 核对入口与资源，`alonabot build web/admin` 生成进程入口，`alonabot pack web/admin --target darwin/arm64 --out web/admin/bin` 生成携带进程与 `dist` 的平台包；安装后从 Core 同源入口登录，前端经 Cookie/CSRF 调用 Admin API 与 `/plugins/alonabot-webui-admin/` 后台路由。后台在自身受管 SQLite 保存统计、用户目录、商店缓存和已读版本，接口见 [ADMIN-API §25](../spec/ADMIN-API.md#25-官方-webui-后台)。
-
-T-09.23 的验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)：darwin/arm64 正式包已通过真实 Core 联验，GitHub 使用回环模拟，五目标包完成交叉编译和资产检查；其他平台实际运行与修复后浏览器验收记为未运行。
-
-T-09.26 锁定 `lucide-react` 1.74.0、`@dnd-kit/core` 6.3.1、`@dnd-kit/sortable` 10.0.0、`@radix-ui/react-dialog` 1.3.1、`@radix-ui/react-dropdown-menu` 2.2.1 和 `@radix-ui/react-tooltip` 1.4.1；`@radix-ui/react-popover` 与 `recharts` 由首个使用它们的页面切片引入。
-
-## 发行构建
-
-在仓库根目录生成包含 Core、Telegram Adapter、Agent、WebUI 与 help 的发行候选：
+打开 Vite 输出的地址。`/dev/forms` 可以用本地 fixture 预览配置表单与 JSON Merge Patch。当前 Vite 配置没有 API 代理；真实管理页面从 Core 的同源入口打开并登录。路由登记在 `web/admin/src/routes.tsx`，界面文案通过 `web/admin/i18n/` 提供，主题与外壳复用 `src/theme/` 和 `src/shell/`。
 
 ```fish
-go run ./scripts/dist --version 0.1.0 \
-  --key ~/.config/alonabot/release.key --out ./dist
+npm --prefix web/admin run typecheck
+npm --prefix web/admin run test
+npm --prefix web/admin run build
 ```
 
-构建机需要上表中的 Go、Node 与 npm，并可读取已锁定的 Go 模块和 npm 包。程序在暂存目录保留根 `go.mod`、`go.sum` 及 `sdk/`、`contracts/`、`internal/`、`web/admin/`，跳过 WebUI 的旧 `node_modules` 与 `dist`；在暂存 WebUI 中运行 `npm ci` 与 `npm run build`，再由主机版 `alonabot pack <组件目录> --target <os>/<arch> ... --asset-base <前缀> --out <目录>` 为每个组件调用一次，传入全部目标；pack 写出合并清单，dist 再签名并自检。组件版本沿用各自 `plugin.yaml`。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，可用 `--platforms linux/amd64,linux/arm64` 选择子集。离线 npm 缓存已齐全时，可在命令前加 `env npm_config_offline=true`。
-
-`--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，允许末尾空白。私钥放在仓库及组件资源目录之外，设置为仅发布维护者可读（0600），通过受控环境或离线介质保管和备份。程序只从该文件读取私钥，子进程不接收私钥；发行物只携带公钥与签名。发布前先用临时测试密钥验证流程，正式签名使用维护者控制的密钥。
-
-`dist/` 中每个平台生成一个 `alonabot-<version>-<os>-<arch>.tar.gz`（Windows 为 `.zip`），解压后的同名目录包含 `alonabot`（Windows 为 `alonabot.exe`）和 `packages/<组件ID>/`。每个组件目录包含该平台安装包、合并全部目标平台的 `release.json`、`release.json.sig` 与 `release.pub`；官方 WebUI 按五个目标平台出包，分别包含 `component`（Windows 为 `component.exe`）与同一份 `dist`。另在 `dist/packages/<组件ID>/` 汇集各平台安装包与同一份签名清单，供后续发布使用。`dist/SHA256SUMS` 列出所有外层发行归档的摘要，格式为摘要、两个空格和文件名。
-
-安装包下载前缀默认取 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，可用 `--asset-base https://example.com/releases/v0.1.0` 覆盖。发行 Core 通过 `-ldflags -X` 嵌入官方公钥，安装官方签名包时免首次来源与发布者确认；签名与摘要仍按安装流程验证，已有发布者绑定继续生效。未注入公钥的开发构建保留原确认流程。
-
-`--version` 决定发行归档名、默认下载前缀及注入的 Core 版本；`GET /api/v1/core` 返回该发行版本。开发构建沿用 Go module 构建信息，源码构建通常显示 `(devel)`。
-
-## 容器镜像
-
-从仓库根目录启动对应版本的官方整合包，然后读出首次登录的 token：
+生产静态文件输出到 `web/admin/dist/`。官方 WebUI 还有 `New() *sdk.Plugin` 后台，使用受管 SQLite 保存统计、用户目录、商店缓存与已读版本；安装时静态资源和进程一起打包：
 
 ```fish
-docker compose -f deploy/compose.yaml up -d
-docker compose -f deploy/compose.yaml exec alonabot alonabot admin-token show --data-dir /data
+bin/alonabot check web/admin
+bin/alonabot build web/admin
+bin/alonabot pack web/admin --target darwin/arm64 --out web/admin/bin
 ```
 
-打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将一次性 token 写入 `/data/admin_token`，首次登录成功后删除该文件。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本；T-10.4 随 Release 上传该文件的副本时，须与 Release 的镜像版本一致。
-
-镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
-
-自行构建时，使用上表锁定的 Go、Node/npm 与 Docker BuildKit/buildx。`VERSION` 必填，签名私钥使用发行构建相同的 base64 Ed25519 格式，存放在构建上下文之外，权限为 0600；构建验收使用临时密钥，正式发行使用维护者控制的密钥。密钥通过必需的 BuildKit secret 挂载传入。构建阶段直接调用 `scripts/dist`，沿用其中的 npm ci/build、签名和四个官方包清单。BuildKit 的缓存判定忽略 secret 内容；命令使用 `--no-cache-filter build` 重新执行签名阶段，确保同版本更换密钥时使用本次密钥。
+将 target 换为需要的平台。完整联调时，先在独立终端运行 `bin/alonabot run --data-dir ./data`，按[管理认证](deployment.md#core-设置与-http-入口)为 CLI 提供 token，再安装并启用上一步的本机 WebUI 包：
 
 ```fish
-set version 0.1.0
-set release_key ~/.config/alonabot/release.key
-docker buildx build --platform linux/amd64,linux/arm64 --no-cache-filter build \
-  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
-  --output type=oci,dest=/tmp/alonabot-$version.oci.tar \
-  -t ghcr.io/alonabot/alonabot:$version .
+bin/alonabot install web/admin/bin/alonabot-webui-admin-0.1.0-darwin-arm64.tar.gz --data-dir ./data --yes
+bin/alonabot enable alonabot-webui-admin --data-dir ./data
 ```
 
-需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`；省略时沿用 `scripts/dist` 的 GitHub Release 地址。下面分别构建并在可运行相应平台的主机上启动本地镜像；跨架构运行需要 Docker 已配置的模拟器。
+包名随组件版本与 target 调整。打开 Core 的 `http://127.0.0.1:7650` 入口检查页面、后台与插件桥。只预览静态页面时可在构建前端后运行 `bin/alonabot run web/admin --data-dir ./data`；开发 WebUI 目录仅挂载静态资源，带 Go 后台的行为通过安装包验证。浏览器通过同源 Cookie/CSRF 调用 Admin API，WebUI 后台通过 SDK 与 Core 通信；后端接口见 [ADMIN-API §25](../spec/ADMIN-API.md#25-官方-webui-后台)。
+
+### 页面接入外壳
+
+- 在 `web/admin/src/routes.tsx` 的 `routes` 登记 `RouteEntry`：`id`、`path`、`label`、`icon: LucideIcon`、`group: 'main' | 'bottom'`、`render: () => JSX.Element`。`label` 填 `web/admin/i18n/en-US.json` 与 `zh-CN.json` 均定义的 `messages` 键，供导航、顶栏标题和搜索共用。已登记总览、插件、账号、模型、配置文件、会话、日志、权限与系统设置，权限子页共用同一导航入口；`/dev/forms` 仅在开发模式登记。登录后访问 `/` 跳转 `/overview`，未登录访问管理页跳转 `/login`。
+- 桌面侧栏将 `main` 条目的顺序、隐藏状态和侧栏折叠偏好保存在浏览器中，`bottom` 条目放在底部。侧栏以 `100vh` 固定高度贴顶，导航内部滚动，底部保留版本号与「关于」入口。手机固定入口按 `overview`、`plugins`、`profiles`、`logs` 的顺序取已登记的 `main` 条目；其余条目（含 `bottom`）只出现在「更多」，无剩余条目时省略「更多」。
+- `AppShell({ version, onLogout?, coreUpdate?, coreUpdateFailed?, children })` 装配导航和搜索，页面由入口按路径选择后作为 `children` 传入；传入 `onLogout` 才显示退出入口。`coreUpdate` 为 `{ version, releaseURL }`，`coreUpdateFailed` 在侧栏更新处显示局部失败提示。站内跳转用 `router.ts` 的 `navigate(path, options?)` 或 `Link`。`Link` 的 props 为 `to`、可选的 `className` 和 `children`；手机「更多」使用 Radix 菜单项的 `onSelect` 调用 `navigate`。
+- 已登记路由自动加入全局搜索，匹配当前语言的标题和路径。页面可通过 `SearchContext.register(items: SearchItem[]): () => void` 补充搜索项，卸载时调用返回的注销函数。搜索项包含 `id`、`title`、`section`、`run: () => void` 与可选 `keywords`；按标题和关键词做大小写不敏感的子串匹配，结果按 `section` 分组。按 Enter 或点击执行后清除查询、焦点和悬停状态。
+- `useTheme(): [ThemeChoice, (choice: ThemeChoice) => void]` 提供主题选择接口，面向用户的控件由系统设置页接入。桌面搜索在透明顶栏右端，同排展开；收起时为 40×40，内容右边距为 40px。手机顶栏高 54px。配置表单与开发预览沿用原有结构、字体、尺寸和间距，颜色、背景、描边及原生控件 `color-scheme` 随主题更新。
+
+插件详情提供详情页的数据库表格、KV/文件存储、导出与清空，以及 Agent 会话摘要与清除；Agent 页面提供会话正文。外壳保留配置、任务与插件页面入口，共用 `/permissions/users` 用户页。
+
+父桥按 [ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥) 在每次 `translate` 请求时用当前语言和请求参数返回 `text`；`hello` 交付语言、主题与令牌，`locale` 事件交付语言。浏览器验证用沙箱 iframe 验证 showcase 首次翻译、切换语言后重新取词、主题与快捷键转发。
+
+配置文件的工具覆盖候选按 [ADMIN-API §18](../spec/ADMIN-API.md#18-工具调用策略) 的 `identities` 展开为 §23 的独立工具与操作；同名两类分别编辑，仅有旧全局覆盖的空身份行没有新增候选。已保存的配置文件覆盖按原身份继续读写。配置与配置文件页面共用 `src/api/admin.ts` 的 `ToolPolicy.identities: ('tool' | 'operation')[]`。
+
+配置页面使用 `PluginConfigPanel({id})` 与共享 `ConfigForm`：编辑基线为 `pending.config ?? active`，保存使用 `active_generation`，409 保留草稿并允许显式采用最新配置；secret 再认证、动态选项、回复示例及双语字段沿用同一表单。插件详情标签单行横滚，Agent 页面入口为 `pages/memory`（记忆），Core 数据标签保留。父桥在 layout effect 提前绑定，保留首次 hello 的主题与语言订阅。
+
+## 代码生成
+
+只修改 `.proto`、生成器或 changelog 源文件，随后重新生成：
 
 ```fish
-docker buildx build --platform linux/amd64 --load --no-cache-filter build \
-  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
-  -t alonabot:$version-amd64 .
-docker run -d --name alonabot-amd64 --platform linux/amd64 --init \
-  -p 127.0.0.1:7650:7650 -v alonabot-amd64-data:/data alonabot:$version-amd64
-docker exec alonabot-amd64 alonabot admin-token show --data-dir /data
-# 完成该平台验收后停止，释放宿主端口，再运行另一个平台。
-docker stop alonabot-amd64
-
-docker buildx build --platform linux/arm64 --load --no-cache-filter build \
-  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
-  -t alonabot:$version-arm64 .
-docker run -d --name alonabot-arm64 --platform linux/arm64 --init \
-  -p 127.0.0.1:7650:7650 -v alonabot-arm64-data:/data alonabot:$version-arm64
-docker exec alonabot-arm64 alonabot admin-token show --data-dir /data
+go generate ./...
 ```
 
-端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
+协议源文件位于 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。生成器核对 protoc 版本后重新生成 `contracts/pb/`，protoc-gen-go 通过 `go tool` 定位。
 
-在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
+更新根目录 CHANGELOG 后可定点运行 `go generate ./internal/core/manage`，一同交付生成的 `changelog_core.go`。
 
-## 用 install.sh 安装与升级
+## 验证改动
 
-在支持 systemd 的 Linux 上以 root 运行；macOS 在当前用户的登录会话运行。支持两种系统的 amd64、arm64。先从同一 Release 下载脚本，再安装指定版本（以下命令使用 fish，把 `VERSION` 换成发行版本号，省略前导 `v`）：
-
-set version VERSION
-curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o install.sh https://github.com/AlonaBot/AlonaBot/releases/download/v$version/install.sh
-# Linux
-sudo sh install.sh --version $version
-# macOS
-sh install.sh --version $version
-
-省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档与 `SHA256SUMS`。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址，基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服并替换 `alonabot` 与完整的 `packages/`。
-
-Linux 使用 `/opt/alonabot/`、数据目录 `/var/lib/alonabot` 和系统服务 `alonabot.service`；服务以系统用户 `alonabot` 运行并启用开机启动。macOS 使用 `~/Library/Application Support/AlonaBot/`、其中的 `data/` 和用户 LaunchAgent `io.github.alonabot`，登录后启动。工作目录设为程序目录，启动参数为 `run --data-dir <完整数据路径>`。
-
-有控制终端时，脚本在停服后以服务身份运行 `admin-token init --if-missing`，stdin 与 stderr 连接 `/dev/tty`；新 token 仅显示一次，已有凭证保持原值。经管道执行同样使用控制终端。无控制终端时跳过初始化，服务照常启动，Core 首次启动写入 `admin_token`。文件存在时按脚本输出的完整命令领取：
-
-# Linux，以服务身份读取
-sudo runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /var/lib/alonabot
-# macOS，以当前用户读取
-"$HOME/Library/Application Support/AlonaBot/alonabot" admin-token show --data-dir "$HOME/Library/Application Support/AlonaBot/data"
-
-首次登录成功后 Core 删除 `admin_token`。再次运行安装命令即升级，保留数据、`core_config.json`、状态库、已安装组件与未领取的 token。内置包的预装、默认启用与可用更新由 Core 处理。
-
-# Linux 卸载
-sudo sh install.sh --uninstall
-# macOS 卸载
-sh install.sh --uninstall
-
-卸载停止并解除服务注册，删除服务定义、程序与内置包，输出保留的数据目录位置；macOS 的 `data/` 保留在原位。
-
-本地先运行 `sh -n deploy/install.sh`、`shellcheck deploy/install.sh`（缺工具记录「未运行」）和 `go test -race ./cmd/alonabot ./scripts/dist`。临时 HTTPS Release 和系统命令模拟放在 `*_local_test.go`，分别验证版本/latest、下载校验失败门禁、服务参数与数据保留。开发机只在临时目录模拟；V-84 的真实安装须使用专用、可恢复的 systemd Linux（root）与 macOS（当前用户）环境，逐项记录全新安装、管道有/无终端、升级、校验失败与卸载，核对身份、token、旧安装及数据；缺少环境的项目记「未运行」。容器内 systemd 与命令模拟的结果分别记录。
-
-`go run ./scripts/dist --version VERSION --key FILE --out DIR` 会在输出目录附带与 `deploy/install.sh` 内容相同的 `install.sh`，`SHA256SUMS` 继续仅列外层发行归档。当前上传由 T-10.4 的维护者执行：将 `install.sh`、`SHA256SUMS` 和发行归档上传至同一个 Release，并按发行步骤上传各组件安装包及 `release.json`、`.sig`、`release.pub`。
-
-## 运行 Core 与管理组件
-
-```sh
-go build -o bin/alonabot ./cmd/alonabot
-bin/alonabot run --data-dir ./data      # 不带子命令时等同 run；按安装记录启动全部已启用的组件
-# Ctrl-C / SIGTERM：排空 → STOPPING/OnStop → 退出；同一 data_dir 只能运行一个 Core
-```
-
-`run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，token 取自 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，管理地址可用 `--admin-url` 覆盖：
-
-```sh
-bin/alonabot install pkg.tar.gz --yes             # release.json、签名和公钥缺省取归档同目录
-bin/alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
-bin/alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
-bin/alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
-bin/alonabot enable <id>
-bin/alonabot list
-bin/alonabot uninstall <id> --purge-data --yes      # 或 --purge；不带选项时只卸载
-bin/alonabot adapter instance create <adapter-package-id> <instance-id> --config instance.json
-bin/alonabot admin add telegram:123456
-```
-
-`install` 的位置参数为已存在的普通文件时使用该归档，其他值按组件 ID 查找可执行文件旁的 `packages/<组件 ID>/`；缺失时列出可用的官方组件 ID。不带位置参数时，当前目录为作者工程便搜索 `bin/`，其他情况搜索当前目录；也检查直接包子目录的清单。按 `release.json` 选择本机平台资产，静态 WebUI 使用 `any/any`，恰好一个候选才安装；零个或多个时列出搜索目录和候选后退出。发现阶段只读，安装经管理 API 完成。
-
-`--archive` 仍可显式指定归档；`--release`、`--signature` 与 `--public-key` 分别覆盖元数据文件。签名和公钥未指定时取 release.json 同目录的 `release.json.sig` 与 `release.pub`。位置参数、`--archive` 和 `--source` 互斥；`--source` 与本地元数据选项也互斥。来源与签名确认、归档预检及 `--yes`、`--replace` 沿用管理服务。
-
-help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
-
-排查 Core 设置时，读取 `GET /api/v1/core/settings/corrections`：`corrections` 列出转换、恢复默认值与移除记录，`unknown` 列出声明之外的键。Core 载入时校正运行副本，原文件中的值与 `${环境变量}` 写法保持；每条校正在日志中只记路径与原因。`admins` 值有误时恢复为空列表，修订后重新读取设置。
-
-Adapter 实例的记录在 `GET /api/v1/adapters/{adapter_id}/instances/{instance_id}` 的 `corrections` 与 `unknown` 中。校正后 required 仍缺失的实例留待修订，其余实例独立准备。清理 Core 的未知键调用 `POST /api/v1/core/settings/prune`，清理某个实例调用 `POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune`；这两个入口经原有管理认证和文件写回流程，只删除声明之外的键，保留其他原值。
-
-需要确认的操作不带 `--yes` 时列出受影响的对象后退出。开发中的组件可以按下节以目录运行，也可以用库模式，先 `alonabot build ./examples/devbot`，再运行 `examples/devbot/bin/devbot --data-dir ./data`。
-
-使用同一套管理凭证运行 `bin/alonabot profile list` 查看配置文件 ID 和会话数。`bin/alonabot profile assign <配置文件ID> <实例名>` 设置实例缺省；再给出会话字符串可单独指定会话。`profile set` 与 `profile unset` 编辑 `default` 时写入插件的 Pending，沿用配置重载流程。全部子命令见 [CONTRACTS §5.6](../spec/CONTRACTS-v0.1.md#56-配置文件)，平台设置与工具策略见 [ADMIN-API §23](../spec/ADMIN-API.md#23-配置文件)。
-
-会话派发按单独指定 → 实例缺省 → `default` 解析配置文件，已应用插件开关、字段覆盖与消息过滤；SDK 的 `c.Config()` 在每次调用开始时冻结视图。覆盖更新向在线 Session 下发完整集合，后续调用使用新值；离线插件在下次 Bootstrap 接收。Bootstrap 的 `profile_overrides_json` 必须是对象，无覆盖填 `{}`；离线 `alonabot test` 同样下发该字段。插件经 `core.profile.set` 修改 `default` 时，Core 在整条根调用及延续结束后 reload；固定服务写入遇管理互斥占用立即返回 FAILED_PRECONDITION。工具目录、调用与操作确认使用可信默认 Target 对应配置文件的一次操作快照；无 Target 或无父 list 使用 `default`。插件关闭时为 deny，其余按配置文件覆盖、全局覆盖与工具声明缺省策略查找，确认操作无覆盖时为 confirm。管理更新从下一次操作生效，在途确认保留已接纳策略。命令前缀与回复设置按同一会话配置文件读取。
-
-通过 `GET/PUT /api/v1/profiles/{id}/platform` 读取或保存平台覆盖；普通配置文件的 `reply` 各键为 `null` 时跟随 `default`，显式 `false`、空字符串和 `0` 关闭对应修饰。写入 `default` 须提供完整 `command_prefixes` 与 `reply`，值写回 `core_config.json`。后续派发和发送读取新快照，无需重启插件。命令前缀未覆盖时跟随 `default`，支持空字符串前缀并按最长前缀匹配；usage 使用本次命中的前缀。平台菜单按实例缺省配置文件读取前缀，命令目录沿用原权限与命令名规则。
-
-处理 `message.created` 的命令、文本、事件及其派生和延续调用向原实例、会话与话题回复时，共享根调用的首条 Send 标记。首条按 `mention_sender` 在群聊提及可信发送人，按 `quote` 引用触发消息，并在第一个 text 前加 `prefix`；已有同人提及或引用保留。提及和前缀加入后超过实例声明的文本长度上限时，两项一起省略，引用仍保留。后台和跨会话发送沿用原行为。
-
-Core 在出站 Hook 前完成回复改写，并沿用整链复检。前缀按普通文本处理，Markdown 正文前插入独立 plain text 片段，保留实体的 UTF-16 偏移。首条回执选取 `primary_platform_message_id`，为空时取 `platform_message_ids` 首项；只按该 ID 的 ACCEPTED `part_results` 与 `segment_indexes` 记录 Hook 后实际已发送的自动提及和前缀，完整回执与错误继续返回。关联按当前插件 Session、完整 Target 与平台消息 ID 隔离；后续 Edit 保留已记录修饰，用 TEXT_MENTION 表达自动提及，重复编辑沿用已有修饰，并同步插入位置前后实体的偏移与长度。Edit 仍接受一个 text 和可选 buttons，超限时省略自动修饰；需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出时释放关联，配置读取期间的在途准备与迟到回执随之失效；根调用结束时释放首条标记。
-
-`forward_threshold` 为正且实例声明 `message.forward` 时，每次回复 Send 的 text 片段总 Unicode 码点数超过阈值会改为一个合并转发，节点来源为本账号；reference、媒体、按钮及嵌套限制沿用原校验，Edit 沿用原编辑限制。平台菜单在启动及路由、命令策略变化时同步；命令派发与回复 Send 从下一次操作读取新平台快照。
-
-官方 Agent 可用 `/profile [名字]` 查询或切换当前会话的配置文件；名字为「默认」或 `default` 时取消单独指定，先回落实例缺省，再回到 `default`。Admin 用 `/agent on|off`、`/persona <名字>`、`/provider <名字>` 修改当前配置文件的触发方式、人格与模型，共用该配置文件的会话在后续调用一起生效；回复显示 Core 返回的名称、会话数，修改 `default` 时追加即将重载提示。可覆盖字段为 `chat_model`、`image_caption_model`、`default_persona`、`triggers`、`wake_words`、`member_sessions`。人格目录已迁入 Agent 受管 SQLite 的 `persona` 表（T-12.20，PR #252），由插件的人格页增删改，`default_persona` 只存名字，选项来源为 `@agent/personas`；基础配置的非空引用在 OnStart 校验，普通与定时轮次读取当前已提交提示。受管库的 `chat_settings` 仅保留会话键、reset 代次与图片计数；初始迁移 ID:1 包含 `persona` 与 `conversation_record`，ID:2 保留记忆迁移，旧开发库按首次发布前约定重建。
-
-官方 Agent 的人格、MCP、技能、记忆和用户任务页面由组件自带资源提供，通过管理会话访问。人格修改从下一轮普通对话和定时任务生效；记忆页位于 `pages/memory`，读取完整会话正文并管理笔记/档案，摘要与清除使用 Core 原有入口；动态任务按真实实例 key 取消。接口见 [ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)，验证证据见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。goal-44 已完成真实浏览器与 iframe 桥联验，覆盖主题、语言、窄屏标签、配置保存与重载。
-
-### 导出诊断包
+根据改动影响选择检查，不重复运行已有效通过的无关检查：
 
 ```fish
-alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
+git diff --check
+# 例如修改 Router 时：
+go vet ./internal/core/router
+go test -race ./internal/core/router
 ```
 
-默认收集近 24 小时的日志、当前设置和 Active 配置、组件与环境信息，并开启脱敏。`--no-logs`、`--no-settings`、`--no-components` 可分别省略一组，至少保留一组。`-o` 也可写作 `--output`；省略时在当前目录生成 `alonabot-diagnostics-<UTC 时间>.zip`。
+合并前 CI 的 Go 检查包括 `go vet ./...`、race 测试与五目标 pure-Go 构建；自托管 runner 串行测试包，命令以[工作流](../.github/workflows/ci.yml)为准。前端检查由贡献者运行，CI 当前只执行 Go 与仓库检查。手动需要完整检查时执行：
 
-在线使用管理 API 和 Bearer token：优先读 `--token-file`，其次取 `ALONABOT_ADMIN_TOKEN`，两者均未指定时尝试 `<data_dir>/admin_token`。`--admin-url` 可覆盖管理地址。连接被拒绝后尝试停机导出，无需 token；数据目录须已有可读的 `core.lock` 且锁未被占用。离线导出只读原目录，组件状态为 `Stopped`。
+```fish
+go build ./...
+go vet ./...
+go test -race ./...
+```
 
-缺少可用的 Adapter 实例 schema 时，默认遮盖该组实例配置的全部叶值，保留结构和完整的 `${环境变量}` 表达式。`--no-redact` 会导出凭证明文；日志可能包含聊天内容，提交 issue 前请先检查归档。
+改变插件页面套件时，运行 `go test -race -v ./sdk/page ./examples/plugins/showcase` 和 `node --check sdk/page/kit.js`，并在 WebUI 的 iframe 中检查关键交互、语言与主题。文档修改检查链接、锚点、代码块和实际命令。
+
+跨平台修改同时核对真实运行与交叉构建。五个发行目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64；构建结果与平台实跑结果分别记录，现有结果见[发布说明](release-notes/v0.1.0.md#发行内容)。真实 Telegram 或付费 Provider 验证使用授权的测试凭据，模拟服务在验证结果中明确注明。
+
+仓库只提交集成测试及协议编号检查。单元测试、临时复现与局部前端测试使用 `*_local_test.go`、`*.local.test.ts`、`*.local.test.tsx` 或 `tmp/test/`；完整规则见[编码规范](coding-standards.md#测试提交规则)。PR 记录测试位置、命令、平台、输入条件、结果与未运行原因，以及提交测试新增行数。
+
+## GitHub Actions
+
+[Quality gate](../.github/workflows/ci.yml)在 main push、目标为 main 的 PR 和手动触发时运行。Repository job 检查空白与 main 的文件范围；Go job 检查格式、生成一致性、vet、race 和五平台构建。main 路径检查排除个人维护资料，产品中的技能功能和测试工具照常保留。
+
+[PR metadata](../.github/workflows/pr-metadata.yml)验证非草稿 PR 的说明；triage 和 auto-assign 只处理 GitHub 元数据，不执行 PR 代码。代码检查使用只读权限，不接触生产 secret。分支保护另由维护者配置。
+
 
 ## 开发运行与热部署
 
@@ -274,7 +192,7 @@ cat $DEVBOT_OUTPUT
 
 注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
 
-组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。从改名前的开发环境更新时，先停止 Core 和开发组件，备份原目录，再用新数据目录启动以重建状态库和组件数据。按新组件 ID 重配组件设置、实例的 `package`、`log.sources`、权限和工具策略；平台 `adapter_id` 与实例名沿用原值。Core 不自动迁移旧数据。
+组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [CONTRACTS §9.1](../spec/CONTRACTS-v0.1.md#91-manifest-与构建产物)。
 
 验证官方 help 工程可运行 `bin/alonabot check ./plugins/help`。使用上面的回环 Adapter 试用时，在 `run` 的组件目录列表追加 `./plugins/help`，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`，在同一输出文件查看回复。
 
@@ -312,65 +230,11 @@ bin/alonabot run ./examples/plugins/lifecycle --stdio
 
 `--reload` 也监视 `core_config.json` 的其他设置：`admins` 更新后立即改变 Core Admin 权限，命令前缀从共享设置读取当前值，`default_locale` 对之后建立的 Session 生效。修改 Adapter 的 `default_instance` 后，未指定实例的发送立即改选新的缺省实例；`log.level` 立即更新全局日志级别，本次运行显式给出的 `--log-level` 或库模式 `LogLevel` 选项持续优先。这些修改保持组件进程与实例运行；同时修改设置与开发 Adapter 实例时，先刷新设置，再重启变化的实例。重新读取失败时记录错误并保留旧设置。开发 CLI 经 `internal/app.Core.ReloadSettings(ctx)` 与其他管理操作串行刷新同一份设置。
 
-`role: webui` 的工程直接以 manifest 中 `assets` 指定的目录为静态根目录，覆盖已安装的 WebUI，等同于 `alonabot.WebUI(os.DirFS(<assets 目录>))`。一次运行只接受一个 WebUI 目录，重复时在启动任何组件前报错。开发 WebUI 按 D-140 跳过 Admin API 主版本检查；静态文件按请求读取，修改后立即可见，无需构建或重启，也无需 `--reload`。
+`role: webui` 的工程直接以 manifest 中 `assets` 指定的目录为静态根目录，覆盖已安装的 WebUI，等同于 `alonabot.WebUI(os.DirFS(<assets 目录>))`。一次运行只接受一个 WebUI 目录，重复时在启动任何组件前报错。开发 WebUI 按开发模式约定跳过 Admin API 主版本检查；静态文件按请求读取，修改后立即可见，无需构建或重启，也无需 `--reload`。
 
 独立进程调试时将调试器附加到组件 PID；需要在同一进程调试 Core 和组件时使用下文库模式。
 
-## Core 设置与 HTTP 入口
-
-`run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。JSON 语法、重复键或根节点错误时，以 usage 退出码报告键路径与行列号。未知键保留并忽略，类型或取值错误在运行副本中校正，记录路径与原因。
-
-键与缺省值见 CONTRACTS §15.1；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。旧键 `admin_base_url` 与 `plugin_base_url` 作为无效配置保留，运行时使用 `base_url`。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 按未知键保留原文并忽略，管理员 prune 时清理。按账号区分前缀时，为该实例指定缺省配置文件，再经平台 API 保存前缀覆盖；旧 `/api/v1/core/command-prefixes` 路由已移除。本地 `run` 按监听、日志、代理与 Base URL 装配。
-
-整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录（D-161）。
-
-`(*settings.File).Update` 在未展开的文档上编辑，校验后以 0600 临时文件替换原文件，保留其他键的顺序与 `${...}` 写法，新键追加到所在对象末尾；写回使用两个空格缩进并以换行结束。文件没有格式版本（D-161）：不是合法 JSON 对象时拒绝启动，其中不合法的值按 CONTRACTS §5.5 校正，不改写文件。
-
-插件由 SDK 先执行 `OnConfigLoad(ctx, raw)`，再补值与校正；`GET /api/v1/plugins/{id}/config` 返回 Active 的 `corrections` 和 `unknown`。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除无效键并保存为 Pending，随后调用管理 API 的 reload 生效。开发组件也按此顺序清理：reload 时原子更新其编辑文件，成功启动后清除 Pending；之后的 restart 保持清理结果。
-
-Core 设置的记录由 `GET /api/v1/core/settings/corrections` 读取，清理由 `POST /api/v1/core/settings/prune` 写回。Adapter 实例的 GET 响应也带 `corrections` 与 `unknown`，`POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 只删除该实例的无效键，保留其他值与 `${...}` 原文；实例校正与 required 检查独立进行，失败实例保留可修订的配置，其余实例继续启动。端点与生效方式见 [ADMIN-API §12～§14](../spec/ADMIN-API.md#12-组件配置pending-与秘密查看)。
-
-配置准备沿用 `internal/tune` 的 `PHASE_CONFIG`（缺省 60s），覆盖 OnConfigLoad、补值与校正及 required 校验；`PHASE_MIGRATION`（缺省 15m）用于数据库迁移，参数表见 CONTRACTS §16。
-
-部署运行中，手改设置后重启 Core 生效；带 `--reload` 的运行按上节刷新设置与开发实例，监听地址等启动时装配的设置仍需重启 Core。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，文件内容保持不变：
-
-```sh
-bin/alonabot run --data-dir ./data --listen 127.0.0.1:8080
-```
-
-用 `alonabot logs --level critical` 只看严重故障，或用 `alonabot run --log-level critical` 为本次启动提高全局输出阈值。运行中用 `alonabot log-level global critical` 保存全局阈值，用 `alonabot log-level <组件 ID> critical` 单独设置来源。查询筛选与输出设置见 [ADMIN-API §8](../spec/ADMIN-API.md#8-日志读取与输出级别)。
-
-Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口。请求 Host 的主机名须匹配 `base_url`：`/plugins/{id}/...` 转发给该插件当前 Session 的路由，其余路径交给管理处理器；其他 Host 返回 421。缺省设置下，lifecycle 示例的私有页面地址为 `http://127.0.0.1:7650/plugins/demo/page`。listen 为非 loopback 地址时，`base_url` 必须是 https，或者配置非空的 `trusted_proxies`（由可信反代终止 TLS），设置文件与 `--listen` 都按此校验。
-
-插件路由的全部响应（含 Core 的错误响应）统一设置 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups` 与 `X-Content-Type-Options: nosniff`，覆盖插件的同名头。Core 清除插件设置的全部 `Set-Cookie` 和 `Access-Control-Allow-Credentials`（含 trailer），Cookie 只以 WARN 记录名称；缺失 Content-Type 时补 `application/octet-stream`。HTML 页面按此沙箱策略返回。
-
-设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
-
-首次启动且尚无管理凭证时，Core 自动生成管理 token：stdin 与 stderr 都是终端时只向 stderr 显示一次；系统服务、容器等非终端启动时，以 0600 权限写入 `<data_dir>/admin_token`，INFO 日志记录文件路径。读取文件中的 token：
-
-```sh
-bin/alonabot admin-token show --data-dir ./data
-```
-
-`show` 直接读取文件，可在 Core 运行时执行，也可从非终端调用；文件不存在时返回英文错误。第一次登录成功后，Core 删除该文件。登录接口为 `base_url` 下的 `POST /api/auth/login`，要求受控 Origin、`Content-Type: application/json` 与正文 `{"token":"<token>"}`，成功后返回管理 Cookie 和 `csrf_token`；CLI 可用 `Authorization: Bearer <token>`。
-
-私有插件路由复用管理认证：有效管理 Cookie 或 Bearer token；Cookie 认证的非 GET/HEAD 请求还须携带 `X-Alonabot-CSRF` 与受控 Origin，校验失败返回 401。公开路由无需管理会话，由插件按其声明的回调来源校验规则处理。转发给插件前，Core 清除管理 Cookie、Authorization 与 CSRF 头。
-
-需要在启动前初始化凭证时，停止 Core 后在本机终端运行 `bin/alonabot admin-token init --data-dir ./data`。token 遗失时用 `bin/alonabot admin-token reset --data-dir ./data` 重新生成，旧 token 与全部管理会话随之失效。`init` 与 `reset` 都要求 stdin 与 stderr 是终端，只向 stderr 显示 token 一次；Core 运行中执行会因 core.lock 失败。
-
-Core 运行且仍持有当前 token 时，可调用 `POST /api/auth/token/rotate` 在线轮换（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。从响应保存新 token，更新 CLI 使用的 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，并用新 token 重新登录。轮换会撤销全部旧管理会话。
-
-调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限，`core.profile.*` 与 `sdk.profile.set_overrides` 沿用普通 RPC 的期限与 Session 预算（CONTRACTS §16、`internal/tune/params.go`）。查看全部调优参数及当前生效值：
-
-```sh
-bin/alonabot tune list
-bin/alonabot --args REQUEST_TIMEOUT=2s tune list
-bin/alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
-```
-
-`--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
-
-`OPTIONS_PAGE` 的默认值和范围见 [CONTRACTS §16](../spec/CONTRACTS-v0.1.md#16-调优参数)，可用 `alonabot tune list` 查看；聊天目录每页的上限取当前 Core 生效值的十倍，请求的 `limit` 仍缺省为 50。
+## 作者工具
 
 插件包导出 `func New() *sdk.Plugin`，在 `sdk.NewPlugin()` 返回的对象上登记命令、生命周期回调与业务行为。构建工具自动扫描 manifest、配置 Schema、Service Schema、i18n 和参数名，经 overlay 编入程序；作者工程中没有 `alonabot_gen.go`，作者代码无需生成相关内容。构建或只读检查：
 
@@ -394,34 +258,6 @@ bin/alonabot pack ./alonabot-plugin-hello --target linux/amd64 --target linux/ar
 
 `--key` 可选，文件内容为标准 base64 编码的 64 字节 Ed25519 私钥，允许首尾空白。提供时只对最终合并清单的原始字节签名一次，额外写 `release.json.sig` 和 `release.pub`，分别为标准 base64 签名及公钥；省略时生成 unsigned release，并清除输出目录中旧的签名与公钥。密钥读取或签名失败直接报错。私钥、运行配置与数据目录均应留在打包资源之外。
 
-真实进程验收（Unix；构建 Core、lifecycle 与临时热部署工程）：
-
-```sh
-go test -count=3 ./cmd/alonabot/ ./internal/core/supervisor/
-go test -race -count=3 ./internal/core/supervisor/
-```
-
-文档改动用 `git diff --check` 检查空白错误，链接与技能元数据由审查核对。包文档、命名、注释与测试提交范围由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
-
-## 按需唤醒与验证
-
-S-02.1 已接通已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 与 HTTP 请求恢复原代次。Core 唯一 Waker 在 ACTIVATED、摘要核对及全部绑定后开放交付；等待期间沿用接纳时的绝对期限。同代次 RESUME 复用配置与 DB，跳过数据库迁移回调；配置仍执行加载、补值/校正与 required 校验，完整结果须与原快照一致。开发组件沿用当前绑定与原生命周期。
-
-`internal/tune` 已登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 CONTRACTS §16。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。S-02.2 已接通自动空闲策略：`sleep.mode` 缺省 `always_on`，`sleep.idle_timeout` 缺省 `15m`，`sleep.plugins` 缺省为空；覆盖接受 `never` 或正时长，删除覆盖恢复自动准入。`SLEEP_MIN_UPTIME=5m`（>0）、`SLEEP_COLD_START_WINDOW=1h`（>0）与 `SLEEP_COLD_START_MAX=3`（≥1）已登记，窗口内冷启动超过上限后固定常驻一个窗口，期间启动保持原冷却截止。S-03.1 已接通 Scheduler 自然到期唤醒，复用同一 Waker 与上述等待预算；payload 按完整 HandlerRequest 的编码字节计入。静态 deadline 为原 scheduled_at 加 `JOB_TIMEOUT=15m`（>0），动态从取得并发名额开始计算，冷启动计入原期限；等待继续占用原运行槽与 `TASK_CONCURRENCY=16` 名额（≥1 且 ≤ SESSION_MAX_INFLIGHT）。
-
-管理 CLI 可直接查询和调整逐插件策略（复用既有 `--data-dir`、`--admin-url` 与 `--token-file`）：
-
-```sh
-alonabot sleep-policy
-alonabot sleep-policy my-plugin
-alonabot sleep-policy my-plugin never
-alonabot sleep-policy my-plugin 15m
-alonabot sleep-policy my-plugin auto
-```
-
-无参数返回全局设置与全部已安装 plugin/agent 的策略和运行状态；单 ID 返回对应对象。`auto` 删除覆盖，`never` 与正时长立即写回设置并生效。全局模式与时长通过[管理 API §24](../spec/ADMIN-API.md#24-插件休眠策略与运行状态) 的 `PUT /api/v1/core/sleep` 修改，两项必填。管理读取保持休眠；需要路由而尚无有效已提交快照时，策略查询返回 412 / `FAILED_PRECONDITION`，全局设置与 runtime 可独立读取。保存后的恢复失败保留实际错误；重新 GET 核对已保存设置。
-
-提交集成 `internal/app/wake_test.go:TestWake` 覆盖真实 Core、SDK 回环 Adapter、已安装子进程与 SQLite 的 command/service/http 三入口；`contracts/wirespec_test.go:TestEnumValues` 固定 `STOP_REASON_IDLE=6`。本地 `*_local_test.go` 覆盖并发、预算、取消/期限、停止竞争、活动释放与 RESUME 数据库迁移。`internal/app/idle_test.go:TestIdle` 覆盖自动空闲退出、正常 OnStop 与资源关闭、首命令唯一原代次恢复，以及保存 never 后立即恢复并保持 ACTIVE。本地回归覆盖同步准入与排空交接、全部设置发布入口、固定冷却与历史回收、停止及落盘失败。`internal/app/scheduler_wake_test.go:TestSchedulerWake` 覆盖自动休眠→静态 interval 唤醒→再次休眠→动态 at 唤醒→消费→再次休眠，并核对原时间、静态起点、暂停状态、代次、配置、业务 DB 与执行期活动引用。本地 Scheduler 回归覆盖原 deadline、并发与队列、Late/Released、冻结写入窗口、唤醒失败撤销及同代次恢复清理未注册过期 at。darwin/arm64 的完整命令、结果及真实平台未运行项见 [TEST-MATRIX §3.2](../spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
 ## 库模式运行（同一进程）
 
@@ -442,47 +278,13 @@ examples/devbot/bin/devbot -data-dir ./data
 
 组件以 source=dev 登记，代次固定为 `dev:<组件 ID>`。库模式由 `alonabot build <main 目录>` 构建，扫描 main 依赖中的组件入口（含模块缓存中的第三方组件），将全部资源登记经 main 包的 overlay 编入。默认只输出 `<main 目录>/bin/<目录名>` 可执行文件（Windows 加 `.exe`），可用 `--out` 修改输出目录。组件源码与模块缓存保持只读。同包多次 New 共用资源；main 的包级变量也可调用组件的 New。直接 `go build` 的库模式产物在启动缺少资源的组件前返回提示 `alonabot build` 或 `alonabot run` 的英文错误。
 
-库模式更改源码或资源后重新运行 `alonabot build` 并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 修改开发配置后写回并重启由 T-09.14 承接，手改配置的轮询行为见上节。
+库模式更改源码或资源后重新运行 `alonabot build` 并重启程序。未捕获的后台 panic 使整个进程非零退出且无有限重启；SDK Handler 边界内捕获的 panic 记录 stack 并返回 `INTERNAL`。同进程组件超过停止预算仍未退出时，`Wait` 返回错误；独立进程由 supervisor 隔离并有限恢复，两种模式的 SIGINT/SIGTERM 停止总预算缺省均为 `STOP_TOTAL=10s`。开发来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`；WebUI/CLI 保存开发配置后写回并重启，手改配置的轮询行为见[开发运行](#开发运行与热部署)。
 
 库模式公开入口由根目录 `alonabot_test.go` 的 `TestLibraryLifecycle` 验证；装配、内部服务、候选与 WebUI 的 9 个集成测试文件位于 `internal/app/`。开发 CLI 与热部署测试位于 `cmd/alonabot/`，覆盖经 `internal/app` 运行的独立进程开发组件与单组件重启。
 
 ## Adapter 的 HTTP 路由
 
 Adapter 在 `adapter.Descriptor.HTTP` 中用 `[]adapter.HTTPRoute` 声明路由，对外位于统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。`Auth` 的零值要求 Core 会话；公开路由写 `Auth: adapter.AuthPlatformToken`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
-
-## 备份与恢复
-
-整机备份前先停止 Core 和全部插件进程，再复制完整的 `data_dir`。备份须同时覆盖 Core 元数据、程序包、插件配置及各代次的受管 SQLite 数据库。单独备份 `state.sqlite` 只保存 Core 元数据，不包含插件业务数据。
-
-插件自管的外部数据库与框架目录之外的文件，按插件的维护说明单独备份。恢复时保持 Core 和插件停止，还原完整的 `data_dir`，并同步恢复插件自管的外部数据，再启动 Core。恢复旧备份会丢弃备份之后的新写入，执行前须确认要恢复的数据时点。
-
-## 外部测试环境
-
-- **Telegram：** 真实测试需要授权的测试 Bot，目前没有，相关项记为「未运行」；Adapter 测试改用本地 Bot API 模拟服务。
-- **目标平台：** 本机只能运行 darwin/arm64；其余四个组合只做 `CGO_ENABLED=0` 交叉编译，尚无运行证据。
-
-## 规则与检查
-
-| 规则 | 依据 | 检查 | 状态 |
-| --- | --- | --- | --- |
-| 生成代码可重复生成，结果稳定 | AGENTS「项目约定」 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（手动执行） |
-| WIRE-FORMAT 规定的协议字段号与枚举值（含 `ToolEffect` 及三个 `effect` 字段） | spec/WIRE-FORMAT.md §1/§2/§3.3/§3.5/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
-| Core 与 SDK 根包只链接允许的模块 | CONTRACTS §10、D-52 | 审查时运行上方的 `go list -deps` 命令（需要时按目标平台设 GOOS/GOARCH） | 人工/agent 审查规则，不由 CI 自动证明 |
-| 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 下方交叉编译命令（手动执行） | 已观测（只验证了构建；运行见 V-32） |
-| 包文档、命名、注释与测试提交范围 | coding-standards.md | 代码审查与 PR 清单 | 人工/agent 审查规则，不由 CI 自动证明 |
-| 验收证据 | spec/TEST-MATRIX.md §3 | 按编号记录测试位置、命令、平台和结果 | 各分项的运行结果与未运行项见证据表 |
-
-状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。工作流本身不代表目标提交已经验证。
-
-## GitHub Actions
-
-[Quality gate](../.github/workflows/ci.yml) 在 PR 到 main、main push 和手动触发时运行 `git diff --check`。存在产品 Go 文件时，才运行 Go 格式、Protobuf 生成一致性、vet、race 测试和五目标平台 `CGO_ENABLED=0` 构建；无产品代码时明确标注 Go 检查未运行。
-
-生成检查从官方 Protobuf release 下载当前约定的 protoc 36.0；工具链变更时同时更新生成器、开发指南和工作流。代码 job 使用只读 token，不使用生产凭据。
-
-[PR metadata](../.github/workflows/pr-metadata.yml) 校验非草稿 PR 的实际说明和清单；[triage](../.github/workflows/pr-triage.yml) 同步标签与 assignee，[auto-assign](../.github/workflows/auto-assign.yml) 请求非作者维护者审阅。这些 `pull_request_target` 流程不 checkout/执行 PR 代码，新工作流合入默认分支后才开始处理后续事件。Issue 表单自带 assignee，不依赖工作流执行。
-
-远端合并保护由维护者单独管理，不能因存在这些 YAML 就声称检查不可绕过。本次建设不添加发布、真实 Telegram 调用或自动关闭 PR 的流程。
 
 ## 动态提醒与静态任务暂停恢复
 

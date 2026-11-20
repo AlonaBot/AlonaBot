@@ -1,21 +1,27 @@
-# 文档索引
+# AlonaBot 文档
 
-| 文档 | 用途 | 权威性 |
-| --- | --- | --- |
-| [spec/README.md](../spec/README.md) | 规格入口：PLAN、CONTRACTS、WIRE、MESSAGE、DESIGN、TEST-MATRIX | 行为的唯一权威 |
-| [spec/adr/README.md](../spec/adr/README.md) | D/P/Q 决策与历史审阅 | 解释「为什么」，不覆盖现行契约 |
-| [ARCHITECTURE.md](../ARCHITECTURE.md) | 模块职责、import 方向、状态归属 | 结构规则 |
-| [development.md](development.md) | 环境、命令、外部测试环境、规则与检查 | 验证入口 |
-| [coding-standards.md](coding-standards.md) | 命名与术语、按职责组织文件、包文档与注释、测试提交规则 | 编码审查规则 |
-| [plugin-guide.md](plugin-guide.md) | 插件作者的依赖、存储、日志、生命周期、协作与发布规则 | 插件作者规则；行为以 CONTRACTS 为准 |
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | Issue、PR、Git 授权和 GitHub 自动化 | 贡献流程 |
-| [AGENTS.md](../AGENTS.md) | 项目维护技能与规格的按任务路由 | Agent 工作入口 |
-| [goals/](goals/README.md) | 按章节分文件的切片 goal 语句与状态 | 派发入口 |
-| [execution-order.md](execution-order.md) | 并行派发、共享文件与合并顺序 | 并行约束 |
+从你要完成的事情开始选择文档。精确行为由技术规范定义；指南提供可以直接使用的步骤和示例。
 
-按任务找文档：
+## 使用机器人
 
-- 修改协议、消息或生命周期行为：先读对应的 spec 文件；改动契约时同步 PLAN、TEST-MATRIX，并在 ADR 中记录原因。
-- 新增包或新的跨包 import：读 ARCHITECTURE.md，必要时先更新依赖表。
-- 编写官方插件、Adapter 或示例插件：读 plugin-guide.md，确认依赖、存储与常驻内存符合规则。
-- 记录验收证据：按 TEST-MATRIX §3 的字段，写进当前 goal 本地的 tasks.md；`goal-*/` 不入库，最终证据落在 PR 正文。
+- [安装与部署](deployment.md)：发行归档、系统服务、Docker、管理认证、配置、备份与诊断。
+- [v0.1.0 发布说明](release-notes/v0.1.0.md)：发行内容、平台验证、升级与已知限制。
+
+## 开发组件
+
+- [插件开发指南](plugin-guide.md)：创建工程、命令、事件、配置、存储、模型调用、生命周期与发布。
+- [插件测试](development.md#插件测试)：用真实 Core 注入消息、检查回复、任务和 LLM 替身。
+- [可运行示例](../examples/plugins)：echo、lifecycle、showcase、configdb 和 media。
+- [开发机器人示例](../examples/devbot/README.md)：回环 Adapter、热重载和同进程调试。
+
+## 贡献源码
+
+- [贡献指南](../CONTRIBUTING.md)：Issue、依赖讨论、PR、审查与交付。
+- [源码开发](development.md)：环境、构建、热重载、WebUI、生成与验证。
+- [编码规范](coding-standards.md)：命名、文件组织、注释、日志与测试提交规则。
+- [架构地图](../ARCHITECTURE.md)：模块职责、依赖方向与状态归属。
+- [技术规范](../spec/README.md)：API、生命周期、消息模型、IPC 与管理接口。
+
+## 维护发行
+
+- [发行维护](releasing.md)：发行构建、测试签名、候选核对与正式发布步骤。

@@ -1,6 +1,6 @@
 # 平台验收
 
-`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。四个 Linux/macOS 环境已完整通过；Windows 完成交叉构建，实际运行仍为「未运行」，2026-11-20 经维护者按 [D-185](../../spec/adr/DECISIONS.md) 批准延期。实际候选、环境与原失败见 [TEST-MATRIX §3.6](../../spec/TEST-MATRIX.md#36-五平台运行增量t-102--v-32v-34)。
+`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。四个 Linux/macOS 环境已完整通过；Windows 完成交叉构建，实际运行仍为「未运行」，2026-11-20 经维护者按 [Windows 实跑延期](../../docs/release-notes/v0.1.0.md#发行内容) 批准延期。实际候选、环境与原失败见 [TEST-MATRIX §3.6](https://github.com/AlonaBot/AlonaBot/blob/d8b9678931013b6d46a044dbdbb0db9182262065/spec/TEST-MATRIX.md#36-五平台运行增量t-102--v-32v-34)。
 
 先从候选源码构建验收程序、Core 与三个示例组件包，并准备下文约定的本地 `platform-tree` 插件。fixture 源码和产物放在 git 忽略的本地目录，随本次证据保留。以下为本机 fish 命令；交叉构建时分别为验收程序与 Core 设置目标，并为 `pack` 指定同一 `--target OS/arch`。
 
@@ -40,9 +40,9 @@ uv run --no-project --offline --no-python-downloads scripts/platform/cgo_build.p
 
 程序为每次运行创建独立的临时 `cwd` 与 `data` 目录，并在 JSON 中留下绝对路径。命令从该 `cwd` 运行；输入路径按启动位置解析为绝对路径。程序和 Core 应构建为相同目标；Rosetta 验收时两者及组件都使用 `darwin/amd64`，环境填 `emulation`，宿主说明填写 Apple Silicon/Rosetta。容器填 `container`，同时说明实际宿主与容器发行版。
 
-Rosetta 的构建工具可使用宿主原生 Go、Git 和 C 编译器，构建目标显式设为 `darwin/amd64`，验收程序经 `arch -x86_64` 启动。本次 macOS 的 `/usr/bin/git` 在 Rosetta 中经 `xcrun` 加载 ARM 专用 `libxcrun` 失败，构建时改为从 `PATH` 直接查找已有 Command Line Tools 的原生 Git。直接调用该目录中的 Clang 时，`CC`／`CXX` 同时指定 `-isysroot` 与现有 macOS SDK；工具实际架构、完整参数及原始失败见 [TEST-MATRIX](../../spec/TEST-MATRIX.md) §3.6。
+Rosetta 的构建工具可使用宿主原生 Go、Git 和 C 编译器，构建目标显式设为 `darwin/amd64`，验收程序经 `arch -x86_64` 启动。若 `/usr/bin/git` 在 Rosetta 中经 `xcrun` 加载 ARM 专用 `libxcrun` 失败，构建时从 `PATH` 查找已有 Command Line Tools 的原生 Git。直接调用该目录中的 Clang 时，`CC`／`CXX` 同时指定 `-isysroot` 与现有 macOS SDK；工具实际架构、完整参数及原始失败见 [TEST-MATRIX](https://github.com/AlonaBot/AlonaBot/blob/d8b9678931013b6d46a044dbdbb0db9182262065/spec/TEST-MATRIX.md) §3.6。
 
-Docker Desktop 验收时，将 `TMPDIR` 指向容器本地文件系统中的目录，运行后把完整工作区复制到证据目录。共享挂载可保留构建输入和最终 JSON；本次实际对照发现，共享文件系统上的 Core 锁观测与容器本地文件系统不同，原始失败与对照结果见 [TEST-MATRIX](../../spec/TEST-MATRIX.md) §3.6。
+Docker Desktop 验收时，将 `TMPDIR` 指向容器本地文件系统中的目录，运行后把完整工作区复制到证据目录。共享挂载可保留构建输入和最终 JSON；既有对照发现，共享文件系统上的 Core 锁观测与容器本地文件系统不同，原始失败与对照结果见 [TEST-MATRIX](https://github.com/AlonaBot/AlonaBot/blob/d8b9678931013b6d46a044dbdbb0db9182262065/spec/TEST-MATRIX.md) §3.6。
 
 JSON 包含运行时 OS/架构/Go 版本、系统版本原始输出、Core 与组件包的 Go build info、包路径与长度，以及各步骤的 UTC 时间、毫秒耗时、完整合并输出、退出码和错误。`host_description` 由操作者声明，系统命令输出与编译目标另行记录。`runs` 保存 Core 命令、PID、动态监听地址、完整日志位置和组件激活 PID/代次；`purpose` 区分首次业务、循环、强杀和恢复，`cycle` 记录 1–100，每一步的 `core_pid` 对应所属运行。`bot_calls` 保留本地 Bot API 模拟服务收到的真实请求。
 
@@ -66,7 +66,7 @@ Unix 随后经 `os/exec` 运行[原有场景入口](../scenarios/README.md)，�
 
 Windows 使用 `windows_sources.py` 加载原场景的源码生成函数，按 Go AST 选择入口引用的完整声明与原断言，再编译成五个原生 `scenario-test.exe`；实际执行通过 Go 测试程序完成。构建阶段保留源码 cwd，管理／恢复／残存写入者运行阶段在 TestMain 切到独立 cwd。归档入口使用 `.exe`，只读 DB 使用 Windows 文件 URI。检查点由命名 Event 阻塞和释放。残存写入者场景的临时 Core 为 Job 命名，验收程序保留额外 Job 句柄，Core 强杀后真实旧 SDK 仍持有 runtime.lock；原有 Degraded、启动计数、Active／Journal／业务 DB 断言继续执行，随后终止旧 PID 并验证恢复。该钩子只存在于保留的临时 overlay 中。
 
-Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部目标组件包；Core 与验收程序使用 `.exe` 文件名。源码生成输入、有效 Go 声明、overlay、测试可执行文件及每场景运行参数均留在 `scenario-evidence`。交叉构建证据单独记录；实际 Windows 工具核对、平台/恢复/CGO/GORM 均为「未运行（D-185 批准延期）」。hosted run `44695663481` 在分配 runner 前失败，零 step、零 artifact，原错误和临时输入保留；后续实跑由维护者重新安排。
+Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部目标组件包；Core 与验收程序使用 `.exe` 文件名。源码生成输入、有效 Go 声明、overlay、测试可执行文件及每场景运行参数均留在 `scenario-evidence`。Windows 实跑与 CGO 经维护者批准延期，重新安排时需补齐本地工具与平台运行结果；原始失败保存在上述历史验收记录中。
 
 JSON 的 `recovery` 保存源码与候选提交、构建参数、七个产物的身份、三个场景的输入和完整 `events.jsonl`；每个场景另留 `go-test.log`、overlay、真实 `state.sqlite` 与业务数据库。程序同时核对所需测试名的成功记录和独立 cwd 标记，证据缺失即失败；部分事件和损坏输入的原始字节也保留在失败结果中。所有构建、运行目录与证据路径均位于 JSON 的 `workspace` 下，目录内容沿用原场景入口的布局。
 

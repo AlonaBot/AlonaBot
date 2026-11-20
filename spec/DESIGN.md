@@ -1,7 +1,6 @@
 # AlonaBot 技术设计
 
-**版本：** v0.6-review · 2026-10-21  
-**状态：** 现行实施基线，待实施验证。实现模块与职责按下文执行；具体工作包见根目录 PLAN。精确行为以 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 为准，执行顺序见 [PLAN.md](PLAN.md)。
+**状态：** 现行技术设计。精确行为以 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md) 为准；实现目录见[架构地图](../ARCHITECTURE.md)，开发流程见[源码开发](../docs/development.md)。
 
 ## A. Core 与插件职责
 
@@ -226,7 +225,7 @@ err = Remind.Cancel(c.Context(), key)
 
 ### 数据库
 
-Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）：`sqlitedb.Open(ctx) (*sql.DB,error)` 与 `gormdb.Open(ctx) (*gorm.DB,error)` 共用 Session 的同一个连接，插件只导入用到的包，不用 GORM 就不链接 GORM（D-49）。需要外部数据库的插件自带驱动、自行管理连接与数据。驱动组合在 CONTRACTS §6 指定，实际版本由 T-01 验证锁定。
+Core 管理状态库与插件业务库分开。框架只托管 SQLite（D-48）：`sqlitedb.Open(ctx) (*sql.DB,error)` 与 `gormdb.Open(ctx) (*gorm.DB,error)` 共用 Session 的同一个连接，插件只导入用到的包，不用 GORM 就不链接 GORM（D-49）。需要外部数据库的插件自带驱动、自行管理连接与数据。驱动组合在 CONTRACTS §6 指定，实际版本由 `go.mod` 与 `go.sum` 锁定。
 
 受管 SQLite 每插件、每候选代次独立文件。配置重载与版本更新统一先停止旧进程、备份候选副本，再迁移/初始化；不能复用旧可写 DB 来承诺提交前回退。准备期会改动外部数据的插件声明 `prepare_effects=external`，已有安装的升级按维护模式处理。
 
@@ -277,22 +276,22 @@ if m := p.Config().Template("music"); m.Key() == "netease" {
 
 ## K. WebUI、安装与运行安全
 
-WebUI 是可替换的组件（§T），只含静态文件，由 Core 提供，只经带主版本号的 Admin API 管理 Core（CONTRACTS §7.5）。官方 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次启动生成管理 token（终端中显示一次，非终端时写入数据目录的 `admin_token`）、admin-token init/show/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
+WebUI 是可替换的组件（§T），静态文件由 Core 提供，也可带使用 SDK 的 Go 进程；通过带主版本号的 Admin API 管理 Core（CONTRACTS §7.5）。官方 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次启动生成管理 token（终端中显示一次，非终端时写入数据目录的 `admin_token`）、admin-token init/show/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
 
 环境变量只传该插件所需信息，SDK 将日志标记 plugin/session/route/call；secret 原文不进入普通日志。工作目录与进程隔离不是 OS 权限隔离，首发只支持可信 Native 插件。进程树按 Linux/macOS/Windows 的合作型子进程机制回收，验证不涵盖恶意 detach。
 
 ## L. 接口实现与验收入口
 
-| 议题 | 实施依据 | 实证任务 |
+| 议题 | 行为依据 | 实现入口 |
 | --- | --- | --- |
-| Handler/Rule/Hook/权限 | CONTRACTS §2/§3、MESSAGE-MODEL | T-04/T-05/T-06，WebUI 在 T-09 |
-| 帧/Bootstrap/Session/错误/取消 | WIRE-FORMAT、CONTRACTS §1/§12 | T-01/T-02 |
-| 消息/媒体/按钮/回执 | MESSAGE-MODEL、CONTRACTS §1.3 | T-03 |
-| 调度/HTTP/生命周期 | CONTRACTS §4/§7/§12 | T-02/T-07/T-08，正式认证/更新在 T-09 |
-| 配置/secret/DB/Journal | CONTRACTS §5/§6/§12 | T-08/T-09 |
-| 构建/来源/安装/恢复 | CONTRACTS §9、TEST-MATRIX | T-01/T-09/T-10 |
+| Handler、Rule、Hook 与权限 | CONTRACTS §2/§3、MESSAGE-MODEL | `sdk/`、`internal/core/router/`、`hook/`、`policy/` |
+| 帧、Bootstrap、Session、错误与取消 | WIRE-FORMAT、CONTRACTS §1/§12 | `contracts/`、`internal/wire/`、`internal/core/host/` |
+| 消息、媒体、按钮与回执 | MESSAGE-MODEL、CONTRACTS §1.3 | `internal/core/message/`、`media/`、`buttons/`、`adapters/` |
+| 调度、HTTP 与生命周期 | CONTRACTS §4/§7/§12 | `internal/core/scheduler/`、`supervisor/`、`httpproxy/`、`idle/` |
+| 配置、secret、DB 与 Journal | CONTRACTS §5/§6/§12 | `internal/core/config/`、`secret/`、`state/`、`journal/` |
+| 构建、来源、安装与恢复 | CONTRACTS §9 | `internal/pluginkit/`、`internal/core/manage/`、`scripts/` |
 
-各接口随对应工作包实现并取得测试证据；跨任务用例按 TEST-MATRIX 的最终闭合点完成。
+同一格中的缩写目录沿用前一完整路径的父目录。验证方法见[开发指南](../docs/development.md#验证改动)，现有候选结果见[发布说明](../docs/release-notes/v0.1.0.md)。
 
 ## M. Adapter：可安装的平台适配器
 
@@ -331,11 +330,11 @@ v0.1 只支持 Telegram long polling，先确定实际 bot 身份并校验 accou
 
 最小逻辑分层为 contracts、SDK、Core 和 CLI；contracts 不依赖具体平台 SDK/GORM，数据库作为按需 SDK 包。使用标准 Go 编译、Protocol Buffers、标准 HTTP 代理及选定驱动，不引入额外容器运行时、服务发现或迁移平台。
 
-**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP 与外部数据库驱动一律放在需要它们的插件或按需 SDK 包里；GORM 由 Core 状态库使用（D-68），插件仍只在导入 `sdk/gormdb` 时链接；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存按现有实测记录，维护者已接受当前开销并停止继续资源测量（D-184、TEST-MATRIX V-74）；依赖由审查用 `go list -deps` 核对（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
+**按需付费**（D-52）：Core 与 SDK 根包只链接允许清单中的模块，模型 SDK、Provider 客户端、MCP 与外部数据库驱动一律放在需要它们的插件或按需 SDK 包里；GORM 由 Core 状态库使用（D-68），插件仍只在导入 `sdk/gormdb` 时链接；没有安装或没有启用的组件不运行进程。Core 与示例插件的空闲常驻内存按现有实测记录，维护者已接受当前开销并停止继续资源测量（[现有资源实测](../docs/release-notes/v0.1.0.md#资源与依赖)）；依赖由审查用 `go list -deps` 核对（V-75）。插件作者的对应规则见 [插件开发规范](../docs/plugin-guide.md)。
 
 CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记录安装序号/来源、ActiveGeneration、Journal、权限、回调与配置引用；业务库由插件负责。所有状态变更通过同一个 Core 管理服务串行化，离线 CLI 不能绕过仍运行的 Core 直接改状态库。
 
-日志使用标准库 `log/slog`（D-31）：每条记录关联来源（Core、插件或 Adapter）、plugin_id 或 adapter_id、instance、route_id、call_id、trace_id、session/generation，记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。控制台格式仿照 AstrBot，例如 `[14:05:42.118] [Plug:weather] [ERRO] [weather/weather.go:57]: ... trace=7c2e91d0`；同一条消息引起的记录共用 trace_id，可以串起跨插件的整条链路。每个插件与 Adapter 可单独设置级别或设为 off，WebUI 的显示筛选只在浏览器中进行（CONTRACTS §14）。资源测试包含 Core+不同插件+附属进程，总 RSS/私有内存、Linux PSS、CPU、P50/P95/P99；测试环境和平台差异随结果记录。
+日志使用标准库 `log/slog`（D-31）：每条记录关联来源（Core、插件或 Adapter）、plugin_id 或 adapter_id、instance、route_id、call_id、trace_id、session/generation，记录状态变化、拒绝/丢弃、发送回执、更新/恢复和配置权限审计。控制台格式仿照 AstrBot，例如 `[14:05:42.118] [Plug:weather] [ERRO] [weather/weather.go:57]: ... trace=7c2e91d0`；同一条消息引起的记录共用 trace_id，可以串起跨插件的整条链路。每个插件与 Adapter 可单独设置级别或设为 off，WebUI 的显示筛选只在浏览器中进行（CONTRACTS §14）。既有资源结果记录对应的组件、指标与环境；维护者已停止新增资源测量。
 
 ## P. 长期扩展方向（不进入 v0.1）
 
@@ -343,9 +342,9 @@ CLI/API 的完整管理动作与包协议见 CONTRACTS §9。Core 状态库记�
 
 ## Q. 多实例与实施维护
 
-Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账号需求硬编码进 Core。实例管理、权限和凭证切换分别在 T-03/T-04/T-09 实施并验收。
+Target 与凭证按 Adapter 实例/账号区分，不把特定 X/Twitter 多账号需求硬编码进 Core。实例管理、权限和凭证切换由 Adapter Registry、策略与管理服务分别负责。
 
-修订时同步根目录契约、详细计划与测试；选择原因和历史审阅见 [adr/README.md](adr/README.md)。技术基线维持 v0.6-review。
+修订时同步现行契约、实现、示例与受影响测试，按[贡献指南](../CONTRIBUTING.md)交付。技术基线维持 v0.6-review。
 
 ## R. Agent 组件
 
@@ -374,8 +373,8 @@ AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-
 | | 部署（用户） | 开发（开发者） |
 | --- | --- | --- |
 | 入口 | 从本仓库的 Release 用发行归档、`install.sh` 或 `docker compose` 安装（官方整合包），`alonabot run` 启动，在 `core_config.json` 或 WebUI 中配置 | `alonabot init` 创建组件工程，`alonabot run --reload` 在工程目录中运行 |
-| 包含 | Core、官方 Telegram 与 OneBot 11 Adapter、Agent、WebUI 与预装插件；首次运行自动安装，默认只启用 help 与 WebUI，Adapter 在 `core_config.json` 写了实例时启用，Agent 由管理员按需启用（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
-| 组件进程 | 每个已启用的包一个独立进程（WebUI 没有进程） | 开发中的组件也是独立进程；改动源码后自动重新构建，只重启该组件 |
+| 包含 | Core、官方 Telegram Adapter、Agent、WebUI 与 help；首次运行自动安装，默认只启用 help 与 WebUI，Adapter 在 `core_config.json` 写了实例时启用，Agent 由管理员按需启用（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
+| 组件进程 | 每个已启用的包一个独立进程（纯静态 WebUI 除外，官方 WebUI 含 Go 后台） | 开发中的组件也是独立进程；改动源码后自动重新构建，只重启该组件 |
 
 开发者只写组件本身，不写 `main.go`，也不写任何生成相关的代码（D-145）：`alonabot build` 生成正式入口，`run` 每次启动前都会构建。开发时与生产时的行为只差安装来源（dev）与固定代次。热部署时 Core 常驻，源码改动后重新编译，只重启变化的组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行；只改配置时不重新编译（CONTRACTS §15.4）。
 

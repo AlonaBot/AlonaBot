@@ -1,6 +1,6 @@
 # AlonaBot v0.1 事件与消息契约
 
-版本：v0.6-review · 2026-10-21。状态：**现行实施基线，待实施验证**。本文件补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §2/§8 和 [WIRE-FORMAT.md](WIRE-FORMAT.md)，不代表已构建 SDK 或调用平台 API。
+版本：v0.6-review · 2026-10-21。状态：**现行消息契约**。本文件补充 [CONTRACTS-v0.1.md](CONTRACTS-v0.1.md) §2/§8 和 [WIRE-FORMAT.md](WIRE-FORMAT.md)。实际平台验证范围见[发布说明](../docs/release-notes/v0.1.0.md)。
 
 ## 1. Event、Actor 与 Target
 
@@ -278,6 +278,6 @@ Bot API 中描述为 service message 的 Message 字段（例如 `new_chat_membe
 
 ## 8. 验收与依据
 
-对应 [TEST-MATRIX.md](TEST-MATRIX.md)：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）；会话类型、Telegram 的代理模式与话题判定（V-98～V-100）；会话字符串与可选的机器人（V-101）；插件 API 的简化：消息句柄、管理员按 Adapter 登记、带类型的按钮动作、片段构造函数、媒体读取与上传助手、时间与时长、Hook 的链式注册与 Adapter 声明的 Go 类型（V-102、V-103、V-105～V-108、V-110、V-111）。实际编译、平台调用和故障注入均留在实施阶段记录。
+验证下列消息与事件场景：Target/话题/多实例；Handler 两签名及停止传播；Rule false；空 Chain；按钮 token/过期/代次/多用户权限；相册多 ID；发送前拒绝、平台明确失败、先成功再超时；AfterSend 失败不改写平台结果；缺少 actor 和平台不支持事件；消息编辑；bot 上下线事件；Actor.locale 映射；OneBot 11 的接收映射、发送计划与跨 Adapter 一致性（V-71、V-72）；D-87 补齐的媒体传递、新片段、平台动作、撤回与输入状态、命令菜单、流式输出、反向 WebSocket、扩展事件与 Telegram 媒体小项（V-89～V-97）；会话类型、Telegram 的代理模式与话题判定（V-98～V-100）；会话字符串与可选的机器人（V-101）；插件 API 的简化：消息句柄、管理员按 Adapter 登记、带类型的按钮动作、片段构造函数、媒体读取与上传助手、时间与时长、Hook 的链式注册与 Adapter 声明的 Go 类型（V-102、V-103、V-105～V-108、V-110、V-111）。修改时按[开发指南](../docs/development.md#验证改动)记录实际编译、平台调用和故障注入结果。
 
 平台约束核对依据（2026-10-21）：[Telegram Bot API](https://core.telegram.org/bots/api)、[sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup)、[InlineKeyboardButton](https://core.telegram.org/bots/api#inlinekeyboardbutton)、[CallbackQuery](https://core.telegram.org/bots/api#callbackquery)。相册返回 Message 数组、每组 2～10 项、按钮载荷限额和回调确认来自官方接口；上面的拆分、token 生命周期和错误汇总属于 AlonaBot 首发选择。

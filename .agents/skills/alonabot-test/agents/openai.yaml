@@ -1,5 +1,0 @@
-# 本文件提供技能选择界面的名称、简述及入口提示。
-interface:
-  display_name: "AlonaBot 测试"
-  short_description: "按实际风险选择检查；只提交集成测试，单元测试写在被忽略的 *_local_test.go。"
-  default_prompt: "使用 $alonabot-test 完成本次 AlonaBot 项目任务。"
