@@ -11,16 +11,19 @@ permissions: {}
 jobs:
   metadata:
     name: PR description
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.state == 'open' && github.event.pull_request.draft == false
     runs-on: [self-hosted, linux, x64, alonabot]
     steps:
       - name: 检查模板段落和确认项
         env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           node --input-type=module <<'JS'
           // 本脚本校验说明结构；确认项是否真实由审阅者判断。
           import assert from 'node:assert/strict';
+
+          assert.match(process.env.PR_TITLE || '', /^(feat|fix|docs|refactor|test|ci|build|chore|perf|revert)\/[a-z0-9]+(?:-[a-z0-9]+)*: \S.*$/, 'PR 标题须为 type/scope: 摘要');
 
           // 1. 移除模板提示和代码块，避免提示文字或示例被当作实际说明。
           const body = (process.env.PR_BODY || '')

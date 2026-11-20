@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml"><img src="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml/badge.svg?branch=main" alt="Quality gate"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="AGPL-3.0"></a>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27.1"></a>
   <a href="docs/release-notes/v0.1.0.md"><img src="https://img.shields.io/badge/v0.1.0-发布候选-22B8CF?style=flat-square" alt="v0.1.0 发布候选"></a>
 </p>
@@ -80,3 +81,7 @@ func New() *sdk.Plugin {
 | 构建与核对发行物 | [发行维护](docs/releasing.md) |
 
 欢迎修复问题、改善跨平台行为、补充文档和开发社区组件。提交问题时附上版本、系统和复现步骤，日志与配置先脱敏；较大的改动请先通过 Issue 讨论。
+
+## 许可证
+
+AlonaBot 与官方组件采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。插件模板遵循其所在仓库的许可证。
