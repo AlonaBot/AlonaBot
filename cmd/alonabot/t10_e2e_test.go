@@ -5,16 +5,20 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/AlonaBot/AlonaBot/adapters/telegram/telegramtest"
 	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
@@ -35,12 +39,44 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 		{"echo", "echo"},
 		{"configdb", "alonabot-plugin-configdb"},
 		{"showcase", "showcase"},
+		{"../../adapters/telegram", "alonabot-adapter-telegram"},
+		{"../../plugins/help", "alonabot-plugin-help-official"},
+		{"../../agent", "alonabot-agent-official"},
+		{"webui", "alonabot-webui-admin"},
 	}
 	archives := make([]string, len(projects))
 	for i, project := range projects {
-		archives[i] = packAgentComponent(t, filepath.Join("../../examples/plugins", project.directory), project.id)
+		if project.directory == "webui" {
+			archives[i] = packCrossComponentWebUI(t)
+			continue
+		}
+		directory := filepath.Join("../../examples/plugins", project.directory)
+		if strings.HasPrefix(project.directory, "../../") {
+			directory = project.directory
+		}
+		archives[i] = packAgentComponent(t, directory, project.id)
 	}
+	server := telegramtest.NewServer(t, "cross-component-token")
+	server.SetMe(101, "cross_component_bot")
+	var providerMu sync.Mutex
+	var providerRequests []agentPackageRequest
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request agentPackageRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		providerMu.Lock()
+		providerRequests = append(providerRequests, request)
+		providerMu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeAgentPackageText(t, w, "cross component answer")
+	}))
+	defer provider.Close()
 	dir := t.TempDir()
+	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"cross_bot","instances":{"cross_bot":{"token":"cross-component-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
+	developmentWrite(t, filepath.Join(dir, "plugins", agentPackageID, "config.json"), fmt.Sprintf(`{"providers":[{"custom":{"name":"cross","protocol":"openai-compatible","base_url":%q,"api_key":"cross-test-key"}}],"models":[{"name":"cross","provider":"cross","model":"cross-model","type":"chat","max_tokens":128}],"chat_model":"cross"}`, provider.URL))
 	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
 	if transport == "stdio" {
 		args = append(args, "--stdio")
@@ -151,6 +187,118 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 			t.Fatalf("enabled package: %+v", items[i])
 		}
 	}
+	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
+	sequence := 0
+	send := func(text, want string) {
+		t.Helper()
+		sequence++
+		telegramMessage(t, server, sequence, map[string]any{"text": text, "chat": map[string]any{"id": 9, "type": "private"}})
+		telegramEventually(t, c, func() bool {
+			for _, request := range server.Requests() {
+				if (request.Method == "sendMessage" || request.Method == "editMessageText") && request.Params["text"] == want {
+					return true
+				}
+			}
+			return false
+		})
+	}
+	c.management(t, dir, token, "admin", "add", "telegram:88")
+	call(http.MethodPut, "/api/v1/plugins/echo/policies", `{"scope":{"kind":"plugin"},"permissions":["admin"]}`, base.String(), csrf, true, http.StatusOK)
+	send("/echo installed chain", "installed chain")
+	send("/note set cross persisted", "Saved cross")
+	send("/note get cross", "cross: persisted")
+	// 配置通过 Pending 编辑，激活后再观察实际消息。
+	items := packages()
+	var old string
+	for _, item := range items {
+		if item.ID == "alonabot-plugin-configdb" {
+			old = item.Active
+		}
+	}
+	configBody, err := json.Marshal(map[string]any{"base_generation": old, "patch": map[string]any{"greeting": "Cross"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call(http.MethodPatch, "/api/v1/plugins/alonabot-plugin-configdb/config/pending", string(configBody), base.String(), csrf, true, http.StatusOK)
+	call(http.MethodPost, "/api/v1/plugins/alonabot-plugin-configdb/reload", "", base.String(), csrf, true, http.StatusOK)
+	configRaw, _ := call(http.MethodGet, "/api/v1/plugins/alonabot-plugin-configdb/config", "", "", "", true, http.StatusOK)
+	var configuration struct {
+		ActiveGeneration string         `json:"active_generation"`
+		Active           map[string]any `json:"active"`
+		Pending          any            `json:"pending"`
+	}
+	if err := json.Unmarshal(configRaw, &configuration); err != nil {
+		t.Fatal(err)
+	}
+	if configuration.ActiveGeneration == old || configuration.Active["greeting"] != "Cross" || configuration.Pending != nil {
+		t.Fatalf("activated configuration: %s", configRaw)
+	}
+	send("/note hello Reader", "Hello, Reader")
+	c.management(t, dir, token, "restart", "echo")
+	send("/echo after restart", "after restart")
+	call(http.MethodGet, "/plugins/showcase/status", "", "", "", true, http.StatusOK)
+	c.management(t, dir, token, "pin", "echo", "0.1.0")
+	c.management(t, dir, token, "pin", "echo", "")
+	c.management(t, dir, token, "disable", "echo")
+	c.management(t, dir, token, "enable", "echo")
+	send("/echo after enable", "after enable")
+	// Agent 命令使用管理覆盖名，避开 echo 的同名 ask 声明。
+	policiesRaw, _ := call(http.MethodGet, "/api/v1/plugins/"+agentPackageID+"/policies", "", "", "", true, http.StatusOK)
+	var policies struct {
+		Commands []struct {
+			RouteID string     `json:"route_id"`
+			Names   [][]string `json:"declared_names"`
+		} `json:"commands"`
+	}
+	if err := json.Unmarshal(policiesRaw, &policies); err != nil {
+		t.Fatal(err)
+	}
+	foundAsk := false
+	for _, command := range policies.Commands {
+		for _, name := range command.Names {
+			if len(name) == 1 && name[0] == "ask" {
+				call(http.MethodPut, "/api/v1/plugins/"+agentPackageID+"/commands/"+url.PathEscape(command.RouteID)+"/names", `{"names":[["crossask"]]}`, base.String(), csrf, true, http.StatusOK)
+				foundAsk = true
+			}
+		}
+	}
+	if !foundAsk {
+		t.Fatal("Agent ask command not registered")
+	}
+	send("/crossask verify chain", "cross component answer")
+	providerMu.Lock()
+	captured := append([]agentPackageRequest(nil), providerRequests...)
+	providerMu.Unlock()
+	if len(captured) != 1 || captured[0].Model != "cross-model" || captured[0].MaxTokens != 128 || !captured[0].Stream {
+		t.Fatalf("Provider requests: %+v", captured)
+	}
+	// 升级与回退都经候选编排；回退产生新代次，继续实际消息验证。
+	echoPackages := packages()
+	var originalGeneration string
+	for _, item := range echoPackages {
+		if item.ID == "echo" {
+			originalGeneration = item.Active
+		}
+	}
+	next := validationPackage(t, archives[0], "0.2.0", nil, "")
+	c.management(t, dir, token, "update", "echo", "--archive", next, "--yes")
+	send("/echo after update", "after update")
+	c.management(t, dir, token, "rollback", "echo", originalGeneration, "--yes")
+	var reverted manage.Package
+	for _, item := range packages() {
+		if item.ID == "echo" {
+			reverted = item
+		}
+	}
+	if reverted.Version != "0.1.0" || reverted.Active == originalGeneration || !reverted.Enabled {
+		t.Fatalf("rollback package: %+v", reverted)
+	}
+	send("/echo after rollback", "after rollback")
+	call(http.MethodGet, "/", "", "", "", false, http.StatusOK)
+	c.management(t, dir, token, "uninstall", "echo")
+	c.management(t, dir, token, "install", archives[0], "--yes")
+	c.management(t, dir, token, "enable", "echo")
+	send("/echo after reinstall", "after reinstall")
 	var listed []manage.Package
 	if err := json.Unmarshal([]byte(c.management(t, dir, token, "list")), &listed); err != nil {
 		t.Fatal(err)
@@ -164,4 +312,33 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 			t.Fatal("Core logs contain management credentials")
 		}
 	}
+}
+
+// packCrossComponentWebUI 在独立副本构建正式页面，保留工作区的依赖与构建目录。
+func packCrossComponentWebUI(t *testing.T) string {
+	t.Helper()
+	root := filepath.Join("../..", "tmp", "test")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	project, err := os.MkdirTemp(root, "t10-webui-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(project); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := os.CopyFS(project, os.DirFS("../../web/admin")); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"ci", "--offline"}, {"run", "build"}} {
+		command := exec.CommandContext(t.Context(), "npm", args...)
+		command.Dir = project
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("build official WebUI %v: %v\n%s", args, err, output)
+		}
+	}
+	return packAgentComponent(t, project, "alonabot-webui-admin")
 }
