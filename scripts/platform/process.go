@@ -56,6 +56,7 @@ func (r *report) startCore(ctx context.Context, opt options) (*coreProcess, erro
 			Directory: r.Directory, Log: filepath.Join(r.Workspace, fmt.Sprintf("core-%d.jsonl", len(r.Runs))),
 		}
 		r.Runs = append(r.Runs, run)
+		r.currentRun = run
 		step.Command, step.Directory = run.Command, run.Directory
 		file, err := os.OpenFile(run.Log, os.O_WRONLY|os.O_CREATE|os.O_EXCL, privateFileMode)
 		if err != nil {

@@ -51,6 +51,7 @@ type adminSession struct {
 }
 
 func (r *report) business(ctx context.Context, opt options) (err error) {
+	defer func() { r.currentRun = nil }()
 	// 1. 归档由调用者构建；先读取其中的真实 build-info，再经正式 CLI 安装。
 	ids := []string{telegramPackageID, echoPackageID, showcasePackageID, treePackageID}
 	archives := make(map[string]string)

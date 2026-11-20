@@ -6,6 +6,7 @@
 // 包的组成：[run] 创建证据文件与独立工作区，[report.business] 驱动管理认证和业务，
 // [botServer] 拥有本地 Bot API 服务与请求等待。[coreProcess] 拥有 Core 进程和日志，
 // [report.lifecycle] 检查启停、异常恢复及合作型进程树，平台观测由 inspect 文件实现。
+// [report.runScenarios] 驱动平台恢复场景，[scenarioEvidence] 保留产物来源与原始断言证据。
 package main
 
 import (
@@ -76,28 +77,30 @@ type stepResult struct {
 }
 
 type report struct {
-	Arguments   []string       `json:"arguments"`
-	Started     time.Time      `json:"started"`
-	DurationMS  float64        `json:"duration_ms"`
-	Status      string         `json:"status"`
-	Error       string         `json:"error,omitempty"`
-	OS          string         `json:"os"`
-	Arch        string         `json:"arch"`
-	GoVersion   string         `json:"go_version"`
-	OSVersion   string         `json:"os_version"`
-	Environment string         `json:"environment"`
-	Host        string         `json:"host_description"`
-	Core        candidate      `json:"core"`
-	Packages    string         `json:"packages"`
-	Assets      []packageAsset `json:"assets"`
-	Scenarios   string         `json:"scenarios"`
-	Workspace   string         `json:"workspace"`
-	Directory   string         `json:"directory"`
-	DataDir     string         `json:"data_dir"`
-	Steps       []stepResult   `json:"steps"`
-	Runs        []*coreRun     `json:"runs"`
-	Components  []candidate    `json:"components"`
-	BotCalls    []botCall      `json:"bot_calls"`
+	Arguments   []string          `json:"arguments"`
+	Started     time.Time         `json:"started"`
+	DurationMS  float64           `json:"duration_ms"`
+	Status      string            `json:"status"`
+	Error       string            `json:"error,omitempty"`
+	OS          string            `json:"os"`
+	Arch        string            `json:"arch"`
+	GoVersion   string            `json:"go_version"`
+	OSVersion   string            `json:"os_version"`
+	Environment string            `json:"environment"`
+	Host        string            `json:"host_description"`
+	Core        candidate         `json:"core"`
+	Packages    string            `json:"packages"`
+	Assets      []packageAsset    `json:"assets"`
+	Scenarios   string            `json:"scenarios"`
+	Workspace   string            `json:"workspace"`
+	Directory   string            `json:"directory"`
+	DataDir     string            `json:"data_dir"`
+	Steps       []stepResult      `json:"steps"`
+	Runs        []*coreRun        `json:"runs"`
+	Components  []candidate       `json:"components"`
+	BotCalls    []botCall         `json:"bot_calls"`
+	Recovery    *scenarioEvidence `json:"recovery,omitempty"`
+	currentRun  *coreRun          // 仅业务生命周期阶段给步骤标记 Core PID；场景使用各自的进程证据。
 }
 
 func main() {
@@ -197,21 +200,10 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 		return err
 	}
 	if err := r.step("candidate", func(_ *stepResult) error {
-		build, err := buildinfo.ReadFile(opt.core)
+		var err error
+		r.Core, err = executableCandidate(opt.core)
 		if err != nil {
-			return fmt.Errorf("read candidate build metadata: %w", err)
-		}
-		r.Core.GoVersion, r.Core.Program, r.Core.Module, r.Core.Settings = build.GoVersion, build.Path, build.Main, build.Settings
-		for _, setting := range build.Settings {
-			switch setting.Key {
-			case "GOOS":
-				r.Core.OS = setting.Value
-			case "GOARCH":
-				r.Core.Arch = setting.Value
-			}
-		}
-		if r.Core.OS != runtime.GOOS || r.Core.Arch != runtime.GOARCH {
-			return fmt.Errorf("candidate target %s/%s differs from verifier %s/%s", r.Core.OS, r.Core.Arch, runtime.GOOS, runtime.GOARCH)
+			return err
 		}
 		return filepath.WalkDir(opt.packages, func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
@@ -241,14 +233,38 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 	if err := r.command(ctx, "core_help", opt.core, "--help"); err != nil {
 		return err
 	}
-	return r.business(ctx, opt)
+	if err := r.business(ctx, opt); err != nil {
+		return err
+	}
+	return r.runScenarios(ctx, opt)
+}
+
+func executableCandidate(path string) (result candidate, err error) {
+	result.Path = path
+	build, err := buildinfo.ReadFile(path)
+	if err != nil {
+		return result, fmt.Errorf("read candidate build metadata: %w", err)
+	}
+	result.GoVersion, result.Program, result.Module, result.Settings = build.GoVersion, build.Path, build.Main, build.Settings
+	for _, setting := range build.Settings {
+		switch setting.Key {
+		case "GOOS":
+			result.OS = setting.Value
+		case "GOARCH":
+			result.Arch = setting.Value
+		}
+	}
+	if result.OS != runtime.GOOS || result.Arch != runtime.GOARCH {
+		return result, fmt.Errorf("candidate %s target %s/%s differs from verifier %s/%s", path, result.OS, result.Arch, runtime.GOOS, runtime.GOARCH)
+	}
+	return result, nil
 }
 
 func (r *report) step(name string, action func(*stepResult) error) error {
 	step := stepResult{Name: name, Started: time.Now().UTC(), Status: statusPassed}
 	err := action(&step)
-	if len(r.Runs) > 0 {
-		step.CorePID = r.Runs[len(r.Runs)-1].PID
+	if r.currentRun != nil {
+		step.CorePID = r.currentRun.PID
 	}
 	step.DurationMS = time.Since(step.Started).Seconds() * 1000
 	if err != nil {
@@ -259,10 +275,14 @@ func (r *report) step(name string, action func(*stepResult) error) error {
 }
 
 func (r *report) command(ctx context.Context, name string, argv ...string) error {
+	command := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	command.Dir = r.Directory
+	return r.execute(name, command)
+}
+
+func (r *report) execute(name string, command *exec.Cmd) error {
 	return r.step(name, func(step *stepResult) error {
-		command := exec.CommandContext(ctx, argv[0], argv[1:]...)
-		command.Dir = r.Directory
-		step.Command, step.Directory = argv, command.Dir
+		step.Command, step.Directory = command.Args, command.Dir
 		var output bytes.Buffer
 		command.Stdout, command.Stderr = &output, &output
 		err := command.Run()

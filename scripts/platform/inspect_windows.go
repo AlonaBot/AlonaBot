@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 )
@@ -19,3 +20,8 @@ func lockHeld(string) (bool, error) {
 func killedState(*os.ProcessState) bool { return false }
 
 func addressInUse(error) bool { return false }
+
+// shortcut: Windows 恢复需原生进程与检查点驱动，后续替换此入口。
+func (*report) runScenarios(context.Context, options) error {
+	return errors.New("Windows native recovery scenarios are not implemented")
+}
