@@ -1318,7 +1318,9 @@ Linux 最终增量在父明确分配的 2026-11-20 06:33:35–07:03:35 UTC 独�
 
 同一固定入口以新输出目录重跑：background job `3fb6cf77` / PID `420275` 退出 0，`run02/session.json` 的 21 命令全部 exit0；Go `1.27.1`、实际 Linux/x86_64 VM。完整结果及远端库存为 `/data/home/user/goal47-final-linux-amd64-5094592d-run02/{result.json,session.json,evidence-audit.json}`；本地三份原始 JSON 位于 `GN47-13/linux-amd64-run02/`。库存脚本原样复用，104 日志、29 DB、七 ELF、CGO 归档字节、原恢复事件和 GORM 双传输数据库均通过。`linux-amd64-control/process-release.json` 记录 06:40:46.627393Z 的退出核对：659 个已知 PID 均消失，本轮产品/构建/驱动路径无活跃进程，已先交回窗口再后台归档回收；完整命令、job/PID、原错与传输记录保留在同控制目录。
 
-完整 raw 归档 `/data/home/user/goal47-final-linux-amd64-5094592d-evidence.tar.xz` 为 572610432 字节，包含原 run01、成功 run02、缓存来源和退出凭据；归档 job `a560d6c1` 退出 0。本地完整归档仍由现有 pull 传输，后续本地还原及逐字节库存由本切片承接；当前远端完整库存及已回收的结果、失败原错继续有效。
+完整 raw 归档 `/data/home/user/goal47-final-linux-amd64-5094592d-evidence.tar.xz` 为 572610432 字节，包含原 run01、成功 run02、缓存来源和退出凭据；归档 job `a560d6c1` 退出 0。原 pull47706 于 2026-11-20 06:58 UTC 退出 0，同字节数归档已回收至 `GN47-13/goal47-final-linux-amd64-5094592d-evidence.tar.xz`；传输命令、stdout/stderr 和终态保留在 `linux-amd64-control/archive-pull.*`。
+
+GN47-13A 本地完整库存通过：`linux-amd64-control/restore_archive.py` 退出 0，原归档还原至 `GN47-13/linux-amd64-remote-full/`。本地副本的三条绝对 Core 链接重定位到同归档 Core，三个 checkpoint FIFO 原样还原；原始链接及本地映射记录于 `local-extraction-relocation.json`，原归档与 JSON 保持。两轮 session、最终 result/远端 audit、run01 的 build-core 原错及 process-release 凭据逐字节相等；原 `audit_evidence.py` 完整运行退出 0，再次核对 104 非空日志、七 ELF、10 状态库/19 业务库、52/136/16 events、CGO 原字段与归档字节及 GORM TCP/stdio 全部断言。解出树内 `evidence-audit.remote.json` 保留远端原记录，`evidence-audit.json` 为本地完整库存结果；原始失败与全部数据均可从本地直接消费，命令及日志见 `restore-archive01.*`、`local-audit.*`。
 
 **待执行项：** Windows 真实运行/CGO 与 Actions billing 继续留最后，最终 main 文档/祖先整合由父协调，push/PR/CI 按父指令暂缓。旧 GN10 本地完整库存已通过，见本节该候选的原始证据与回收记录。WebUI 前端改动复用父实际浏览器验收；本轮未新增资源测量或性能优化。
 
