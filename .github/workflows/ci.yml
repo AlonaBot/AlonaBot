@@ -61,7 +61,7 @@ jobs:
           has_go=false
           while IFS= read -r -d '' path; do
             case "$path" in
-              go.mod|go.sum|*.go|*.proto) has_go=true ;;
+              go.mod|go.sum|*.go|*.proto|components.lock.json|tests/go.mod|tests/go.sum|scripts/integration.py) has_go=true ;;
             esac
           done < "$RUNNER_TEMP/changed-paths"
           echo "has_go=$has_go" >> "$GITHUB_OUTPUT"
@@ -81,6 +81,12 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '26.5.1'
+      - name: 准备整合测试工具
+        run: pipx install uv==0.11.11
       - name: 检查产品 Go 格式
         shell: bash
         run: |
@@ -107,18 +113,15 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- contracts)"
       - name: 静态检查
         run: go vet ./...
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: web/admin/package.json
-          cache: npm
-          cache-dependency-path: web/admin/package-lock.json
-      - name: 准备发行测试的 npm 缓存
-        run: npm --prefix web/admin ci
       - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'
         # 串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
-        run: GOMAXPROCS=2 go test -p 1 -race -timeout 30m ./...
+        run: GOMAXPROCS=2 go test -p 1 -race ./...
+      - name: 跨组件整合测试
+        env:
+          CGO_ENABLED: '1'
+        run: GOMAXPROCS=2 uv run --no-project python scripts/integration.py --race
       - name: 五目标平台 pure-Go 构建
         shell: bash
         run: |

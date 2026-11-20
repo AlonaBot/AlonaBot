@@ -1,10 +1,8 @@
 package app
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +15,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
@@ -27,11 +24,9 @@ import (
 
 const (
 	bundledPackagesDirectory = "packages"
-	officialSource           = "github.com/AlonaBot/AlonaBot"
 	officialHelp             = "alonabot-plugin-help-official"
 	officialWebUI            = "alonabot-webui-admin"
 	officialAdapterPrefix    = "alonabot-adapter-"
-	officialLatestRelease    = "https://api.github.com/repos/AlonaBot/AlonaBot/releases/latest"
 )
 
 func bundledDirectory() (string, error) {
@@ -62,7 +57,7 @@ func officialBundledPackage(dir, id string) (manage.InstallRequest, error) {
 	if err != nil {
 		return req, err
 	}
-	if strings.TrimPrefix(publication.Source, "https://") != officialSource {
+	if !trust.MatchesSource(id, publication.Source) {
 		return req, fmt.Errorf("bundled component %s has non-official source %q", id, publication.Source)
 	}
 	return req, nil
@@ -193,92 +188,93 @@ func (c *Core) configureAdapter(ctx context.Context, management *manage.Service,
 	return nil
 }
 
-// installOfficialAdapter 读取官方整合包的外层发行归档，再将选中组件交给普通安装流程。
+// installOfficialAdapter 从对应官方仓库下载签名组件，再交给普通安装流程。
 func (c *Core) installOfficialAdapter(ctx context.Context, management *manage.Service, id string) (err error) {
-	if _, ok := trust.Official(); !ok {
+	key, ok := trust.Official()
+	if !ok {
 		return fmt.Errorf("official publisher key is unavailable; use alonabot install to install %s manually", id)
 	}
-	// 1. 从 Release 元数据按官方归档名选择当前平台，不使用单组件仓库的下载布局。
-	response, err := officialReleaseResponse(ctx, officialLatestRelease)
+	source := trust.Source(id)
+	if source == "" || !strings.HasPrefix(id, officialAdapterPrefix) {
+		return fmt.Errorf("unknown official adapter %q", id)
+	}
+	base := "https://" + source + "/releases/latest/download/"
+	limits := packages.NewLimits(c.values)
+	contents := make(map[string][]byte)
+	for _, name := range []string{"release.json", "release.json.sig", "release.pub"} {
+		raw, err := officialReleaseBytes(ctx, base+name, limits.MaxArchiveBytes)
+		if err != nil {
+			return err
+		}
+		contents[name] = raw
+	}
+	if len(contents["release.json.sig"]) == 0 {
+		return errors.New("official adapter release requires a signature")
+	}
+	publisher, err := release.DecodePublicKey(contents["release.pub"])
 	if err != nil {
 		return err
 	}
-	var publication struct {
-		Tag    string `json:"tag_name"`
-		Assets []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-		} `json:"assets"`
+	if !bytes.Equal(publisher, key) {
+		return errors.New("official adapter publisher key differs from trusted key")
 	}
-	decodeErr := json.NewDecoder(response.Body).Decode(&publication)
-	if err := errors.Join(decodeErr, response.Body.Close()); err != nil {
-		return fmt.Errorf("read official release: %w", err)
+	publication, err := release.Verify(contents["release.json"], contents["release.json.sig"], key)
+	if err != nil {
+		return err
 	}
-	version := strings.TrimPrefix(publication.Tag, "v")
-	if !manifest.ValidVersion(version) {
-		return fmt.Errorf("official release tag %q is not a SemVer version", publication.Tag)
+	if publication.PluginID != id || !trust.MatchesSource(id, publication.Source) {
+		return errors.New("official adapter release identity differs from requested component")
 	}
-	root := fmt.Sprintf("alonabot-%s-%s-%s", version, runtime.GOOS, runtime.GOARCH)
-	extension := ".tar.gz"
-	if runtime.GOOS == "windows" {
-		extension = ".zip"
+	asset, ok := publication.Asset(runtime.GOOS, runtime.GOARCH)
+	if !ok {
+		return fmt.Errorf("official adapter has no asset for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
-	var address string
-	for _, asset := range publication.Assets {
-		if asset.Name == root+extension {
-			address = asset.URL
-			break
-		}
+	address, err := url.Parse(asset.URL)
+	if err != nil || address.Scheme != "https" || address.Host == "" {
+		return fmt.Errorf("official adapter URL must be absolute HTTPS: %q", asset.URL)
 	}
-	if address == "" {
-		return fmt.Errorf("official release %q has no distribution for %s/%s", publication.Tag, runtime.GOOS, runtime.GOARCH)
-	}
-	parsed, err := url.Parse(address)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		return fmt.Errorf("official distribution URL must be absolute HTTPS: %q", address)
-	}
-	// 2. 临时资源由本次补装独占；沿用安装器既有压缩与展开预算。
 	staging := filepath.Join(c.dir, "staging")
 	if err := os.MkdirAll(staging, 0o700); err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp(staging, "official-release-*")
+	dir, err := os.MkdirTemp(staging, "official-adapter-*")
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(dir)) }()
-	archive := filepath.Join(dir, "distribution"+extension)
+	archive := filepath.Join(dir, "package.tar.gz")
 	file, err := os.OpenFile(archive, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	response, err = officialReleaseResponse(ctx, address)
+	response, err := officialReleaseResponse(ctx, asset.URL)
 	if err != nil {
 		return errors.Join(err, file.Close())
 	}
-	limits := packages.NewLimits(c.values)
 	n, copyErr := io.Copy(file, io.LimitReader(response.Body, limits.MaxArchiveBytes+1))
 	if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
 		return err
 	}
 	if n > limits.MaxArchiveBytes {
-		return errors.New("official distribution exceeds the archive size limit")
+		return errors.New("official adapter exceeds archive size limit")
 	}
-	if runtime.GOOS == "windows" {
-		err = extractReleaseZIP(archive, dir, root, id, limits)
-	} else {
-		err = packages.Extract(archive, dir, limits)
-	}
-	if err != nil {
-		return err
-	}
-	// 3. 外层解压只定位文件；真实性与包内身份仍经官方公钥和 Install 校验。
-	req, err := officialBundledPackage(filepath.Join(dir, root, bundledPackagesDirectory), id)
-	if err != nil {
-		return err
-	}
-	_, err = management.Install(ctx, req)
+	_, err = management.Install(ctx, manage.InstallRequest{Archive: archive, ReleaseJSON: string(contents["release.json"]), Signature: string(contents["release.json.sig"]), PublicKey: string(contents["release.pub"])})
 	return err
+}
+
+func officialReleaseBytes(ctx context.Context, address string, limit int64) ([]byte, error) {
+	response, err := officialReleaseResponse(ctx, address)
+	if err != nil {
+		return nil, err
+	}
+	raw, readErr := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if err := errors.Join(readErr, response.Body.Close()); err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > limit {
+		return nil, fmt.Errorf("official asset exceeds archive size limit: %s", address)
+	}
+	return raw, nil
 }
 
 func officialReleaseResponse(ctx context.Context, address string) (*http.Response, error) {
@@ -294,48 +290,4 @@ func officialReleaseResponse(ctx context.Context, address string) (*http.Respons
 		return nil, errors.Join(fmt.Errorf("download %s: %s", address, response.Status), response.Body.Close())
 	}
 	return response, nil
-}
-
-// extractReleaseZIP 只展开指定组件的平面目录；其他文件由发行构建定义，无需落盘。
-func extractReleaseZIP(archive, dir, root, id string, limits packages.Limits) (err error) {
-	reader, err := zip.OpenReader(archive)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, reader.Close()) }()
-	if len(reader.File) > limits.MaxEntries {
-		return errors.New("official distribution has too many entries")
-	}
-	prefix := root + "/" + bundledPackagesDirectory + "/" + id + "/"
-	destination := filepath.Join(dir, root, bundledPackagesDirectory, id)
-	if err := os.MkdirAll(destination, 0o700); err != nil {
-		return err
-	}
-	var expanded int64
-	for _, entry := range reader.File {
-		if !strings.HasPrefix(entry.Name, prefix) || entry.FileInfo().IsDir() {
-			continue
-		}
-		name := strings.TrimPrefix(entry.Name, prefix)
-		if !filepath.IsLocal(name) || filepath.Base(name) != name || !entry.Mode().IsRegular() {
-			return fmt.Errorf("invalid bundled ZIP entry %q", entry.Name)
-		}
-		source, err := entry.Open()
-		if err != nil {
-			return err
-		}
-		target, err := os.OpenFile(filepath.Join(destination, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err != nil {
-			return errors.Join(err, source.Close())
-		}
-		n, copyErr := io.Copy(target, io.LimitReader(source, limits.MaxExpandedBytes-expanded+1))
-		if err := errors.Join(copyErr, source.Close(), target.Close()); err != nil {
-			return err
-		}
-		expanded += n
-		if expanded > limits.MaxExpandedBytes {
-			return errors.New("official distribution exceeds the expanded size limit")
-		}
-	}
-	return nil
 }

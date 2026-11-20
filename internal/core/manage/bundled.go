@@ -18,8 +18,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
-const officialRepository = "github.com/AlonaBot/AlonaBot"
-
 // BundledPackage 读取发行物中指定组件的本机安装输入，保留清单、签名和公钥的原始字节。
 // 验签、摘要与包内身份校验由 Install 或 Update 完成；缺失文件保留 os.ErrNotExist。
 func BundledPackage(dir, id string) (InstallRequest, error) {
@@ -84,7 +82,7 @@ func (s *Service) bundledUpdate(ctx context.Context, id string) (req InstallRequ
 		return req, "", err
 	}
 	key, official := trust.Official()
-	if !official || in.Uninstalled || strings.TrimPrefix(in.Source, "https://") != officialRepository || in.PublisherKeyID != release.KeyID(key) {
+	if !official || in.Uninstalled || !trust.MatchesSource(id, in.Source) || in.PublisherKeyID != release.KeyID(key) {
 		return req, "", nil
 	}
 	if _, err := os.Stat(filepath.Join(s.opt.BundledPackages, id)); errors.Is(err, os.ErrNotExist) {

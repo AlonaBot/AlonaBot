@@ -8,7 +8,7 @@
   <a href="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml"><img src="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml/badge.svg?branch=main" alt="Quality gate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="AGPL-3.0"></a>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27.1"></a>
-  <a href="docs/release-notes/v0.1.0.md"><img src="https://img.shields.io/badge/v0.1.0-发布候选-22B8CF?style=flat-square" alt="v0.1.0 发布候选"></a>
+  <a href="changelog/v0.1.0/zh-CN.md"><img src="https://img.shields.io/badge/v0.1.0-发布候选-22B8CF?style=flat-square" alt="v0.1.0 发布候选"></a>
 </p>
 
 <p align="center">轻量级、跨平台的 Go 聊天机器人框架。<br>按需安装组件，把机器人搭成你需要的样子。</p>
@@ -43,7 +43,19 @@ bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 
 在同一个终端输入 `/ping`，即可看到 `pong`。修改示例源码后会自动重载；按 Ctrl-C 停止。使用独立的 `data` 目录，避免与正在运行的机器人共用数据。
 
-需要接入聊天平台和 AI 时，官方整合包包含 Core、Telegram Adapter、Agent、WebUI 与 help。首次启动启用 help 和 WebUI，配置 Telegram 实例后启用 Adapter，再按需启用 Agent 并配置模型。正式发布后的归档、Docker Compose 与系统服务安装步骤见[安装与部署](docs/deployment.md)，平台实跑情况与已知限制见[v0.1.0 发布说明](docs/release-notes/v0.1.0.md)。
+官方整合包包含 Core、WebUI 与 Agent，根目录提供 `docker-compose.yml`。首次启动启用 WebUI；配置 Provider 与模型后再启用 Agent。Telegram、OneBot 11 Adapter 和 help 插件从各自仓库按需安装。正式发布后的归档、Docker Compose 与系统服务安装步骤见[安装与部署](docs/deployment.md)，平台实跑情况与已知限制见[v0.1.0 发布说明](changelog/v0.1.0/zh-CN.md)。
+
+## 官方组件
+
+| 组件 | 仓库 | 整合包 |
+| --- | --- | --- |
+| WebUI | [alonabot-webui](https://github.com/AlonaBot/alonabot-webui) | 预装并启用 |
+| Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | 预装，配置后启用 |
+| Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | 按需安装 |
+| OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | 按需安装，当前支持接收 |
+| Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) | 按需安装 |
+
+Core 仓库保留 SDK、协议、示例、整合发行与跨组件测试。组件各自构建和发布；[发行源码锁](components.lock.json)固定整合版本。
 
 ## 写一个插件
 

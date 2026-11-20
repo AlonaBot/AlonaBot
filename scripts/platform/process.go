@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	// 观察与停止期限沿用 cmd/alonabot/e2e_test.go 的真实进程验收期限。
+	// 观察与停止期限沿用 tests/e2e/e2e_test.go 的真实进程验收期限。
 	observationDeadline = 20 * time.Second
 	stopDeadline        = 15 * time.Second
 	observationInterval = 20 * time.Millisecond
