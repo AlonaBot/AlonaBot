@@ -1,7 +1,8 @@
-// release-check 命令离线核对 dist 候选发行物的签名、归档与内嵌资源。
+// release-check 命令核对 dist 候选发行物，并可运行源码外安装与更新链。
 //
 // 检查依据 CONTRACTS §9.2、§15.2；结果与解包内容保存在独立的新目录中。
-// 包的组成：资产核对见 assets.go，受控解包见 archive.go，二进制读取见 binary.go。
+// 包的组成：资产核对见 assets.go，受控解包见 archive.go，二进制读取见 binary.go，
+// 安装与更新联验见 lifecycle.go，候选进程与公开管理入口见 runtime.go。
 package main
 
 import (
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
@@ -29,12 +31,14 @@ const (
 )
 
 type options struct {
-	candidate, version, publicKey, out, platforms, assetBase string
+	candidate, version, publicKey, out, platforms, assetBase       string
+	installCandidate, updateCandidate, wrongSource, wrongPublisher string
+	runtimeTimeout                                                 time.Duration // 调用者给出的整条功能联验截止时间。
 }
 
 type report struct {
 	Scope         string               `json:"scope"`
-	RuntimeChecks string               `json:"runtime_checks"` // 本入口只做静态核对。
+	RuntimeChecks string               `json:"runtime_checks"`
 	Status        string               `json:"status"`
 	Candidate     string               `json:"candidate"`
 	Version       string               `json:"core_version"`
@@ -43,6 +47,7 @@ type report struct {
 	Checks        []check              `json:"checks"`
 	Components    []componentResult    `json:"components"`
 	Distributions []distributionResult `json:"distributions"`
+	Runtime       *runtimeResult       `json:"runtime,omitempty"`
 	Error         string               `json:"error,omitempty"`
 }
 
@@ -91,6 +96,11 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 	flags.StringVar(&opt.out, "out", "", "new evidence directory, outside candidate (required)")
 	flags.StringVar(&opt.platforms, "platforms", defaultPlatforms, "comma-separated OS/arch targets; must match the candidate")
 	flags.StringVar(&opt.assetBase, "asset-base", "", "expected https asset URL prefix (default: official download URL for version)")
+	flags.StringVar(&opt.installCandidate, "install-candidate", "", "signed configdb example package directory; enables host runtime checks")
+	flags.StringVar(&opt.updateCandidate, "update-candidate", "", "same-source, same-publisher package with a higher component SemVer")
+	flags.StringVar(&opt.wrongSource, "wrong-source-candidate", "", "valid signed package with the same ID and publisher but a different source")
+	flags.StringVar(&opt.wrongPublisher, "wrong-publisher-candidate", "", "valid signed package with the same ID and source but a different publisher")
+	flags.DurationVar(&opt.runtimeTimeout, "runtime-timeout", 0, "required overall deadline for runtime checks, including process shutdown (e.g. 2m)")
 	r := report{Scope: "asset-integrity", RuntimeChecks: "not_run", Status: "fail", Checks: []check{}, Components: []componentResult{}, Distributions: []distributionResult{}}
 	outCreated := false
 	// 参数错误也输出 JSON；已有证据目录始终保持原样。
@@ -126,6 +136,10 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 	}
 	if flags.NArg() != 0 || opt.candidate == "" || opt.version == "" || opt.publicKey == "" || opt.out == "" {
 		return errors.New("--candidate, --version, --public-key and --out are required; positional arguments are not accepted")
+	}
+	runtimeRequested := opt.installCandidate != "" || opt.updateCandidate != "" || opt.wrongSource != "" || opt.wrongPublisher != "" || opt.runtimeTimeout != 0
+	if runtimeRequested && (opt.installCandidate == "" || opt.updateCandidate == "" || opt.wrongSource == "" || opt.wrongPublisher == "" || opt.runtimeTimeout <= 0) {
+		return errors.New("runtime checks require --install-candidate, --update-candidate, --wrong-source-candidate, --wrong-publisher-candidate and a positive --runtime-timeout")
 	}
 	if strings.ContainsAny(opt.version, "/\\\x00 \t\r\n") || opt.version == "." || opt.version == ".." {
 		return errors.New("version must be a single path component")
@@ -196,7 +210,17 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 		opt.assetBase = defaultAssetBase + opt.version
 	}
 	opt.assetBase = strings.TrimRight(opt.assetBase, "/")
-	return verifyAssets(opt, public, &r)
+	if err := verifyAssets(opt, public, &r); err != nil {
+		return err
+	}
+	if runtimeRequested {
+		r.Scope, r.RuntimeChecks = "asset-integrity-and-lifecycle", "fail"
+		if err := verifyLifecycle(opt, &r); err != nil {
+			return err
+		}
+		r.RuntimeChecks = "pass"
+	}
+	return nil
 }
 
 func (r *report) perform(name string, fn func() error) error {

@@ -1,4 +1,4 @@
-# 离线核对候选发行资产
+# 核对候选发行资产与安装更新链
 
 `release-check` 读取 `scripts/dist` 生成的候选目录，在新目录保留解包内容和 `result.json`。默认要求全部五目标；候选子集必须用 `--platforms` 明确指定。各平台二进制只进行静态读取。
 
@@ -21,6 +21,11 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 | `--out` | 必填；尚不存在的证据目录，父目录须已存在，位置须在候选目录之外。已有目录原样保留。 |
 | `--platforms` | 逗号分隔的目标，缺省 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`。必须与发行归档和每个组件清单的目标集合一致。 |
 | `--asset-base` | 期望的资产 URL 前缀；缺省 `https://github.com/AlonaBot/AlonaBot/releases/download/v<version>`，与构建候选时的 `dist --asset-base` 对应。 |
+| `--install-candidate` | 可选运行链的初始组件包目录：从现有 configdb 示例打包，使用独立第三方测试发布者。 |
+| `--update-candidate` | 同 ID、来源、发布者，组件自身 SemVer 严格递增的包目录。 |
+| `--wrong-source-candidate` | 同更新版本、ID、发布者，来源不同的有效签名包目录。 |
+| `--wrong-publisher-candidate` | 同更新版本、ID、来源，发布者不同的有效签名包目录。 |
+| `--runtime-timeout` | 运行链必填，例如 `2m`；检查器整条联验的截止时间，包含候选退出。 |
 | `--help` | 显示实际参数并以 0 退出。 |
 
 检查顺序如下：
@@ -35,4 +40,23 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 
 成功返回 0，失败返回 1。stdout 始终输出结果 JSON（`--help` 除外），完整错误写入 `error`，已完成的检查与失败检查保留在 `checks`。证据目录创建成功后，同一 JSON 写入 `result.json`，失败解包现场保留。参数错误或证据目录创建失败时，可从 stdout 保存结果。stderr 保存参数帮助或失败日志。
 
-`scope` 为 `asset-integrity`，`runtime_checks` 为 `not_run`。安装、真实更高组件版本更新、Active/数据库保持、pin、卸载重装和错误资产的实际管理入口拒绝属于运行链验收。五目标静态检查结果分别记录所选平台；真实平台运行结果由发布矩阵记录。
+仅给出原有静态参数时，`scope` 为 `asset-integrity`，`runtime_checks` 为 `not_run`。五目标静态检查结果分别记录所选平台。
+
+要验证当前宿主的安装与更新，另给出上表四个组件目录与运行截止时间。每个目录包含正式 `alonabot pack` 生成的该平台 tar.gz、`release.json`、`release.json.sig` 和 `release.pub`；组件固定为现有 `examples/plugins/configdb` 示例，manifest 显式声明 `role: plugin`。初始与更新副本只改作者 manifest 中的版本/来源，错误来源副本只换来源，错误发布者副本只换测试签名密钥。私钥留在构建环境，检查器只读取发行文件。
+
+```sh
+/tmp/alonabot-release-check --candidate /tmp/alonabot-candidate \
+  --version 0.1.0 --public-key /tmp/trusted-release.pub \
+  --out /tmp/alonabot-lifecycle-evidence \
+  --install-candidate /tmp/configdb-0.1.0 \
+  --update-candidate /tmp/configdb-0.1.1 \
+  --wrong-source-candidate /tmp/configdb-wrong-source \
+  --wrong-publisher-candidate /tmp/configdb-wrong-publisher \
+  --runtime-timeout 2m
+```
+
+`--platforms` 必须包含当前宿主。程序先完成全部静态检查，再在系统临时目录重新解包宿主归档，以独立空 cwd 和 data_dir 无 TTY 启动，不调用源码或构建工具。它通过 `admin-token show` 获取首次 token，核对文件权限 0600；token 只留在内存和候选自身的私密文件中。管理 CLI 使用 Bearer token 文件；本机转发将随机监听端口的 Host/Origin 对齐候选实际 `base_url`。
+
+运行链核对官方四包的版本、来源、发布者和默认启用状态，以及 HTTP 返回的 Core 版本。随后安装并启用第三方 configdb，通过公开数据管理 API 写入 `configdb_note`，读取真实 SQLite 行与插件 OnStart 写入的 `configdb_startup`。错误签名、有效签名但来源不同、发布者不同与 pin 不匹配的更新均须被管理 CLI 拒绝；每次拒绝后核对身份、版本、Active 与数据库原内容。解除 pin 后执行真实高版本更新，要求 Active 变化、内容保留；普通卸载保留绑定与代次，拒绝异源/异发布者重装，再同源重装、启用并读取原内容。
+
+运行成功时 `scope=asset-integrity-and-lifecycle`、`runtime_checks=pass`。`runtime` 记录平台、保留的系统临时工作目录、Core PID/退出码和各阶段组件状态。`out/runtime/` 保留 Core 日志、管理 CLI 原始 stdout/stderr/参数/退出码、数据 API 原始响应；预期拒绝的原错同样保留。失败返回完整错误及已完成阶段；候选收到中断信号并等待退出，超过调用者给定截止时间则终止并记为失败。临时资产和 data_dir 保留供复查，整个程序成功也要求 Core 正常退出且日志未出现 token。真实平台运行结果由发布矩阵记录。
