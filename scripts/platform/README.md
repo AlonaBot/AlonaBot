@@ -1,6 +1,6 @@
 # 平台验收
 
-`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。Windows 当前完成交叉构建，实际运行尚未执行。
+`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。四个 Linux/macOS 环境已完整通过；Windows 完成交叉构建，实际运行仍为「未运行」，2026-11-20 经维护者按 [D-185](../../spec/adr/DECISIONS.md) 批准延期。实际候选、环境与原失败见 [TEST-MATRIX §3.6](../../spec/TEST-MATRIX.md#36-五平台运行增量t-102--v-32v-34)。
 
 先从候选源码构建验收程序、Core 与三个示例组件包，并准备下文约定的本地 `platform-tree` 插件。fixture 源码和产物放在 git 忽略的本地目录，随本次证据保留。以下为本机 fish 命令；交叉构建时分别为验收程序与 Core 设置目标，并为 `pack` 指定同一 `--target OS/arch`。
 
@@ -66,7 +66,7 @@ Unix 随后经 `os/exec` 运行[原有场景入口](../scenarios/README.md)，�
 
 Windows 使用 `windows_sources.py` 加载原场景的源码生成函数，按 Go AST 选择入口引用的完整声明与原断言，再编译成五个原生 `scenario-test.exe`；实际执行通过 Go 测试程序完成。构建阶段保留源码 cwd，管理／恢复／残存写入者运行阶段在 TestMain 切到独立 cwd。归档入口使用 `.exe`，只读 DB 使用 Windows 文件 URI。检查点由命名 Event 阻塞和释放。残存写入者场景的临时 Core 为 Job 命名，验收程序保留额外 Job 句柄，Core 强杀后真实旧 SDK 仍持有 runtime.lock；原有 Degraded、启动计数、Active／Journal／业务 DB 断言继续执行，随后终止旧 PID 并验证恢复。该钩子只存在于保留的临时 overlay 中。
 
-Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部目标组件包；Core 与验收程序使用 `.exe` 文件名。源码生成输入、有效 Go 声明、overlay、测试可执行文件及每场景运行参数均留在 `scenario-evidence`。交叉构建证据单独记录，实际 Windows 运行仍标记「未运行」。
+Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部目标组件包；Core 与验收程序使用 `.exe` 文件名。源码生成输入、有效 Go 声明、overlay、测试可执行文件及每场景运行参数均留在 `scenario-evidence`。交叉构建证据单独记录；实际 Windows 工具核对、平台/恢复/CGO/GORM 均为「未运行（D-185 批准延期）」。hosted run `44695663481` 在分配 runner 前失败，零 step、零 artifact，原错误和临时输入保留；后续实跑由维护者重新安排。
 
 JSON 的 `recovery` 保存源码与候选提交、构建参数、七个产物的身份、三个场景的输入和完整 `events.jsonl`；每个场景另留 `go-test.log`、overlay、真实 `state.sqlite` 与业务数据库。程序同时核对所需测试名的成功记录和独立 cwd 标记，证据缺失即失败；部分事件和损坏输入的原始字节也保留在失败结果中。所有构建、运行目录与证据路径均位于 JSON 的 `workspace` 下，目录内容沿用原场景入口的布局。
 

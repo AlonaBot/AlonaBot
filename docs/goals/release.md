@@ -12,7 +12,7 @@
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 已完成（PR #275） |
 | goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 已完成（PR #278；最终检查与合并门槛待核对） |
-| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 独立实施中；最终验收等待前置 |
+| goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 已完成（四环境通过，Windows 实跑按 D-185 批准延期；PR #280 待父审与当前 head CI） |
 | goal-48 | T-10.3 | 现有资源实测与维护者决定归档 | T-10.1 | 等待文档收口（D-184） |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
 
@@ -307,7 +307,9 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：独立实施中，最终验收等待 T-10.1 / goal-46。2026-11-20 从经父审查的 goal-46 候选 `eb01ed6c` 开始平台程序与可用环境的独立实施；最终以整合后的同一候选闭合五平台要求，后继候选变动补受影响验证。五平台均需实际运行；2026-11-19 GitHub-hosted 四平台短探测 run 44492249496 因付款或支出限额在分配 runner 前失败。现有 instabox linux/amd64、本机 darwin/arm64 与 Docker Desktop 的 linux/arm64 作为可用环境候选，执行时核对实际身份与架构；2026-11-19 主线程在本机执行 `arch -x86_64 /usr/bin/uname -m` 返回 `x86_64`，据此确认 Rosetta 可执行候选，完整 darwin/amd64 产品验收留待 goal-47，结果按架构仿真标记。Windows/amd64 的实际执行入口与 GitHub Actions 计费恢复按维护者决定留到最后处理；其余可用平台继续实施和实跑。
+状态：已完成（四环境通过，Windows 实跑按 D-185 批准延期）；PR #280 保持草稿，父独立终审与最终 head CI 待核对。T-10.1 / goal-46 已通过 PR #278 合入实际 main `46c35d0e`，本切片已普通 merge 该输入；等待父交付 goal48 实际 main 后一次整合、普通 push 并 ready。固定产品 `5094592d` 在 linux/amd64 VM、linux/arm64 Docker 容器、darwin/arm64 原生与 darwin/amd64 Rosetta 仿真均完整通过，每组 1082 步、104 runs、100 次启停、完整恢复、CGO 与 GORM TCP/stdio，原始 JSON/日志/DB/七恢复产物已完整库存，见 TEST-MATRIX §3.6。
+
+2026-11-20 维护者裁定（[D-185](../../spec/adr/DECISIONS.md)）：①“批准 Windows 实跑延期”；②模板“等主仓库正式公开后验收”。本决定覆盖下列历史派发语句中的 Windows 实跑门槛；历史五平台目标原文保留。Windows run `44695663481` 在分配 runner 前因付款或支出限额失败，零 step、零 artifact；工具核对、平台/恢复/CGO/GORM 实际执行全部保留「未运行」，交叉构建单列。原 2026-11-19 探测 run `44492249496` 与本次失败均保留；停止 Windows 重试、资源测量和工具安装。后继 goal49 在发布说明列明批准延期及缺项，模板验收在主仓库正式公开后由维护者安排。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -359,7 +361,9 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-49 · T-10.4 发布资产与说明
 
-状态：等待前置（T-10.2 / goal-47、T-10.3 / goal-48）。正式签名与发布由维护者在其控制的环境中执行。
+状态：等待前置整合（goal47 按 D-185 完成，PR #280 待父审与最终 head CI；T-10.3 / goal-48 待实际合并）。正式签名与发布由维护者在其控制的环境中执行。
+
+2026-11-20 裁定补充（[D-185](../../spec/adr/DECISIONS.md)）：发布说明保留 Windows 实跑批准延期、原分配前失败和完整未运行清单；下列模板条目的 SDK 版本、候选 CI 与使用验收统一在主仓库正式公开后执行。维护者已明确模板“等主仓库正式公开后验收”。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-49（切片 T-10.4：发布资产与说明）。goal 目录 goal-49，分支 goal-49，worktree .worktrees/goal-49，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
