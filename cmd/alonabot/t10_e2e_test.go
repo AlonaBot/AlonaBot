@@ -29,8 +29,69 @@ func TestCrossComponentEndToEnd(t *testing.T) {
 	for _, transport := range []string{"tcp", "stdio"} {
 		t.Run(transport, func(t *testing.T) {
 			t.Run("components", func(t *testing.T) { testCrossComponentPackages(t, transport) })
+			t.Run("capabilities", func(t *testing.T) { testCrossCapabilityPackages(t, transport) })
 		})
 	}
+}
+
+func testCrossCapabilityPackages(t *testing.T, transport string) {
+	projects := []struct{ directory, id string }{
+		{"../../adapters/telegram", "alonabot-adapter-telegram"},
+		{"../../examples/plugins/lifecycle", "demo"},
+		{"../../examples/plugins/echo", "echo"},
+		{"../../examples/plugins/media", "media"},
+	}
+	archives := make([]string, len(projects))
+	for i, project := range projects {
+		archives[i] = packAgentComponent(t, project.directory, project.id)
+	}
+	server := telegramtest.NewServer(t, "capability-token")
+	server.SetMe(101, "capability_bot")
+	dir := t.TempDir()
+	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"capability_bot","instances":{"capability_bot":{"token":"capability-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
+	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
+	if transport == "stdio" {
+		args = append(args, "--stdio")
+	}
+	c := startEmptyCore(t, dir, args...)
+	for i, project := range projects {
+		c.management(t, dir, "", "install", archives[i], "--yes")
+		c.management(t, dir, "", "enable", project.id)
+	}
+	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
+	// 无配置、无数据库的命令插件与文本匹配插件分别产生真实回复。
+	for i, item := range []struct{ input, want string }{{"/ping", "pong"}, {"roll 3d8", "Rolling 3d8."}} {
+		before := len(server.Requests())
+		telegramMessage(t, server, i+1, map[string]any{"text": item.input, "chat": map[string]any{"id": 9, "type": "private"}})
+		telegramEventually(t, c, func() bool {
+			for _, request := range server.Requests()[before:] {
+				if request.Method == "sendMessage" && request.Params["text"] == item.want {
+					return true
+				}
+			}
+			return false
+		})
+	}
+	// 媒体由另一个实际上传并写库的插件实现，核对 Adapter 收到的完整字节。
+	telegramMessage(t, server, 3, map[string]any{"text": "/media", "chat": map[string]any{"id": 9, "type": "private"}})
+	sample := developmentRead(t, "../../examples/plugins/media/assets/sample.png")
+	telegramEventually(t, c, func() bool { return server.Calls("sendMediaGroup") == 1 })
+	for _, request := range server.Requests() {
+		if request.Method == "sendMediaGroup" {
+			if len(request.Files) != 2 || !reflect.DeepEqual(request.Files["media_0"], sample) || !reflect.DeepEqual(request.Files["media_1"], sample) {
+				t.Fatal("media plugin upload differs from its packaged asset")
+			}
+		}
+	}
+	telegramEventually(t, c, func() bool {
+		for _, request := range server.Requests() {
+			if request.Method == "sendMessage" && request.Params["text"] == "Click to edit this text." {
+				return true
+			}
+		}
+		return false
+	})
+	stopTestCore(t, c)
 }
 
 func testCrossComponentPackages(t *testing.T, transport string) {
