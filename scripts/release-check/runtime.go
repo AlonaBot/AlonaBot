@@ -34,6 +34,7 @@ func startRuntime(ctx context.Context, binary, cwd, data, evidence string) (*run
 	// 环境只保留平台运行所需变量，排除调用者的 token、调参及开发注入。
 	h.command = exec.Command(binary, "run", "--data-dir", data, "--listen", "127.0.0.1:0", "--console=false", "--log-format", "json")
 	h.command.Dir, h.command.Env = cwd, runtimeEnvironment()
+	prepareRuntime(h.command)
 	output, err := os.OpenFile(filepath.Join(evidence, "core.stdout.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
 	if err != nil {
 		return nil, err
@@ -120,7 +121,7 @@ func (h *runtimeHost) stop() error {
 		return errors.Join(errors.New("Core exited before requested shutdown"), h.waitErr)
 	default:
 	}
-	signalErr := h.command.Process.Signal(os.Interrupt)
+	signalErr := interruptRuntime(h.command.Process)
 	if signalErr != nil {
 		killErr := h.command.Process.Kill()
 		<-h.done
@@ -139,12 +140,8 @@ func (h *runtimeHost) stop() error {
 // authenticate 只在内存接收 show 输出；证据仅记录权限和成功状态。
 func (h *runtimeHost) authenticate() error {
 	tokenFile := filepath.Join(h.data, "admin_token")
-	info, err := os.Stat(tokenFile)
-	if err != nil {
+	if err := checkTokenPermissions(tokenFile); err != nil {
 		return err
-	}
-	if info.Mode().Perm() != fileMode {
-		return fmt.Errorf("first token mode = %s; want 0600", info.Mode())
 	}
 	command := exec.CommandContext(h.ctx, h.binary, "admin-token", "show", "--data-dir", h.data)
 	command.Dir, command.Env = h.cwd, runtimeEnvironment()
@@ -239,13 +236,11 @@ func (h *runtimeHost) cli(name string, args ...string) ([]byte, error) {
 		receipt.Error = err.Error()
 	}
 	writeErr = errors.Join(writeErr, writeJSON(prefix+".command.json", receipt))
-	if writeErr != nil {
-		return stdout.Bytes(), writeErr
-	}
+	var commandErr error
 	if err != nil {
-		return stdout.Bytes(), fmt.Errorf("%s: %w; stderr: %s; stdout: %s", name, err, stderr.String(), stdout.String())
+		commandErr = fmt.Errorf("%s: %w; stderr: %s; stdout: %s", name, err, stderr.String(), stdout.String())
 	}
-	return stdout.Bytes(), nil
+	return stdout.Bytes(), errors.Join(commandErr, writeErr)
 }
 
 func (h *runtimeHost) api(name, method, path, body string) ([]byte, error) {

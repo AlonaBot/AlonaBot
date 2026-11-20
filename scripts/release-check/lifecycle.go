@@ -310,6 +310,9 @@ func verifyLifecycle(opt options, r *report) (err error) {
 		if err := checkActive(reinstalled, updated.publication); err != nil {
 			return err
 		}
+		if reinstalled.Active != active.Active {
+			return fmt.Errorf("reinstall changed retained Active: got %q; want %q", reinstalled.Active, active.Active)
+		}
 		return host.checkDatabase("reinstalled", id)
 	})
 }
