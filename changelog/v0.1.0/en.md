@@ -35,7 +35,7 @@ Each of the four available environments completed 1,082 steps and 104 Core runs,
 
 The maintainer accepted the current overhead and stopped further resource measurements, load tests and optimization. Median PSS from three fixed Linux runs was Core-only **26.61328125 MiB**, echo **10.09375 MiB**, configdb GORM **16.21875 MiB**. The historical 24/10/16 MiB comparisons remain FAIL. New four-workload and NoneBot2 comparison runs were cancelled. See the [original measurements](https://github.com/AlonaBot/AlonaBot/blob/d8b9678931013b6d46a044dbdbb0db9182262065/docs/benchmarks.md).
 
-Builds use Go 1.27.1, Node 26.5.1 and locked npm dependencies; Linux ARM platform acceptance used Go 1.27.3. Normal distributions use `CGO_ENABLED=0`. The approved GORM replacement is `github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d`, preserving the upstream `gorm.io/gorm v1.31.2` package identity.
+Builds use Go 1.27.1, Node 26.5.1 and locked npm dependencies; Linux ARM platform acceptance used Go 1.27.3. Normal distributions use `CGO_ENABLED=0`. GORM now uses upstream `gorm.io/gorm v1.31.2` directly. The historical resource measurements above used `github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d`, whose constant-name hook lookups helped the linker discard unrelated methods. Binary size and runtime memory may increase after restoring upstream; further resource measurements remain stopped.
 
 ## Known limitations and publication work
 
