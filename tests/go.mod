@@ -55,5 +55,3 @@ require (
 )
 
 replace github.com/AlonaBot/AlonaBot => ..
-
-replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d
