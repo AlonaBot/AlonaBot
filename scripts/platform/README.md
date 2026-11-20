@@ -41,6 +41,8 @@ JSON 包含运行时 OS/架构/Go 版本、系统版本原始输出、Core 与�
 
 Telegram Adapter 与 echo、showcase 均为独立真实组件进程；Bot API 为验收程序内的 loopback 模拟服务。发送一条 `/echo` 后核对回复正文与会话，再访问受认证的 showcase `/status`、页面与桥脚本引用。
 
+管理会话核对每个端点的原始 HTTP 响应；跳转保留原状态、`Location` 和响应体，状态不符即判失败。Bot API 请求体读取失败时，错误同时保留完整原错与 `%q` 格式的已收字节，便于从失败 JSON 复现。
+
 本地 `platform-tree` 工程使用当前候选 SDK，manifest 的 ID 为 `platform-tree`、role 为 `plugin`。`OnStart` 用 `os/exec` 启动同一可执行文件的 child 模式，继承进程组／Job；子进程保持一个 `127.0.0.1:0` TCP Listener 并接收连接，在其 stdin EOF 后关闭 Listener 并退出。父插件持有输入管道，`OnStop` 关闭管道并 `Wait` 回收子进程。父插件注册受认证的 `GET /state`，返回 `{"parent_pid":123,"child_pid":124,"address":"127.0.0.1:34567"}`；值取实际 PID 与 Listener 地址。Core 正常停止和断链停止均经过这一合作路径。
 
 首次业务运行后，程序复用同一 data_dir 完成 100 次实际启动／停止。每次读取管理状态和激活日志，核对所有组件的持久 Active、代次与 PID，再访问子树状态。`running` 和 `released` 记录 Core、四组件、子 PID、Unix 进程组、五把锁及 Core／子进程监听端口：运行时要求存活、锁被持有且可连接；停止后要求 PID 和进程组消失、既有锁可真实取得、原端口可重新绑定。Unix 负 PID 表示进程组；僵尸仍视为存在。锁文件使用既有路径打开，检查结束即释放并保留文件。

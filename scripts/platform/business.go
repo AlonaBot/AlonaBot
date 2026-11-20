@@ -38,6 +38,7 @@ type httpObservation struct {
 	Path         string `json:"path"`
 	RequestBody  string `json:"request_body,omitempty"`
 	Status       int    `json:"status"`
+	Location     string `json:"location,omitempty"`
 	ResponseBody string `json:"response_body"`
 }
 
@@ -307,11 +308,14 @@ func (s *adminSession) request(ctx context.Context, name, method, path string, i
 		for _, cookie := range s.cookies {
 			request.AddCookie(cookie)
 		}
-		response, err := http.DefaultClient.Do(request)
+		// 每个端点都核对其原始响应，跳转目的地的成功响应会掩盖被测端点的状态。
+		client := http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		response, err := client.Do(request)
 		if err != nil {
 			return err
 		}
 		evidence.Status = response.StatusCode
+		evidence.Location = response.Header.Get("Location")
 		result, err = io.ReadAll(response.Body)
 		if !credential || response.StatusCode != expected {
 			evidence.ResponseBody = string(result)

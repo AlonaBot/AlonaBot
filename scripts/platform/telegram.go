@@ -71,7 +71,7 @@ func (b *botServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	method := strings.TrimPrefix(r.URL.Path, prefix)
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		b.record(botCall{Method: method, Error: err.Error()})
+		b.record(botCall{Method: method, Error: fmt.Sprintf("%v; received body %q", err, raw)})
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
