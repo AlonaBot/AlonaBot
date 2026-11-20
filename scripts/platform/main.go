@@ -58,6 +58,7 @@ type packageAsset struct {
 
 type stepResult struct {
 	Name           string           `json:"name"`
+	CorePID        int              `json:"core_pid,omitempty"`
 	Started        time.Time        `json:"started"`
 	DurationMS     float64          `json:"duration_ms"`
 	Status         string           `json:"status"`
@@ -242,6 +243,9 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 func (r *report) step(name string, action func(*stepResult) error) error {
 	step := stepResult{Name: name, Started: time.Now().UTC(), Status: statusPassed}
 	err := action(&step)
+	if len(r.Runs) > 0 {
+		step.CorePID = r.Runs[len(r.Runs)-1].PID
+	}
 	step.DurationMS = time.Since(step.Started).Seconds() * 1000
 	if err != nil {
 		step.Status, step.Error = statusFailed, err.Error()

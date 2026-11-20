@@ -26,6 +26,8 @@ type activation struct {
 }
 
 type coreRun struct {
+	Purpose     string       `json:"purpose"`
+	Cycle       int          `json:"cycle,omitempty"`
 	Command     []string     `json:"command"`
 	Directory   string       `json:"directory"`
 	Log         string       `json:"log"`
@@ -33,6 +35,10 @@ type coreRun struct {
 	Address     string       `json:"address"`
 	Activations []activation `json:"activations"`
 	ExitCode    *int         `json:"exit_code,omitempty"`
+	ExitError   string       `json:"exit_error,omitempty"`
+	Tree        *treeState   `json:"tree,omitempty"`
+	Running     *resources   `json:"running,omitempty"`
+	Released    *resources   `json:"released,omitempty"`
 }
 
 type coreProcess struct {
@@ -65,6 +71,9 @@ func (r *report) startCore(ctx context.Context, opt options) (*coreProcess, erro
 		go func() {
 			// Wait 与日志文件都归此 goroutine；close 将最终错误和退出码发布给等待方。
 			process.err = errors.Join(command.Wait(), file.Close())
+			if process.err != nil {
+				run.ExitError = process.err.Error()
+			}
 			code := command.ProcessState.ExitCode()
 			run.ExitCode = &code
 			close(process.done)
@@ -123,6 +132,10 @@ func observe(ctx context.Context, core *coreProcess, condition func() (bool, err
 	defer cancel()
 	ticker := time.NewTicker(observationInterval)
 	defer ticker.Stop()
+	var exited <-chan struct{}
+	if core != nil {
+		exited = core.done
+	}
 	for {
 		ready, err := condition()
 		if err != nil || ready {
@@ -130,10 +143,10 @@ func observe(ctx context.Context, core *coreProcess, condition func() (bool, err
 		}
 		select { // 按实际观测推进；Core 提前退出或观察期限到达立即结束。
 		case <-ticker.C:
-		case <-core.done:
+		case <-exited:
 			return errors.Join(fmt.Errorf("Core exited before observation completed; log: %s", core.run.Log), core.err)
 		case <-ctx.Done():
-			return fmt.Errorf("observe Core %d; log %s: %w", core.run.PID, core.run.Log, ctx.Err())
+			return fmt.Errorf("observation deadline: %w", ctx.Err())
 		}
 	}
 }

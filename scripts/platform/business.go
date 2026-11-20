@@ -26,6 +26,7 @@ const (
 	telegramPackageID   = "alonabot-adapter-telegram"
 	showcasePackageID   = "showcase"
 	echoPackageID       = "echo"
+	treePackageID       = "platform-tree"
 	coreConfigFile      = "core_config.json"
 	firstTokenFile      = "admin_token"
 	csrfHeader          = "X-Alonabot-CSRF"
@@ -50,7 +51,7 @@ type adminSession struct {
 
 func (r *report) business(ctx context.Context, opt options) (err error) {
 	// 1. 归档由调用者构建；先读取其中的真实 build-info，再经正式 CLI 安装。
-	ids := []string{telegramPackageID, echoPackageID, showcasePackageID}
+	ids := []string{telegramPackageID, echoPackageID, showcasePackageID, treePackageID}
 	archives := make(map[string]string)
 	if err := r.step("example_packages", func(_ *stepResult) error {
 		for _, id := range ids {
@@ -273,7 +274,7 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 	} else if !bytes.Contains(raw, []byte("postMessage")) {
 		return errors.New("showcase bridge script is missing postMessage")
 	}
-	return r.step("core_stop", func(_ *stepResult) error { return core.stop() })
+	return r.lifecycle(ctx, opt, session, ids)
 }
 
 func (s *adminSession) request(ctx context.Context, name, method, path string, input any, expected int, credential bool) ([]byte, error) {
