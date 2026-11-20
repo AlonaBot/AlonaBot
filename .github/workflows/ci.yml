@@ -107,11 +107,18 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- contracts)"
       - name: 静态检查
         run: go vet ./...
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: web/admin/package.json
+          cache: npm
+          cache-dependency-path: web/admin/package-lock.json
+      - name: 准备发行测试的 npm 缓存
+        run: npm --prefix web/admin ci
       - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'
         # 串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
-        run: GOMAXPROCS=2 go test -p 1 -race ./...
+        run: GOMAXPROCS=2 go test -p 1 -race -timeout 30m ./...
       - name: 五目标平台 pure-Go 构建
         shell: bash
         run: |
