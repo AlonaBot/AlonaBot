@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -56,15 +57,17 @@ type packageAsset struct {
 }
 
 type stepResult struct {
-	Name       string    `json:"name"`
-	Started    time.Time `json:"started"`
-	DurationMS float64   `json:"duration_ms"`
-	Status     string    `json:"status"`
-	Error      string    `json:"error,omitempty"`
-	Command    []string  `json:"command,omitempty"`
-	Directory  string    `json:"directory,omitempty"`
-	Output     string    `json:"output,omitempty"`    // stdout/stderr 合并，完整保留。
-	ExitCode   *int      `json:"exit_code,omitempty"` // 启动失败时没有退出码。
+	Name           string           `json:"name"`
+	Started        time.Time        `json:"started"`
+	DurationMS     float64          `json:"duration_ms"`
+	Status         string           `json:"status"`
+	Error          string           `json:"error,omitempty"`
+	Command        []string         `json:"command,omitempty"`
+	Directory      string           `json:"directory,omitempty"`
+	Output         string           `json:"output,omitempty"`    // stdout/stderr 合并，完整保留。
+	ExitCode       *int             `json:"exit_code,omitempty"` // 启动失败时没有退出码。
+	HTTP           *httpObservation `json:"http,omitempty"`
+	OutputRedacted bool             `json:"output_redacted,omitempty"` // 仅凭证输出。
 }
 
 type report struct {
@@ -87,10 +90,15 @@ type report struct {
 	Directory   string         `json:"directory"`
 	DataDir     string         `json:"data_dir"`
 	Steps       []stepResult   `json:"steps"`
+	Runs        []*coreRun     `json:"runs"`
+	Components  []candidate    `json:"components"`
+	BotCalls    []botCall      `json:"bot_calls"`
 }
 
 func main() {
-	err := run(context.Background(), os.Args[1:], os.Stdout)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	err := run(ctx, os.Args[1:], os.Stdout)
 	if errors.Is(err, flag.ErrHelp) {
 		return
 	}
@@ -225,7 +233,10 @@ func run(ctx context.Context, args []string, output io.Writer) (err error) {
 		return err
 	}
 	r.OSVersion = strings.TrimSpace(r.Steps[len(r.Steps)-1].Output)
-	return r.command(ctx, "core_help", opt.core, "--help")
+	if err := r.command(ctx, "core_help", opt.core, "--help"); err != nil {
+		return err
+	}
+	return r.business(ctx, opt)
 }
 
 func (r *report) step(name string, action func(*stepResult) error) error {
