@@ -4,9 +4,39 @@
 
 Module：`github.com/AlonaBot/AlonaBot`。
 
+## 安装与快速开始
+
+v0.1.0 当前为发布候选，正式资产待维护者发布。平台实际运行结果、已知限制与恢复步骤见[发布说明](docs/release-notes/v0.1.0.md)；发行后从 [v0.1.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.1.0) 下载同一版本的资产。
+
+Docker 用户下载 Release 中的 `compose.yaml` 后运行：
+
+```fish
+docker compose -f compose.yaml up -d
+docker compose -f compose.yaml exec alonabot alonabot admin-token show --data-dir /data
+```
+
+compose 使用固定版本镜像、独立数据卷、init 与 `127.0.0.1:7650:7650` 端口发布。打开 `http://127.0.0.1:7650`，使用一次性 token 登录；成功后 token 文件删除。
+
+Linux systemd 与 macOS launchd 用户可安装为系统服务。先下载同一 Release 的脚本：
+
+```fish
+curl --fail --location --proto '=https' --proto-redir '=https' \
+  -o install.sh https://github.com/AlonaBot/AlonaBot/releases/download/v0.1.0/install.sh
+# Linux，以 root 安装
+sudo sh install.sh --version 0.1.0
+# macOS，以当前登录用户安装
+sh install.sh --version 0.1.0
+```
+
+按脚本提示领取管理 token 并登录；再次运行即升级，`sh install.sh --uninstall`（Linux 加 `sudo`）卸载服务和程序并保留数据。完整路径与命令见[安装与升级](docs/development.md#用-installsh-安装与升级)。其他部署方式可下载对应 OS/arch 的发行归档，保留 `alonabot` 与 `packages/` 相邻，在解压目录执行 `./alonabot run --data-dir ./data`；Windows 使用 `alonabot.exe`。
+
+首次启动只启用 help 与 WebUI。在后台添加 Telegram 实例后 Adapter 自动启用；需要 AI 对话时再启用 Agent、配置 Provider 与模型。聊天中用 `/whoami` 取得用户字符串，在后台登记 Core Admin 后管理聊天权限。备份与回退见[发布说明](docs/release-notes/v0.1.0.md#升级回退与恢复)。
+
+## 开发与当前实现
+
 已接通休眠插件的命令/事件、Service 与 HTTP 按需唤醒：复用原代次、配置与数据库，并发启动合并，等待条数与字节有界，冷启动沿用请求原期限。S-02.2 已接通自动空闲退出与即时休眠策略：缺省 `always_on`，启用 `component_idle` 后按生效策略正常停止并记 `SUSPENDED`，改为 `never` 或切回 `always_on` 时立即恢复已启用插件；S-03.1 已接通正常休眠插件的静态与动态任务自然到期唤醒，保留计划、原期限与运行槽，异常离线继续跳过过期 tick。管理 API 与 `alonabot sleep-policy` 已支持查询策略、六态和最近原因，以及设置 `never`、正时长或用 `auto` 删除覆盖；用法见[开发指南](docs/development.md#按需唤醒与验证)。验收证据见 [TEST-MATRIX §3.2](spec/TEST-MATRIX.md#32-已合并独立切片的验证证据)。
 
-**当前进度：** 已实现协议契约、生成工具链、manifest/release 校验、SDK 公共类型、受管 SQLite 验证，以及 Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启；验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)：只在 darwin/arm64 上运行过，Linux/Windows 只做了交叉构建。已接通命令最长路径/别名选择、文本匹配与 Raw、参数绑定、usage/silent 与自动回复、按调用者语言选择的 en-US/zh-CN usage 与插件 `Context.T` 文案、显式事件注册、原目标手动回复、实例许可准入、后台 `sdk.Send`、媒体分块上传 `media.Upload`、入站媒体按需读取与转授（`media.Open`/`media.Grant`）及发送期间的只读媒体租约、Core 发送服务、插件 HTTP 路由经 Core 公开入口的代理（与管理入口共用 `base_url` 主机名，私有路由复用管理认证与 CSRF 校验，响应统一加 sandbox CSP 与 nosniff 并清除插件的 Set-Cookie）、Core 设置文件 `core_config.json`（保序写回、首次管理 token 交付，以及按内置 schema 和 Adapter 的 `adapter_config_schema.json` 校正设置与实例配置，运行校正保留原文件）、经 Core Broker 准入的跨插件 Service 调用、非持久 Event Bus 广播（`bus.Event.Publish`/`bus.Subscribe`）、插件 interval/cron 定时任务的注册校验与 Core 调度（运行槽、超期与迟到响应；`alonabot run` 中随插件激活接入，正常 IDLE 停止保留计划与到期项，其他停止时与插件 HTTP 一起排空），以及构建期检查并嵌入配置 Schema、Service Schema 与 `i18n/` 文案的 `alonabot build`/`check`（命令与事件只经链式注册）；Telegram 接收、标准化、入站媒体取件、整链发送（物理计划、媒体上传、引用与按钮渲染、逐步回执）与文本消息编辑已实现，按钮回调、命令策略与 Rule 等业务能力继续实施；开发用入口为 `alonabot run` 与顶层的 `init`、`check`、`build`、`test`、`pack`，用法见 [docs/development.md](docs/development.md)。
+**当前进度：** 已实现协议契约、生成工具链、manifest/release 校验、SDK 公共类型、受管 SQLite 验证，以及 Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启；验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)；最新平台结果见[发布说明](docs/release-notes/v0.1.0.md#发行内容)，Windows 实际运行留待最后验收。已接通命令最长路径/别名选择、文本匹配与 Raw、参数绑定、usage/silent 与自动回复、按调用者语言选择的 en-US/zh-CN usage 与插件 `Context.T` 文案、显式事件注册、原目标手动回复、实例许可准入、后台 `sdk.Send`、媒体分块上传 `media.Upload`、入站媒体按需读取与转授（`media.Open`/`media.Grant`）及发送期间的只读媒体租约、Core 发送服务、插件 HTTP 路由经 Core 公开入口的代理（与管理入口共用 `base_url` 主机名，私有路由复用管理认证与 CSRF 校验，响应统一加 sandbox CSP 与 nosniff 并清除插件的 Set-Cookie）、Core 设置文件 `core_config.json`（保序写回、首次管理 token 交付，以及按内置 schema 和 Adapter 的 `adapter_config_schema.json` 校正设置与实例配置，运行校正保留原文件）、经 Core Broker 准入的跨插件 Service 调用、非持久 Event Bus 广播（`bus.Event.Publish`/`bus.Subscribe`）、插件 interval/cron 定时任务的注册校验与 Core 调度（运行槽、超期与迟到响应；`alonabot run` 中随插件激活接入，正常 IDLE 停止保留计划与到期项，其他停止时与插件 HTTP 一起排空），以及构建期检查并嵌入配置 Schema、Service Schema 与 `i18n/` 文案的 `alonabot build`/`check`（命令与事件只经链式注册）；Telegram 接收、标准化、入站媒体取件、整链发送（物理计划、媒体上传、引用与按钮渲染、逐步回执）与文本消息编辑已实现，按钮回调、命令策略与 Rule 等业务能力继续实施；开发用入口为 `alonabot run` 与顶层的 `init`、`check`、`build`、`test`、`pack`，用法见 [docs/development.md](docs/development.md)。
 
 Core 的[管理 API](spec/ADMIN-API.md#20-webui-需要的补充接口)已支持查询保留代次、列出并暂停或恢复静态任务、查看 Adapter 实例状态、筛选和分页查看聊天目录、在线轮换管理令牌，以及列出由 SDK `.Page` 声明的插件页面及其本地化标题。对应的官方 WebUI 页面随各自切片交付。
 
@@ -39,8 +69,8 @@ Core、SDK 与管理 CLI 已支持 CRITICAL 日志；用 `alonabot logs --level 
 
 参与开发先读 [贡献流程](CONTRIBUTING.md) 和 [编码与注释规范](docs/coding-standards.md)；项目维护技能随仓库提供，不依赖个人配置。
 
-- 首发：可安装的组件分为插件、Adapter、Agent 与 WebUI 四种，各自是独立子进程（官方 WebUI 包含静态文件与后台进程）；官方 Telegram 与 OneBot 11 Adapter、官方 Agent（含记忆，工具调用需用户确认）与官方 WebUI 都可以换成社区组件；命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI、组件安装更新、英文与简体中文的用户文案；面向用户的官方整合包可用发行归档、`install.sh`（Linux systemd、macOS launchd）或 `docker compose` 安装，开箱即用，开发者可以通过 `alonabot run --reload` 热部署组件，或在自己的 `main.go` 中用 `alonabot.Run`、`alonabot.Start` 与 `Core.Wait` 将框架作为 Go 库运行，并用插件测试套件在 `go test` 中以真实 Core 测试插件。
-- 后续：更多正式 Adapter、动态命令 Router、持久化的多轮会话、跨会话记忆检索与额外客户端等，按规格范围推进。
+- 首发：可安装的组件分为插件、Adapter、Agent 与 WebUI 四种，各自是独立子进程（官方 WebUI 包含静态文件与后台进程）；官方 Telegram Adapter、官方 Agent（含记忆，工具调用需用户确认）与官方 WebUI 都可以换成社区组件；命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI、组件安装更新、英文与简体中文的用户文案；面向用户的官方整合包可用发行归档、`install.sh`（Linux systemd、macOS launchd）或 `docker compose` 安装，开箱即用，开发者可以通过 `alonabot run --reload` 热部署组件，或在自己的 `main.go` 中用 `alonabot.Run`、`alonabot.Start` 与 `Core.Wait` 将框架作为 Go 库运行，并用插件测试套件在 `go test` 中以真实 Core 测试插件。
+- 后续：OneBot 11 与更多正式 Adapter、动态命令 Router、持久化的多轮会话、跨会话记忆检索与额外客户端等，按规格范围推进。
 - 实施约束：保持轻量、良好的开发体验和最小必要配置；以编译、集成和目标平台测试记录完成情况。
 
 SDK 的文本匹配、Raw、事件与 Hook 注册可省略 route ID，需要稳定身份时链式调用 `.ID(...)`。Handler 的 `c` 可直接传给 `kv`、`task`、`llm` 等客户端；`c.Reply("hi", message.ImageURL(url))` 一次发送文本与图片，测试可用 `Result.RequireReply(t, "hi")` 检查 Handler 错误与单次回复文本。用法见[插件开发指南](docs/plugin-guide.md)与[插件测试](docs/development.md#插件测试)。
