@@ -848,9 +848,13 @@ management 核对 DB 1→41→99、五条 committed Journal、restart/reload/upd
 
 本地 `cmd/alonabot/cross_external_local_test.go:TestCrossExternalMaintenanceLocal` 完整沿用已提交 `TestManualMigrationApproval` 的真实独立程序与全部断言，逐 TCP/stdio 执行首装、restart、resume（许可均 false）、普通 reload/update/rollback 拒绝、运行中许可拒绝、停用后的单次许可及成功/迁移失败/OnReady 失败/PREPARED 与提交后崩溃恢复、external→managed。核对 Bootstrap 的 Session/Generation/DB 绑定、真实外部写入与业务 DB、Active 和停用状态，未知副作用未自动重跑。`go test -race ./cmd/alonabot -run '^TestCrossExternalMaintenanceLocal$' -count=1 -v` 通过，TCP 28.56s / stdio 27.55s / 总测试 56.11s / 包 65.307s，`GN46-10-external.log`；完整运行目录 `goal-46/evidence/external-{tcp,stdio}-*/` 保留 effects、bootstrap 审计、安装包与数据库。关联 V-31、V-39、V-40。
 
+#### 真实日志卷写满补验
+
+2026-11-20，候选 `cc5cc863`，darwin/arm64、Go1.27.1。父本地 `cmd/alonabot/diskfull_parent_local_test.go:TestParentRealLogDiskFullLocal` 复用真实Core、正式打包的日志插件与认证管理入口，将临时data_dir的logs链接到独立64MiB HFS+磁盘映像。填充文件实际写入65490944字节后返回 `no space left on device`；继续10次认证插件HTTP请求，实际日志文件写入也返回该错误，Core stderr仅一条 `log file unavailable`。实时日志仍可查询，移除填充文件后同日保持既有失败处理，正常SIGINT退出0，旧日志保留。测试命令为 `ALONABOT_V68_VOLUME=<独立映像挂载点> ALONABOT_V68_EVIDENCE=<父RUN>/v68-diskfull GOMAXPROCS=2 go test -p 1 -race ./cmd/alonabot -run '^TestParentRealLogDiskFullLocal$' -count=1 -v`，通过（测试2.64s/包11.635s）。完整源码、Core日志、卷内原日志与 `test.log` 保留，映像已卸载，填充文件已删除；新增提交测试0行。
+
 #### goal174 的固定 Linux 依赖与未闭合项
 
-2026-11-20，GN46-11 **待联验**：父/Core owner 尚未给出 goal174 的稳定合并点，原预算保留。父 RUN `goal174-three-rounds-median.json` 的固定 linux/amd64 三轮 PSS（MiB）为：Core 28.83594 / 28.37109 / 28.40625，中位数 28.40625（预算 24）；echo 11.67578 / 11.69141 / 11.74219，中位数 11.69141（预算 10）；configdb_gorm 21.625 / 19.79688 / 19.98828，中位数 19.98828（预算 16），三项均 **失败**。父随后给出的独立 GORM 诊断配对为 configdb 21.40→18.02 MiB、Core-only 27.63→27.11 MiB，仍超原预算；该配对作为诊断证据，正式 fork 来源待维护者答复，174 保持草稿。
+2026-11-20，GN46-11 **待联验**：父/Core owner 尚未给出 goal174 的稳定合并点，原预算保留。父 RUN `goal174-three-rounds-median.json` 的固定 linux/amd64 三轮 PSS（MiB）为：Core 28.83594 / 28.37109 / 28.40625，中位数 28.40625（预算 24）；echo 11.67578 / 11.69141 / 11.74219，中位数 11.69141（预算 10）；configdb_gorm 21.625 / 19.79688 / 19.98828，中位数 19.98828（预算 16），三项均 **失败**。父随后给出的独立 GORM 诊断配对为 configdb 21.40→18.02 MiB、Core-only 27.63→27.11 MiB，仍超原预算；该配对作为诊断证据。用户已批准正式来源，AlonaBot/gorm@34b98340007ddc2acd5cb8727a0b4b72ea295896 已接入174候选f9accdb3，最终head CI44662020903通过；新SDK/GORM候选的实际Linux PSS正在独占窗口采样，174保持草稿。
 
 V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、V-81 的固定机器冷启动 100 次与活跃/休眠 PSS、频繁唤醒，须消费稳定合并实现与对应固定输入的完整 Linux 结果后逐分项闭合。V-74 的发布预算及 V-33 比较报告继续交 goal48，RSS/PSS 和平台身份分别保留。46 本轮只执行本机已合并行为；父在固定 `d7a6aa34` 的独立正式 stdio 包上验证 enable→两次自动 SUSPENDED→HTTP 唤醒，旧 PID 均 ESRCH，新 PID 14644→14648→14650 实际返回 ALONABOT_TRANSPORT=stdio、Active 同代次，`go test -race ./cmd/alonabot -run '^TestReviewInstalledStdioWakeLocal$' -count=1 -v` 通过（测试 3.84s / 包 14.413s，RUN `review46-stdio-wake.log`），复用该证据。恢复条件：父提供174稳定合并点、固定 Linux 命令/产物/原错与预算处理结论；46 执行者再按合并公开面做增量联验。Linux/runner 预约及操作由父独占，本轮未操作；GN12～15独立工作继续，46整体保持未完成。
 
@@ -866,7 +870,7 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | `go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk` 与同模板单独的 `./sdk`；各输出按开发指南 `sort -u` | exit0；`final-linked-modules.txt`合计20项均在Core批准子集，`final-sdk-linked-modules.txt`仅jsonschema-go/x/sys/protobuf三项。五目标实际运行/逐目标审计交47，本轮无新增依赖。 |
 | 新增149行逐条核对当前文件、Test符号、已列子测试与原JSON；历史命令对应原候选保留，D86历史位置单列；`git diff --check` | 当前引用均有效，原主表149与新增追踪149连续唯一、四列表格完整；`final-matrix-reference-audit.json`保留位置/历史/实际PASS映射。V76/109/123的Services路径正确，原Conversation过滤命令另保留，补实际Services命令与本轮PASS0.56s（Conversation8.47s）。 |
 
-本轮结果保留V74预算失败、V77/78/81等待174稳定合并点与固定Linux故障/指标。V126模型页及V146主题/外壳的完整逐项浏览器证据仍按§3.5缺口承接；真实凭据、服务管理环境、五平台/100次与比较报告保留各自未运行项。46以草稿交父独立审查，最终当前head CI仍待父安排；已恢复的cb5 main CI为原合并点证据，后续候选的最终main恢复由父核对。公开签名、Release与镜像发布由维护者执行。
+本轮结果保留V74预算失败、V77/78/81等待174稳定合并点与固定Linux故障/指标。V126模型页及V146主题/外壳的父补验已完成，见§3.5；V68真实日志卷写满补验见本节。真实凭据、服务管理环境、五平台/100次与比较报告保留各自未运行项。46以草稿交父独立审查，最终当前head CI仍待父安排；已恢复的cb5 main CI为原合并点证据，后续候选的最终main恢复由父核对。公开签名、Release与镜像发布由维护者执行。
 
 ### 3.5 全部 V 编号的发布前追踪
 
@@ -950,7 +954,7 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 | V-65 | **通过（继承本机分项）**。双传输源码/编译失败/配置/schema/i18n重载，Core与其他组件保持；D148迁移保留原入口。 | `alonabot_test.go:TestLibraryLifecycle；cmd/alonabot/dev_e2e_test.go:TestDevelopmentReload；§3.2 T-13.5 / V-64、V-65 的回归（D-148）`；`go test -race -count=1 ./...` | PR #200（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
 | V-66 | **通过（复用归档）**。首发四包/默认启用/非TTY令牌/卸载选择持久化；交互TTY和坏签名等沿T-14.4及75专项。OneBot11随后续版本；不重建不变资产。 | `cmd/alonabot/t14_e2e_test.go:TestReleaseEndToEnd（§3.2 T-14.6）`；`go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$' -v` | 4200216d；darwin/arm64；当前归档23.52s/包31.806s通过；复用G75-02原资产 |
 | V-67 | **分项通过；部分随后续版本**。help/权限/翻译/whoami当前归档与双镜像通过；welcome/rss及其私网抓取分项按D171随后续版本。 | `cmd/alonabot/t14_e2e_test.go:TestReleaseEndToEnd（§3.2 T-14.6）`；`go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$' -v` | 4200216d；darwin/arm64；当前归档23.52s/包31.806s通过；复用G75-02原资产 |
-| V-68 | **分项通过；真实磁盘写满未运行**。轮转/查询/保留期限沿§3.1与T-09.10，本机当前未注入真实磁盘ENOSPC；管理/数据库备份ENOSPC证据分别归V29，父最终裁定真实磁盘环境承接。 | `cmd/alonabot/logs_e2e_test.go:TestLogManagement；§3.2 T-09.10 / V-62、V-63、V-68 的日志管理分项`；`GOMAXPROCS=2 go test -p 1 -race ./...` | PR #177（固定候选详原记录）；darwin/arm64；继承通过（本地/CI身份详原记录） |
+| V-68 | **通过（本机日志分项）**。轮转/查询/保留期限沿§3.1与T-09.10；父在64MiB HFS+独立映像填入65490944字节，真实日志写入返回ENOSPC，Core只报告一次且10次认证插件请求及实时日志继续成功，正常退出0。管理/数据库备份ENOSPC证据归V29。 | 继承 `cmd/alonabot/logs_e2e_test.go:TestLogManagement`；增量 `cmd/alonabot/diskfull_parent_local_test.go:TestParentRealLogDiskFullLocal`（D86）；`GOMAXPROCS=2 go test -p 1 -race ./cmd/alonabot -run '^TestParentRealLogDiskFullLocal$' -count=1 -v`（环境参数见§3.4） | 2026-11-20，cc5cc863，darwin/arm64，Go1.27.1；增量PASS2.64s/包11.635s，父RUN `v68-diskfull/test.log`与完整Core日志，映像已卸载 |
 | V-69 | **分项通过**。现有--args JOB_TIMEOUT=200ms实际生效；参数/文件行号/覆盖/单位/矛盾与MemorySoft诊断沿T-02.2，契约默认值未改。 | `cmd/alonabot/cross_resources_local_test.go:TestCrossRunningJobLocal、internal/core/media/cross_lease_local_test.go:TestCrossMediaLeaseLocal（本地）`；`go test -race ./cmd/alonabot ./internal/core/media -run '^TestCross(RunningJob\|MediaLease)Local$' -count=1 -v` | GN46-08-resources.log；ae400141；darwin/arm64；job11.61s/CLI包21.709s/media包2.897s通过 |
 | V-70 | **通过（复用双镜像）**。真实独立卷/非TTY/UID10001/loopback单端口/docker stop/top整树退出；amd64明确Rosetta仿真，当前双资产/浏览器不重跑。 | `cmd/alonabot/t14_e2e_test.go:TestReleaseEndToEnd/docker-{arm64,amd64}（§3.2 T-14.6）`；`env ALONABOT_TEST_DOCKER=1 go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$/^docker-arm64$' -v；env ALONABOT_TEST_DOCKER=1 go test -race -count=1 ./cmd/alonabot -run '^TestReleaseEndToEnd$/^docker-amd64$' -v` | 4200216d；linux/arm64原生566.40s/包576.249s，linux/amd64 Rosetta仿真326.60s/包336.497s；均通过，原日志/镜像复用 |
 | V-71 | **随后续版本（D171）**。OneBot11产品保留既有T-15.1模拟证据，首发排除；后续进入发行版时消费本地模拟+真实凭据验收。 | 未运行；无本轮命令 | 后继owner按本行条件执行 |
@@ -1044,6 +1048,6 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 
 1. 当前交接对象为 goal46 / T-10.1 的草稿候选，基于已恢复的 main `cb5acc79`。原2026-10-21从T-01起实施的交接已由§3.1～§3.3各阶段记录和本轮逐V表接续；全部149编号、原验收门槛、D86历史身份与旧票据/配置来源保留。
 2. 46执行者交付唯一Unix正式集成 `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`，四类子测试均TCP/stdio；不同真实能力程序/SDK回归按D86留本地，源码/正式包/数据/完整错误均在本地卡、PR与§3.4可追踪。75不变发行资产、双架构镜像及浏览器结果复用，最终CI补充见上文。
-3. 父/Core owner提供174稳定合并点、固定Linux完整故障与资源证据及原预算处理结论后，46再做公开面增量联验。V74原预算仍失败，V77/78/81保留具体待联验，174草稿和正式fork来源问题保持。Linux/runner预约归父；Windows/Billing按维护者留最后，本轮未探测。
-4. 父负责46独立增量审查、当前head CI、最终goals文档状态及squash/main恢复；`docs/goals/release.md`旧“派发前main CI通过”措辞须改为已批准的独立实施、最终交付核对main恢复。46保持草稿，整项目标未完成。需要维护者真实Telegram/Provider凭据的分项仍未运行，历史真实记录只按原候选复用。
+3. 父/Core owner提供174稳定合并点、固定Linux完整故障与资源证据及原预算处理结论后，46再做公开面增量联验。V74原预算仍失败，V77/78/81保留具体待联验，174保持草稿；正式fork来源已获批准并固定接入。Linux/runner预约归父；Windows/Billing按维护者留最后，本轮未探测。
+4. 父负责46独立增量审查、当前head CI、最终goals文档状态及squash/main恢复；`docs/goals/release.md`已同步独立实施与最终交付核对main恢复的条件。46保持草稿，整项目标未完成。需要维护者真实Telegram/Provider凭据的分项仍未运行，历史真实记录只按原候选复用。
 5. goal47承接五目标实际运行/CGO支持与100次启停；goal48承接固定机器四负载比较与原资源预算；goal49由维护者控制正式签名、公开Release与镜像发布。D171后置OneBot11/welcome/rss及Telegram后续分项随对应版本验收，原完整要求不变。后继派发条件由父按最终验收处理。
