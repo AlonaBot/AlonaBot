@@ -773,7 +773,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	rand.Read(l.Secret)
 	go func() {
 		if entry.role == state.RoleAdapter {
-			running.runErr = inproc.Adapter(entry.adapter, l)
+			running.runErr = inproc.Adapter.Run(entry.adapter, l)
 		} else {
 			running.runErr = inproc.Plugin(entry.root, l)
 		}

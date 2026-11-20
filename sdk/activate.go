@@ -164,7 +164,7 @@ func (a *activation) shutdown(deadline time.Time) {
 		// 1. 关闭 ready gate 并取消 lifetime，不再接受新业务。
 		a.ready.Store(false)
 		a.stopLifetime()
-		go a.l.http.close(deadline)
+		go a.l.closeHTTP(deadline)
 		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
 		ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 		done := make(chan struct{})
@@ -196,7 +196,7 @@ func (a *activation) shutdown(deadline time.Time) {
 		}
 		timer.Stop()
 		cancel()
-		a.l.http.close(deadline)
+		a.l.closeHTTP(deadline)
 		if err := a.l.runtime.database.Close(); err != nil {
 			componentLogger(a.l.runtime.ctx).Error("close plugin database failed", "err", err)
 		}
@@ -257,7 +257,7 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *re
 		MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond,
 	})
 	if l.http != nil {
-		l.http.activation.Store(a)
+		l.http.activate(a)
 	}
 	l.runtime.active.Store(a)
 	a.sess.Start() // a.sess 赋值之后再启动，回调中使用的指针一定有效

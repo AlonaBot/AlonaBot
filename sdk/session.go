@@ -43,7 +43,7 @@ type launch struct {
 	addr            string            // TCP 传输时 Core 的 loopback 地址
 	secret          []byte            // 32 字节 Session Secret
 	digest          []byte            // 安装时已验证的归档摘要，在 HELLO 中原样回显
-	http            *httpListener     // 有HTTP路由时持有本Run的Listener，传给prepare与activation
+	http            httpRuntime       // 有HTTP路由时持有本Run的Listener，传给prepare与activation
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
@@ -293,7 +293,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 			code, "database migration failed", migrationError)
 	}
 
-	if err := l.http.start(boot); err != nil {
+	if err := l.startHTTP(boot); err != nil {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}
 
@@ -340,7 +340,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 	}
 
 	registration.Migration = migration
-	l.http.report(registration)
+	l.reportHTTP(registration)
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	if err != nil {
 		return nil, err

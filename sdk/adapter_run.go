@@ -93,11 +93,8 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	if err := errors.Join(routes.http.errs...); err != nil {
 		return fmt.Errorf("invalid adapter HTTP registration: %w", err)
 	}
-	l.http = newHTTPListener(routes.http.routes)
-	if l.http != nil {
-		l.http.runtime = l.runtime
-	}
-	defer func() { l.http.close(time.Now().Add(onStopBudget)) }()
+	l.http = newHTTPListener(routes.http.routes, l.runtime)
+	defer func() { l.closeHTTP(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
 		return err
@@ -121,7 +118,7 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	runtime.activation = active
 	runtime.session = active.sess
 	if l.http != nil {
-		l.http.activation.Store(active)
+		l.http.activate(active)
 	}
 	l.runtime.active.Store(active)
 	active.sess.Start() // 回调使用的 Session 指针先发布，再启动读循环。
@@ -146,12 +143,12 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, d *adapter.Desc
 	}
 	l.runtime.source = append(l.runtime.source, slog.String("adapter_id", descriptor.GetAdapterId()))
 	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
-	if err := l.http.start(boot); err != nil {
+	if err := l.startHTTP(boot); err != nil {
 		return sessionFailure(conn, ack.SessionId, ack.ChosenMinor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}
 	if l.http != nil {
-		appendHTTPRoutes(reg, l.http.routes)
-		l.http.report(reg)
+		appendHTTPRoutes(reg, l.http.registrations())
+		l.reportHTTP(reg)
 	}
 	frame, err := wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, reg)
 	if err != nil {
