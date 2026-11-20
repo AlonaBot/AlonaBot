@@ -2,6 +2,10 @@
 //
 // 验收通过管理 CLI 与 HTTP 驱动真实进程，进程工作目录和数据目录由本命令独立创建。
 // 平台与进程所有权遵循 CONTRACTS §7.1、§12.2。
+//
+// 包的组成：[run] 创建证据文件与独立工作区，[report.business] 驱动管理认证和业务，
+// [botServer] 拥有本地 Bot API 服务与请求等待。[coreProcess] 拥有 Core 进程和日志，
+// [report.lifecycle] 检查启停、异常恢复及合作型进程树，平台观测由 inspect 文件实现。
 package main
 
 import (

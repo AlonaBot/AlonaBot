@@ -78,7 +78,7 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 	}
 	bot := newBotServer()
 	defer func() {
-		bot.server.Close()
+		err = errors.Join(err, bot.close())
 		r.BotCalls = bot.snapshot()
 		for _, call := range r.BotCalls {
 			if call.Error != "" {

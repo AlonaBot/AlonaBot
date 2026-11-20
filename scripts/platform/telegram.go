@@ -30,14 +30,23 @@ type botServer struct {
 	server  *httptest.Server
 	updates chan json.RawMessage
 	replies chan map[string]any
-	mu      sync.Mutex // HTTP 并发处理程序共同追加调用证据。
+	done    chan struct{} // 由 close 的唯一调用方关闭，主动解除本服务拥有的等待。
+	mu      sync.Mutex    // HTTP 并发处理程序共同追加调用证据。
 	calls   []botCall
 }
 
 func newBotServer() *botServer {
-	bot := &botServer{updates: make(chan json.RawMessage), replies: make(chan map[string]any)}
+	bot := &botServer{updates: make(chan json.RawMessage), replies: make(chan map[string]any), done: make(chan struct{})}
 	bot.server = httptest.NewServer(http.HandlerFunc(bot.serveHTTP))
 	return bot
+}
+
+func (b *botServer) close() error {
+	close(b.done)
+	// 先停 Listener 并关闭现存连接，解除请求体读取和响应写入；随后等待处理程序退出再取证。
+	err := b.server.Config.Close()
+	b.server.Close()
+	return err
 }
 
 func (b *botServer) record(call botCall) {
@@ -89,12 +98,14 @@ func (b *botServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		timer := time.NewTimer(time.Duration(request.Timeout) * time.Second)
 		defer timer.Stop()
-		select { // 按 Adapter 请求的 long poll 期限、实际更新或请求取消结束。
+		select { // 按 Adapter 请求的 long poll 期限、实际更新或任一方关闭结束。
 		case update := <-b.updates:
 			result = []json.RawMessage{update}
 		case <-timer.C:
 			result = []json.RawMessage{}
 		case <-r.Context().Done():
+			return
+		case <-b.done:
 			return
 		}
 	case "sendMessage":
@@ -104,9 +115,11 @@ func (b *botServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		select { // 收到的文本由验收方核对，Core 退出时请求取消解除等待。
+		select { // 收到的文本由验收方核对；服务关闭也主动解除尚未消费的回复。
 		case b.replies <- params:
 		case <-r.Context().Done():
+			return
+		case <-b.done:
 			return
 		}
 		result = map[string]any{"message_id": testMessageID, "date": time.Now().Unix(), "chat": map[string]any{"id": testUserID, "type": "private"}, "text": params["text"]}
