@@ -51,17 +51,11 @@ go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd
 
 前端使用已锁定的 React、Vite、TypeScript、vitest、Lucide、dnd-kit 和 Radix；Recharts 已批准但尚未进入当前锁文件。DOM 测试环境和 Testing Library 需要另行批准。JetBrains Mono 静态字体按其 SIL OFL 1.1 许可分发。
 
-### GORM 固定补丁来源
+### GORM 来源
 
-`gorm.io/gorm v1.31.2` 固定替换为组织派生仓库的补丁版本：
+GORM 直接使用上游 `gorm.io/gorm v1.31.2`，版本由 `go.mod` 锁定。
 
-```go
-replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d
-```
-
-该补丁基于上游 v1.31.2（`1d6ce99528060be18a42be09aca8d39efcb47f28`），补丁提交为 `34b98340007ddc2acd5cb8727a0b4b72ea295896`，仅将九种 hook 查找改为常量方法名，保留 hook 顺序、签名检查与包身份，让链接器裁剪无关方法。
-
-独立组件的 build、pack 和开发构建沿用作者主 module 的 go.mod/go.sum，库模式直接使用作者 module。独立作者项目如需该补丁，须在自己的 go.mod 加入相同 replace，并运行 `go mod download gorm.io/gorm`。正式 GORM 组件的 build-info 同时列出原模块与替换来源。
+独立组件的 build、pack 和开发构建沿用作者主 module 的 go.mod/go.sum，库模式直接使用作者 module。正式 GORM 组件的 build-info 列出实际使用的模块版本。
 
 ## 官方 WebUI 开发
 
