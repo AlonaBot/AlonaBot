@@ -1,7 +1,7 @@
 # AlonaBot v0.1 验收与故障注入矩阵
 
 版本：v0.6-review（原始矩阵 2026-10-21；发布前追踪更新 2026-11-20）
-状态：**已汇总全部149编号及本机TCP/stdio真实跨组件分项，见§3.4～§3.5；GN46-11已完成174合并输入的功能增量联验及独立审查，待最终head CI与合并。资源按D-184接受现有实测并收口。** 原2026-10-21总述“仅T-01/T-02有分项证据，其余未执行”保留为§3.1的历史状态。真实凭据、目标平台、资源报告及D171后置项按逐行状态承接。
+状态：**已汇总全部149编号及本机TCP/stdio真实跨组件分项，见§3.4～§3.5；GN46-11功能增量及独立审查完成，PR #278 最终 head CI通过并合入main `46c35d0e`，合并后 Quality44693804971 已成功。资源按D-184接受现有实测并收口，数据见[资源实测记录](../docs/benchmarks.md)。** 原2026-10-21总述“仅T-01/T-02有分项证据，其余未执行”保留为§3.1的历史状态。真实凭据、目标平台、资源报告及D171后置项按逐行状态承接。
 规范来源：[PLAN.md](PLAN.md)（T-01～T-16 详细工作包与 §7 的 S-01～S-06）、[CONTRACTS-v0.1.md](CONTRACTS-v0.1.md)、[WIRE-FORMAT.md](WIRE-FORMAT.md)、[MESSAGE-MODEL.md](MESSAGE-MODEL.md)。决策依据见 [adr/DECISIONS.md](adr/DECISIONS.md)。阶段归属更新：2026-10-22。
 
 ## 1. 逐任务验收条目
@@ -895,7 +895,7 @@ G75-08 的「完整 CI 未运行」保留为该次记录。后续固定最终 PR
 
 ### 3.4 发布前跨组件证据汇总
 
-当前 goal-46 已普通合入 main `34472fd5`（PR #277）；相对已审固定产品 `648d3d38` 的 Go、模块与 WebUI 输入保持一致，仅同步实际祖先及文档状态。PR #277 最终 `306b7b0e` 的 Quality 44682185996 attempt 2 已通过全仓 race（1191s）及五目标构建（222s），先前磁盘写满失败保留；main Quality 44688639778 由审查者确认。以下是 2026-11-20 在 darwin/arm64 上实际执行的增量证据。历史分项保留；完整逐 V 汇总随本切片后续任务更新。临时程序和 SDK 绑定回归按 D-86 保存在本地 `*_local_test.go`，源、正式包与完整日志保存在本地 `goal-46/evidence/`，PR 记录可复查位置。
+当前 goal-46 已普通合入 main `34472fd5`（PR #277）；相对已审固定产品 `648d3d38` 的 Go、模块与 WebUI 输入保持一致，仅同步实际祖先及文档状态。PR #277 最终 `306b7b0e` 的 Quality 44682185996 attempt 2 已通过全仓 race（1191s）及五目标构建（222s），先前磁盘写满失败保留；main Quality 44688639778 已通过。goal-46 最终 `2914c391` 的 Quality44689318290 与 metadata44689318584 均成功，已 squash 合并为 `46c35d0e`；合并后 main Quality44693804971 已成功。以下是 2026-11-20 在 darwin/arm64 上实际执行的增量证据。历史分项保留；完整逐 V 汇总随本切片后续任务更新。临时程序和 SDK 绑定回归按 D-86 保存在本地 `*_local_test.go`，源、正式包与完整日志保存在本地 `goal-46/evidence/`，PR 记录可复查位置。
 
 | 分项 | 实际入口与命令 | 结果与具体观察 |
 | --- | --- | --- |
@@ -1334,14 +1334,16 @@ The job was not started because recent account payments have failed or your spen
 
 `gh run --log-failed` 退出 1，原错 `log not found: 136151687886`。完整命令、stdout/stderr、API 收据及 `result.json` 位于 ignored `goal-47/evidence/GN47-14/`，状态为 `blocked_before_runner_allocation`。Windows 的 OS/架构及 Go/Git/uv/CC 工具核对、真实认证/消息/HTTP、104 runs/100 次启停、Core 强杀/合作树/端口/锁、Job/Event、恢复 DB/Active/Journal、CGO 构建运行及 GORM TCP/stdio 均未运行，无运行日志、DB 或七恢复产物可回收；既有 Windows 交叉构建记录按原身份保留。模板 hosted run `44694601377` 的 runner/setup-go 曾执行，其后因主仓库 private/缺 SDK token 失败，主仓库本次付款或限额失败另列。
 
-2026-11-20 维护者明确决定：①“批准 Windows 实跑延期”；②模板“等主仓库正式公开后验收”。[D-185](adr/DECISIONS.md) 统一记录两项决定，T-10.2 / goal47 按四环境完整通过、Windows 实跑批准延期完成；Windows 全部缺项仍为未运行，停止重试、资源测量和工具安装，模板的 SDK 版本/候选 CI/使用验收在主仓库正式公开后执行。后继 goal49 在发布说明消费该决定和完整缺项。
+2026-11-20 维护者明确决定：①“批准 Windows 实跑延期”；②模板“等主仓库正式公开后验收”。[D-185](adr/DECISIONS.md) 统一记录两项决定，T-10.2 / goal47 按四环境完整通过、Windows 实跑批准延期完成；Windows 全部缺项仍为未运行，停止重试、资源测量和工具安装，模板 CI 待主仓库正式公开后验收；已完成的候选 SDK 版本与本地功能核对保留，正式 SDK tag 由维护者发布前替换。后继 goal49 在发布说明消费该决定和完整缺项。
 
-**交付待核对项：** PR #280 保持草稿，旧 Quality `44694708167` 已由父取消；等待父交付 goal48 实际 main 后一次普通 merge、push 并 ready，父核对最终 head CI 与独立终审。四环境产品与完整 raw 库存复用原有效证据；旧 GN10 库存已通过，WebUI 复用父实际浏览器验收，本轮只同步裁定文档。
+GN47-12B 已普通 merge goal48 实际 main `44aeb7e5b1ebabd603e3a5bba0561e7f32c59ebd`（PR #279，2026-11-20 07:50:24 UTC）；该 PR 锁定 head `db980b75` 的 Quality44694052919（完整 Linux race、五目标构建，共 14m12s）及最新 metadata44697793408 均成功。48 的 `docs/benchmarks.md` 与原始数值、来源链接保持；46 合并后 main Quality44693804971 已成功。
+
+**交付待核对项：** PR #280 由父核对最终 head CI 与独立终审；旧 Quality `44694708167` 已由父取消，本次整合后普通 push 并 ready。四环境产品与完整 raw 库存复用原有效证据；旧 GN10 库存已通过，WebUI 复用父实际浏览器验收，本轮只同步裁定文档。
 
 ## 4. 实施交接
 
-1. 当前交接对象为 goal46 / T-10.1 的草稿候选，基于已恢复的 main `cb5acc79`。原2026-10-21从T-01起实施的交接已由§3.1～§3.3各阶段记录和本轮逐V表接续；全部149编号、原验收门槛、D86历史身份与旧票据/配置来源保留。
-2. 46执行者交付唯一Unix正式集成 `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`，四类子测试均TCP/stdio；不同真实能力程序/SDK回归按D86留本地，源码/正式包/数据/完整错误均在本地卡、PR与§3.4可追踪。75不变发行资产、双架构镜像及浏览器结果复用，最终CI补充见上文。
-3. 46已接入174固定普通产品8b及D-184文档候选；GN46-11公开面增量联验已通过，V77/78/81按§3.4逐分项记录本轮、继承及未运行。原资源数值失败保留历史，当前开销经维护者接受。正式GORM fork来源已批准并固定。Linux/runner预约归父；Windows/Billing按维护者留最后。
-4. 父负责46独立增量审查、当前head CI、最终goals文档状态及squash/main恢复；`docs/goals/release.md`已同步独立实施与最终交付核对main恢复的条件。46保持草稿，整项目标未完成。需要维护者真实Telegram/Provider凭据的分项仍未运行，历史真实记录只按原候选复用。
-5. goal47按D-185以四环境实际运行/CGO与100次启停通过、Windows实跑批准延期完成，完整缺项见§3.6；goal48按D-184归档现有资源实测与接受决定；goal49在发布说明记录延期项，模板在主仓库正式公开后验收，正式签名、公开Release与镜像发布由维护者控制。D171后置OneBot11/welcome/rss及Telegram后续分项随对应版本验收，原完整要求不变。后继派发条件由父按最终验收处理。
+1. goal46 / T-10.1 已通过 PR #278 锁定最终 head `2914c391` squash 为实际 main `46c35d0e`，最终 Quality44689318290/metadata44689318584 及合并后 main Quality44693804971 均成功。原2026-10-21起的历史状态和原候选证据由§3.1～§3.5接续；全部149编号、D-86身份和旧票据/配置来源保留。
+2. goal46交付唯一Unix正式集成 `cmd/alonabot/t10_e2e_test.go:TestCrossComponentEndToEnd`，四类子测试均TCP/stdio；不同真实能力程序/SDK回归按D-86留本地。75不变发行资产、双架构镜像及浏览器结果复用，GN46-11的174固定产品增量联验、正式GORM fork来源及V77/78/81分项见§3.4。
+3. goal48 / T-10.3 已通过 PR #279 锁定 head `db980b75` squash 为实际 main `44aeb7e5`；该 head Quality44694052919/最新metadata44697793408均成功。现有三轮资源实测、中位数、来源与D-184接受决定归档在[资源实测记录](../docs/benchmarks.md)，原数值及历史失败保留，停止新增资源测量和优化。
+4. goal47 / T-10.2 按D-185以四环境实际运行/CGO与100次启停通过、Windows实跑批准延期完成，完整原始证据和缺项见§3.6；PR #280 待父独立终审、当前head CI与squash/main确认。需要真实Telegram/Provider凭据的既有分项仍未运行，历史真实记录按原候选复用。
+5. goal49等待goal47实际合并，消费47平台结果和D-185及48资源文档，在发布说明记录批准延期和完整未运行项。模板CI待主仓库正式公开后验收；已完成的候选SDK版本与本地功能核对保留，正式SDK tag由维护者发布前替换。正式签名、公开Release与镜像发布由维护者控制；D-171后置OneBot11/welcome/rss及Telegram分项随对应版本验收。后继派发由父按实际main和最终验收处理。

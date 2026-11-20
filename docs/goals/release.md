@@ -11,10 +11,10 @@
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
 | goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 已完成（PR #275） |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 已完成（PR #278；最终检查与合并门槛待核对） |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 已完成（PR #278，`46c35d0e`） |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 已完成（四环境通过，Windows 实跑按 D-185 批准延期；PR #280 待父审与当前 head CI） |
-| goal-48 | T-10.3 | 现有资源实测与维护者决定归档 | T-10.1 | 等待文档收口（D-184） |
-| goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
+| goal-48 | T-10.3 | 现有资源实测与维护者决定归档 | T-10.1 | 已完成（PR #279，`44aeb7e5`；D-184） |
+| goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待 goal47 实际合并（PR #280）；goal48 已合并 |
 
 ## 第 19 波
 
@@ -263,7 +263,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：实施与证据审查中（PR #278）。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，main `cb5acc79` 的 Quality gate（run 44647524835）已通过。跨组件实现、浏览器补验与 GN11 功能增量联验均已完成独立审查，PR #278 等待最终 head CI 与合并。GN11 已接入 goal-174 的固定产品候选；D-184 已接受当前资源开销，资源测量收口。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 已完成固定 Linux 实测并按 D-184 收口，最终消费稳定合并输入完成公开入口联验。
+状态：已完成（PR #278，`46c35d0e`）。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，main `cb5acc79` 的 Quality gate（run 44647524835）已通过。跨组件实现、浏览器补验与 GN11 功能增量联验均已完成独立审查，PR #278 最终 head `2914c391` 的 Quality44689318290（完整 Linux race、五目标构建）和 metadata44689318584 均通过，已锁定该 SHA squash 合并；合并后 main Quality44693804971 已成功。GN11 已接入 goal-174 的固定产品候选；D-184 已接受当前资源开销，资源测量收口。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 已完成固定 Linux 实测并按 D-184 收口，最终消费稳定合并输入完成公开入口联验。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -307,9 +307,9 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-47 · T-10.2 五平台构建与运行
 
-状态：已完成（四环境通过，Windows 实跑按 D-185 批准延期）；PR #280 保持草稿，父独立终审与最终 head CI 待核对。T-10.1 / goal-46 已通过 PR #278 合入实际 main `46c35d0e`，本切片已普通 merge 该输入；等待父交付 goal48 实际 main 后一次整合、普通 push 并 ready。固定产品 `5094592d` 在 linux/amd64 VM、linux/arm64 Docker 容器、darwin/arm64 原生与 darwin/amd64 Rosetta 仿真均完整通过，每组 1082 步、104 runs、100 次启停、完整恢复、CGO 与 GORM TCP/stdio，原始 JSON/日志/DB/七恢复产物已完整库存，见 TEST-MATRIX §3.6。
+状态：已完成（四环境通过，Windows 实跑按 D-185 批准延期）；PR #280 交付父独立终审，最终 head CI 待核对。T-10.1 / goal-46 已通过 PR #278 合入实际 main `46c35d0e`，合并后 Quality44693804971 已成功；goal48 / PR #279 已合入实际 main `44aeb7e5`，本切片已普通 merge 两次实际输入，完整保留产品与双方证据。固定产品 `5094592d` 在 linux/amd64 VM、linux/arm64 Docker 容器、darwin/arm64 原生与 darwin/amd64 Rosetta 仿真均完整通过，每组 1082 步、104 runs、100 次启停、完整恢复、CGO 与 GORM TCP/stdio，原始 JSON/日志/DB/七恢复产物已完整库存，见 TEST-MATRIX §3.6。
 
-2026-11-20 维护者裁定（[D-185](../../spec/adr/DECISIONS.md)）：①“批准 Windows 实跑延期”；②模板“等主仓库正式公开后验收”。本决定覆盖下列历史派发语句中的 Windows 实跑门槛；历史五平台目标原文保留。Windows run `44695663481` 在分配 runner 前因付款或支出限额失败，零 step、零 artifact；工具核对、平台/恢复/CGO/GORM 实际执行全部保留「未运行」，交叉构建单列。原 2026-11-19 探测 run `44492249496` 与本次失败均保留；停止 Windows 重试、资源测量和工具安装。后继 goal49 在发布说明列明批准延期及缺项，模板验收在主仓库正式公开后由维护者安排。
+2026-11-20 维护者裁定（[D-185](../../spec/adr/DECISIONS.md)）：①“批准 Windows 实跑延期”；②模板“等主仓库正式公开后验收”。本决定覆盖下列历史派发语句中的 Windows 实跑门槛；历史五平台目标原文保留。Windows run `44695663481` 在分配 runner 前因付款或支出限额失败，零 step、零 artifact；工具核对、平台/恢复/CGO/GORM 实际执行全部保留「未运行」，交叉构建单列。原 2026-11-19 探测 run `44492249496` 与本次失败均保留；停止 Windows 重试、资源测量和工具安装。后继 goal49 在发布说明列明批准延期及缺项，模板 CI 待主仓库正式公开后验收；已完成的候选 SDK 版本与本地功能核对保留，正式 SDK tag 由维护者发布前替换。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-47（切片 T-10.2：五平台构建与运行）。goal 目录 goal-47，分支 goal-47，worktree .worktrees/goal-47，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
@@ -345,7 +345,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-48 · T-10.3 现有资源实测与维护者决定归档
 
-状态：等待 goal-46 稳定输入后文档收口。2026-11-20 维护者接受当前开销并要求停止该方面测量（D-184）；原四负载及 NoneBot2 对照取消新增运行。已批准的两组基准依赖及本地兼容预检保留历史，不再扩展基准实现。
+状态：已完成（PR #279，实际 main `44aeb7e5b1ebabd603e3a5bba0561e7f32c59ebd`，2026-11-20 07:50:24 UTC）。已锁定 head `db980b75` squash 合并；该 head 的 Quality44694052919（完整 Linux race、五目标构建，共 14m12s）及最新 metadata44697793408 均成功。goal-46 已合入 main `46c35d0e`，合并后 Quality44693804971 已成功；后继 goal-49 读取 [docs/benchmarks.md](../benchmarks.md) 的三轮实测、中位数、环境和原始记录。2026-11-20 维护者接受当前开销并要求停止该方面测量（D-184）；原四负载及 NoneBot2 对照取消新增运行。已批准的两组基准依赖及本地兼容预检保留历史，不再扩展基准实现。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-48（切片 T-10.3：现有资源实测与维护者决定归档）。goal 目录 goal-48，分支 goal-48，worktree .worktrees/goal-48，从最新 origin/main 创建。
@@ -361,9 +361,9 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-49 · T-10.4 发布资产与说明
 
-状态：等待前置整合（goal47 按 D-185 完成，PR #280 待父审与最终 head CI；T-10.3 / goal-48 待实际合并）。正式签名与发布由维护者在其控制的环境中执行。
+状态：等待 goal47 实际合并（按 D-185 完成，PR #280 待父独立终审与最终 head CI）；T-10.3 / goal-48 已通过 PR #279 合入 main `44aeb7e5`，发布说明读取 [资源实测记录](../benchmarks.md)。正式签名与发布由维护者在其控制的环境中执行。
 
-2026-11-20 裁定补充（[D-185](../../spec/adr/DECISIONS.md)）：发布说明保留 Windows 实跑批准延期、原分配前失败和完整未运行清单；下列模板条目的 SDK 版本、候选 CI 与使用验收统一在主仓库正式公开后执行。维护者已明确模板“等主仓库正式公开后验收”。
+2026-11-20 裁定补充（[D-185](../../spec/adr/DECISIONS.md)）：发布说明保留 Windows 实跑批准延期、原分配前失败和完整未运行清单；下列模板条目的 CI 待主仓库正式公开后验收；已完成的候选 SDK 版本与本地功能核对保留，正式 SDK tag 由维护者发布前替换。维护者已明确模板“等主仓库正式公开后验收”。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-49（切片 T-10.4：发布资产与说明）。goal 目录 goal-49，分支 goal-49，worktree .worktrees/goal-49，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
