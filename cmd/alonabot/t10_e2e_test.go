@@ -237,6 +237,47 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 	c.management(t, dir, token, "restart", "echo")
 	send("/echo after restart", "after restart")
 	call(http.MethodGet, "/plugins/showcase/status", "", "", "", true, http.StatusOK)
+	for _, path := range []string{"/status", "/page"} {
+		call(http.MethodGet, "/plugins/showcase"+path, "", "", "", false, http.StatusUnauthorized)
+	}
+	page, _ := call(http.MethodGet, "/plugins/showcase/page", "", "", "", true, http.StatusOK)
+	for _, text := range []string{`href="kit.css"`, `src="kit.js"`, "window.AlonaBot.request", "window.AlonaBot.t"} {
+		if !strings.Contains(string(page), text) {
+			t.Fatalf("showcase page is missing %q", text)
+		}
+	}
+	// 页面保持管理认证，套件由真实插件按静态资源公开提供。
+	for _, resource := range []struct{ file, mime string }{{"kit.js", "text/javascript"}, {"kit.css", "text/css"}} {
+		var etag string
+		for _, conditional := range []bool{false, true} {
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+address+"/plugins/showcase/"+resource.file, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Host = base.Host
+			if conditional {
+				request.Header.Set("If-None-Match", etag)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, readErr := io.ReadAll(response.Body)
+			if err := errors.Join(readErr, response.Body.Close()); err != nil {
+				t.Fatal(err)
+			}
+			if conditional {
+				if response.StatusCode != http.StatusNotModified || len(data) != 0 {
+					t.Fatalf("conditional resource %s: %d %s", resource.file, response.StatusCode, data)
+				}
+			} else {
+				etag = response.Header.Get("ETag")
+				if response.StatusCode != http.StatusOK || len(data) == 0 || etag == "" || !strings.HasPrefix(response.Header.Get("Content-Type"), resource.mime) {
+					t.Fatalf("public resource %s: %d %v", resource.file, response.StatusCode, response.Header)
+				}
+			}
+		}
+	}
 	c.management(t, dir, token, "pin", "echo", "0.1.0")
 	c.management(t, dir, token, "pin", "echo", "")
 	c.management(t, dir, token, "disable", "echo")
