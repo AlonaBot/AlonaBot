@@ -805,6 +805,17 @@ env ALONABOT_BROWSER_ASSET=docker go test -race -count=1 -timeout=0 ./cmd/alonab
 
 本地自测（`*_local_test.go`，未提交）也随上述 race 命令通过：state 的 `TestPermissionsRoundTripLocal` 覆盖许可空集、字典序、授权/撤销幂等、插件隔离、关闭重开持久化和安装外键；policy 的 `TestCheckSendLocal` 覆盖回复豁免、跨插件附件、后台授权/撤销及查询取消时的完整错误；sdk 的 `TestSendBeforeReadyLocal` 覆盖无 Session、尚未就绪与 stopping 时的 FAILED_PRECONDITION。
 
+### 3.4 发布前跨组件证据汇总
+
+当前 goal-46 候选基于 main `cb5acc79`；以下是 2026-11-20 在 darwin/arm64 上实际执行的增量证据。历史分项保留；完整逐 V 汇总随本切片后续任务更新。临时程序和 SDK 绑定回归按 D-86 保存在本地 `*_local_test.go`，源、正式包与完整日志保存在本地 `goal-46/evidence/`，PR 记录可复查位置。
+
+| 分项 | 实际入口与命令 | 结果与具体观察 |
+| --- | --- | --- |
+| V-01 / 满准入与取消；Service 生命周期 | `go test -race ./internal/app -run '^TestServiceChain/(tcp\|stdio)/(admission-and-malformed\|cancellation-exit-replacement\|deadline-draining-and-target-exit)$' -count=1 -v` | 通过，测试 3.54s / 包 6.353s，`GN46-08-service.log`。真实独立进程，TCP/stdio 各三项；满目标槽/全局字节预算拒绝未运行目标，Cancel 仍可完成，迟到响应到齐后预算归零；退出/替换、父期限与排空交接通过。 |
+| V-01 / Cancel 实际帧因果顺序 | 本地 `cmd/alonabot/cross_protocol_local_test.go:TestCrossCancelOrderLocal`；`go test -race ./cmd/alonabot -run '^TestCrossCancelOrderLocal$' -count=1 -v` | 通过，测试 0.00s / 包 7.518s，`GN46-08-cancel-once.log`。loopback TCP 与 OS 双管道均观察 Request 后才有同 Session/方向/call_id 的 Cancel；预取消未写帧，满准入拒绝新调用，迟到成功仅回收并保留本地 CANCELLED。初次探针重复调用 NewSession 已自动执行的 Start 导致 race；修正探针，完整原错 `GN46-08-cancel.log` 保留。 |
+| V-09、V-89 / 上传消费租约 | 本地 `internal/core/media/cross_lease_local_test.go:TestCrossMediaLeaseLocal`；`go test -race ./cmd/alonabot ./internal/core/media -run '^TestCross(RunningJob\|MediaLease)Local$' -count=1 -v` | 通过，media 包 2.897s，`GN46-08-resources.log`。真实 Store/Mux/文件系统：owner Session 释放后原 token 撤销，Adapter 只读租约仍能读取原字节，禁止二次委托且文件仍占磁盘预算；显式释放、context 取消、绝对期限 Sweep 三种结束均回收文件/token/预算。该 Store 分项无传输；完整媒体字节跨 TCP/stdio 由正式 t10 capabilities 的不同 media 程序和 Telegram 模拟服务覆盖。 |
+| V-14、V-78 / 超时仍实际运行的 job | 本地 `cmd/alonabot/cross_resources_local_test.go:TestCrossRunningJobLocal`；同上联合命令 | 通过，测试 11.61s / CLI 包 21.709s。`resources/` 保留 gn46-held-job 独立源码、正式 pack 包、双传输 Core 日志与计数。真实 SDK callback 在 200ms job 期限后观察取消，再阻塞于外部闸门；跨完整下一 interval 仍仅一次运行、Active 保持，暂停后释放实际 callback、恢复后未来 tick 再运行。休眠调度与资源预算部分继续待 goal174 联验。 |
+
 ## 4. 实施交接
 
 1. 采用 v0.6-review 技术基线，按 PLAN 的 T-01 开始；任务完成条件及部分验收的后续承接以详细工作包为准。
