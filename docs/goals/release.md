@@ -10,8 +10,8 @@
 | goal-74 | T-14.4 | 首次运行与预装 | T-09.6、T-14.3 | 已完成（PR #235） |
 | goal-77 | T-14.5 | 容器镜像 | T-07.6、T-14.3 | 已完成（PR #231） |
 | goal-85 | T-14.7 | install.sh | T-14.3 | 已完成（PR #236） |
-| goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 待派发 |
-| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 等待前置 |
+| goal-75 | T-14.6 | 发行包与镜像端到端验收 | T-09.11、T-14.4、T-14.5 | 已完成（PR #275） |
+| goal-46 | T-10.1 | 证据汇总与跨组件联验 | T-02.3、T-03.11、T-03.23、T-04.10、T-04.11、T-05.5、T-08.9、T-08.13、T-09.11、T-09.27、T-11.4、T-12.7、T-13.4、T-14.6、T-14.7、T-16.2 | 待派发 |
 | goal-47 | T-10.2 | 五平台构建与运行 | T-10.1 | 等待前置 |
 | goal-48 | T-10.3 | 资源比较报告与常驻内存预算核对 | T-10.1 | 等待前置 |
 | goal-49 | T-10.4 | 发布资产与说明 | T-10.2、T-10.3 | 等待前置 |
@@ -207,7 +207,7 @@
 
 ### goal-75 · T-14.6 发行包与镜像端到端验收
 
-状态：待派发。T-09.11（goal-45，PR #272）的正式流程、三类 Unix 场景与 T-08/T-09 联验已完成，原始证据与未运行项见 TEST-MATRIX §3.2；T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）和 T-09.9（PR #259，`661cf9b1`）已合并。2026-11-19 按 goal-45 候选 `8f62c0bb` 与 main `c2d4774d` 复核以下现行页面、API 与构建入口；执行前确认 PR #272 已合并。
+状态：已完成（PR #275），合并提交 `8a039310`。最终 head `72183ded` 的 [Quality gate](https://github.com/AlonaBot/AlonaBot/actions/runs/44631679053) 与 [PR metadata](https://github.com/AlonaBot/AlonaBot/actions/runs/44634909628) 通过；验收证据见 TEST-MATRIX §3.2。以下保留派发时语句。T-09.11（goal-45，PR #272）的正式流程、三类 Unix 场景与 T-08/T-09 联验已完成，原始证据与未运行项见 TEST-MATRIX §3.2；T-14.4（PR #235，`815e53c`）、T-14.5（PR #231，`97aafdf`）和 T-09.9（PR #259，`661cf9b1`）已合并。2026-11-19 按 goal-45 候选 `8f62c0bb` 与 main `c2d4774d` 复核以下现行页面、API 与构建入口；执行前确认 PR #272 已合并。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-75（切片 T-14.6：发行包与镜像的端到端验收）。goal 目录 goal-75，分支 goal-75，worktree .worktrees/goal-75，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」，确认 T-09.11 / goal-45 已合并。
@@ -263,7 +263,7 @@ V-70 补充分项：核对 linux/amd64 与 linux/arm64 的实际镜像运行记�
 
 ### goal-46 · T-10.1 证据汇总与跨组件联验
 
-状态：等待前置（T-14.6 / goal-75）。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)。2026-11-19 按候选 `8f62c0bb` 与 main `c2d4774d` 复核；完整前置仍以 spec/plan/release.md 的 T-10.1 行为准，包含 T-09.27 / goal-177 与 T-16.2 / goal-82。goal-44 为 T-09.9，是 goal-45 的前置。本条保留首次发布联验与必要修复，前置合并后由审查者更新派发状态。
+状态：待派发。T-10.1 的全部前置已合并；T-14.6 / goal-75（PR #275，`8a039310`）交付真实归档、双架构镜像与浏览器联验。2026-11-20 按该合并点复核现行入口，派发前确认合并后 main 的 Quality gate 通过。T-09.11（goal-45，PR #272）提供 `scripts/scenarios/run.py` 的 build/management/build-recovery/recovery/survivor 五个入口，实际调用方式见[场景说明](../../scripts/scenarios/README.md)；普通 Core、包与故障 overlay 分别构建后作为明确输入消费。Unix 场景使用 FIFO，Windows 的实际恢复由 goal-47 对应入口验收。完整前置以 spec/plan/release.md 的 T-10.1 行为准，包含已合并的 T-09.27 / goal-177 与 T-16.2 / goal-82。复用 goal-75 的有效资产及原始证据，在本切片更新 TEST-MATRIX 的历史总述和完整 CI 引用。S-06.2 / goal-174 的固定 Linux 测量仍在途，按实际合并状态消费其公开入口并保留具体待联验项；由原 Core 执行者完成资源归因。
 
 ```text
 /goal 使用 $alonabot-execute 推进 goal-46（切片 T-10.1：证据汇总与跨组件联验）。goal 目录 goal-46，分支 goal-46，worktree .worktrees/goal-46，从最新 origin/main 创建。开始前完整读取 docs/goals/README.md「所有 goal 的共同约束」。
