@@ -31,7 +31,10 @@ const maxToolDescriptionBytes = 1024
 
 const scheduleRoutePrefix = "job."
 
-var taskNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
+// 动态任务名的字符与长度分开检查，避免编译展开有界重复。
+const maxTaskNameLength = 64
+
+var taskNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
 
 const taskRoutePrefix = "task."
 
@@ -157,7 +160,7 @@ func register(r *pb.Register, isAdapter bool) error {
 			}
 		case pb.RouteKind_ROUTE_KIND_TASK:
 			name := route.GetTask().GetName()
-			if !taskNamePattern.MatchString(name) || route.GetRouteId() != taskRoutePrefix+name {
+			if len(name) > maxTaskNameLength || !taskNamePattern.MatchString(name) || route.GetRouteId() != taskRoutePrefix+name {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "task route %q has invalid name or route_id", route.GetRouteId())
 			}
 			if tasks[name] {

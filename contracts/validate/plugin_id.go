@@ -17,7 +17,7 @@ const (
 
 var (
 	marketID = regexp.MustCompile(`^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
-	localID  = regexp.MustCompile(fmt.Sprintf(`^[a-z][a-z0-9_-]{0,%d}$`, MaxPluginIDLen-1))
+	localID  = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`) // 长度由 PluginID 先行检查，避免展开有界重复。
 )
 
 // reservedNames 收录 Windows 保留设备名，它们作为路径组件在 Windows 上不可用。
