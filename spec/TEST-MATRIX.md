@@ -1042,7 +1042,7 @@ V-77 的休眠/并发唤醒/取消/快照故障、V-78 的休眠调度/占槽、
 
 ### 3.6 五平台运行增量（T-10.2 / V-32、V-34）
 
-2026-11-20，goal47 的固定源码基于 goal46 `eb01ed6c75cdde59963c4acdcd1b6db5d94e6bd7`。本节记录该候选的实际平台结果；最终消费 goal46/174 稳定输入后，按产品差异补受影响验证。`scripts/platform` 仅经 `os/exec` 和 HTTP 驱动真实 Core、Adapter 与插件，fixture 源码、JSON、日志、overlay 和数据库留在 ignored `goal-47/evidence/`，随 PR 提供可复查位置。
+2026-11-20，goal47 的固定源码基于 goal46 `eb01ed6c75cdde59963c4acdcd1b6db5d94e6bd7`。本节保留该候选的实际平台结果。父已交付最终产品输入 goal46 `648d3d38`；GN47-13 将普通 merge 该固定输入，按产品差异补受影响的四平台验证。`scripts/platform` 仅经 `os/exec` 和 HTTP 驱动真实 Core、Adapter 与插件，fixture 源码、JSON、日志、overlay 和数据库留在 ignored `goal-47/evidence/`，随 PR 提供可复查位置。
 
 #### linux/amd64：instabox VM 完整通过
 
@@ -1065,7 +1065,7 @@ uv run --no-project --offline --no-python-downloads \
 | 管理与事务恢复 | 七个实际产物均 `linux/amd64`；源码 HEAD 与 Core revision 同为 `a77824c3`。原 management、七个 recovery 窗口与 survivor/started 的完整断言均 PASS，事件 52/136/16 行；保留 Active、Journal、真实业务 DB、旧写入者持锁/Degraded/启动计数和恢复后 DB=41 等原断言及数据库。 |
 | CGO 实际支持 | 已有 GCC `14.2.0`，`CGO_ENABLED=1`、`-O2 -g`、`-lm`，构建记录包含成功 `go_env`、CC 版本及 `go build -x -work`；真实 HTTP 返回 `value=9`、`os=linux`、`arch=amd64`、PID `300628`，与激活 PID 相同。直接链接 `libm.so.6`、`libc.so.6`；支持范围为本次 math 库 fixture。 |
 
-原始远端根为 `/data/home/user/goal47-linux-amd64-a77824c3-run01`；`result.json`、`session.json`、`logs/`、`artifacts/` 和 `tmp/alonabot-platform-3603207358/` 保留完整命令、104 份 Core 日志、七产物、overlay、运行数据与数据库。本地原始 JSON 为 `goal-47/evidence/GN47-10/remote-result/`，逐项结果核对记录为同证据根的 `linux-evidence-audit.json`。完整远端归档为 `/data/home/user/goal47-platform-input-a77824c3/evidence-run01.tar.gz`（516203198 字节）；本地完整归档回收与日志/数据库库存复查继续由本叶执行者收尾。Darwin 原生、Docker linux/arm64 与 Rosetta darwin/amd64 证据见下文。Windows 实际运行与 Actions billing 按用户安排留最后；既有 Windows/Linux 交叉构建仍单列。
+原始远端根为 `/data/home/user/goal47-linux-amd64-a77824c3-run01`；`result.json`、`session.json`、`logs/`、`artifacts/` 和 `tmp/alonabot-platform-3603207358/` 保留完整命令、104 份 Core 日志、七产物、overlay、运行数据与数据库。本地原始 JSON 为 `goal-47/evidence/GN47-10/remote-result/`，逐项结果核对记录为同证据根的 `linux-evidence-audit.json`。完整远端归档为 `/data/home/user/goal47-platform-input-a77824c3/evidence-run01.tar.gz`（516203198 字节）。原 pull session `17303` / PID `7388` 于 GN47-11 终态退出 1，原错 `pull /data/home/user/goal47-platform-input-a77824c3/evidence-run01.tar.gz: unexpected EOF`；此前最后观测临时数据 264511488 字节，CLI 退出后临时文件与最终目标均不存在。终态记录 `GN47-10/archive-transfer-terminal.json`，已接受的本地原始 JSON 保持有效；父已接管同一原始归档的 SSH 回收；取得本地归档后，由本叶执行者完成日志/数据库库存复查。Darwin 原生、Docker linux/arm64 与 Rosetta darwin/amd64 证据见下文。Windows 实际运行与 Actions billing 按用户安排留最后；既有 Windows/Linux 交叉构建仍单列。
 
 #### darwin/arm64：Apple Silicon 原生完整通过
 
@@ -1114,7 +1114,7 @@ docker exec --env TMPDIR=/tmp/goal47-platform-run02 \
 | CGO 实际支持 | GCC `14.2.0`，`CGO_ENABLED=1`、`-O2 -g`、`-lm`；真实 HTTP 返回 C 值 `9`、`linux/arm64`、PID `9532`，与激活 PID 一致。直接链接 `libm.so.6`、`libc.so.6`，构建命令、原始输出与归档保留；支持范围为本次 math 库 fixture。 |
 | 本地完整取证 | 容器工作区 `/tmp/goal47-platform-run02/alonabot-platform-303955508` 已复制到 `goal-47/evidence/GN47-08/run02/native-tmp/`；104 份非空 Core 日志、七 ELF 产物、三恢复日志/events/cwd、10 个状态库和 19 个业务库文件库存通过。三个 gateprobe 库为原场景生成的空文件，另 16 个业务库含真实表；CGO 归档入口与二进制逐字节一致，凭证扫描通过，记录在 `evidence-audit.json`。 |
 
-完整命令与原始输出分别在 `run01/preparation.json`、`run01/session.json`、`run02/session.json` 及各自日志；首轮失败、共享/本地锁对照和全部原始数据保留。Rosetta 结果见下文；Windows 实际运行及最终全仓门槛继续由后继闭合，Windows/Billing 按用户安排留最后。
+完整命令与原始输出分别在 `run01/preparation.json`、`run01/session.json`、`run02/session.json` 及各自日志；首轮失败、共享/本地锁对照和全部原始数据保留。Rosetta 结果见下文；该候选全仓门槛见本节末；Windows 实际运行与最终产品输入的增量验收继续由后继闭合，Windows/Billing 按用户安排留最后。
 
 #### darwin/amd64：Rosetta 架构仿真完整通过
 
@@ -1142,7 +1142,26 @@ arch -x86_64 "$run_root/artifacts/platform" \
 | CGO 实际支持 | 宿主原生 Apple clang `21.0.0 (clang-2100.3.34.2)` 生成 amd64 插件，`CGO_ENABLED=1`、`-O2 -g`、`-arch x86_64`、显式 SDK。Rosetta 中的真实 HTTP 返回 C 值 `9`、`darwin/amd64`、PID `30239`，与激活 PID 一致；直接链接 `libSystem.B.dylib`、`libresolv.9.dylib`、CoreFoundation、Security。支持范围为本次 math 库 fixture。 |
 | 完整本地库存 | `GN47-09/evidence-audit.json` 核对 104 份非空 Core 日志、全部产物的 amd64 身份、三场景原日志/events/cwd、10 个状态库和 19 个业务库文件。其中三个 gateprobe 文件原为 0 字节，另 16 个业务库含表；CGO 原记录与结果逐字段一致，归档入口与二进制逐字节一致，凭证扫描通过。初次库存脚本误设普通包入口为 `bin/`，改按实际 manifest 的 `entrypoint: component` 核对后通过，`audit-01.log` 原错保留。 |
 
-全部命令、构建记录与原始数据位于 `goal-47/evidence/GN47-09/`；完整工作区为 `run01/tmp/alonabot-platform-3398410509/`，运行 cwd 与 data_dir 为其 `cwd/` 和 `data/`，均脱离源码。最终原始结果为 `run01/result.json`，库存检查命令 `uv run --no-project --offline --no-python-downloads goal-47/evidence/GN47-09/audit_evidence.py` 退出 0，日志 `audit-02.log`。Windows 实际运行/CGO、全仓门槛与最终 goal46/174 输入继续按后继卡闭合。
+全部命令、构建记录与原始数据位于 `goal-47/evidence/GN47-09/`；完整工作区为 `run01/tmp/alonabot-platform-3398410509/`，运行 cwd 与 data_dir 为其 `cwd/` 和 `data/`，均脱离源码。最终原始结果为 `run01/result.json`，库存检查命令 `uv run --no-project --offline --no-python-downloads goal-47/evidence/GN47-09/audit_evidence.py` 退出 0，日志 `audit-02.log`。该候选全仓门槛见下文；Windows 实际运行/CGO 与固定最终产品输入的增量验收继续按后继卡闭合。
+
+#### GN47-11 固定候选的全仓门槛
+
+GN47-11 在 `45e14b27bfb772aef02319c7b9faf2f68e95a762` 的干净 clone 执行门槛，覆盖 111 个已提交包；平台本地回归和四环境实跑沿既有有效证据复用。实际环境为本机 `darwin/arm64`、Go `1.27.1`，`GOMAXPROCS=2`、`GOFLAGS=-p=1`、`GOPROXY=off`，使用既有原生 C 工具链与 SDK。完整命令、环境、PID、原始输出、退出码及耗时保留在 `goal-47/evidence/GN47-11/gates.json` 和 `logs/`；源码为同证据根的 `source/`。
+
+| 检查 | 实际状态 |
+| --- | --- |
+| `gofmt -l` 全部 tracked Go 文件 | 通过，无输出。 |
+| `go vet ./...`，darwin/arm64 | 通过，退出 0，9.553s。 |
+| `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...` | 通过，退出 0，22.440s；静态检查。 |
+| `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go vet ./...` | 通过，退出 0，14.710s；静态检查。 |
+| `go test -p 1 -race -count=1 ./...`，darwin/arm64 | 通过，退出 0，955.796s；111 个包均有终态，27 个含测试，其余为 `[no test files]`。 |
+| `CGO_ENABLED=0 go build ./...`，linux/amd64 | 通过，退出 0，6.920s；构建检查。 |
+| 同上，linux/arm64 | 通过，退出 0，13.171s；构建检查。 |
+| 同上，windows/amd64 | 通过，退出 0，7.579s；构建检查。 |
+| 同上，darwin/amd64 | 通过，退出 0，13.838s；构建检查。 |
+| 同上，darwin/arm64 | 通过，退出 0，7.204s；构建检查。 |
+
+GN47-11 共 20 个命令全部退出 0，会话总耗时 1051.866s；源码运行前后均干净。`finish_gates.py` 汇总检查退出 0，`acceptance-map.json` 对照 111 包输出、平台程序仅标准库导入及四平台既有 1082 步／104 runs 结果，记录其候选身份和未闭合依赖。
 
 ## 4. 实施交接
 
