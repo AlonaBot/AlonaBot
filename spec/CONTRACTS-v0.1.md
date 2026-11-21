@@ -778,19 +778,19 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 官方组件的包 ID 固定为 `alonabot-adapter-telegram`、`alonabot-adapter-onebot11`、`alonabot-agent-official`、`alonabot-webui-admin`、`alonabot-plugin-help-official`；示例使用 `alonabot-plugin-configdb`、`alonabot-plugin-devbot` 与 `alonabot-adapter-devbot`。`adapter_id` 仍为 `telegram`、`onebot11` 或 `devloop`。整合发行默认包含 WebUI 与 Agent；Adapter 与 help 独立发行并按需安装。D-172 在首次发布前直接改名，状态库与开发数据目录需要重建；不提供旧市场 ID 别名或数据迁移。
 
-- 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `docker-compose.yml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
-- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中包含官方 Agent 与官方 WebUI 的组件包，以及各自归档外的 `release.json`、`.sig` 与 `release.pub`（§9.2）。Adapter 和 help 在各自独立仓库发布，由用户按需安装。Release 附件仅包含五个平台归档；GitHub 自动提供源码压缩包。`install.sh` 从主仓 `main/deploy/install.sh` 下载。
+- 发行归档与 `install.sh`（§15.6）安装纯 Core；容器镜像与 `docker-compose.yml`（§15.3）提供 Core、WebUI 与 Agent 整合包。
+- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），仅包含 `alonabot` 可执行文件（Windows 为 `alonabot.exe`）、AGPL `LICENSE` 与 `source.json` 源码版本记录。镜像使用的内部整合归档额外包含 `packages/`，收录官方 Agent 与官方 WebUI 的组件包，以及各自归档外的 `release.json`、`.sig` 与 `release.pub`（§9.2）。Adapter 和 help 在各自独立仓库发布，由用户按需安装。Release 附件仅包含五个平台归档；GitHub 自动提供源码压缩包。`install.sh` 从主仓 `main/deploy/install.sh` 下载。
 - 官方 WebUI 分别提供 linux/amd64、linux/arm64、windows/amd64、darwin/amd64 与 darwin/arm64 平台包；每包携带相应的后台进程与同一份 dist。首次启用官方 WebUI 时运行其组件进程，Agent 默认保留未启用状态。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
-- 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，整合包默认启用官方 WebUI，Agent 只安装不启用。需要 AI 对话时，管理员配置 Provider 与模型后启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。Adapter 由用户按需安装；`core_config.json` 的 `adapters` 中有实例时自动启用。某个官方 Adapter 已配置实例但尚未安装时，Core 先查 `packages/`，缺失时从该 Adapter 独立仓库的最新 Release 下载，验证确切来源、组件 ID、官方公钥、签名和归档摘要后安装。首次预装与后续整合更新只信任组件 ID 对应的官方仓库。
-- 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从 `packages/` 重装（§9.3，D-149）。
+- 纯 Core 在空数据目录首次启动时组件清单为空；存在相邻 `packages/` 的整合部署在首次初始化时按普通安装流程安装其中的全部包，整合包默认启用官方 WebUI，Agent 只安装不启用。需要 AI 对话时，管理员配置 Provider 与模型后启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。Adapter 由用户按需安装；`core_config.json` 的 `adapters` 中有实例时自动启用。某个官方 Adapter 已配置实例但尚未安装时，Core 先查 `packages/`，缺失时从该 Adapter 独立仓库的最新 Release 下载，验证确切来源、组件 ID、官方公钥、签名和归档摘要后安装。首次预装与后续整合更新只信任组件 ID 对应的官方仓库。
+- 管理员可以用 `install --source <来源> --replace` 把任一官方 Adapter、Agent 或 WebUI 换成社区组件（§9.3）；之后不再从官方来源更新该组件。卸载或损坏 WebUI 后，用 `alonabot install <官方 WebUI 的组件 ID>` 从整合部署的 `packages/` 重装；纯 Core 部署使用 `alonabot install --source AlonaBot/alonabot-webui`（§9.3，D-149），安装后显式启用。
 - 之后不再自动安装，已卸载的预装包不会在下次启动时重新安装。新版本发行包中的包版本高于已安装版本时，作为可用更新列在管理界面与 `alonabot list` 中，由管理员确认后按 `update` 流程更新。Core 本身通过替换可执行文件升级，新版本按 §5.5 校正 `core_config.json`，不改写文件。
 - 官方 help 插件由 `AlonaBot/alonabot-plugin-help` 独立发行，按需安装。组件导出 `New() *sdk.Plugin`，独立进程入口为 `cmd/alonabot-help`。`/help` 与 `/whoami` 默认要求 `user`，均为零参数命令。`/help` 经 `command.List` 列出当前会话可用的主名、别名与本地化说明，参数用法由 Core 的 usage 回复给出；`/whoami` 回复用户字符串与收到消息的实例名，无 Actor 时回复对应提示。welcome（新成员入群时发送欢迎语）与 rss（订阅 RSS/Atom 并推送到聊天）完成后按组件仓库独立发行。
 - 第一个 Core Admin 的产生：安装并启用 help 后，用户在聊天中发送 `/whoami` 取得自己的用户字符串，管理员把它写入 `core_config.json` 的 `admins`，或在 WebUI 的 Core 设置页、`alonabot admin add` 中添加。预装插件与第三方插件一样以独立进程运行，只有启用的才运行。
 
 ### 15.3 容器镜像
 
-- 每个版本发布官方容器镜像 `ghcr.io/alonabot/alonabot:<version>`（同时更新 `latest`），平台为 linux/amd64 与 linux/arm64。镜像内容与该平台的发行归档相同：`alonabot` 可执行文件与 `packages/`，另含 CA 证书；不含 shell、Node 或 Python，需要这些运行时的 MCP stdio 服务器须使用自行构建的镜像。
+- 每个版本发布官方容器镜像 `ghcr.io/alonabot/alonabot:<version>`（同时更新 `latest`），平台为 linux/amd64 与 linux/arm64。镜像从该平台的内部整合归档构建：包含 `alonabot`、`LICENSE`、`source.json`、Agent 与 WebUI 的 `packages/`，另含 CA 证书；不含 shell、Node 或 Python，需要这些运行时的 MCP stdio 服务器须使用自行构建的镜像。
 - 镜像以非 root 用户（UID 10001）运行 `alonabot run --data-dir /data`，数据目录 `/data` 是卷。容器须以 Docker 的 init 运行（`docker run --init` 或 compose 的 `init: true`），由它回收孤儿进程；Core 不承担 PID 1 的回收职责。
 - 镜像设置环境变量 `ALONABOT_CONTAINER=1`，`core_config.json` 的缺省 `listen` 改为 `0.0.0.0:7650`，`base_url` 的缺省值不变（`http://127.0.0.1:7650`）。只有在这个环境变量下，Core 才允许非本机的 listen 搭配本机 http 的 `base_url`；容器的端口只应发布到宿主的本机地址（`127.0.0.1:7650:7650`），Core 启动时为此输出一条 WARN 提示。远程访问按 §15.1 使用 SSH 隧道或 HTTPS 反向代理。Adapter 的凭证可以经 `${环境变量}` 从容器环境传入。
 - 容器首次启动时没有交互终端，Core 把一次性管理 token 写入 `/data/admin_token`（§7.4）。镜像不含 shell，用 `docker compose exec alonabot alonabot admin-token show` 读出它，登录成功后该文件被删除。
@@ -842,7 +842,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 
 ### 15.6 install.sh
 
-- `install.sh` 在 Linux（需要 systemd）与 macOS（launchd）上安装 Core 与官方组件并注册系统服务（D-64）；其他系统与没有 systemd 的 Linux 在改动任何文件之前报错退出，提示改用发行归档或容器镜像。脚本只依赖 POSIX sh、`curl`、`tar`，以及 `sha256sum`（Linux）或 `shasum`（macOS）。
+- `install.sh` 在 Linux（需要 systemd）与 macOS（launchd）上安装 Core 并注册系统服务（D-64）；其他系统与没有 systemd 的 Linux 在改动任何文件之前报错退出，提示改用发行归档或容器镜像。脚本只依赖 POSIX sh、`curl`、`tar`，以及 `sha256sum`（Linux）或 `shasum`（macOS）。
 
 | | Linux | macOS |
 | --- | --- | --- |
@@ -851,10 +851,10 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | 数据目录 | `/var/lib/alonabot` | `~/Library/Application Support/AlonaBot/data` |
 | 服务 | systemd 单元 `alonabot.service`，以系统用户 `alonabot` 运行 `alonabot run --data-dir <数据目录>`，开机启动 | 用户 LaunchAgent `io.github.alonabot`，登录后启动 |
 
-- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档，并使用 GitHub Release API 的资产 SHA256 摘要校验（自定义镜像站下载同一 Release 的 `SHA256SUMS`），不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 与 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），token 只在当前终端显示一次 → 写入服务定义并启动服务。
+- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档，并使用 GitHub Release API 的资产 SHA256 摘要校验（自定义镜像站下载同一 Release 的 `SHA256SUMS`），不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 并清理旧的相邻 `packages/` 安装介质；自定义镜像站仍提供整合归档时复制其 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），token 只在当前终端显示一次 → 写入服务定义并启动服务。
 - 以 `curl … | sh` 运行时，初始化从 `/dev/tty` 读写终端；没有可用终端时跳过初始化，Core 首次启动时按 §15.1 把一次性 token 写入数据目录的 `admin_token`，脚本输出读取它的命令（`alonabot admin-token show --data-dir <数据目录>`）。
-- 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 校正设置），新版本 `packages/` 中更高版本的官方组件按 §15.2 作为可用更新列出。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
-- 只经 HTTPS 下载。官方归档与摘要来自同一 GitHub Release，自定义镜像站使用同版本的 `SHA256SUMS` 校验下载完整性；归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
+- 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 校正设置），组件从各自来源独立更新；自定义整合归档中的更高版本组件按 §15.2 列为可用更新。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
+- 只经 HTTPS 下载。官方归档与摘要来自同一 GitHub Release，自定义镜像站使用同版本的 `SHA256SUMS` 校验下载完整性；自定义整合归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
 
 ## 16. 调优参数
 
