@@ -1,4 +1,4 @@
-# 官方整合包；Release 上传副本时固定为该 Release 对应的镜像版本。
+# 官方整合包；从对应发行 tag 下载此文件，镜像版本与该 tag 一致。
 services:
   alonabot:
     image: ghcr.io/alonabot/alonabot:0.1.0

@@ -4,11 +4,13 @@ AlonaBot 首个正式版本，提供五平台归档、官方签名组件和 Core
 
 ## 发行内容
 
-五个目标分别提供 `alonabot-0.1.0-<os>-<arch>.tar.gz`，Windows 使用 `.zip`。归档包含 Core 与相邻的 `packages/`，WebUI 与 Agent 两个组件各有平台包、`release.json`、`release.json.sig` 和 `release.pub`。Release 附件仅提供五个平台归档，源码压缩包由 GitHub 自动提供。`install.sh` 从主仓 `main/deploy/install.sh` 下载，固定版本的 `docker-compose.yml` 从对应 tag 下载；官方安装器使用 GitHub Release API 的资产摘要校验归档。整合构建先验签已发布组件，再原样收录资产，同时附带 AGPL 许可证与 `source.json` 源码版本记录。五个官方组件均采用 AGPL-3.0-only。Core 与整合的两个组件的版本均为 `0.1.0`，组件后续更新使用各自的版本号。
+五个目标分别提供 `alonabot-0.1.0-<os>-<arch>.tar.gz`，Windows 使用 `.zip`。公开归档仅包含 Core 可执行文件、`LICENSE` 和 `source.json`；WebUI、Agent 与 Adapter 按需安装。Release 附件仅提供五个平台归档，源码压缩包由 GitHub 自动提供。`install.sh` 从主仓 `main/deploy/install.sh` 下载，固定版本的 `docker-compose.yml` 从对应 tag 下载；官方安装器使用 GitHub Release API 的资产摘要校验归档。镜像使用的内部整合归档先验签已发布组件，再原样收录资产，同时附带 AGPL 许可证与 `source.json` 源码版本记录。五个官方组件均采用 AGPL-3.0-only。Core 与整合的两个组件的版本均为 `0.1.0`，组件后续更新使用各自的版本号。
 
-首次启动预装 Agent 与 WebUI，启用 WebUI；Agent 配置 Provider 与模型后由管理员启用。Telegram、OneBot 11 Adapter 和 help 插件从各自独立仓库按需安装。整合发行、Dockerfile 与根目录 `docker-compose.yml` 保留在 Core 主仓。OneBot 11 当前仅支持接收，发送返回 `UNSUPPORTED`；welcome、rss 及 CONTRACTS §15.2 列出的 Telegram 后续功能留待后续发行。
+Compose 镜像首次启动预装 Agent 与 WebUI，启用 WebUI；Agent 配置 Provider 与模型后由管理员启用。Telegram、OneBot 11 Adapter 和 help 插件从各自独立仓库按需安装。整合发行、Dockerfile 与根目录 `docker-compose.yml` 保留在 Core 主仓。OneBot 11 当前仅支持接收，发送返回 `UNSUPPORTED`；welcome、rss 及 CONTRACTS §15.2 列出的 Telegram 后续功能留待后续发行。
 
-以下平台与资源数字记录拆仓前候选的历史验收；组件拆仓后的定向验证随对应 PR 记录。
+2026-11-21 经维护者批准，v0.1.0 五个平台归档原地从整合包改为纯 Core：保留原 Core 二进制与 tag，Compose 镜像继续提供整合包。旧归档摘要失效，请重新下载并按 GitHub Release API 的新摘要校验。数据目录中已有的组件继续保留。
+
+以下平台与资源数字记录拆仓前整合候选的历史验收；组件拆仓后的定向验证随对应 PR 记录。
 
 | 目标 | 已取得的实际运行结果 |
 | --- | --- |
@@ -26,14 +28,14 @@ AlonaBot 首个正式版本，提供五平台归档、官方签名组件和 Core
 
 预编译运行无需 Go 或 Node。Linux 自动安装需要 systemd 和 root，macOS 使用当前登录用户的 launchd。脚本依赖 POSIX sh、curl、tar 和 sha256sum/shasum，下载校验通过后才替换安装。
 
-手动解压时保留 Core 与 `packages/` 的相邻关系，在解压目录运行 `./alonabot run --data-dir ./data`；Windows 对应 `alonabot.exe`。浏览器打开 `http://127.0.0.1:7650`，按启动提示领取一次性管理 token，登录后按需安装 Adapter 并配置实例。需要 AI 对话时，配置 Agent 的 Provider 与模型再启用。help 插件可独立安装。
+手动解压后在该目录运行 `./alonabot run --data-dir ./data`；Windows 对应 `alonabot.exe`。首次组件清单为空；按启动提示领取管理 token，通过 CLI 按需安装组件。安装并启用 WebUI 后可在 `http://127.0.0.1:7650` 登录管理。Compose 已预装 WebUI 与 Agent，登录后按需安装 Adapter 并配置实例。需要 AI 对话时，配置 Agent 的 Provider 与模型再启用。help 插件可独立安装。
 
 Linux 服务的程序目录为 `/opt/alonabot`、数据目录为 `/var/lib/alonabot`；macOS 数据位于 `~/Library/Application Support/AlonaBot/data`。容器以 UID 10001 运行，使用独立 `/data` 卷、init 和 loopback 端口发布。镜像包含 Core、组件与 CA 证书；需要 shell、Node 或 Python 的 MCP stdio 服务应自行构建含相应运行时的镜像。远程管理使用 SSH 隧道或按[HTTP 入口说明](https://github.com/AlonaBot/AlonaBot/blob/main/docs/deployment.md#core-设置与-http-入口)配置 HTTPS 反向代理。
 
 ## 升级、回退与恢复
 
 1. 升级前正常停止 Core 与全部组件，备份完整 `data_dir`，同时保存当前 Core、`packages/` 和部署配置。外部数据库与框架目录外文件按组件说明另外备份；具体范围见[备份与恢复](https://github.com/AlonaBot/AlonaBot/blob/main/docs/deployment.md#备份与恢复)。
-2. 再次运行 `install.sh --version <版本>` 升级 Core，或替换手动安装的 Core 与完整 `packages/`；容器更新固定版本 tag 后重建服务并保留同一数据卷。设置、安装记录和组件数据保留，更高版本的内置组件先列为可用更新，由管理员确认。
+2. 再次运行 `install.sh --version <版本>` 升级 Core，或替换手动安装的 Core；容器更新固定版本 tag 后重建服务并保留同一数据卷。设置、安装记录和组件数据保留，更高版本的内置组件先列为可用更新，由管理员确认。
 3. 组件更新保持来源与发布者绑定，遵守 pin。用 WebUI 查看保留代次，或通过[代次 API](https://github.com/AlonaBot/AlonaBot/blob/main/spec/ADMIN-API.md)选择恢复目标，再执行 `alonabot rollback <组件ID> <代次ID>`；CLI 显示将舍弃的数据并要求确认。回退建立独立新代次与数据库副本。
 4. 需要整套恢复时，保持 Core 与组件停止，恢复备份对应的程序、完整数据目录及外部数据，再启动并核对登录、组件状态和业务数据。恢复备份会舍弃备份之后的写入；升级失败时先保存完整错误与现场。
 

@@ -1,4 +1,4 @@
-# 固定 tag 构建一次归档；原生双架构 runner 复用归档构建和验收镜像。
+# 固定源码构建公开 Core 归档与内部整合归档；双架构镜像消费整合产物。
 name: Release
 on:
   push:
@@ -34,12 +34,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go run ./scripts/dist --version "${TAG#v}" --public-key .github/release.pub --out dist
-          go run ./scripts/release-check --candidate dist --version "${TAG#v}" \
-            --public-key .github/release.pub --out "$RUNNER_TEMP/release-evidence"
+          go run ./scripts/dist --version "${TAG#v}" --public-key .github/release.pub --out dist/core
+          go run ./scripts/release-check --candidate dist/core --version "${TAG#v}" \
+            --public-key .github/release.pub --out "$RUNNER_TEMP/core-evidence"
+          go run ./scripts/dist --bundle --version "${TAG#v}" --public-key .github/release.pub \
+            --platforms linux/amd64,linux/arm64 --out dist/bundle
+          go run ./scripts/release-check --bundle --candidate dist/bundle --version "${TAG#v}" \
+            --platforms linux/amd64,linux/arm64 --public-key .github/release.pub --out "$RUNNER_TEMP/bundle-evidence"
       - name: 验收本次归档首次启动
         env:
-          ALONABOT_RELEASE_DIR: ${{ github.workspace }}/dist
+          ALONABOT_RELEASE_DIR: ${{ github.workspace }}/dist/core
+          ALONABOT_BUNDLE_DIR: ${{ github.workspace }}/dist/bundle
         working-directory: tests
         run: go test ./e2e -run '^TestFirstRunDistribution$' -count=1
       - name: 创建发行草稿
@@ -47,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$TAG" --verify-tag --draft --title "$TAG" \
-            --notes-file dist/release-notes.md dist/alonabot-*.tar.gz dist/alonabot-*.zip
+            --notes-file dist/core/release-notes.md dist/core/alonabot-*.tar.gz dist/core/alonabot-*.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: distribution
@@ -86,7 +91,7 @@ jobs:
           set -euo pipefail
           image="ghcr.io/alonabot/alonabot:${TAG#v}-$ARCH"
           mkdir -p "$RUNNER_TEMP/distribution"
-          tar -xzf "dist/alonabot-${TAG#v}-linux-$ARCH.tar.gz" -C "$RUNNER_TEMP/distribution" --strip-components=1
+          tar -xzf "dist/bundle/alonabot-${TAG#v}-linux-$ARCH.tar.gz" -C "$RUNNER_TEMP/distribution" --strip-components=1
           mkdir -p "$RUNNER_TEMP/distribution/data" "$RUNNER_TEMP/distribution/etc/ssl/certs"
           cp /etc/ssl/certs/ca-certificates.crt "$RUNNER_TEMP/distribution/etc/ssl/certs/"
           docker buildx create --use
@@ -97,7 +102,7 @@ jobs:
             --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
             --label org.opencontainers.image.licenses=AGPL-3.0-only \
             -t "$image" --load .
-          python3 scripts/release-smoke.py --compose dist/docker-compose.yml --image "$image"
+          python3 scripts/release-smoke.py --compose dist/bundle/docker-compose.yml --image "$image"
       - name: 推送已验收的平台镜像
         env:
           REGISTRY_TOKEN: ${{ github.token }}

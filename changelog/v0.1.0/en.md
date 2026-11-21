@@ -8,15 +8,17 @@ The first official AlonaBot release provides a signed component ecosystem, five 
 - Five archive targets: linux/amd64, linux/arm64, windows/amd64, darwin/amd64 and darwin/arm64. Windows uses ZIP; other targets use tar.gz.
 - Core, WebUI and Agent form the integrated distribution. The repository retains its Dockerfile, installer and root `docker-compose.yml`. WebUI is enabled on first start; configure a Provider and model before enabling Agent.
 - Telegram and OneBot 11 adapters and the help plugin are installed separately from their component repositories. OneBot 11 currently receives events; sending returns `UNSUPPORTED`.
-- Each independent component publishes its own signed `release.json`, signature, public key and platform archives. `components.lock.json` pins the released versions. Integrated archives verify and preserve the published component assets without rebuilding them. All five official components use AGPL-3.0-only.
+- Each independent component publishes its own signed `release.json`, signature, public key and platform archives. `components.lock.json` pins the released versions. Internal integrated archives for images verify and preserve the published component assets without rebuilding them. All five official components use AGPL-3.0-only.
 
 ## Install and upgrade
 
-Follow the [deployment guide](https://github.com/AlonaBot/AlonaBot/blob/main/docs/deployment.md). Archives retain Core alongside `packages/`, the license and `source.json`. The public image is `ghcr.io/alonabot/alonabot:0.1.0` (`latest` also points to this release). Open `http://127.0.0.1:7650` and use the one-time administration token. Compose binds the published port to loopback, runs as UID 10001 with init, and preserves `/data` in a named volume.
+Follow the [deployment guide](https://github.com/AlonaBot/AlonaBot/blob/main/docs/deployment.md). The five public archives contain only the Core executable, `LICENSE` and `source.json`; install WebUI, Agent and adapters separately as needed. The installer also installs Core and retains components already in the data directory. The public image is `ghcr.io/alonabot/alonabot:0.1.0` (`latest` also points to this release). Open `http://127.0.0.1:7650` and use the one-time administration token. Compose binds the published port to loopback, runs as UID 10001 with init, and preserves `/data` in a named volume.
 
 Stop Core and components before upgrading. Back up the complete data directory, deployed programs, packages and external component data. Replace the complete distribution or recreate the container with the same volume. Component updates retain source/publisher bindings and pin settings; rollback creates a new generation and database copy. The installer removes the service and programs on uninstall while retaining data.
 
 The scratch image includes CA certificates. MCP stdio tools requiring shell, Node or Python need a custom image containing those runtimes. Use an SSH tunnel or HTTPS reverse proxy for remote management.
+
+On 2026-11-21, with maintainer approval, the five v0.1.0 archives were repackaged in place from integrated distributions to Core-only distributions. The original Core binaries and tag remain unchanged, and Compose images remain integrated. Download the new archives and verify their new GitHub Release API digests; previous archive digests are obsolete. Existing installed components are retained.
 
 ## Recorded verification
 

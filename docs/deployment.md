@@ -4,7 +4,7 @@
 
 ## 选择安装方式
 
-从 [v0.1.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.1.0) 下载正式资产。整合包包含 Core、WebUI 与 Agent；Adapter 和 help 插件按需安装。具体平台实跑与已知限制见[发布说明](../changelog/v0.1.0/zh-CN.md)。
+从 [v0.1.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.1.0) 下载正式资产。五平台归档与 `install.sh` 提供纯 Core；Docker Compose 提供 Core、WebUI 与 Agent 整合包。Adapter 和 help 插件按需安装。具体平台实跑与已知限制见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 | 方式 | 适用场景 |
 | --- | --- |
@@ -14,12 +14,12 @@
 
 ## 手动运行发行归档
 
-下载同一版本的归档，解压后保持 `alonabot` 与 `packages/` 相邻，在该目录运行：
+下载对应平台的归档，解压后可见 `alonabot`（Windows 为 `alonabot.exe`）、`LICENSE` 与 `source.json`。在该目录运行：
 ```fish
 ./alonabot run --data-dir ./data
 ```
 
-后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动预装 WebUI 与 Agent，启用 WebUI。打开 `http://127.0.0.1:7650`，按[管理认证](#core-设置与-http-入口)领取首次 token 并登录。按需安装 Telegram 或 OneBot 11 Adapter 后配置实例；配置 Provider 与模型后再启用 Agent。
+后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动的组件清单为空。按[管理认证](#core-设置与-http-入口)领取管理 token，在另一终端设置 `ALONABOT_ADMIN_TOKEN` 后，按[管理组件](#管理组件)安装所需组件。安装并启用 WebUI 后可打开 `http://127.0.0.1:7650` 登录；Agent 配置 Provider 与模型后再启用。
 
 ## 系统服务安装与升级
 
@@ -34,7 +34,7 @@ sudo sh install.sh --version $version
 sh install.sh --version $version
 ```
 
-省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档，并与 GitHub Release API 的资产 SHA256 摘要核对。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址；自定义镜像站继续从同一 Release 下载 `SHA256SUMS`。基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服并替换 `alonabot` 与完整的 `packages/`。
+省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档，并与 GitHub Release API 的资产 SHA256 摘要核对。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址；自定义镜像站继续从同一 Release 下载 `SHA256SUMS`。基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服、替换 Core 程序并清理旧的相邻 `packages/` 安装介质；数据目录中的已安装组件保留。自定义镜像站若仍提供整合归档，脚本同时复制其 `packages/`。
 
 Linux 使用 `/opt/alonabot/`、数据目录 `/var/lib/alonabot` 和系统服务 `alonabot.service`；服务以系统用户 `alonabot` 运行并启用开机启动。macOS 使用 `~/Library/Application Support/AlonaBot/`、其中的 `data/` 和用户 LaunchAgent `io.github.alonabot`，登录后启动。工作目录设为程序目录，启动参数为 `run --data-dir <完整数据路径>`。
 
@@ -46,7 +46,7 @@ sudo runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /
 "$HOME/Library/Application Support/AlonaBot/alonabot" admin-token show --data-dir "$HOME/Library/Application Support/AlonaBot/data"
 ```
 
-首次登录成功后 Core 删除 `admin_token`。再次运行安装命令即升级，保留数据、`core_config.json`、状态库、已安装组件与未领取的 token。内置包的预装、默认启用与可用更新由 Core 处理。
+首次登录成功后 Core 删除 `admin_token`。再次运行安装命令即升级，保留数据、`core_config.json`、状态库、已安装组件与未领取的 token。组件通过各自的来源独立安装和更新。
 ```fish
 # Linux 卸载
 sudo sh install.sh --uninstall
@@ -86,6 +86,9 @@ alonabot install pkg.tar.gz --yes             # release.json、签名和公钥�
 alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
 alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
 alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
+alonabot install --source AlonaBot/alonabot-webui --yes
+alonabot enable alonabot-webui-admin
+alonabot install --source AlonaBot/alonabot-agent --yes
 alonabot install --source AlonaBot/alonabot-adapter-telegram --yes
 alonabot install --source AlonaBot/alonabot-plugin-help --yes
 alonabot enable alonabot-plugin-help-official
