@@ -1,0 +1,7 @@
+- [首页](https://github.com/AlonaBot/AlonaBot/wiki)
+- [开发指南](https://github.com/AlonaBot/AlonaBot/blob/main/docs/development.md)
+- [插件开发](https://github.com/AlonaBot/AlonaBot/blob/main/docs/plugin-guide.md)
+- [完整文档](https://github.com/AlonaBot/AlonaBot/blob/main/docs/index.md)
+- [讨论区](https://github.com/AlonaBot/AlonaBot/discussions)
+- [报告问题](https://github.com/AlonaBot/AlonaBot/issues/new/choose)
+- [安全报告](https://github.com/AlonaBot/AlonaBot/security/advisories/new)

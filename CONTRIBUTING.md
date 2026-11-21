@@ -4,6 +4,8 @@
 
 ## 从一个明确的问题开始
 
+使用求助与方案交流前往 [讨论区](https://github.com/AlonaBot/AlonaBot/discussions)。安全漏洞按 [安全政策](SECURITY.md) 通过私密报告提交。按任务查找文档可从 [Wiki](https://github.com/AlonaBot/AlonaBot/wiki) 进入。
+
 Bug Issue 写清发生了什么和复现步骤，能提供版本、系统和日志更好。功能 Issue 说明要解决的问题，期望的效果可选。日志与配置先脱敏，不提交 Bot Token、Session Secret、数据库凭证或真实用户数据。
 
 行为以 [spec](spec/README.md) 为准，结构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。实现前读取对应 T 工作包及失败停止条件；契约有冲突时先按 spec 的维护流程解决，再实现。

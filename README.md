@@ -2,6 +2,8 @@
 
 轻量级、跨平台的 Go 聊天机器人框架。
 
+[Wiki](https://github.com/AlonaBot/AlonaBot/wiki) · [文档](docs/index.md) · [讨论区](https://github.com/AlonaBot/AlonaBot/discussions) · [报告问题](https://github.com/AlonaBot/AlonaBot/issues/new/choose) · [安全报告](SECURITY.md)
+
 Module：`github.com/AlonaBot/AlonaBot`。
 
 **当前进度：** 已实现协议契约、生成工具链、manifest/release 校验、SDK 公共类型、受管 SQLite 验证，以及 Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启；验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)：只在 darwin/arm64 上运行过，Linux/Windows 只做了交叉构建。已接通命令最长路径/别名选择、文本匹配与 Raw、参数绑定、usage/silent 与自动回复、显式事件注册、原目标手动回复、实例许可准入、后台 `sdk.Send`、媒体分块上传 `sdk.Upload`、入站媒体按需读取与转授（`sdk.ReadMedia`/`sdk.GrantMedia`）及发送期间的只读媒体租约、Core 发送服务、插件 HTTP 路由经 Core 公开入口的代理（私有路由尚未接入授权，一律 401）、启动设置文件 `alonabot.yaml`、经 Core Broker 准入的跨插件 Service 调用、非持久 Event Bus 广播（`sdk.Publish`/`sdk.Subscribe`），以及构建期生成插件注册代码的 `alonabot plugin generate`/`plugin check`；Telegram 接收、标准化与入站媒体取件已实现，发送、出站媒体、按钮、命令策略与 Rule、调度和管理等业务能力继续实施；目前只有开发用入口 `alonabot run` 与 `alonabot plugin generate`/`check`，用法见 [docs/development.md](docs/development.md)。

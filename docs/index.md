@@ -1,5 +1,7 @@
 # 文档索引
 
+[Wiki](https://github.com/AlonaBot/AlonaBot/wiki) 提供任务导航；使用求助和方案交流前往 [讨论区](https://github.com/AlonaBot/AlonaBot/discussions)，安全问题按 [安全政策](../SECURITY.md) 提交。
+
 | 文档 | 用途 | 权威性 |
 | --- | --- | --- |
 | [spec/README.md](../spec/README.md) | 规格入口：PLAN、CONTRACTS、WIRE、MESSAGE、DESIGN、TEST-MATRIX | 行为的唯一权威 |
