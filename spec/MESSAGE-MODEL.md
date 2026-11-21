@@ -47,6 +47,7 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 | type | data 字段 | 约束 |
 | --- | --- | --- |
 | text | text、format?（plain/markdown）、entities? | 默认为 plain；format 与 entities 不同时指定。markdown 支持范围由 Adapter 公布，不能把未知 HTML 直接转交平台 |
+| markdown | content | 通用 CommonMark 与删除线；Core 统一转换为 plain text 与 UTF-16 entities，需目标声明 `message.markdown`。显式 `.PlainText()` 保留结构及链接说明与 URL |
 | image | media_ref、incoming_ref、https_url 或 inline_base64、alt?、caption? | 来源恰有一个（CONTRACTS §1.3，D-88）；引用/URL/大小/MIME 在发送前验证 |
 | video | 来源同 image、duration_ms?、caption? | 来源恰有一个；未知时长为 absent |
 | voice | 来源同 image、duration_ms?、caption? | 语音消息（D-89），需要目标实例声明 `message.voice`；音乐等其他音频作为 file；Adapter 不转码 |
@@ -54,7 +55,7 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 | mention | external_user_id、display? | 按目标平台实例解释，不能猜测跨实例身份；Adapter 无法表示时 UNSUPPORTED。全体提及只有 OneBot 11 提供，用其 extension（D-90） |
 | reference | original_platform_message_id、target? | 一条 Chain 最多一个；目标必须与本次发送兼容，否则 UNSUPPORTED |
 | buttons | rows[[{action_id 或 url,label,value?}]] | 一条 Chain 最多一个；action_id 指向当前插件已注册的 button.clicked 路由，value 通过该 action Schema 校验；url 按钮（https 或 tg 链接，D-97）不签发 token、不产生 button.clicked，不能带 value |
-| forward | items[{source?,chain 或 platform_message_id}]，或只在入站出现的 platform_forward_id | 仅平台明确支持合并转发（`message.forward`）时发送；platform_message_id 引用同一会话中的已有消息；节点 chain 不能嵌套 forward（D-91）；不支持返回 UNSUPPORTED，不默默转成多次 Send |
+| forward | items[{source?,occurred_at_unix_ms?,chain 或 platform_message_id}]，或只在入站出现的 platform_forward_id | 仅平台明确支持合并转发（`message.forward`）时发送；platform_message_id 引用同一会话中的已有消息；节点 chain 可递归包含 forward 和 file，chain 与 platform_message_id 恰有一个；未知时间为零；不支持返回 UNSUPPORTED，不默默转成多次 Send |
 | extension | adapter_id、name、version、payload（JSON 对象） | 平台专有能力，只能发往该 adapter_id 的实例；name/version 必须在 Adapter 注册的 extension 声明中，payload 按其 Schema 校验；不支持时 UNSUPPORTED，不降级为其他片段（CONTRACTS §8）。入站 chain 可以含本实例所属 Adapter 已声明的 extension（D-95） |
 
 `entities` 使用 `type、offset_utf16、length_utf16` 及类型需要的 url/language/external_user_id；偏移相对于本 text，必须落在完整字符边界，不能截断代理对。首发公共类型为 bold/italic/underline/strikethrough/spoiler/code/pre/text_link/text_mention；不支持的类型明确拒绝。SDK 从 Go 字符串创建实体时须转换 UTF-8/rune 索引，不能直接把字节索引交给 Telegram。
@@ -64,6 +65,14 @@ MessageChain 是一次**逻辑 Send** 的有序 Segment 列表。Segment JSON �
 Core/Adapter 先验证整个 Chain 的结构、顺序、片段数、媒体租约及目标能力，再发出第一条平台请求。结构错误返回 INVALID_ARGUMENT；合法但平台无法表示返回 UNSUPPORTED；不能先发送已知可用前半段，再因已知不支持的末尾丢失内容。
 
 显式 `Send(empty Chain)` 返回 INVALID_ARGUMENT 和 REJECTED，不调用平台。没有默认 Target 且无显式 To 返回 NO_DEFAULT_TARGET。平台实现必须保留片段顺序；需要拆成多条物理消息时遵循 §4，不静默移动文字或丢弃按钮/附件。只含 reference/buttons 等发送元数据而无可发送内容的 Chain 在预检时拒绝。
+
+### 2.1 节点读取与媒体授权
+
+`c.ReadNodes(segment)` 使用当前 Handler 的可信会话、实例和账号；后台入口为 `sdk.ReadNodes(ctx, sid, segment, sdk.Via(instanceID))`。查询输入为资源 ID 或消息引用 ID 列表，已展开的节点链直接遍历。SDK 对带资源 ID 的已展开结果重新查询时只提交资源标识。Adapter 可选实现 `adapter.NodesReader`，递归展开由平台 Adapter 完成，Core 不规定平台嵌套深度。
+
+Core 按原父调用期限与发信许可准入，递归登记查询中的媒体，再为调用插件 Session 和完整目标签发 `IncomingMedia`；插件使用 `media.Open` 读取。查询可以同时返回合法部分节点及带具体路径的错误。OneBot `client.From(c).ReadReply(reference)` 复用同一入口；原始 `get_msg` / `get_forward_msg` JSON 动作继续保留原文。
+
+通用 markdown 与 `TextSegment.FormatMarkdown` 分开：后者保留平台原生格式（Telegram 为 MarkdownV2）。同一链混用两者返回 UNSUPPORTED；通用图片语法和 HTML 无法映射到文本实体时返回带片段路径的错误。调用者可使用无参对象方法 `md.PlainText()` 显式转换，得到 `TextSegment`。
 
 ## 3. Handler 与传播结果
 
@@ -229,9 +238,9 @@ Bot API 中描述为 service message 的 Message 字段（例如 `new_chat_membe
 | `notice.group_admin`、`notice.group_ban`、`notice.group_upload`、`notice.friend_add` | `onebot11.group_admin`、`onebot11.group_ban`、`onebot11.group_upload`、`onebot11.friend_add` | 扩展事件（D-95），见下表 |
 | `request.friend`、`request.group` | `onebot11.friend_request`、`onebot11.group_request` | 扩展事件（D-95），见下表 |
 | `notice.notify`（input_status，NapCat 等实现端扩展） | `onebot11.input_status` | 扩展事件（D-95），只在私聊；标准实现端不上报时插件收不到，不伪造 |
-| 其他 `notice` 与 `request` | 不交付 | 明确忽略并计数，不伪造事件 |
+| 其他 `notice` 与 `request` | `onebot11.notice`、`onebot11.request` | 扩展事件以 `raw` JSON 字符串保留完整原始上报 |
 
-扩展事件的 version 都为 1；payload 沿用 OneBot 11 原字段名，数字 ID 写作十进制字符串，不含 time、self_id、post_type 等公共字段，Schema 不允许其他属性。Target 取事件所属的会话：带 group_id 的为 `group:<group_id>`，其余为 `private:<user_id>`；Actor 为 user_id 对应的用户（群事件中带 operator_id 时 Actor 为操作人）。
+扩展事件的 version 都为 1；payload 沿用 OneBot 11 原字段名，数字 ID 写作十进制字符串，不含 time、self_id、post_type 等公共字段，Schema 不允许其他属性。Target 取事件所属的会话：带 group_id 的为 `group:<group_id>`，其余带 user_id 的为 `private:<user_id>`；两者均缺失的未知通知或请求保留实例与账号身份，Session 为空。Actor 为 user_id 对应的用户（群事件中带 operator_id 时 Actor 为操作人）。
 
 | 扩展事件 | payload |
 | --- | --- |
@@ -245,22 +254,24 @@ Bot API 中描述为 service message 的 Message 字段（例如 `new_chat_membe
 | `onebot11.friend_request` | comment、flag |
 | `onebot11.group_request` | sub_type（add、invite）、comment、flag |
 | `onebot11.input_status` | status_text、event_type；字段在实施时按 NapCat 文档核对 |
+| `onebot11.notice`、`onebot11.request` | raw（完整原始上报的 JSON 字符串） |
 
-- 入站 Chain：`text` 为 plain 的 text；`at` 为 mention，`qq` 为 all 时为 `onebot11.at_all` extension 片段（D-90）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video；`record` 为 voice，`file` 为 file，二者都带 incoming_ref（D-89）；`face` 为 `onebot11.face` extension 片段；`forward` 为只带 platform_forward_id 的 forward（D-91，展开用动作 `onebot11.get_forward_msg`）。其余没有通用对应的段（`json`、`xml`、`music`、`share` 等）不进入 chain，原始消息数组完整保存在 platform_payload 中；因此 chain 可以为空。
+- 入站 Chain：`text` 为 plain 的 text；`at` 为 mention，`qq` 为 all 时为 `onebot11.at_all` extension 片段（D-90）；`reply` 为 reference；`image`、`video` 为带 incoming_ref 的 image、video；`record` 为 voice，`file` 为 file，二者都带 incoming_ref（D-89）；`face` 为 `onebot11.face` extension 片段；`forward` 为只带 platform_forward_id 的 forward（通过 `c.ReadNodes` 类型化展开）。`json`、`xml`、`music`、`share`、`location`、`rps`、`dice`、`shake`、`contact` 以同名 `onebot11.*` extension 保留，payload 的 `data` 为完整段数据的 JSON 字符串；其他未知段以 `onebot11.segment` 保留完整 `type` 与 `data`。markdown 的 `data.markdown` 或 `data.content` 文本另映射为通用 markdown，模板和完整字段保留在 `onebot11.markdown` extension。原始消息数组同时完整保存在 platform_payload 中。
+- mention 的 Display 优先取事件发送者或已验证的账号昵称，其余通过群成员或陌生人查询补充；同一事件的重复提及共用结果。查询失败记诊断并继续交付原消息与提及。
 - to_me 在以下情况为 true：私聊；chain 中有指向本账号的 mention；`reply` 引用的消息经 `get_msg` 查得发送者是本账号。`get_msg` 失败时按 false 处理并记诊断。
-- 入站媒体：实例声明 `media.read` v1；`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；段中没有 `url` 时 Adapter 把该来源的 readability 标为 UNSUPPORTED。段中的 `url` 同时是该对象的平台文件标识，发回同一实例时原样作为 `file` 复用（D-88）。
+- 入站媒体：实例声明 `media.read` v1；`adapter.media.read` 时 Adapter 用段中的 `url` 经 HTTP GET 取件，只允许 http 与 https；file 只有 file_id 时保存当前会话的文件描述符，读取时分别用 `get_group_file_url` 或 `get_private_file_url` 解析 URL；其他缺少可读来源的段标为 UNSUPPORTED。段中的 `url` 同时是该对象的平台文件标识，发回同一实例时原样作为 `file` 复用（D-88）。
 
 ### 7.2 能力与发送计划
 
-- 支持的片段：plain 的 text、image、video、mention、reference、voice、file、forward，以及 extension `onebot11.face` v1（payload 为 `{"id": "<数字字符串>"}`，发送为 `face` 段）与 `onebot11.at_all` v1（payload 为空对象，发送为 `at` 的 `qq=all`）。实例声明 `message.send`、`message.reference`、`message.voice`、`message.forward` 与 `message.delete`，不声明 `message.markdown`、`message.album`、`message.buttons`、`message.edit` 与 `commands.sync`。带 markdown 或 entities 的 text 与 buttons 由 Adapter 在首个平台请求前返回 UNSUPPORTED；Edit 等未声明能力的操作由 Core 返回 UNSUPPORTED。
-- 发送用 `send_msg`，`message_type` 与目标号码由 chat_id 决定。连续的 text、mention、image 与 extension 片段合成一条消息的段数组，按原顺序排列；video 与语音（`record` 段）各自单独成一条消息。file 用 `upload_group_file` 或 `upload_private_file`（go-cqhttp 系实现端的扩展）单独成一个物理操作，平台不返回 message_id，成功时为 ACCEPTED 并标记 message_ids_unavailable。forward 用 `send_group_forward_msg` 或 `send_private_forward_msg` 单独成一条消息，每个 item 为一个 `node` 段：platform_message_id 对应 node 的 `id`，chain 对应 node 的 `content`，source 给出时作为 `user_id` 与 `nickname`，否则用本账号（D-91）。reference 只加在第一条消息最前面的 `reply` 段上（第一条为 file 或 forward 时 UNSUPPORTED）。每条消息是一个物理操作，对应一项 PartResult。
-- 媒体来源（D-88），不把来源统一转为 base64：https_url 原样作为段的 `file`；inline_base64 原样以 `base64://` 传递；`platform_file`（同一实例的入站对象）原样作为 `file`；media_ref 按以下顺序选择：实例配置了 `media_dir` 时，Adapter 经 `core.media.read` 把对象写入 `media_dir.local` 下的随机文件名，以 `file://<media_dir.remote>/<文件名>` 传递，该物理操作结束（含 UNKNOWN）后删除；否则经 `core.media.url` 取得临时媒体 URL（前缀取实例的 `media_url_base`，缺省为 `base_url`）作为 `file`。实现端在其他主机或容器中而前缀不可达时，实现端取件失败按平台的明确拒绝报告，不改用 base64；部署文档提示配置 `media_url_base` 或 `media_dir`。
+- 支持的片段：plain 的 text、image、video、mention、reference、voice、file、forward，以及 extension `onebot11.face` v1（payload 为 `{"id": "<数字字符串>"}`，发送为 `face` 段）、`onebot11.at_all` v1（payload 为空对象，发送为 `at` 的 `qq=all`）及上述具名平台扩展。平台扩展的 `data` JSON 字符串还原为原段的数据对象后交给实现端。实例声明 `message.send`、`message.reference`、`message.voice`、`message.forward` 与 `message.delete`，不声明 `message.markdown`、`message.album`、`message.buttons`、`message.edit` 与 `commands.sync`。带 markdown 或 entities 的通用 text 与 buttons 由 Adapter 在首个平台请求前返回 UNSUPPORTED；Edit 等未声明能力的操作由 Core 返回 UNSUPPORTED。
+- 发送用 `send_msg`，`message_type` 与目标号码由 chat_id 决定。连续的 text、mention、image 与 extension 片段合成一条消息的段数组，按原顺序排列；video 与语音（`record` 段）各自单独成一条消息。file 用 `upload_group_file` 或 `upload_private_file`（go-cqhttp 系实现端的扩展）单独成一个物理操作，平台不返回 message_id，成功时为 ACCEPTED 并标记 message_ids_unavailable。forward 用 `send_group_forward_msg` 或 `send_private_forward_msg` 单独成一条消息，每个 item 为一个 `node` 段：platform_message_id 对应 node 的 `id`，chain 对应 node 的 `content`，source 给出时作为 `user_id` 与 `nickname`，否则用本账号；非零时间写入 `time`。纯 node 数组递归直接交给实现端；正文与子节点混合时用 `upload_forward_msg` 只上传子资源，再提交最终父消息。节点文件通过原生 `file` 段上传，上传资源的 message_id=0 不作为聊天 ID。reference 只加在第一条消息最前面的 `reply` 段上（第一条为 file 或 forward 时 UNSUPPORTED）。每条消息是一个物理操作，对应一项 PartResult。
+- 媒体来源（D-88），不把来源统一转为 base64：https_url 原样作为段的 `file`；inline_base64 原样以 `base64://` 传递；`platform_file`（同一实例的入站对象）原样作为 `file`；media_ref 按以下顺序选择：实例配置了 `media_dir` 时，Adapter 经 `core.media.read` 把对象写入 `media_dir.local` 下的随机文件名，以 `file://<media_dir.remote>/<文件名>` 传递（`remote` 缺省沿用 `local`），该物理操作结束（含 UNKNOWN）后删除；否则经 `core.media.url` 取得临时媒体 URL（前缀取实例的 `media_url_base`，缺省为 `base_url`）作为 `file`。实现端在其他主机或容器中而前缀不可达时，实现端取件失败按平台的明确拒绝报告，不改用 base64；部署文档提示配置 `media_url_base` 或 `media_dir`。
 - 结果：响应 `status` 为 ok 时该部分 ACCEPTED，`data.message_id` 为平台消息 ID；为 async 时 ACCEPTED 并标记 message_ids_unavailable；为 failed 时 REJECTED，safe_message 带 retcode。请求帧已写出后连接断开，或到调用期限仍无响应，该部分为 UNKNOWN。连接未建立时在首个请求前返回 UNAVAILABLE。任一部分不是 ACCEPTED 后停止，其余部分 NOT_ATTEMPTED，按 §4 汇总。
 - 撤回：`adapter.delete` 对每个 ID 调用一次 `delete_msg`，按 §4A 汇总。
 
 ### 7.3 反向 WebSocket
 
-- `mode` 为 reverse 时（D-94），Adapter 在 REGISTER 中注册公开的前缀路由 `/ws/`，实现端连接 `<base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>`。未知或未启动的 instance_id 返回 404；`access_token` 不符返回 401；`X-Self-ID` 不等于实例的 `self_id` 或 `X-Client-Role` 不是 Universal 返回 403；该实例已有连接时返回 409。access_token 不进入日志、错误或普通响应。
+- `mode` 为 reverse 时（D-94），`self_id` 与 `access_token` 必须非空。Adapter 在 REGISTER 中注册公开的前缀路由 `/ws/`，实现端连接 `<base_url>/plugins/<Adapter 包 ID>/ws/<instance_id>`。未知或未启动的 instance_id 返回 404；`access_token` 不符返回 401；`X-Self-ID` 不等于实例的 `self_id` 或 `X-Client-Role` 不是 Universal 返回 403；该实例已有连接时返回 409。access_token 不进入日志、错误或普通响应。
 - 实例启动时不等待连入，account_id 为 `self_id`，账号展示名在连入后经 `get_login_info` 取得；`get_login_info` 的 user_id 不等于 self_id 时关闭连接并记诊断。连接断开后实例保持运行、等待实现端重连，不报告致命错误，也不生成 bot.offline；未连接期间 Send 与动作返回 UNAVAILABLE。
 - 连入后的事件队列、交付、API 调用按 echo 配对、心跳与格式检查与 forward 模式相同。
 
@@ -274,7 +285,7 @@ Bot API 中描述为 service message 的 Message 字段（例如 `new_chat_membe
 | chat（群或私聊） | `onebot11.get_msg`、`onebot11.get_forward_msg`、`onebot11.poke`（`group_poke` 或 `friend_poke`，实现端扩展） |
 | account | `onebot11.set_friend_add_request`、`onebot11.set_group_add_request`、`onebot11.get_stranger_info`、`onebot11.get_friend_list`、`onebot11.get_group_list`、`onebot11.send_like` |
 
-实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。`alonabot-adapter-onebot11/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包。
+实现端扩展的动作在实现端不支持时按其返回的 failed 报告，Adapter 不探测实现端类型。`alonabot-adapter-onebot11/client` 提供 `From(c)` 和带类型的客户端方法，绑定当前事件的实例、账号与默认会话；底层 `Call` 仅接受上述已声明动作。`event` 包发布可直接传给 `r.On(...)` 的事件常量与载荷类型。
 
 ## 8. 验收与依据
 

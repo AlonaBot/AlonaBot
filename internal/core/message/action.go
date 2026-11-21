@@ -41,6 +41,9 @@ func (s *Service) Action(ctx context.Context, caller router.Caller, in *wire.Inb
 	if invocation != nil {
 		defaultTarget = invocation.DefaultTarget
 	}
+	if request.UseDefaultTarget && (request.To != nil || invocation == nil || request.AdapterInstanceId == "") {
+		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "default action target requires a parent invocation and an instance without to")
+	}
 	// 2. 会话动作沿用完整发信准入，账号动作只检查实例许可。
 	var target *pb.Target
 	var safe *pb.ErrorInfo
@@ -73,6 +76,26 @@ func (s *Service) Action(ctx context.Context, caller router.Caller, in *wire.Inb
 	scope, safe := executor.CheckAction(request.Name, request.Version, request.ParamsJson)
 	if safe != nil {
 		return wire.Response{Err: safe}
+	}
+	if request.UseDefaultTarget && scope == pb.ActionScope_ACTION_SCOPE_CHAT {
+		if defaultTarget.GetChatId() == "" {
+			return reject(pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET, "no default target")
+		}
+		request.To = proto.CloneOf(defaultTarget)
+		if request.To.AdapterInstanceId != target.AdapterInstanceId {
+			request.To.AdapterInstanceId = target.AdapterInstanceId
+			request.To.AccountId = target.AccountId
+		}
+		target, safe = s.adapters.Complete(request.To, defaultTarget)
+		if safe == nil {
+			safe = s.policy.CheckSend(ctx, caller.PluginID, invocation, target)
+		}
+		if safe != nil {
+			return wire.Response{Err: safe}
+		}
+		if target.AdapterId != instance.AdapterID() || target.AccountId != instance.AccountID() {
+			return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "action target does not match instance")
+		}
 	}
 	if (scope == pb.ActionScope_ACTION_SCOPE_CHAT && request.To == nil) || (scope == pb.ActionScope_ACTION_SCOPE_ACCOUNT && request.To != nil) {
 		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "action scope does not match target")

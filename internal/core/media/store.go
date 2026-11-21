@@ -85,8 +85,8 @@ type Store struct {
 	incoming        map[string]*incomingObject
 	bySource        map[platformFile]string
 	incomingTokens  map[string]*incomingAccess
-	baseURL         *url.URL          // AddURLService 保存的已校验配置
-	urls            map[string]*entry // 临时 URL 只指向消费租约，由 mu 保护
+	baseURL         *url.URL            // AddURLService 保存的已校验配置
+	urls            map[string]urlGrant // 临时 URL 绑定消费租约与签发主机名，由 mu 保护
 	acquireActivity func(router.Caller) (func(), error)
 }
 

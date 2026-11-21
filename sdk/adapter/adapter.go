@@ -68,3 +68,8 @@ type Adapter interface {
 	// Start 完成凭证与账号检查、启动接收后返回；Core 在实例停止前一直有效。
 	Start(ctx context.Context, req StartRequest, core Core) (Instance, error)
 }
+
+// NodesReader 读取合并转发资源或同会话消息引用，返回完整递归节点及部分错误。
+type NodesReader interface {
+	ReadNodes(ctx context.Context, to string, segment message.ForwardSegment) ([]message.ForwardItem, *errcode.Error)
+}

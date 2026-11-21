@@ -1562,6 +1562,7 @@ type Segment struct {
 	//	*Segment_Forward
 	//	*Segment_Extension
 	//	*Segment_Voice
+	//	*Segment_Markdown
 	Data          isSegment_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1694,6 +1695,15 @@ func (x *Segment) GetVoice() *VoiceSegment {
 	return nil
 }
 
+func (x *Segment) GetMarkdown() *MarkdownSegment {
+	if x != nil {
+		if x, ok := x.Data.(*Segment_Markdown); ok {
+			return x.Markdown
+		}
+	}
+	return nil
+}
+
 type isSegment_Data interface {
 	isSegment_Data()
 }
@@ -1748,6 +1758,11 @@ type Segment_Voice struct {
 	Voice *VoiceSegment `protobuf:"bytes,10,opt,name=voice,proto3,oneof"`
 }
 
+type Segment_Markdown struct {
+	// 通用 CommonMark 与删除线。
+	Markdown *MarkdownSegment `protobuf:"bytes,11,opt,name=markdown,proto3,oneof"`
+}
+
 func (*Segment_Text) isSegment_Data() {}
 
 func (*Segment_Image) isSegment_Data() {}
@@ -1768,6 +1783,53 @@ func (*Segment_Extension) isSegment_Data() {}
 
 func (*Segment_Voice) isSegment_Data() {}
 
+func (*Segment_Markdown) isSegment_Data() {}
+
+// MarkdownSegment 承载通用 Markdown 正文。
+type MarkdownSegment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkdownSegment) Reset() {
+	*x = MarkdownSegment{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkdownSegment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkdownSegment) ProtoMessage() {}
+
+func (x *MarkdownSegment) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkdownSegment.ProtoReflect.Descriptor instead.
+func (*MarkdownSegment) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *MarkdownSegment) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
 // TextSegment 描述一段文本。
 type TextSegment struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1783,7 +1845,7 @@ type TextSegment struct {
 
 func (x *TextSegment) Reset() {
 	*x = TextSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[14]
+	mi := &file_alonabot_v1_message_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1795,7 +1857,7 @@ func (x *TextSegment) String() string {
 func (*TextSegment) ProtoMessage() {}
 
 func (x *TextSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[14]
+	mi := &file_alonabot_v1_message_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1808,7 +1870,7 @@ func (x *TextSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextSegment.ProtoReflect.Descriptor instead.
 func (*TextSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{14}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TextSegment) GetText() string {
@@ -1853,7 +1915,7 @@ type TextEntity struct {
 
 func (x *TextEntity) Reset() {
 	*x = TextEntity{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[15]
+	mi := &file_alonabot_v1_message_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1865,7 +1927,7 @@ func (x *TextEntity) String() string {
 func (*TextEntity) ProtoMessage() {}
 
 func (x *TextEntity) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[15]
+	mi := &file_alonabot_v1_message_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1878,7 +1940,7 @@ func (x *TextEntity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextEntity.ProtoReflect.Descriptor instead.
 func (*TextEntity) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{15}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TextEntity) GetType() EntityType {
@@ -1942,7 +2004,7 @@ type MediaSource struct {
 
 func (x *MediaSource) Reset() {
 	*x = MediaSource{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[16]
+	mi := &file_alonabot_v1_message_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1954,7 +2016,7 @@ func (x *MediaSource) String() string {
 func (*MediaSource) ProtoMessage() {}
 
 func (x *MediaSource) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[16]
+	mi := &file_alonabot_v1_message_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1967,7 +2029,7 @@ func (x *MediaSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaSource.ProtoReflect.Descriptor instead.
 func (*MediaSource) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{16}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *MediaSource) GetSource() isMediaSource_Source {
@@ -2076,7 +2138,7 @@ type ImageSegment struct {
 
 func (x *ImageSegment) Reset() {
 	*x = ImageSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[17]
+	mi := &file_alonabot_v1_message_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2088,7 +2150,7 @@ func (x *ImageSegment) String() string {
 func (*ImageSegment) ProtoMessage() {}
 
 func (x *ImageSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[17]
+	mi := &file_alonabot_v1_message_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2101,7 +2163,7 @@ func (x *ImageSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImageSegment.ProtoReflect.Descriptor instead.
 func (*ImageSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{17}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ImageSegment) GetSource() *MediaSource {
@@ -2140,7 +2202,7 @@ type VideoSegment struct {
 
 func (x *VideoSegment) Reset() {
 	*x = VideoSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[18]
+	mi := &file_alonabot_v1_message_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2152,7 +2214,7 @@ func (x *VideoSegment) String() string {
 func (*VideoSegment) ProtoMessage() {}
 
 func (x *VideoSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[18]
+	mi := &file_alonabot_v1_message_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2165,7 +2227,7 @@ func (x *VideoSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VideoSegment.ProtoReflect.Descriptor instead.
 func (*VideoSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{18}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *VideoSegment) GetSource() *MediaSource {
@@ -2204,7 +2266,7 @@ type VoiceSegment struct {
 
 func (x *VoiceSegment) Reset() {
 	*x = VoiceSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[19]
+	mi := &file_alonabot_v1_message_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2216,7 +2278,7 @@ func (x *VoiceSegment) String() string {
 func (*VoiceSegment) ProtoMessage() {}
 
 func (x *VoiceSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[19]
+	mi := &file_alonabot_v1_message_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2229,7 +2291,7 @@ func (x *VoiceSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceSegment.ProtoReflect.Descriptor instead.
 func (*VoiceSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{19}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *VoiceSegment) GetSource() *MediaSource {
@@ -2270,7 +2332,7 @@ type FileSegment struct {
 
 func (x *FileSegment) Reset() {
 	*x = FileSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[20]
+	mi := &file_alonabot_v1_message_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2282,7 +2344,7 @@ func (x *FileSegment) String() string {
 func (*FileSegment) ProtoMessage() {}
 
 func (x *FileSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[20]
+	mi := &file_alonabot_v1_message_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2295,7 +2357,7 @@ func (x *FileSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileSegment.ProtoReflect.Descriptor instead.
 func (*FileSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{20}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *FileSegment) GetSource() *MediaSource {
@@ -2339,7 +2401,7 @@ type MentionSegment struct {
 
 func (x *MentionSegment) Reset() {
 	*x = MentionSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[21]
+	mi := &file_alonabot_v1_message_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2351,7 +2413,7 @@ func (x *MentionSegment) String() string {
 func (*MentionSegment) ProtoMessage() {}
 
 func (x *MentionSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[21]
+	mi := &file_alonabot_v1_message_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2364,7 +2426,7 @@ func (x *MentionSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MentionSegment.ProtoReflect.Descriptor instead.
 func (*MentionSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{21}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *MentionSegment) GetExternalUserId() string {
@@ -2394,7 +2456,7 @@ type ReferenceSegment struct {
 
 func (x *ReferenceSegment) Reset() {
 	*x = ReferenceSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[22]
+	mi := &file_alonabot_v1_message_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2406,7 +2468,7 @@ func (x *ReferenceSegment) String() string {
 func (*ReferenceSegment) ProtoMessage() {}
 
 func (x *ReferenceSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[22]
+	mi := &file_alonabot_v1_message_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2419,7 +2481,7 @@ func (x *ReferenceSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReferenceSegment.ProtoReflect.Descriptor instead.
 func (*ReferenceSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{22}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ReferenceSegment) GetOriginalPlatformMessageId() string {
@@ -2447,7 +2509,7 @@ type ButtonsSegment struct {
 
 func (x *ButtonsSegment) Reset() {
 	*x = ButtonsSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[23]
+	mi := &file_alonabot_v1_message_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2459,7 +2521,7 @@ func (x *ButtonsSegment) String() string {
 func (*ButtonsSegment) ProtoMessage() {}
 
 func (x *ButtonsSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[23]
+	mi := &file_alonabot_v1_message_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2472,7 +2534,7 @@ func (x *ButtonsSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ButtonsSegment.ProtoReflect.Descriptor instead.
 func (*ButtonsSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{23}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ButtonsSegment) GetRows() []*ButtonRow {
@@ -2493,7 +2555,7 @@ type ButtonRow struct {
 
 func (x *ButtonRow) Reset() {
 	*x = ButtonRow{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[24]
+	mi := &file_alonabot_v1_message_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2505,7 +2567,7 @@ func (x *ButtonRow) String() string {
 func (*ButtonRow) ProtoMessage() {}
 
 func (x *ButtonRow) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[24]
+	mi := &file_alonabot_v1_message_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2518,7 +2580,7 @@ func (x *ButtonRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ButtonRow.ProtoReflect.Descriptor instead.
 func (*ButtonRow) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{24}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ButtonRow) GetButtons() []*Button {
@@ -2547,7 +2609,7 @@ type Button struct {
 
 func (x *Button) Reset() {
 	*x = Button{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[25]
+	mi := &file_alonabot_v1_message_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2559,7 +2621,7 @@ func (x *Button) String() string {
 func (*Button) ProtoMessage() {}
 
 func (x *Button) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[25]
+	mi := &file_alonabot_v1_message_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2572,7 +2634,7 @@ func (x *Button) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Button.ProtoReflect.Descriptor instead.
 func (*Button) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{25}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Button) GetActionId() string {
@@ -2623,7 +2685,7 @@ type ForwardSegment struct {
 
 func (x *ForwardSegment) Reset() {
 	*x = ForwardSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[26]
+	mi := &file_alonabot_v1_message_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2635,7 +2697,7 @@ func (x *ForwardSegment) String() string {
 func (*ForwardSegment) ProtoMessage() {}
 
 func (x *ForwardSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[26]
+	mi := &file_alonabot_v1_message_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2648,7 +2710,7 @@ func (x *ForwardSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardSegment.ProtoReflect.Descriptor instead.
 func (*ForwardSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{26}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ForwardSegment) GetItems() []*ForwardItem {
@@ -2674,13 +2736,15 @@ type ForwardItem struct {
 	Chain *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
 	// 引用同一会话的已有消息，与 chain 恰有一个。
 	PlatformMessageId *string `protobuf:"bytes,3,opt,name=platform_message_id,json=platformMessageId,proto3,oneof" json:"platform_message_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// UTC 毫秒，0 表示未知。
+	OccurredAtUnixMs int64 `protobuf:"varint,4,opt,name=occurred_at_unix_ms,json=occurredAtUnixMs,proto3" json:"occurred_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ForwardItem) Reset() {
 	*x = ForwardItem{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[27]
+	mi := &file_alonabot_v1_message_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2692,7 +2756,7 @@ func (x *ForwardItem) String() string {
 func (*ForwardItem) ProtoMessage() {}
 
 func (x *ForwardItem) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[27]
+	mi := &file_alonabot_v1_message_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2705,7 +2769,7 @@ func (x *ForwardItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardItem.ProtoReflect.Descriptor instead.
 func (*ForwardItem) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{27}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ForwardItem) GetSource() *ForwardSource {
@@ -2729,6 +2793,13 @@ func (x *ForwardItem) GetPlatformMessageId() string {
 	return ""
 }
 
+func (x *ForwardItem) GetOccurredAtUnixMs() int64 {
+	if x != nil {
+		return x.OccurredAtUnixMs
+	}
+	return 0
+}
+
 // ForwardSource 描述转发条目的来源展示信息。
 type ForwardSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2742,7 +2813,7 @@ type ForwardSource struct {
 
 func (x *ForwardSource) Reset() {
 	*x = ForwardSource{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[28]
+	mi := &file_alonabot_v1_message_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2754,7 +2825,7 @@ func (x *ForwardSource) String() string {
 func (*ForwardSource) ProtoMessage() {}
 
 func (x *ForwardSource) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[28]
+	mi := &file_alonabot_v1_message_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2767,7 +2838,7 @@ func (x *ForwardSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardSource.ProtoReflect.Descriptor instead.
 func (*ForwardSource) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{28}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ForwardSource) GetDisplayName() string {
@@ -2797,7 +2868,7 @@ type SendRequest struct {
 
 func (x *SendRequest) Reset() {
 	*x = SendRequest{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[29]
+	mi := &file_alonabot_v1_message_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2809,7 +2880,7 @@ func (x *SendRequest) String() string {
 func (*SendRequest) ProtoMessage() {}
 
 func (x *SendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[29]
+	mi := &file_alonabot_v1_message_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2822,7 +2893,7 @@ func (x *SendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendRequest.ProtoReflect.Descriptor instead.
 func (*SendRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{29}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SendRequest) GetTo() *Target {
@@ -2862,7 +2933,7 @@ type SendResult struct {
 
 func (x *SendResult) Reset() {
 	*x = SendResult{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[30]
+	mi := &file_alonabot_v1_message_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2874,7 +2945,7 @@ func (x *SendResult) String() string {
 func (*SendResult) ProtoMessage() {}
 
 func (x *SendResult) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[30]
+	mi := &file_alonabot_v1_message_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2887,7 +2958,7 @@ func (x *SendResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendResult.ProtoReflect.Descriptor instead.
 func (*SendResult) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{30}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SendResult) GetStatus() SendStatus {
@@ -2960,7 +3031,7 @@ type PartResult struct {
 
 func (x *PartResult) Reset() {
 	*x = PartResult{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[31]
+	mi := &file_alonabot_v1_message_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2972,7 +3043,7 @@ func (x *PartResult) String() string {
 func (*PartResult) ProtoMessage() {}
 
 func (x *PartResult) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[31]
+	mi := &file_alonabot_v1_message_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2985,7 +3056,7 @@ func (x *PartResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartResult.ProtoReflect.Descriptor instead.
 func (*PartResult) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{31}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PartResult) GetPartIndex() uint32 {
@@ -3043,7 +3114,7 @@ type BotOnlinePayload struct {
 
 func (x *BotOnlinePayload) Reset() {
 	*x = BotOnlinePayload{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[32]
+	mi := &file_alonabot_v1_message_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3055,7 +3126,7 @@ func (x *BotOnlinePayload) String() string {
 func (*BotOnlinePayload) ProtoMessage() {}
 
 func (x *BotOnlinePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[32]
+	mi := &file_alonabot_v1_message_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3068,7 +3139,7 @@ func (x *BotOnlinePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BotOnlinePayload.ProtoReflect.Descriptor instead.
 func (*BotOnlinePayload) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{32}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *BotOnlinePayload) GetAdapterId() string {
@@ -3113,7 +3184,7 @@ type BotOfflinePayload struct {
 
 func (x *BotOfflinePayload) Reset() {
 	*x = BotOfflinePayload{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[33]
+	mi := &file_alonabot_v1_message_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3125,7 +3196,7 @@ func (x *BotOfflinePayload) String() string {
 func (*BotOfflinePayload) ProtoMessage() {}
 
 func (x *BotOfflinePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[33]
+	mi := &file_alonabot_v1_message_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3138,7 +3209,7 @@ func (x *BotOfflinePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BotOfflinePayload.ProtoReflect.Descriptor instead.
 func (*BotOfflinePayload) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{33}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *BotOfflinePayload) GetAdapterId() string {
@@ -3189,7 +3260,7 @@ type EditRequest struct {
 
 func (x *EditRequest) Reset() {
 	*x = EditRequest{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[34]
+	mi := &file_alonabot_v1_message_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3201,7 +3272,7 @@ func (x *EditRequest) String() string {
 func (*EditRequest) ProtoMessage() {}
 
 func (x *EditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[34]
+	mi := &file_alonabot_v1_message_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3214,7 +3285,7 @@ func (x *EditRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditRequest.ProtoReflect.Descriptor instead.
 func (*EditRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{34}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *EditRequest) GetTo() *Target {
@@ -3255,7 +3326,7 @@ type ExtensionSegment struct {
 
 func (x *ExtensionSegment) Reset() {
 	*x = ExtensionSegment{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[35]
+	mi := &file_alonabot_v1_message_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3267,7 +3338,7 @@ func (x *ExtensionSegment) String() string {
 func (*ExtensionSegment) ProtoMessage() {}
 
 func (x *ExtensionSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[35]
+	mi := &file_alonabot_v1_message_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3280,7 +3351,7 @@ func (x *ExtensionSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExtensionSegment.ProtoReflect.Descriptor instead.
 func (*ExtensionSegment) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{35}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ExtensionSegment) GetAdapterId() string {
@@ -3322,7 +3393,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[36]
+	mi := &file_alonabot_v1_message_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3334,7 +3405,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[36]
+	mi := &file_alonabot_v1_message_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3347,7 +3418,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{36}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DeleteRequest) GetTo() *Target {
@@ -3376,7 +3447,7 @@ type DeleteItemResult struct {
 
 func (x *DeleteItemResult) Reset() {
 	*x = DeleteItemResult{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[37]
+	mi := &file_alonabot_v1_message_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3388,7 +3459,7 @@ func (x *DeleteItemResult) String() string {
 func (*DeleteItemResult) ProtoMessage() {}
 
 func (x *DeleteItemResult) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[37]
+	mi := &file_alonabot_v1_message_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3401,7 +3472,7 @@ func (x *DeleteItemResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteItemResult.ProtoReflect.Descriptor instead.
 func (*DeleteItemResult) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{37}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *DeleteItemResult) GetPlatformMessageId() string {
@@ -3436,7 +3507,7 @@ type DeleteResult struct {
 
 func (x *DeleteResult) Reset() {
 	*x = DeleteResult{}
-	mi := &file_alonabot_v1_message_proto_msgTypes[38]
+	mi := &file_alonabot_v1_message_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3448,7 +3519,7 @@ func (x *DeleteResult) String() string {
 func (*DeleteResult) ProtoMessage() {}
 
 func (x *DeleteResult) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_message_proto_msgTypes[38]
+	mi := &file_alonabot_v1_message_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3461,7 +3532,7 @@ func (x *DeleteResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResult.ProtoReflect.Descriptor instead.
 func (*DeleteResult) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{38}
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *DeleteResult) GetTarget() *Target {
@@ -3472,6 +3543,104 @@ func (x *DeleteResult) GetTarget() *Target {
 }
 
 func (x *DeleteResult) GetItems() []*DeleteItemResult {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+// ReadNodesRequest 查询指定目标中的合并转发资源。
+type ReadNodesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	To            *Target                `protobuf:"bytes,1,opt,name=to,proto3" json:"to,omitempty"`
+	Segment       *ForwardSegment        `protobuf:"bytes,2,opt,name=segment,proto3" json:"segment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadNodesRequest) Reset() {
+	*x = ReadNodesRequest{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadNodesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadNodesRequest) ProtoMessage() {}
+
+func (x *ReadNodesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadNodesRequest.ProtoReflect.Descriptor instead.
+func (*ReadNodesRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ReadNodesRequest) GetTo() *Target {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *ReadNodesRequest) GetSegment() *ForwardSegment {
+	if x != nil {
+		return x.Segment
+	}
+	return nil
+}
+
+// ReadNodesResponse 保留完整递归节点及部分结果。
+type ReadNodesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*ForwardItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadNodesResponse) Reset() {
+	*x = ReadNodesResponse{}
+	mi := &file_alonabot_v1_message_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadNodesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadNodesResponse) ProtoMessage() {}
+
+func (x *ReadNodesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_message_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadNodesResponse.ProtoReflect.Descriptor instead.
+func (*ReadNodesResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_message_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ReadNodesResponse) GetItems() []*ForwardItem {
 	if x != nil {
 		return x.Items
 	}
@@ -3574,7 +3743,7 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\btask_key\x18\x05 \x01(\tR\ataskKey\x12*\n" +
 	"\x11task_payload_json\x18\x06 \x01(\tR\x0ftaskPayloadJson\"@\n" +
 	"\fMessageChain\x120\n" +
-	"\bsegments\x18\x01 \x03(\v2\x14.alonabot.v1.SegmentR\bsegments\"\xb3\x04\n" +
+	"\bsegments\x18\x01 \x03(\v2\x14.alonabot.v1.SegmentR\bsegments\"\xef\x04\n" +
 	"\aSegment\x12.\n" +
 	"\x04text\x18\x01 \x01(\v2\x18.alonabot.v1.TextSegmentH\x00R\x04text\x121\n" +
 	"\x05image\x18\x02 \x01(\v2\x19.alonabot.v1.ImageSegmentH\x00R\x05image\x121\n" +
@@ -3586,8 +3755,11 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\aforward\x18\b \x01(\v2\x1b.alonabot.v1.ForwardSegmentH\x00R\aforward\x12=\n" +
 	"\textension\x18\t \x01(\v2\x1d.alonabot.v1.ExtensionSegmentH\x00R\textension\x121\n" +
 	"\x05voice\x18\n" +
-	" \x01(\v2\x19.alonabot.v1.VoiceSegmentH\x00R\x05voiceB\x06\n" +
-	"\x04data\"\x97\x01\n" +
+	" \x01(\v2\x19.alonabot.v1.VoiceSegmentH\x00R\x05voice\x12:\n" +
+	"\bmarkdown\x18\v \x01(\v2\x1c.alonabot.v1.MarkdownSegmentH\x00R\bmarkdownB\x06\n" +
+	"\x04data\"+\n" +
+	"\x0fMarkdownSegment\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\"\x97\x01\n" +
 	"\vTextSegment\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x124\n" +
 	"\x06format\x18\x02 \x01(\x0e2\x17.alonabot.v1.TextFormatH\x00R\x06format\x88\x01\x01\x123\n" +
@@ -3668,11 +3840,12 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x0eForwardSegment\x12.\n" +
 	"\x05items\x18\x01 \x03(\v2\x18.alonabot.v1.ForwardItemR\x05items\x123\n" +
 	"\x13platform_forward_id\x18\x02 \x01(\tH\x00R\x11platformForwardId\x88\x01\x01B\x16\n" +
-	"\x14_platform_forward_id\"\xbf\x01\n" +
+	"\x14_platform_forward_id\"\xee\x01\n" +
 	"\vForwardItem\x122\n" +
 	"\x06source\x18\x01 \x01(\v2\x1a.alonabot.v1.ForwardSourceR\x06source\x12/\n" +
 	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x123\n" +
-	"\x13platform_message_id\x18\x03 \x01(\tH\x00R\x11platformMessageId\x88\x01\x01B\x16\n" +
+	"\x13platform_message_id\x18\x03 \x01(\tH\x00R\x11platformMessageId\x88\x01\x01\x12-\n" +
+	"\x13occurred_at_unix_ms\x18\x04 \x01(\x03R\x10occurredAtUnixMsB\x16\n" +
 	"\x14_platform_message_id\"\x8c\x01\n" +
 	"\rForwardSource\x12&\n" +
 	"\fdisplay_name\x18\x01 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12-\n" +
@@ -3738,7 +3911,12 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\x05error\x18\x03 \x01(\v2\x16.alonabot.v1.ErrorInfoR\x05error\"p\n" +
 	"\fDeleteResult\x12+\n" +
 	"\x06target\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x123\n" +
-	"\x05items\x18\x02 \x03(\v2\x1d.alonabot.v1.DeleteItemResultR\x05items*t\n" +
+	"\x05items\x18\x02 \x03(\v2\x1d.alonabot.v1.DeleteItemResultR\x05items\"n\n" +
+	"\x10ReadNodesRequest\x12#\n" +
+	"\x02to\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x02to\x125\n" +
+	"\asegment\x18\x02 \x01(\v2\x1b.alonabot.v1.ForwardSegmentR\asegment\"C\n" +
+	"\x11ReadNodesResponse\x12.\n" +
+	"\x05items\x18\x01 \x03(\v2\x18.alonabot.v1.ForwardItemR\x05items*t\n" +
 	"\x0fEventSourceKind\x12!\n" +
 	"\x1dEVENT_SOURCE_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19EVENT_SOURCE_KIND_ADAPTER\x10\x01\x12\x1f\n" +
@@ -3798,7 +3976,7 @@ func file_alonabot_v1_message_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_alonabot_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_alonabot_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_alonabot_v1_message_proto_goTypes = []any{
 	(EventSourceKind)(0),          // 0: alonabot.v1.EventSourceKind
 	(ChatType)(0),                 // 1: alonabot.v1.ChatType
@@ -3821,44 +3999,47 @@ var file_alonabot_v1_message_proto_goTypes = []any{
 	(*ScheduledPayload)(nil),      // 18: alonabot.v1.ScheduledPayload
 	(*MessageChain)(nil),          // 19: alonabot.v1.MessageChain
 	(*Segment)(nil),               // 20: alonabot.v1.Segment
-	(*TextSegment)(nil),           // 21: alonabot.v1.TextSegment
-	(*TextEntity)(nil),            // 22: alonabot.v1.TextEntity
-	(*MediaSource)(nil),           // 23: alonabot.v1.MediaSource
-	(*ImageSegment)(nil),          // 24: alonabot.v1.ImageSegment
-	(*VideoSegment)(nil),          // 25: alonabot.v1.VideoSegment
-	(*VoiceSegment)(nil),          // 26: alonabot.v1.VoiceSegment
-	(*FileSegment)(nil),           // 27: alonabot.v1.FileSegment
-	(*MentionSegment)(nil),        // 28: alonabot.v1.MentionSegment
-	(*ReferenceSegment)(nil),      // 29: alonabot.v1.ReferenceSegment
-	(*ButtonsSegment)(nil),        // 30: alonabot.v1.ButtonsSegment
-	(*ButtonRow)(nil),             // 31: alonabot.v1.ButtonRow
-	(*Button)(nil),                // 32: alonabot.v1.Button
-	(*ForwardSegment)(nil),        // 33: alonabot.v1.ForwardSegment
-	(*ForwardItem)(nil),           // 34: alonabot.v1.ForwardItem
-	(*ForwardSource)(nil),         // 35: alonabot.v1.ForwardSource
-	(*SendRequest)(nil),           // 36: alonabot.v1.SendRequest
-	(*SendResult)(nil),            // 37: alonabot.v1.SendResult
-	(*PartResult)(nil),            // 38: alonabot.v1.PartResult
-	(*BotOnlinePayload)(nil),      // 39: alonabot.v1.BotOnlinePayload
-	(*BotOfflinePayload)(nil),     // 40: alonabot.v1.BotOfflinePayload
-	(*EditRequest)(nil),           // 41: alonabot.v1.EditRequest
-	(*ExtensionSegment)(nil),      // 42: alonabot.v1.ExtensionSegment
-	(*DeleteRequest)(nil),         // 43: alonabot.v1.DeleteRequest
-	(*DeleteItemResult)(nil),      // 44: alonabot.v1.DeleteItemResult
-	(*DeleteResult)(nil),          // 45: alonabot.v1.DeleteResult
-	(*Target)(nil),                // 46: alonabot.v1.Target
-	(*Actor)(nil),                 // 47: alonabot.v1.Actor
-	(*Capability)(nil),            // 48: alonabot.v1.Capability
-	(*IncomingMedia)(nil),         // 49: alonabot.v1.IncomingMedia
-	(*ErrorInfo)(nil),             // 50: alonabot.v1.ErrorInfo
+	(*MarkdownSegment)(nil),       // 21: alonabot.v1.MarkdownSegment
+	(*TextSegment)(nil),           // 22: alonabot.v1.TextSegment
+	(*TextEntity)(nil),            // 23: alonabot.v1.TextEntity
+	(*MediaSource)(nil),           // 24: alonabot.v1.MediaSource
+	(*ImageSegment)(nil),          // 25: alonabot.v1.ImageSegment
+	(*VideoSegment)(nil),          // 26: alonabot.v1.VideoSegment
+	(*VoiceSegment)(nil),          // 27: alonabot.v1.VoiceSegment
+	(*FileSegment)(nil),           // 28: alonabot.v1.FileSegment
+	(*MentionSegment)(nil),        // 29: alonabot.v1.MentionSegment
+	(*ReferenceSegment)(nil),      // 30: alonabot.v1.ReferenceSegment
+	(*ButtonsSegment)(nil),        // 31: alonabot.v1.ButtonsSegment
+	(*ButtonRow)(nil),             // 32: alonabot.v1.ButtonRow
+	(*Button)(nil),                // 33: alonabot.v1.Button
+	(*ForwardSegment)(nil),        // 34: alonabot.v1.ForwardSegment
+	(*ForwardItem)(nil),           // 35: alonabot.v1.ForwardItem
+	(*ForwardSource)(nil),         // 36: alonabot.v1.ForwardSource
+	(*SendRequest)(nil),           // 37: alonabot.v1.SendRequest
+	(*SendResult)(nil),            // 38: alonabot.v1.SendResult
+	(*PartResult)(nil),            // 39: alonabot.v1.PartResult
+	(*BotOnlinePayload)(nil),      // 40: alonabot.v1.BotOnlinePayload
+	(*BotOfflinePayload)(nil),     // 41: alonabot.v1.BotOfflinePayload
+	(*EditRequest)(nil),           // 42: alonabot.v1.EditRequest
+	(*ExtensionSegment)(nil),      // 43: alonabot.v1.ExtensionSegment
+	(*DeleteRequest)(nil),         // 44: alonabot.v1.DeleteRequest
+	(*DeleteItemResult)(nil),      // 45: alonabot.v1.DeleteItemResult
+	(*DeleteResult)(nil),          // 46: alonabot.v1.DeleteResult
+	(*ReadNodesRequest)(nil),      // 47: alonabot.v1.ReadNodesRequest
+	(*ReadNodesResponse)(nil),     // 48: alonabot.v1.ReadNodesResponse
+	(*Target)(nil),                // 49: alonabot.v1.Target
+	(*Actor)(nil),                 // 50: alonabot.v1.Actor
+	(*Capability)(nil),            // 51: alonabot.v1.Capability
+	(*IncomingMedia)(nil),         // 52: alonabot.v1.IncomingMedia
+	(*ErrorInfo)(nil),             // 53: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_message_proto_depIdxs = []int32{
 	0,  // 0: alonabot.v1.Event.source_kind:type_name -> alonabot.v1.EventSourceKind
-	46, // 1: alonabot.v1.Event.target:type_name -> alonabot.v1.Target
-	47, // 2: alonabot.v1.Event.actor:type_name -> alonabot.v1.Actor
+	49, // 1: alonabot.v1.Event.target:type_name -> alonabot.v1.Target
+	50, // 2: alonabot.v1.Event.actor:type_name -> alonabot.v1.Actor
 	8,  // 3: alonabot.v1.Event.message:type_name -> alonabot.v1.PlatformMessage
 	9,  // 4: alonabot.v1.Event.event_payload:type_name -> alonabot.v1.EventPayload
-	48, // 5: alonabot.v1.Event.capabilities:type_name -> alonabot.v1.Capability
+	51, // 5: alonabot.v1.Event.capabilities:type_name -> alonabot.v1.Capability
 	1,  // 6: alonabot.v1.Event.chat_type:type_name -> alonabot.v1.ChatType
 	19, // 7: alonabot.v1.PlatformMessage.chain:type_name -> alonabot.v1.MessageChain
 	12, // 8: alonabot.v1.EventPayload.message_created:type_name -> alonabot.v1.MessageCreatedPayload
@@ -3869,60 +4050,64 @@ var file_alonabot_v1_message_proto_depIdxs = []int32{
 	16, // 13: alonabot.v1.EventPayload.member_left:type_name -> alonabot.v1.MemberPayload
 	17, // 14: alonabot.v1.EventPayload.reaction_added:type_name -> alonabot.v1.ReactionAddedPayload
 	18, // 15: alonabot.v1.EventPayload.scheduled:type_name -> alonabot.v1.ScheduledPayload
-	39, // 16: alonabot.v1.EventPayload.bot_online:type_name -> alonabot.v1.BotOnlinePayload
-	40, // 17: alonabot.v1.EventPayload.bot_offline:type_name -> alonabot.v1.BotOfflinePayload
+	40, // 16: alonabot.v1.EventPayload.bot_online:type_name -> alonabot.v1.BotOnlinePayload
+	41, // 17: alonabot.v1.EventPayload.bot_offline:type_name -> alonabot.v1.BotOfflinePayload
 	11, // 18: alonabot.v1.EventPayload.adapter_event:type_name -> alonabot.v1.AdapterEventPayload
 	10, // 19: alonabot.v1.EventPayload.command_invoked:type_name -> alonabot.v1.CommandInvokedPayload
 	19, // 20: alonabot.v1.MessageCreatedPayload.chain:type_name -> alonabot.v1.MessageChain
 	19, // 21: alonabot.v1.MessageEditedPayload.chain:type_name -> alonabot.v1.MessageChain
 	19, // 22: alonabot.v1.MessageEditedPayload.old_chain:type_name -> alonabot.v1.MessageChain
 	20, // 23: alonabot.v1.MessageChain.segments:type_name -> alonabot.v1.Segment
-	21, // 24: alonabot.v1.Segment.text:type_name -> alonabot.v1.TextSegment
-	24, // 25: alonabot.v1.Segment.image:type_name -> alonabot.v1.ImageSegment
-	25, // 26: alonabot.v1.Segment.video:type_name -> alonabot.v1.VideoSegment
-	27, // 27: alonabot.v1.Segment.file:type_name -> alonabot.v1.FileSegment
-	28, // 28: alonabot.v1.Segment.mention:type_name -> alonabot.v1.MentionSegment
-	29, // 29: alonabot.v1.Segment.reference:type_name -> alonabot.v1.ReferenceSegment
-	30, // 30: alonabot.v1.Segment.buttons:type_name -> alonabot.v1.ButtonsSegment
-	33, // 31: alonabot.v1.Segment.forward:type_name -> alonabot.v1.ForwardSegment
-	42, // 32: alonabot.v1.Segment.extension:type_name -> alonabot.v1.ExtensionSegment
-	26, // 33: alonabot.v1.Segment.voice:type_name -> alonabot.v1.VoiceSegment
-	2,  // 34: alonabot.v1.TextSegment.format:type_name -> alonabot.v1.TextFormat
-	22, // 35: alonabot.v1.TextSegment.entities:type_name -> alonabot.v1.TextEntity
-	3,  // 36: alonabot.v1.TextEntity.type:type_name -> alonabot.v1.EntityType
-	49, // 37: alonabot.v1.MediaSource.incoming_ref:type_name -> alonabot.v1.IncomingMedia
-	23, // 38: alonabot.v1.ImageSegment.source:type_name -> alonabot.v1.MediaSource
-	23, // 39: alonabot.v1.VideoSegment.source:type_name -> alonabot.v1.MediaSource
-	23, // 40: alonabot.v1.VoiceSegment.source:type_name -> alonabot.v1.MediaSource
-	23, // 41: alonabot.v1.FileSegment.source:type_name -> alonabot.v1.MediaSource
-	46, // 42: alonabot.v1.ReferenceSegment.target:type_name -> alonabot.v1.Target
-	31, // 43: alonabot.v1.ButtonsSegment.rows:type_name -> alonabot.v1.ButtonRow
-	32, // 44: alonabot.v1.ButtonRow.buttons:type_name -> alonabot.v1.Button
-	34, // 45: alonabot.v1.ForwardSegment.items:type_name -> alonabot.v1.ForwardItem
-	35, // 46: alonabot.v1.ForwardItem.source:type_name -> alonabot.v1.ForwardSource
-	19, // 47: alonabot.v1.ForwardItem.chain:type_name -> alonabot.v1.MessageChain
-	46, // 48: alonabot.v1.SendRequest.to:type_name -> alonabot.v1.Target
-	19, // 49: alonabot.v1.SendRequest.chain:type_name -> alonabot.v1.MessageChain
-	4,  // 50: alonabot.v1.SendResult.status:type_name -> alonabot.v1.SendStatus
-	46, // 51: alonabot.v1.SendResult.target:type_name -> alonabot.v1.Target
-	48, // 52: alonabot.v1.SendResult.capabilities_used:type_name -> alonabot.v1.Capability
-	38, // 53: alonabot.v1.SendResult.part_results:type_name -> alonabot.v1.PartResult
-	5,  // 54: alonabot.v1.PartResult.status:type_name -> alonabot.v1.PartStatus
-	50, // 55: alonabot.v1.PartResult.error:type_name -> alonabot.v1.ErrorInfo
-	6,  // 56: alonabot.v1.BotOfflinePayload.reason:type_name -> alonabot.v1.BotOfflineReason
-	50, // 57: alonabot.v1.BotOfflinePayload.safe_error:type_name -> alonabot.v1.ErrorInfo
-	46, // 58: alonabot.v1.EditRequest.to:type_name -> alonabot.v1.Target
-	19, // 59: alonabot.v1.EditRequest.chain:type_name -> alonabot.v1.MessageChain
-	46, // 60: alonabot.v1.DeleteRequest.to:type_name -> alonabot.v1.Target
-	5,  // 61: alonabot.v1.DeleteItemResult.status:type_name -> alonabot.v1.PartStatus
-	50, // 62: alonabot.v1.DeleteItemResult.error:type_name -> alonabot.v1.ErrorInfo
-	46, // 63: alonabot.v1.DeleteResult.target:type_name -> alonabot.v1.Target
-	44, // 64: alonabot.v1.DeleteResult.items:type_name -> alonabot.v1.DeleteItemResult
-	65, // [65:65] is the sub-list for method output_type
-	65, // [65:65] is the sub-list for method input_type
-	65, // [65:65] is the sub-list for extension type_name
-	65, // [65:65] is the sub-list for extension extendee
-	0,  // [0:65] is the sub-list for field type_name
+	22, // 24: alonabot.v1.Segment.text:type_name -> alonabot.v1.TextSegment
+	25, // 25: alonabot.v1.Segment.image:type_name -> alonabot.v1.ImageSegment
+	26, // 26: alonabot.v1.Segment.video:type_name -> alonabot.v1.VideoSegment
+	28, // 27: alonabot.v1.Segment.file:type_name -> alonabot.v1.FileSegment
+	29, // 28: alonabot.v1.Segment.mention:type_name -> alonabot.v1.MentionSegment
+	30, // 29: alonabot.v1.Segment.reference:type_name -> alonabot.v1.ReferenceSegment
+	31, // 30: alonabot.v1.Segment.buttons:type_name -> alonabot.v1.ButtonsSegment
+	34, // 31: alonabot.v1.Segment.forward:type_name -> alonabot.v1.ForwardSegment
+	43, // 32: alonabot.v1.Segment.extension:type_name -> alonabot.v1.ExtensionSegment
+	27, // 33: alonabot.v1.Segment.voice:type_name -> alonabot.v1.VoiceSegment
+	21, // 34: alonabot.v1.Segment.markdown:type_name -> alonabot.v1.MarkdownSegment
+	2,  // 35: alonabot.v1.TextSegment.format:type_name -> alonabot.v1.TextFormat
+	23, // 36: alonabot.v1.TextSegment.entities:type_name -> alonabot.v1.TextEntity
+	3,  // 37: alonabot.v1.TextEntity.type:type_name -> alonabot.v1.EntityType
+	52, // 38: alonabot.v1.MediaSource.incoming_ref:type_name -> alonabot.v1.IncomingMedia
+	24, // 39: alonabot.v1.ImageSegment.source:type_name -> alonabot.v1.MediaSource
+	24, // 40: alonabot.v1.VideoSegment.source:type_name -> alonabot.v1.MediaSource
+	24, // 41: alonabot.v1.VoiceSegment.source:type_name -> alonabot.v1.MediaSource
+	24, // 42: alonabot.v1.FileSegment.source:type_name -> alonabot.v1.MediaSource
+	49, // 43: alonabot.v1.ReferenceSegment.target:type_name -> alonabot.v1.Target
+	32, // 44: alonabot.v1.ButtonsSegment.rows:type_name -> alonabot.v1.ButtonRow
+	33, // 45: alonabot.v1.ButtonRow.buttons:type_name -> alonabot.v1.Button
+	35, // 46: alonabot.v1.ForwardSegment.items:type_name -> alonabot.v1.ForwardItem
+	36, // 47: alonabot.v1.ForwardItem.source:type_name -> alonabot.v1.ForwardSource
+	19, // 48: alonabot.v1.ForwardItem.chain:type_name -> alonabot.v1.MessageChain
+	49, // 49: alonabot.v1.SendRequest.to:type_name -> alonabot.v1.Target
+	19, // 50: alonabot.v1.SendRequest.chain:type_name -> alonabot.v1.MessageChain
+	4,  // 51: alonabot.v1.SendResult.status:type_name -> alonabot.v1.SendStatus
+	49, // 52: alonabot.v1.SendResult.target:type_name -> alonabot.v1.Target
+	51, // 53: alonabot.v1.SendResult.capabilities_used:type_name -> alonabot.v1.Capability
+	39, // 54: alonabot.v1.SendResult.part_results:type_name -> alonabot.v1.PartResult
+	5,  // 55: alonabot.v1.PartResult.status:type_name -> alonabot.v1.PartStatus
+	53, // 56: alonabot.v1.PartResult.error:type_name -> alonabot.v1.ErrorInfo
+	6,  // 57: alonabot.v1.BotOfflinePayload.reason:type_name -> alonabot.v1.BotOfflineReason
+	53, // 58: alonabot.v1.BotOfflinePayload.safe_error:type_name -> alonabot.v1.ErrorInfo
+	49, // 59: alonabot.v1.EditRequest.to:type_name -> alonabot.v1.Target
+	19, // 60: alonabot.v1.EditRequest.chain:type_name -> alonabot.v1.MessageChain
+	49, // 61: alonabot.v1.DeleteRequest.to:type_name -> alonabot.v1.Target
+	5,  // 62: alonabot.v1.DeleteItemResult.status:type_name -> alonabot.v1.PartStatus
+	53, // 63: alonabot.v1.DeleteItemResult.error:type_name -> alonabot.v1.ErrorInfo
+	49, // 64: alonabot.v1.DeleteResult.target:type_name -> alonabot.v1.Target
+	45, // 65: alonabot.v1.DeleteResult.items:type_name -> alonabot.v1.DeleteItemResult
+	49, // 66: alonabot.v1.ReadNodesRequest.to:type_name -> alonabot.v1.Target
+	34, // 67: alonabot.v1.ReadNodesRequest.segment:type_name -> alonabot.v1.ForwardSegment
+	35, // 68: alonabot.v1.ReadNodesResponse.items:type_name -> alonabot.v1.ForwardItem
+	69, // [69:69] is the sub-list for method output_type
+	69, // [69:69] is the sub-list for method input_type
+	69, // [69:69] is the sub-list for extension type_name
+	69, // [69:69] is the sub-list for extension extendee
+	0,  // [0:69] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_message_proto_init() }
@@ -3961,34 +4146,35 @@ func file_alonabot_v1_message_proto_init() {
 		(*Segment_Forward)(nil),
 		(*Segment_Extension)(nil),
 		(*Segment_Voice)(nil),
+		(*Segment_Markdown)(nil),
 	}
-	file_alonabot_v1_message_proto_msgTypes[14].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[15].OneofWrappers = []any{}
-	file_alonabot_v1_message_proto_msgTypes[16].OneofWrappers = []any{
+	file_alonabot_v1_message_proto_msgTypes[16].OneofWrappers = []any{}
+	file_alonabot_v1_message_proto_msgTypes[17].OneofWrappers = []any{
 		(*MediaSource_MediaRef)(nil),
 		(*MediaSource_IncomingRef)(nil),
 		(*MediaSource_HttpsUrl)(nil),
 		(*MediaSource_InlineBase64)(nil),
 		(*MediaSource_PlatformFile)(nil),
 	}
-	file_alonabot_v1_message_proto_msgTypes[17].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[18].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[19].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[20].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[21].OneofWrappers = []any{}
-	file_alonabot_v1_message_proto_msgTypes[25].OneofWrappers = []any{}
+	file_alonabot_v1_message_proto_msgTypes[22].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[26].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[27].OneofWrappers = []any{}
 	file_alonabot_v1_message_proto_msgTypes[28].OneofWrappers = []any{}
-	file_alonabot_v1_message_proto_msgTypes[30].OneofWrappers = []any{}
-	file_alonabot_v1_message_proto_msgTypes[32].OneofWrappers = []any{}
+	file_alonabot_v1_message_proto_msgTypes[29].OneofWrappers = []any{}
+	file_alonabot_v1_message_proto_msgTypes[31].OneofWrappers = []any{}
+	file_alonabot_v1_message_proto_msgTypes[33].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_message_proto_rawDesc), len(file_alonabot_v1_message_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   39,
+			NumMessages:   42,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

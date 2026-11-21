@@ -405,6 +405,42 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		// 与其他固定服务共用请求 context，平台调用在状态锁外执行。
 		safe := synchronizer.SyncCommands(ctx, convert.CommandMenuFromProto(request.Commands))
 		return adapterResponse(&pb.AdapterCommandsSyncResponse{}, convert.ErrorToProto(safe))
+
+	case wire.ServiceAdapterReadNodes:
+		request := &pb.AdapterReadNodesRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		instance := entry.instance
+		reader, supported := instance.(adapter.NodesReader)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support node reads")
+		}
+		target := request.Target
+		if target.GetAdapterInstanceId() != request.InstanceId || target.GetAccountId() != instance.Account().ID || target.GetAdapterId() != r.adapter.Descriptor().AdapterID || target.GetChatId() == "" {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "node target does not match instance")
+		}
+		if err := validate.ReadNodes(request.Segment); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		decoded := convert.ChainFromProto(&pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Forward{Forward: request.Segment}}}}, target)[0].(message.ForwardSegment)
+		nodes, safe := reader.ReadNodes(ctx, convert.SessionFromProto(target), decoded)
+		chain, err := convert.ChainToProto(message.Chain{message.ForwardSegment{Items: nodes}}, target)
+		if err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		return adapterResponse(&pb.ReadNodesResponse{Items: chain.Segments[0].GetForward().Items}, convert.ErrorToProto(safe))
 	case wire.ServiceAdapterAction:
 		request := &pb.AdapterActionRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {

@@ -117,3 +117,8 @@ func (r *Registry) Remove(instanceID string) {
 	defer r.mu.Unlock()
 	delete(r.instances, instanceID)
 }
+
+// NodesReader 查询当前目标内的完整递归节点，保留结果与错误。
+type NodesReader interface {
+	ReadNodes(context.Context, *pb.Target, *pb.ForwardSegment) ([]*pb.ForwardItem, *pb.ErrorInfo)
+}

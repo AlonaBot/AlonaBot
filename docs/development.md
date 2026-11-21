@@ -35,7 +35,8 @@ Core 使用 `go.mod`、`go.sum` 中的锁定版本；官方组件各自维护 mo
 
 | 模块 | 允许用途 |
 | --- | --- |
-| protobuf、x/sys、google/jsonschema-go | 协议、操作系统能力及 Schema；SDK 根包仅链接这三组模块及其依赖 |
+| protobuf、x/sys、google/jsonschema-go | 协议、操作系统能力及 Schema；SDK 根包还通过消息模型链接下述 Goldmark |
+| github.com/yuin/goldmark v1.7.16 | 已批准用于 `contracts/markdown` 的 CommonMark 与删除线解析，供 Core 发送/编辑和 SDK `MarkdownSegment.PlainText()` 共用 |
 | modernc.org/sqlite、libtnb/sqlite、GORM | Core 状态库与按需导入的 SQLite/GORM SDK 包 |
 | go.yaml.in/yaml/v3 | manifest、技能元数据等 YAML |
 | Cobra、pflag、go-isatty；Windows 的 mousetrap | CLI、终端识别 |
@@ -43,7 +44,7 @@ Core 使用 `go.mod`、`go.sum` 中的锁定版本；官方组件各自维护 mo
 | openai-go/v3、anthropic-sdk-go/v2 | Agent Provider；不导入 Azure、Bedrock、Vertex 等厂商子包 |
 | coder/websocket | OneBot 11 Adapter；Agent 依赖的传递使用随现行锁文件保留 |
 
-Core 可执行文件允许链接协议、SQLite/GORM、yaml、x/sys、Schema 与 CLI 所需模块；模型 SDK、MCP 和平台连接客户端归对应组件。插件只在导入 `sdk/gormdb` 时链接 GORM。审查时核对实际链接范围：
+Core 可执行文件允许链接协议、Goldmark、SQLite/GORM、yaml、x/sys、Schema 与 CLI 所需模块；模型 SDK、MCP 和平台连接客户端归对应组件。插件只在导入 `sdk/gormdb` 时链接 GORM。审查时核对实际链接范围：
 
 ```fish
 go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u

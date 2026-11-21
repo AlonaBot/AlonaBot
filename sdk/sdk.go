@@ -140,14 +140,15 @@ func (c *Context) StopPropagation() {
 	}
 }
 
-// SendOption 调整一次消息发送的机器人实例。
+// SendOption 调整一次消息发送或平台动作的机器人实例。
 type SendOption func(*sendOptions)
 
 type sendOptions struct {
-	via string
+	via                 string
+	actionDefaultTarget bool // 仅绑定客户端按声明选择 Handler 的默认目标。
 }
 
-// Via 指定发送的机器人实例。
+// Via 指定消息发送或平台动作的机器人实例。
 func Via(instanceID string) SendOption { return func(o *sendOptions) { o.via = instanceID } }
 
 // Send 向当前事件的默认会话发送内容，保留已确认的部分结果。

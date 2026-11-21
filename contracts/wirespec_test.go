@@ -736,7 +736,7 @@ func TestActionFieldNumbers(t *testing.T) {
 		kinds   []protoreflect.Kind
 	}{
 		{&pb.ActionDeclaration{}, []protoreflect.Name{"name", "version", "scope", "params_schema_json", "result_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind}},
-		{&pb.ActionRequest{}, []protoreflect.Name{"to", "adapter_instance_id", "name", "version", "params_json"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}},
+		{&pb.ActionRequest{}, []protoreflect.Name{"to", "adapter_instance_id", "name", "version", "params_json", "use_default_target"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind, protoreflect.BoolKind}},
 		{&pb.AdapterActionRequest{}, []protoreflect.Name{"instance_id", "target", "name", "version", "params_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}},
 		{&pb.ActionResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
 	} {
@@ -764,7 +764,7 @@ func TestActionFieldNumbers(t *testing.T) {
 	}
 }
 
-// TestMessageSegmentFieldNumbers 固定语音、转发、URL 按钮、会话类型与名称的追加编号。
+// TestMessageSegmentFieldNumbers 固定消息片段、节点查询和会话字段的追加编号。
 func TestMessageSegmentFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
 		message  proto.Message
@@ -775,6 +775,14 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		typeName protoreflect.FullName
 	}{
 		{&pb.Segment{}, 10, "voice", protoreflect.MessageKind, false, "alonabot.v1.VoiceSegment"},
+		{&pb.Segment{}, 11, "markdown", protoreflect.MessageKind, false, "alonabot.v1.MarkdownSegment"},
+		{&pb.MarkdownSegment{}, 1, "content", protoreflect.StringKind, false, ""},
+		{&pb.ForwardItem{}, 4, "occurred_at_unix_ms", protoreflect.Int64Kind, false, ""},
+		{&pb.ReadNodesRequest{}, 1, "to", protoreflect.MessageKind, false, "alonabot.v1.Target"},
+		{&pb.ReadNodesRequest{}, 2, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
+		{&pb.AdapterReadNodesRequest{}, 1, "instance_id", protoreflect.StringKind, false, ""},
+		{&pb.AdapterReadNodesRequest{}, 2, "target", protoreflect.MessageKind, false, "alonabot.v1.Target"},
+		{&pb.AdapterReadNodesRequest{}, 3, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
 		{&pb.VoiceSegment{}, 1, "source", protoreflect.MessageKind, false, "alonabot.v1.MediaSource"},
 		{&pb.VoiceSegment{}, 2, "duration_ms", protoreflect.Uint64Kind, true, ""},
 		{&pb.VoiceSegment{}, 3, "caption", protoreflect.StringKind, true, ""},
@@ -792,9 +800,9 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		if c.kind == protoreflect.MessageKind && f.Message().FullName() != c.typeName || c.kind == protoreflect.EnumKind && f.Enum().FullName() != c.typeName {
 			t.Errorf("field type = %v", f)
 		}
-		if c.name == "voice" {
+		if c.name == "voice" || c.name == "markdown" {
 			if f.ContainingOneof() == nil || f.ContainingOneof().Name() != "data" {
-				t.Errorf("voice oneof = %v", f.ContainingOneof())
+				t.Errorf("%s oneof = %v", c.name, f.ContainingOneof())
 			}
 		} else if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
 			t.Errorf("unexpected oneof = %v", f)
@@ -979,5 +987,14 @@ func TestConfigCorrectionFieldNumbers(t *testing.T) {
 		if field == nil || field.Name() != name || field.Kind() != protoreflect.StringKind {
 			t.Errorf("ConfigCorrection field %d should be string %s, got %v", i+1, name, field)
 		}
+	}
+}
+
+// TestReadNodesResponseFieldNumbers 固定节点响应的字段编号、类型和 repeated 语义。
+func TestReadNodesResponseFieldNumbers(t *testing.T) {
+	fields := (&pb.ReadNodesResponse{}).ProtoReflect().Descriptor().Fields()
+	field := fields.ByNumber(1)
+	if fields.Len() != 1 || field == nil || field.Name() != "items" || field.Kind() != protoreflect.MessageKind || !field.IsList() || field.Message().FullName() != "alonabot.v1.ForwardItem" {
+		t.Fatalf("ReadNodesResponse.items = %v", field)
 	}
 }

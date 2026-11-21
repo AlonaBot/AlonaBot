@@ -34,19 +34,20 @@ type Hooks interface {
 
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
 type Service struct {
-	replyMu        sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
-	resolveReply   func(context.Context, *pb.Target) (settings.Reply, error)
-	replyRoots     map[*router.Invocation]struct{}
-	replySessions  map[router.Caller]*replySession
-	requestTimeout time.Duration
-	adapters       *adapter.Registry
-	policy         *policy.Policy
-	hooks          Hooks // nil 时跳过出站 Hook
-	issue          func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error
-	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error)
+	prepareIncoming func(*pb.MessageChain, router.Caller, *pb.Target) (*pb.MessageChain, error)
+	replyMu         sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
+	resolveReply    func(context.Context, *pb.Target) (settings.Reply, error)
+	replyRoots      map[*router.Invocation]struct{}
+	replySessions   map[router.Caller]*replySession
+	requestTimeout  time.Duration
+	adapters        *adapter.Registry
+	policy          *policy.Policy
+	hooks           Hooks // nil 时跳过出站 Hook
+	issue           func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error
+	lease           func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error)
 }
 
-// New 创建消息服务；装配处将 Send、Edit 分别注册为 wire.ServiceSend、wire.ServiceEdit。
+// New 创建消息服务；装配处登记 Send、Edit 与 ReadNodes，并通过 SetIncomingChain 绑定查询媒体授权。
 // lease 由媒体 Store 提供，准备平台文件标识或绑定目标 Adapter Session 的只读令牌；
 // issue 在媒体租约前签发按钮；nil 仅供无按钮的测试。
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
@@ -180,6 +181,9 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 }
 
 func (s *Service) checkChain(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {
+	if safe := s.normalizeMarkdown(chain, target); safe != nil {
+		return safe
+	}
 	if safe := s.completeReferences(chain, target); safe != nil {
 		return safe
 	}

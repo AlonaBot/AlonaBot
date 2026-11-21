@@ -28,6 +28,7 @@ func callAction(ctx context.Context, parent *wire.Inbound, to string, name strin
 	if err != nil {
 		return nil, err
 	}
+	request.UseDefaultTarget = options.actionDefaultTarget
 	session, err := currentSession(ctx)
 	if err != nil {
 		return nil, err

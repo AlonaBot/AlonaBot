@@ -19,7 +19,7 @@ const maxInlineMediaBytes = 1 << 20 // CONTRACTS §1.3：内联来源最多 1 Mi
 // 平台能力（UNSUPPORTED）、媒体租约与目标授权由 Core/Adapter 在发送前另行检查。
 // 结构错误返回 INVALID_ARGUMENT，转发节点中无法表达的片段返回 UNSUPPORTED；消息保留片段位置。
 func Chain(c *pb.MessageChain) error {
-	if err := chain(c, ""); err != nil {
+	if err := chain(c, "", false); err != nil {
 		code := pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
 		var validation *Error
 		if errors.As(err, &validation) {
@@ -31,7 +31,7 @@ func Chain(c *pb.MessageChain) error {
 }
 
 // chain 校验一条 Chain；at 是嵌套位置前缀（顶层为空），用于组成错误中的 segment 位置。
-func chain(c *pb.MessageChain, at string) error {
+func chain(c *pb.MessageChain, at string, incoming bool) error {
 	// 1. 逐个校验片段，并统计 reference/buttons 与可发送内容的数量。
 	segs := c.GetSegments()
 	if len(segs) == 0 {
@@ -42,6 +42,11 @@ func chain(c *pb.MessageChain, at string) error {
 		pos := fmt.Sprintf("%ssegment[%d]", at, i)
 		var err error
 		switch d := s.GetData().(type) {
+		case *pb.Segment_Markdown:
+			content++
+			if d.Markdown.GetContent() == "" || !utf8.ValidString(d.Markdown.GetContent()) {
+				err = fmt.Errorf("markdown content must be nonempty UTF-8")
+			}
 		case *pb.Segment_Text:
 			content++
 			err = text(d.Text)
@@ -72,7 +77,7 @@ func chain(c *pb.MessageChain, at string) error {
 			err = buttonRows(d.Buttons)
 		case *pb.Segment_Forward:
 			content++
-			err = forward(d.Forward, pos)
+			err = forward(d.Forward, pos, incoming)
 		case *pb.Segment_Extension:
 			content++
 			err = extension(d.Extension)
@@ -291,9 +296,12 @@ func buttonRows(b *pb.ButtonsSegment) error {
 }
 
 // forward 校验出站节点；平台转发标识只供入站读取。
-func forward(f *pb.ForwardSegment, pos string) error {
-	if f != nil && f.PlatformForwardId != nil {
+func forward(f *pb.ForwardSegment, pos string, incoming bool) error {
+	if !incoming && f != nil && f.PlatformForwardId != nil {
 		return fmt.Errorf("platform_forward_id is only allowed inbound")
+	}
+	if incoming && f.GetPlatformForwardId() != "" && len(f.GetItems()) == 0 {
+		return nil
 	}
 	if len(f.GetItems()) == 0 {
 		return fmt.Errorf("forward has no items")
@@ -312,16 +320,28 @@ func forward(f *pb.ForwardSegment, pos string) error {
 			}
 			continue
 		}
-		for j, segment := range item.GetChain().GetSegments() {
-			switch segment.GetData().(type) {
-			case *pb.Segment_Text, *pb.Segment_Mention, *pb.Segment_Image, *pb.Segment_Video, *pb.Segment_Voice, *pb.Segment_Extension:
-			case *pb.Segment_File, *pb.Segment_Reference, *pb.Segment_Buttons, *pb.Segment_Forward:
-				return &Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: fmt.Sprintf("%ssegment[%d]: unsupported forward node segment", at, j)}
-			}
-		}
-		if err := chain(item.GetChain(), at); err != nil {
+		if err := chain(item.GetChain(), at, incoming); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// IncomingChain 校验平台返回的递归链，允许平台合并转发资源标识。
+func IncomingChain(c *pb.MessageChain) error { return chain(c, "", true) }
+
+// ReadNodes 仅接受平台查询标识，防止将调用者构造的媒体来源重新签发为平台授权。
+func ReadNodes(f *pb.ForwardSegment) error {
+	if f != nil && f.PlatformForwardId != nil {
+		if f.GetPlatformForwardId() == "" || len(f.Items) != 0 {
+			return fmt.Errorf("node query requires a nonempty resource ID without inline items")
+		}
+		return nil
+	}
+	for index, item := range f.GetItems() {
+		if item.GetChain() != nil {
+			return fmt.Errorf("segment.forward.items[%d]: node query requires platform_message_id; traverse expanded chains directly", index)
+		}
+	}
+	return forward(f, "segment", true)
 }

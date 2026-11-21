@@ -17,6 +17,7 @@ type Caller interface {
 var (
 	_ Caller = (*sdk.Context)(nil)
 	_ Caller = (*Client)(nil)
+	_ Caller = (*sdk.AdapterClient)(nil)
 )
 
 // Client 保存后台任务的取消与期限上下文，每次调用使用当前已激活的 Session。

@@ -134,7 +134,7 @@ func saveCache(ctx context.Context, content []byte) error {
 - 发送目标用 `string` 会话字符串：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.SID(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `message.ParseSID(sid)` 校验并拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`c.SendTo(sid, content)` 发往指定会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
 - 编辑、撤回与引用所指的消息统一用 `string` 消息句柄，格式为 `<会话字符串>/<platform_message_id>[@<实例名>]`，可以原样保存。用发送回执的 `Ref()`、`Refs()` 或 `c.Event().Ref()` 取得句柄，手工构造用 `message.Ref(sid, platformMessageID, instance)`，它负责消息 ID 中 `%`、`/`、`@` 的转义，用 `message.ParseRef(ref)` 校验并拆解。编辑用 `c.Edit(ref, content)` 或后台的 `sdk.Edit(ctx, ref, content)`，引用用 `message.Quote(ref)`；省略实例时由 Core 按目标选择规则补齐（CONTRACTS §8，MESSAGE-MODEL §4，D-104）。
 - 命令前缀与回复方式取当前会话的配置文件（CONTRACTS §5.6，T-04.19）。处理 `message.created` 时，向原实例、会话与话题的首条 Send 由 Core 按设置加入群提及、引用与普通文本前缀；手动发送、自动回复、Service 派生与延续共享首条标记，BeforeSend 看到改写后的 chain。提及与前缀加入后超出实例文本上限时两项一起省略，引用保留；每次回复 Send 按 `forward_threshold` 与 `message.forward` 能力决定合并转发，组合仍须满足原消息校验。后台、定时任务与跨会话发送沿用原行为。
-- 编辑首条回复时，Core 按当前插件 Session、完整目标与物理消息 ID 保留回执已确认发送的自动提及和前缀；重复编辑沿用已有修饰，实体偏移按 UTF-16 调整。Edit 接受一个 text 与可选 buttons，需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出即释放关联；流式回复可直接沿用 `c.Edit` 与 `c.Stream`，修饰由 Core 处理。
+- 编辑首条回复时，Core 按当前插件 Session、完整目标与物理消息 ID 保留回执已确认发送的自动提及和前缀；重复编辑沿用已有修饰，实体偏移按 UTF-16 调整。Edit 接受一个 text（也可由通用 markdown 转换得到）与可选 buttons，需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出即释放关联；流式回复可直接沿用 `c.Edit` 与 `c.Stream`，修饰由 Core 处理。
 - 流式输出用 `c.Stream(next)`：next 每次返回一段增量文本，返回 `io.EOF` 正常结束（可以同时带上末段）。实例声明 `message.edit` 时先发送再节流编辑，超过 `TextLimit` 时换条；没有编辑能力时在正常结束后发送一次，输入出错时不发布缓存。返回全部回执，失败时保留已有回执（D-135）。
 - 回复文本用 `c.Reply(text)`；带片段时写 `c.Reply(text, message.ImageURL(url))`，文本与后续片段依次组成一条消息，只发送一次并返回错误。后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via，发送文本后丢弃回执，错误原样返回（D-118、D-180）。
 - `c.User()` 返回 `string` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.UID` 与 `message.ParseUID` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
@@ -144,7 +144,23 @@ func saveCache(ctx context.Context, content []byte) error {
 
 发送带回调的按钮时，用 `a := button.Define[T](name)` 声明动作，通过 `button.On(r, a).Handle(...)` 注册签名为 `func(*sdk.Context, T) error` 的 Handler，再将 `a.Button(label, value)` 放入 `message.Buttons` 发送。`button.` 是按钮路由的保留前缀，注册其他路由时避开该前缀。value 用 `encoding/json` 编码，Core 限制编码结果最多 1024 字节；编码失败的按钮在发送前返回 INVALID_ARGUMENT。点击时 value 解码失败记 WARN，跳过 Handler 并正常结束本次调用。直接构造 `message.Button` 时，空的 `Value` 会省略该字段，省略值的点击同样按解码失败处理。`message.Extension(adapterID, name, version, payload)` 只能发往所属 Adapter 声明了对应 extension 名称与版本的实例，payload 按声明的 Schema 校验（[CONTRACTS §8](../spec/CONTRACTS-v0.1.md)、[MESSAGE-MODEL §6.3](../spec/MESSAGE-MODEL.md#63-按钮与回调)）。
 
-Handler 内的平台动作使用 `c.CallAction`；后台使用 `action.NewClient(ctx)`，两者都实现 `action.Caller`。
+读取合并转发时，当前 Handler 可直接调用 `nodes, err := c.ReadNodes(forward)`；返回值为递归的 `[]message.ForwardItem`，保留作者、`OccurredAt` 和节点消息链。节点中的图片、文件等来源已经按本次调用授权，可用 `media.Open(c, segment.Source)` 读取。查询错误可带部分节点，处理 `err` 后再决定如何使用。后台调用使用 `sdk.ReadNodes(ctx, sid, forward, sdk.Via(instanceID))`，沿用插件发信许可和指定实例。
+
+通用 Markdown 使用对象方法转换为普通文本：
+
+```go
+md := message.Markdown("**标题**\n[链接](https://example.com)")
+result, err := c.Send(md) // 支持 message.markdown 的平台由 Core 转换为实体。
+result, err = c.Send(md.PlainText()) // 显式普通文本，方法无需参数。
+```
+
+通用语法采用 CommonMark 与删除线，保留块结构；富文本转换遇到图片或 HTML 时返回 `UNSUPPORTED`。平台未声明 `message.markdown` 时直接发送也返回该错误，调用者选择 `.PlainText()`。已有 `TextSegment.FormatMarkdown` 沿用 Adapter 的原生方言，Telegram 仍为 MarkdownV2。
+
+Handler 内先调用 `client, err := c.Adapter()` 取得绑定当前可信实例与账号的 `*sdk.AdapterClient`，处理错误后调用 Adapter 包提供的带类型动作函数。Adapter 的 `client.From(c)` 可调用 `c.Adapter()` 并核对 `AdapterID()`；客户端还提供只读的 `InstanceID()`、`AccountID()` 与 `Session()`。没有可信平台身份时返回 `NO_DEFAULT_TARGET`，Handler 结束后调用返回 `FAILED_PRECONDITION`。
+
+底层入口 `client.Call(name, version, params)` 与 `client.CallAction("", name, version, params)` 按 Adapter 声明的作用范围选择目标：chat 动作使用当前默认会话，account 动作只使用绑定实例、向执行器传空会话。账号事件也可取得客户端，调用 chat 动作时需显式提供 `to`。`CallAction(to, name, version, params, opts...)` 接受显式业务会话与 `sdk.Via(instanceID)`，跨会话、跨实例调用继续检查原有发信许可；结果 JSON 与错误同时保留。所有调用继承当前 Handler 的父调用、取消与期限。
+
+`*sdk.AdapterClient`、`*sdk.Context` 与后台的 `*action.Client` 都实现 `action.Caller`。原入口 `c.CallAction` 保持显式目标语义，账号动作传空会话；后台沿用 `action.NewClient(ctx)`，由任务 context 控制取消与期限。
 
 Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](name, version)` 声明扩展事件与 extension；T 须为结构体，放在 Adapter 的常量与数据类型包中，供插件共用。SDK 从 Go 类型推导 Schema：没有 `omitempty` 的字段为必需，不允许未声明的属性；类型不符或推导失败时，`RunAdapter` 在 REGISTER 前返回带声明名的错误（CONTRACTS §8，MESSAGE-MODEL §1.2、§2，D-113）。
 

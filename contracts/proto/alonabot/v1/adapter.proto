@@ -168,6 +168,8 @@ message ActionRequest {
   string name = 3;
   uint32 version = 4;
   string params_json = 5;
+  // 仅绑定 Handler 的客户端设置；按声明范围选择可信默认会话或账号。
+  bool use_default_target = 6;
 }
 
 // ActionResponse 保留平台返回的 JSON 原文，可以与安全错误同时返回。
@@ -211,4 +213,11 @@ message AdapterCommandsSyncRequest {
 
 // AdapterCommandsSyncResponse 确认菜单同步完成，错误沿用 ErrorInfo。
 message AdapterCommandsSyncResponse {
+}
+
+// AdapterReadNodesRequest 将查询绑定到实例账号及当前会话。
+message AdapterReadNodesRequest {
+  string instance_id = 1;
+  Target target = 2;
+  ForwardSegment segment = 3;
 }

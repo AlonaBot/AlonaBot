@@ -226,7 +226,14 @@ message Segment {
     ExtensionSegment extension = 9;
     // 语音。
     VoiceSegment voice = 10;
+    // 通用 CommonMark 与删除线。
+    MarkdownSegment markdown = 11;
   }
+}
+
+// MarkdownSegment 承载通用 Markdown 正文。
+message MarkdownSegment {
+  string content = 1;
 }
 
 // TextFormat 列出文本的标记格式。
@@ -393,6 +400,8 @@ message ForwardItem {
   MessageChain chain = 2;
   // 引用同一会话的已有消息，与 chain 恰有一个。
   optional string platform_message_id = 3;
+  // UTC 毫秒，0 表示未知。
+  int64 occurred_at_unix_ms = 4;
 }
 
 // ForwardSource 描述转发条目的来源展示信息。
@@ -528,4 +537,14 @@ message DeleteItemResult {
 message DeleteResult {
   Target target = 1;
   repeated DeleteItemResult items = 2;
+}
+
+// ReadNodesRequest 查询指定目标中的合并转发资源。
+message ReadNodesRequest {
+  Target to = 1;
+  ForwardSegment segment = 2;
+}
+// ReadNodesResponse 保留完整递归节点及部分结果。
+message ReadNodesResponse {
+  repeated ForwardItem items = 1;
 }
