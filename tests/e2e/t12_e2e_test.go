@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/alonabot-adapter-telegram/telegramtest"
 )
 
@@ -426,7 +428,27 @@ func packAgentComponent(t *testing.T, project, id string) string {
 	if _, err := os.Stat(generated); !os.IsNotExist(err) {
 		t.Fatalf("pack wrote generated source: %v", err)
 	}
-	return filepath.Join(out, id+"-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	return packedComponentArchive(t, out, id)
+}
+
+func packedComponentArchive(t *testing.T, out, id string) string {
+	t.Helper()
+	publication, err := release.Verify(developmentRead(t, filepath.Join(out, "release.json")), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if publication.PluginID != id {
+		t.Fatalf("packaged plugin ID: got %q want %q", publication.PluginID, id)
+	}
+	asset, ok := publication.Asset(runtime.GOOS, runtime.GOARCH)
+	if !ok {
+		t.Fatalf("package has no asset for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	address, err := url.Parse(asset.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(out, filepath.Base(address.Path))
 }
 
 func agentPackageFiles(t *testing.T, archive string) map[string][]byte {

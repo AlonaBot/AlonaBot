@@ -17,7 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -113,7 +112,7 @@ func testCrossDatabasePackages(t *testing.T, transport, tag string) {
 		t.Fatalf("pack %s: %v\n%s", tag, err, output)
 	}
 	const id = "alonabot-plugin-configdb"
-	archive := filepath.Join(out, id+"-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	archive := packedComponentArchive(t, out, id)
 	adapter := packAgentComponent(t, componentDirectories["telegram"], "alonabot-adapter-telegram")
 	server := telegramtest.NewServer(t, "database-token")
 	server.SetMe(101, "database_bot")
