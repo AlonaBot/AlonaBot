@@ -1,4 +1,4 @@
-// Package action 调用 Adapter 的平台动作，后台客户端保留任务的取消与期限（CONTRACTS §1.4）。
+// Package action 调用 Adapter 的平台动作，后台客户端保留任务的取消与期限。
 package action
 
 import (

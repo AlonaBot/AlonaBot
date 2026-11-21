@@ -9,7 +9,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
-// StopTiming 规定停止的时间预算（CONTRACTS §4.2）；测试可注入更短的值。
+// StopTiming 规定停止的时间预算；测试可注入更短的值。
 type StopTiming struct {
 	Drain    time.Duration // 冻结后最多排空的时间
 	Total    time.Duration // 从 t0 起到终止进程树的总截止
@@ -91,7 +91,7 @@ func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing S
 	}
 
 	// 4. 领头进程与它留在树内的其他进程共用同一个总截止；到期仍未清空则终止整棵树并确认消失，
-	// 不能用 sleep 或猜测代替（CONTRACTS §4.2、§12.2）。
+	// 不能用 sleep 或猜测代替。
 	timer := time.NewTimer(time.Until(total))
 	defer timer.Stop()
 	select {
@@ -130,7 +130,7 @@ func StopAll(t0 time.Time, reason pb.StopReason, targets map[*Instance]Tree, tim
 	return out
 }
 
-// RestartPolicy 实现有限恢复（CONTRACTS §4.2）：窗口内第 Limit 次异常退出自动禁用；
+// RestartPolicy 实现有限恢复：窗口内第 Limit 次异常退出自动禁用；
 // 正常退出与用户主动停用不重启；手动启用重置窗口。失败窗口只保存在内存中，禁用状态由调用方持久化。
 type RestartPolicy struct {
 	Window time.Duration // 计数异常退出的滑动窗口

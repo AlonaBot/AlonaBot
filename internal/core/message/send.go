@@ -1,7 +1,7 @@
 // Package message 实现 Core 消息发送与编辑服务的目标准入和回执转发。
 //
 // [Service] 根据可信父调用的原目标或持久化的实例许可准入，先校验载荷、目标和消息链，
-// 再执行出站 Hook、准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留（CONTRACTS §8）。
+// 再执行出站 Hook、准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留。
 // 编辑仅接受文本及可选按钮，实例须声明能力并实现 adapter.Editor；
 // 撤回逐项返回结果，实例须声明能力并实现 adapter.Deleter。
 package message

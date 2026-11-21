@@ -13,14 +13,14 @@ import (
 	"time"
 )
 
-// 日志文件设置的缺省值（CONTRACTS §14.6）。
+// 日志文件设置的缺省值。
 const (
 	DefaultMaxFileSize  = 100 << 20 // 100 MiB
 	DefaultMaxTotalSize = 1 << 30   // 1 GiB
 	DefaultMaxAgeDays   = 30
 )
 
-// 日志文件名为 alonabot-<日期>.log，同日续写的文件为 alonabot-<日期>.<序号>.log（CONTRACTS §14.6）。
+// 日志文件名为 alonabot-<日期>.log，同日续写的文件为 alonabot-<日期>.<序号>.log。
 const dateLayout = "2006-01-02"
 
 var logFileName = regexp.MustCompile(`^alonabot-(\d{4}-\d{2}-\d{2})(?:\.([1-9]\d*))?\.log$`)

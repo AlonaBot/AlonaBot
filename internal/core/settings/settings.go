@@ -3,7 +3,7 @@
 // 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用。
 // [File] 持有未展开的 [Document] 和有效 [Settings]，副本中的环境变量已展开。
 // Core 设置与 Adapter 实例按声明校正运行副本，原文件只经显式 Update 修改。
-// 设置遵循 CONTRACTS §15.1，日志文件上限遵循 §14.6。
+// 设置与日志文件的管理方式见 docs/deployment.md。
 package settings
 
 import (
@@ -98,8 +98,8 @@ type fileState struct {
 	current  Settings
 }
 
-// Defaults 返回 CONTRACTS §15.1 的缺省设置。
-// ALONABOT_CONTAINER=1 时按 §15.3 监听所有接口，BaseURL 保持本机地址。
+// Defaults 返回缺省设置。
+// ALONABOT_CONTAINER=1 时监听所有接口，BaseURL 保持本机地址。
 func Defaults() Settings {
 	s := Settings{Listen: defaultListen, BaseURL: "http://" + defaultListen,
 		LogLevel:  slog.LevelInfo,

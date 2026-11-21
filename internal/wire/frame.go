@@ -1,11 +1,10 @@
 // Package wire 实现 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
 //
 // 每帧由 4 字节 big-endian 载荷长度（不含前缀）和 Protobuf Envelope 组成，长度范围为
-// 1～4,194,304 字节；TCP 与 stdio 使用相同的编码。帧格式见 spec/WIRE-FORMAT.md §1。
+// 1～4,194,304 字节；TCP 与 stdio 使用相同的编码。帧格式见 docs/development.md。
 //
 // Session 在一条已认证的连接上同时收发双向调用：按调用编号配对请求与响应，
 // 执行每方向与全局的准入预算，并让响应、取消和控制帧走优先通道，不被普通请求阻塞。
-// 调用与取消的规则见 spec/WIRE-FORMAT.md §4。
 //
 // 包的组成：
 //   - [EncodeFrame]、[ReadFrame] 与 [Writer] 负责单帧的编码、读取和串行写出。
@@ -30,7 +29,7 @@ import (
 // MaxFrame 限制单帧载荷（Envelope 编码后）的字节数。
 const MaxFrame = 4 << 20
 
-// MaxMediaChunk 固定媒体分块上限为 1 MiB（CONTRACTS §1.3），不作为调优参数。
+// MaxMediaChunk 固定媒体分块上限为 1 MiB，不作为调优参数。
 const MaxMediaChunk = 1 << 20
 
 var (
@@ -44,7 +43,7 @@ var (
 	ErrDecode = errors.New("cannot decode Envelope")
 )
 
-// 以上错误都使当前连接失败，不再猜测后续帧边界（WIRE §1）。
+// 以上错误都使当前连接失败，不再猜测后续帧边界。
 
 // ReadRaw 读取一帧的原始载荷。先校验长度再分配缓冲；流恰好在帧边界结束时返回 io.EOF。
 func ReadRaw(r io.Reader) ([]byte, error) {

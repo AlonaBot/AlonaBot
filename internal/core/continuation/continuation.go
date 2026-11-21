@@ -1,7 +1,7 @@
 // Package continuation 管理 Handler 的一次性延续调用与同用户、同会话的消息等待。
 //
 // Manager 将登记保留到原调用结束，再在独立 goroutine 中发出延续请求；
-// 等待只保存在内存中，命中事件由 Router 在命令层之前交付（CONTRACTS §2.4）。
+// 等待只保存在内存中，命中事件由 Router 在命令层之前交付。
 package continuation
 
 import (

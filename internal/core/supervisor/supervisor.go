@@ -40,10 +40,10 @@ import (
 // memoryLimitEnv 指定 Go 运行时读取插件内存软上限的环境变量。
 const memoryLimitEnv = "GOMEMLIMIT"
 
-// Core 全局默认语言的缺省值见 CONTRACTS §5.4。
+// Core 全局默认语言未配置时使用英语。
 const defaultLocale = "en-US"
 
-// 受管 SQLite 的代次路径与权限见 CONTRACTS §6.1。
+// 受管 SQLite 的文件仅允许当前用户读写。
 const (
 	generationsDirectory    = "generations"
 	generationDatabaseFile  = "db.sqlite"
@@ -456,8 +456,8 @@ func closeListener(ln net.Listener) {
 	}
 }
 
-// Stop 停用插件（CONTRACTS §4.2），确认进程树清空后关闭 Listener、释放进程资源。
-// 与 Launch 共用逐插件管理锁（CONTRACTS §12.2）：停止完成前，同一插件的下一次启动不会开始。
+// Stop 停用插件，确认进程树清空后关闭 Listener、释放进程资源。
+// 与 Launch 共用逐插件管理锁：停止完成前，同一插件的下一次启动不会开始。
 // 进程已先行退出并由 WaitExit 清理时，只返回该次清理的错误。
 func (r *Running) Stop(t0 time.Time, reason pb.StopReason) host.StopResult {
 	unlock := r.store.LockPlugin(r.pluginID)
@@ -643,7 +643,7 @@ func (r *Running) detach() {
 	}
 }
 
-// drainLogs 等待进程的日志管道读完，插件最后的输出才不会因 Core 随后退出而丢失（CONTRACTS §14.1）。
+// drainLogs 等待进程的日志管道读完，插件最后的输出才不会因 Core 随后退出而丢失。
 func drainLogs(proc *process.Process, deadline time.Time) {
 	if !proc.WaitLogsUntil(deadline) {
 		slog.Warn("plugin output was not fully read before the deadline", "plugin_id", proc.PluginID)

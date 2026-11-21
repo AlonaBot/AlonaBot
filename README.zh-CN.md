@@ -18,18 +18,20 @@
 
 <p align="center">
   <a href="https://alonabot.github.io/docs/">文档</a> ·
-  <a href="docs/plugin-guide.md">插件开发</a> ·
+  <a href="docs/plugin-guide.zh-CN.md">插件开发</a> ·
   <a href="changelog/README.zh-CN.md">更新日志</a> ·
-  <a href="CONTRIBUTING.md">参与贡献</a>
+  <a href="CONTRIBUTING.zh-CN.md">参与贡献</a>
 </p>
 
-## 为什么选择 AlonaBot
+## 核心特性
 
-- **进程隔离**：Native Go 插件、Adapter 与 Agent 各自运行，Core 管理启动、停止与故障恢复。适合信任的本机组件；独立进程仍需管理员审查来源。
-- **组件可替换**：聊天平台由 Adapter 接入，AI 能力由 Agent 提供，管理界面由 WebUI 提供。社区组件可以替换官方实现。
-- **按需运行**：未启用的组件不启动进程；支持休眠的插件可在空闲时退出，由消息、服务、HTTP 或定时任务唤醒。
-- **Go 开发体验**：链式注册命令与事件，支持热重载、受管 SQLite、配置表单、i18n，以及通过真实 Core 运行的插件测试套件。
-- **统一管理**：WebUI 与 CLI 管理组件、账号、模型、权限、会话、配置、日志和更新，支持桌面与窄屏。
+- **故障隔离**：独立进程部署时，插件、Adapter 与 Agent 各自运行，单个组件崩溃不会拖垮主程序，由 Core 负责启停与自动拉起。
+- **模块解耦**：平台接入（Adapter）、AI 能力（Agent）与管理界面（WebUI）均与 Core 分离，不绑定官方实现，可随时替换为社区或自研组件。
+- **轻量低耗**：未启用的组件不启动进程；支持休眠的插件空闲时自动退出以释放内存，在收到消息、HTTP 请求、定时任务或跨组件调用时自动唤醒。
+- **插件开发**：提供链式命令与事件注册、热重载、开箱即用的 SQLite 存储、自动渲染为 WebUI 表单的配置声明、i18n，以及基于真实 Core 的测试套件。
+- **集中运维**：通过 WebUI 与 CLI 统一处理组件更新、账号与权限、模型、会话配置和运行日志，同时适配桌面端与移动端。
+
+> 注：独立进程用于保障稳定性而非安全沙箱，本机运行仍需管理员审查组件来源。库模式组件与 Core 共用进程，未捕获的后台 panic 会导致整个进程退出。
 
 ## 官方组件
 
@@ -45,12 +47,12 @@
 
 | 你想做什么 | 从这里开始 |
 | --- | --- |
-| 安装、配置、升级或备份机器人 | [安装与部署](docs/deployment.md) |
-| 编写插件、Adapter 或 Agent | [插件开发指南](docs/plugin-guide.md) |
-| 修改 Core、SDK 或 WebUI | [源码开发](docs/development.md) · [架构地图](ARCHITECTURE.md) |
-| 报告问题、提交修复或改善文档 | [贡献指南](CONTRIBUTING.md) |
-| 查询精确的 API 与协议行为 | [技术规范](spec/README.md) |
-| 构建与核对发行物 | [发行维护](docs/releasing.md) |
+| 安装、配置、升级或备份机器人 | [安装与部署](docs/deployment.zh-CN.md) |
+| 编写插件、Adapter 或 Agent | [插件开发指南](docs/plugin-guide.zh-CN.md) |
+| 修改 Core、SDK 或 WebUI | [源码开发](docs/development.zh-CN.md) · [架构地图](ARCHITECTURE.zh-CN.md) |
+| 报告问题、提交修复或改善文档 | [贡献指南](CONTRIBUTING.zh-CN.md) |
+| 查询管理 API 与协议行为 | [管理 API](docs/deployment.zh-CN.md#管理-api) · [协议与会话](docs/development.zh-CN.md#协议与会话行为) |
+| 构建与核对发行物 | [发行维护](docs/releasing.zh-CN.md) |
 
 欢迎修复问题、改善跨平台行为、补充文档和开发社区组件。提交问题时附上版本、系统和复现步骤，日志与配置先脱敏；较大的改动请先通过 Issue 讨论。
 

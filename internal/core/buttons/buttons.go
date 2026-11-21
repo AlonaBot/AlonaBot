@@ -1,7 +1,7 @@
 // Package buttons 签发持久化按钮 token，将点击分流到插件动作或 Core 确认记录。
 //
 // Service 按插件当前 Active 代次与完整 Target 校验，插件动作 token 可在同代次重启后使用。
-// 确认 token 由 Core 按父调用和 Actor 校验并作废；插件动作的点击权限由 Router 逐次检查（MESSAGE-MODEL §6.3）。
+// 确认 token 由 Core 按父调用和 Actor 校验并作废；插件动作的点击权限由 Router 逐次检查。
 package buttons
 
 import (
@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MESSAGE-MODEL §6.3 规定随机 token 大小，按钮值字节上限在 Core 签发边界执行。
+// 按钮 token 使用固定长度随机值，按钮值字节上限在 Core 签发边界执行。
 const (
 	tokenBytes     = 32
 	maxValueBytes  = 1024

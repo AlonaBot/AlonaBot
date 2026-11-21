@@ -224,7 +224,7 @@ func pluginExited(pid int, within time.Duration) bool {
 // activatedRe 匹配激活日志，子匹配依次为代次、mode（new/restart）与插件 pid。
 const activatedRe = `plugin activated plugin_id=demo generation_id=(\S+) mode=(\w+) pid=(\d+)`
 
-// lifecycleLogRe 是一次完整生命周期在控制台格式（CONTRACTS §14.2）中必须出现的行，覆盖 Core 与插件两类来源。
+// lifecycleLogRe 是一次完整生命周期在控制台格式中必须出现的行，覆盖 Core 与插件两类来源。
 var lifecycleLogRe = []string{
 	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Core\] \[INFO\] \[[^\]]+/alonabot\.go:\d+\]: Core started data_dir=`,
 	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStart$`,
@@ -285,7 +285,7 @@ func TestLifecycleOverTCPAndStdio(t *testing.T) {
 	}
 }
 
-// --log-format json：插件的记录带上 Core 补充的来源字段与 SDK 给出的源码位置（CONTRACTS §14.1）。
+// --log-format json：插件的记录带上 Core 补充的来源字段与 SDK 给出的源码位置。
 func TestJSONLogFormat(t *testing.T) {
 	c := startCore(t, t.TempDir(), "--log-format", "json")
 	line := c.waitFor(`(?m)^(\{.*"msg":"OnReady".*\})$`)[1]

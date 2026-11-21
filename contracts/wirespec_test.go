@@ -87,9 +87,9 @@ func TestContinuationFieldNumbers(t *testing.T) {
 	}
 }
 
-// 以下期望值逐字取自 spec/WIRE-FORMAT.md §1/§2；改动这里等于改动线上协议。
+// 以下期望值锁定已发布协议的字段号和枚举值；修改 .proto 后仍须保留这些编号。
 
-// Envelope 字段 1～16 的编号与名称和 WIRE §1 一致，且没有多余字段。
+// Envelope 固定字段 1～16 的名称与编号，且没有多余字段；定义见 proto/alonabot/v1/envelope.proto。
 func TestEnvelopeFieldNumbers(t *testing.T) {
 	want := []string{
 		1: "protocol_major", 2: "protocol_minor", 3: "session_id", 4: "initiator_side",
@@ -118,7 +118,7 @@ func TestEnvelopeFieldNumbers(t *testing.T) {
 	}
 }
 
-// ErrorInfo 字段 1～3 的编号与名称和 WIRE §2 一致。
+// ErrorInfo 固定字段 1～3 的名称与编号；定义见 proto/alonabot/v1/errors.proto。
 func TestErrorInfoFieldNumbers(t *testing.T) {
 	fields := (&pb.ErrorInfo{}).ProtoReflect().Descriptor().Fields()
 	for num, name := range map[int]string{1: "code", 2: "safe_message", 3: "trace_id"} {
@@ -255,7 +255,7 @@ func TestEnumValues(t *testing.T) {
 			"ALREADY_EXISTS", "FAILED_PRECONDITION", "UNSUPPORTED", "RESOURCE_EXHAUSTED",
 			"DEADLINE_EXCEEDED", "CANCELLED", "UNAVAILABLE", "INTERNAL", "PROTOCOL_ERROR",
 			"CALL_CYCLE", "PLUGIN_NOT_READY", "NO_DEFAULT_TARGET", "NEEDS_MANUAL_MIGRATION"}},
-		// MESSAGE-MODEL §4。
+		// 已发布枚举的名称与编号保持不变。
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
 		{pb.ActionScope(0).Descriptor(), "ACTION_SCOPE_", []string{"UNSPECIFIED", "CHAT", "ACCOUNT"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
@@ -264,17 +264,17 @@ func TestEnumValues(t *testing.T) {
 		{pb.SendOperation(0).Descriptor(), "SEND_OPERATION_", []string{"UNSPECIFIED", "SEND", "EDIT"}},
 		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
-		// MESSAGE-MODEL §3。
+		// 已发布枚举的名称与编号保持不变。
 		{pb.Propagation(0).Descriptor(), "PROPAGATION_", []string{"UNSPECIFIED", "CONTINUE", "STOP"}},
-		// WIRE §3.3 的 kind 与 CONTRACTS §2.3 的 Hook phase。
+		// 路由类别与 Hook 阶段的编号分别保持不变。
 		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
 			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION", "TASK"}},
 		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
 		{pb.ParamType(0).Descriptor(), "PARAM_TYPE_", []string{"UNSPECIFIED", "STRING", "INT", "FLOAT", "BOOL", "USER", "IMAGE", "MESSAGE"}},
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
-		// WIRE §3.2 的 log_level。
+		// 日志级别保留已发布编号。
 		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF", "CRITICAL"}},
-		// CONTRACTS §13.1、WIRE §3.5 的工具策略。
+		// 工具策略与作用类别各自保留已发布编号。
 		{pb.ToolPolicy(0).Descriptor(), "TOOL_POLICY_", []string{"UNSPECIFIED", "ALLOW", "CONFIRM", "DENY"}},
 		{pb.ToolEffect(0).Descriptor(), "TOOL_EFFECT_", []string{"UNSPECIFIED", "READ_ONLY", "WRITE", "DESTRUCTIVE"}},
 	}
@@ -353,7 +353,7 @@ func checkEnum(t *testing.T, e protoreflect.EnumDescriptor) {
 	}
 }
 
-// Service 调用必须同时携带可信上下文与业务载荷（WIRE §4）。
+// Service 调用必须同时携带可信上下文与业务载荷。
 func TestServiceInvocationCarriesContext(t *testing.T) {
 	fields := (&pb.ServiceInvocation{}).ProtoReflect().Descriptor().Fields()
 	ctx := fields.ByName("context")
@@ -367,7 +367,7 @@ func TestServiceInvocationCarriesContext(t *testing.T) {
 	}
 }
 
-// HandlerOutcome 的字段与 MESSAGE-MODEL §3 对应；error 放在 Envelope，不在此消息内。
+// HandlerOutcome 锁定 invocation.proto 中的业务字段；error 放在 Envelope，不在此消息内。
 func TestHandlerOutcomeFields(t *testing.T) {
 	fields := (&pb.HandlerOutcome{}).ProtoReflect().Descriptor().Fields()
 	for _, name := range []protoreflect.Name{"matched", "propagation", "chain"} {
@@ -392,7 +392,7 @@ func screamingSnake(s string) string {
 	return strings.ToUpper(b.String())
 }
 
-// SessionLimits 的字段名称、类型与编号遵循 WIRE §3.2。
+// SessionLimits 锁定 control.proto 中已发布的字段名称、类型与编号。
 func TestSessionLimitsFieldNumbers(t *testing.T) {
 	fields := (&pb.SessionLimits{}).ProtoReflect().Descriptor().Fields()
 	names := []string{"max_inflight", "max_payload_bytes", "request_timeout_ms"}
@@ -407,7 +407,7 @@ func TestSessionLimitsFieldNumbers(t *testing.T) {
 	}
 }
 
-// Bootstrap.session_limits 固定为字段 11，并引用 SessionLimits（WIRE §3.2）。
+// Bootstrap.session_limits 固定为字段 11，并引用 SessionLimits。
 func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(11)
 	if field == nil || field.Name() != "session_limits" || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "alonabot.v1.SessionLimits" {
@@ -549,7 +549,7 @@ func TestConversationFieldNumbers(t *testing.T) {
 	}
 }
 
-// TestEnvelopeSchemaVersions 区分业务版本和固定控制帧版本（WIRE §1）。
+// TestEnvelopeSchemaVersions 区分业务版本和固定控制帧版本。
 func TestEnvelopeSchemaVersions(t *testing.T) {
 	for _, kind := range []pb.FrameKind{pb.FrameKind_FRAME_KIND_REQUEST, pb.FrameKind_FRAME_KIND_RESPONSE, pb.FrameKind_FRAME_KIND_HEARTBEAT} {
 		for _, version := range []uint32{0, 1, 2} {

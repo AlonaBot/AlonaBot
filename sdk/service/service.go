@@ -1,6 +1,6 @@
 // Package service 声明、注册与调用带类型的 JSON 和 Protobuf 服务。
 //
-// [Spec] 绑定服务目标与类型，[Serve] 构建访问规则和 Handler；调用继承有效父请求（CONTRACTS §3）。
+// [Spec] 绑定服务目标与类型，[Serve] 构建访问规则和 Handler；调用继承有效父请求。
 package service
 
 import (

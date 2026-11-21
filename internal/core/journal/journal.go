@@ -6,7 +6,7 @@
 // Commit 在事务外复核持久资源，事务内切换 Active 与 COMMITTED，再激活同一 Session；
 // 返回的 Running 由调用方装配或保留 Degraded 诊断，提交后失败保持新代次权威。
 // 同包操作由编排器串行化，config 与 supervisor 仍各自取得 Store 的插件锁，
-// 避免持同一锁等待自身。规则见 CONTRACTS §6.3、§12.2、§12.3。
+// 避免持同一锁等待自身。
 package journal
 
 import (

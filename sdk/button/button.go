@@ -1,4 +1,4 @@
-// Package button 声明与登记类型化按钮动作，编码按钮值并在点击时解码（CONTRACTS §1.4、§9.1）。
+// Package button 声明与登记类型化按钮动作，编码按钮值并在点击时解码。
 package button
 
 import (

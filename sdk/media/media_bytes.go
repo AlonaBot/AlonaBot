@@ -9,7 +9,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 )
 
-const maxInlineMediaBytes = 1 << 20 // CONTRACTS §1.3：1 MiB 以内直接内联。
+const maxInlineMediaBytes = 1 << 20 // 1 MiB 以内直接内联。
 
 // Image 将非空图片字节内联，超过 1 MiB 时先上传。
 func Image(ctx context.Context, data []byte) (message.Segment, error) {

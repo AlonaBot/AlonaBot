@@ -1,5 +1,5 @@
 /**
- * kit.js: AlonaBot 插件页面套件客户端 (ADMIN-API §7 / DECISIONS D-84, D-159)
+ * kit.js: AlonaBot 插件页面套件客户端 (docs/plugin-guide.md: Plugin pages)
  *
  * 在 window.AlonaBot 上提供与 WebUI postMessage 桥通信的接口：
  * - request(method, path, body?) → Promise<Response 数据>

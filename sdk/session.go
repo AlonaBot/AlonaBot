@@ -23,7 +23,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
-// handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
+// handshakeTimeout 限制 HELLO 与 HELLO_ACK 握手的等待时间。
 var handshakeTimeout = 10 * time.Second
 
 const sessionSecretBytes = 32

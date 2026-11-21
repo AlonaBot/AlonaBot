@@ -2,7 +2,7 @@
 //
 // 插件的 New 构造 [Plugin]，登记路由和生命周期回调，构建资源由 CLI 自动注入。
 // main 调用 Run(New())，取得 runtime.lock，与 Core 完成握手、准备和激活，再处理调用直到停止。
-// Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤（CONTRACTS §14）。
+// Run 把 log/slog 的默认 Logger 换成写 stderr 的 JSON 行，按 Core 下发的级别过滤。
 //
 // 包的组成：[Plugin] 持有登记状态，[SubPlugin] 提供一层逻辑子插件，[CommandGroup] 组织命令路径与权限；
 // 注册收集在运行前统一检查；类型化服务、事件、任务与按钮分别由 service、bus、task、button 子包声明。
@@ -10,7 +10,7 @@
 // 自动回复型命令返回 [message.Content]，由 Core 在显式发送完成后发送一次。
 // [Context.Stream] 按当前事件实例的能力发送文本增量并节流编辑。
 // HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证；定时任务由 Core Scheduler 触发。
-// 进程生命周期、配置与迁移契约见 CONTRACTS §4～§6，路由与参数见 §9。
+// 组件生命周期、配置、迁移、路由与参数的用法见 docs/plugin-guide.md。
 package sdk
 
 import (

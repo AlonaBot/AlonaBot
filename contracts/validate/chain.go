@@ -13,9 +13,9 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-const maxInlineMediaBytes = 1 << 20 // CONTRACTS §1.3：内联来源最多 1 MiB。
+const maxInlineMediaBytes = 1 << 20 // 内联来源最多 1 MiB。
 
-// Chain 检查 MessageChain 的结构（MESSAGE-MODEL §2）。只做与平台无关的结构检查；
+// Chain 检查 MessageChain 的结构。只做与平台无关的结构检查；
 // 平台能力（UNSUPPORTED）、媒体租约与目标授权由 Core/Adapter 在发送前另行检查。
 // 结构错误返回 INVALID_ARGUMENT，转发节点中无法表达的片段返回 UNSUPPORTED；消息保留片段位置。
 func Chain(c *pb.MessageChain) error {

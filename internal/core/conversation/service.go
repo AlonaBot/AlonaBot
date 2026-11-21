@@ -1,7 +1,7 @@
 // Package conversation 提供按插件身份隔离的 Agent 会话存储服务。
 //
 // 插件请求经 router.Mux 绑定的 Caller 取得身份；管理层直接调用 List、Clear、Purge。
-// list 分批读取状态库并按帧预算分页，条目原样保存（CONTRACTS §13.3）。
+// list 分批读取状态库并按帧预算分页，条目原样保存。
 package conversation
 
 import (
@@ -21,8 +21,8 @@ import (
 
 const (
 	schemaVersion     = 1
-	maxKeyBytes       = 256      // CONTRACTS §13.3：会话键的字节上限。
-	envelopeAllowance = 64 << 10 // CONTRACTS §1.2：为信封字段预留的余量。
+	maxKeyBytes       = 256      // 会话键的字节上限。
+	envelopeAllowance = 64 << 10 // 为信封字段预留的余量。
 	readBatchEntries  = 128
 )
 

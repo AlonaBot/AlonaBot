@@ -1,4 +1,4 @@
-// Package options 注册配置字段的私有 JSON 选项来源，保留固定查询与分页 Schema（CONTRACTS §3、§5.1）。
+// Package options 注册配置字段的私有 JSON 选项来源，保留固定查询与分页 Schema。
 package options
 
 import (

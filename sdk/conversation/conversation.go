@@ -1,4 +1,4 @@
-// Package conversation 追加、分页读取与清除原样 JSON 会话历史（CONTRACTS §3）。
+// Package conversation 追加、分页读取与清除原样 JSON 会话历史。
 package conversation
 
 import (

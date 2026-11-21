@@ -1,6 +1,6 @@
 // Package bus 声明、发布与订阅带类型的非持久 JSON 事件。
 //
-// [Event] 绑定名字与载荷，[Subscribe] 登记无 Actor 和默认目标的串行回调（CONTRACTS §3）。
+// [Event] 绑定名字与载荷，[Subscribe] 登记无 Actor 和默认目标的串行回调。
 package bus
 
 import (

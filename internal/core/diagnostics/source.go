@@ -1,7 +1,7 @@
 // Package diagnostics 收集 Core 日志、设置、Active 配置和组件环境，写出诊断 zip。
 //
 // [Running] 读取 Core 已持有的状态，[Directory] 只读打开数据目录；两者通过 [Write]
-// 共用分组、时间筛选与脱敏规则。归档只包含明确选择的文件，规则见 CONTRACTS §14.7。
+// 共用分组、时间筛选与脱敏规则。归档只包含明确选择的文件。
 package diagnostics
 
 import (

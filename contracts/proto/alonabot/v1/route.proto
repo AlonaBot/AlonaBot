@@ -1,4 +1,4 @@
-// REGISTER 载荷与 RouteDescriptor（WIRE §3.3、CONTRACTS §2.2/§3/§4.3/§7.2）。
+// REGISTER 载荷与 RouteDescriptor。
 syntax = "proto3";
 
 package alonabot.v1;

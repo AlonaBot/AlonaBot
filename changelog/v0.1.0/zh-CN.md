@@ -25,7 +25,7 @@ AlonaBot 首个正式版本。
 
 ### 已知限制
 
-- OneBot 11 支持接收事件，发送返回 `UNSUPPORTED`；welcome、rss 插件与 CONTRACTS §15.2 列出的 Telegram 后续功能留待后续发行。
+- OneBot 11 支持接收事件，发送返回 `UNSUPPORTED`；welcome、rss 插件与 [当时发行约定](https://github.com/AlonaBot/AlonaBot/blob/f0382910/spec/CONTRACTS-v0.1.md#152-发行包官方整合包与预装组件) 列出的 Telegram 后续功能留待后续发行。
 - Native 组件是管理员信任的本机代码。库模式共享 Core 进程，未捕获 panic 会结束进程，停止超时无法强制结束 goroutine。
 - 声明 `prepare_effects=external` 的组件需显式维护、备份许可及针对外部副作用的组件专用恢复流程。
 - scratch 镜像包含 CA 证书；需要 shell、Node 或 Python 的 MCP stdio 工具应自行构建含相应运行时的镜像。

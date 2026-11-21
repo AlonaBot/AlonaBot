@@ -1,6 +1,6 @@
 // Package pluginindex 解析插件源仓库中的 index.json。
 //
-// [Index] 与 [Plugin] 对应 CONTRACTS §9.2 的索引格式；[Parse] 校验输入并报告 JSON 路径。
+// [Index] 与 [Plugin] 描述索引及其条目；[Parse] 校验输入并报告 JSON 路径。
 package pluginindex
 
 import (

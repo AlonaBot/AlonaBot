@@ -1,4 +1,4 @@
-// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷（WIRE §4、MESSAGE-MODEL §3/§5）。
+// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷。
 syntax = "proto3";
 
 package alonabot.v1;

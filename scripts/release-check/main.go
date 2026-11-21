@@ -1,6 +1,6 @@
 // release-check 命令核对 dist 候选发行物，并可运行源码外安装与更新链。
 //
-// 检查依据 CONTRACTS §9.2、§15.2；结果与解包内容保存在独立的新目录中。
+// 结果与解包内容保存在独立的新目录中。
 // 包的组成：资产核对见 assets.go，受控解包见 archive.go，二进制读取见 binary.go，
 // 安装与更新联验见 lifecycle.go，候选进程与公开管理入口见 runtime.go。
 package main

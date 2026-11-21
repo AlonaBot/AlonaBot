@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	sessionLifetime   = 8 * time.Hour // CONTRACTS §7.4 的固定管理会话期限。
+	sessionLifetime   = 8 * time.Hour // 固定管理会话期限。
 	adminCookie       = "alonabot_admin"
 	secureAdminCookie = "__Host-" + adminCookie
 	csrfHeader        = "X-Alonabot-CSRF"

@@ -1,7 +1,7 @@
 // Package release 校验发布在归档之外的 release.json 及其 Ed25519 签名。
 //
 // 验签针对 release.json 文件的原始字节，先验签后解析，不会重新序列化 JSON 再验签。
-// 签名只证明发布来源，不证明插件行为安全。规则见 spec/CONTRACTS-v0.1.md §9.2。
+// 签名只证明发布来源，不证明插件行为安全。
 package release
 
 import (

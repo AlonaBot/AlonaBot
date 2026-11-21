@@ -1,21 +1,23 @@
-# AlonaBot 开发约定
+# AlonaBot development conventions
 
-本仓库维护 Core、SDK、协议、示例和整合发行。官方组件在各自仓库维护，入口见 [README](README.zh-CN.md#官方组件)。
+[简体中文](AGENTS.zh-CN.md)
 
-## 开发入口
+This repository maintains Core, SDK, protocols, examples and bundled releases. Official components live in their own repositories; see [official components](README.md#official-components).
 
-- 环境与检查：[开发指南](docs/development.md)。
-- 模块与依赖方向：[架构地图](ARCHITECTURE.md)。
-- 命名、注释与测试：[编码规范](docs/coding-standards.md)。
-- 公开行为：[技术规范](spec/README.md)。
-- PR 与许可：[贡献流程](CONTRIBUTING.md)。
-- 打包与发布：[发行维护](docs/releasing.md)。
+## Development entry points
 
-## 工作约定
+- Environment and checks: [development guide](docs/development.md).
+- Modules and dependency directions: [architecture](ARCHITECTURE.md).
+- Naming, comments and tests: [coding standards](docs/coding-standards.md).
+- Public behavior: [plugin guide](docs/plugin-guide.md).
+- Pull requests and licensing: [contributing](CONTRIBUTING.md).
+- Packaging and releases: [release maintenance](docs/releasing.md).
 
-- 沟通、文档、注释和 commit message 使用简体中文；标识符、日志、错误与 CLI 输出使用英文。用户界面通过 i18n 提供。
-- 先读取受影响实现、调用方和当前 diff；保留用户已有改动，Git 写操作使用独立 worktree。提交、推送、合并和发布按本次明确授权执行。
-- 新依赖先说明必要性与替代方案，取得维护者明确批准。生成代码修改源文件后重新生成。
-- 只在外部输入与信任边界进行必要校验；错误保留原始原因，业务副作用的重试与超时遵循现行契约。
-- 验证与改动规模匹配。文档和模板检查内容、链接及空白；代码运行受影响检查，跨模块变更独立审查。测试提交范围遵循编码规范。
-- 个人技能、工作卡、调度及历史验收资料在 dev 维护；凭据、运行数据和临时文件留在本机。
+## Working conventions
+
+- Use Simplified Chinese for communication, comments and commit messages. Maintain public Markdown documentation in English by default with a complete Simplified Chinese counterpart and language links. Use English for identifiers, logs, errors and CLI output; user interfaces use i18n.
+- Read affected implementations, callers and current changes first. Preserve other people's changes and use an isolated worktree for Git writes. Commit, push, merge and release only within the current explicit authorization.
+- Explain the need and alternatives for a new dependency and obtain explicit maintainer approval. Edit generator sources and regenerate their output.
+- Validate only at external input and trust boundaries. Preserve original errors; retries and timeouts for business side effects follow the existing contract.
+- Match verification to the change. Check documentation and templates for content, links, anchors and whitespace. Run affected checks for Go changes and obtain an independent review for changes across modules. Follow the coding standards for committed tests.
+- Personal skills, task cards, coordination and historical acceptance records belong on dev. Keep credentials, runtime data and temporary files local.

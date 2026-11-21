@@ -15,13 +15,13 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
-// traceDigits 是控制台显示的 trace_id 位数（CONTRACTS §14.2）。
+// traceDigits 是控制台显示的 trace_id 位数。
 const traceDigits = 8
 
-// continuationIndent 是多行值后续行的缩进（CONTRACTS §14.2）。
+// continuationIndent 是多行值后续行的缩进。
 const continuationIndent = "    "
 
-// 控制台着色使用的 ANSI 序列（CONTRACTS §14.2）。
+// 控制台着色使用的 ANSI 序列。
 const (
 	ansiReset  = "\x1b[0m"
 	ansiGreen  = "\x1b[32m"
@@ -38,7 +38,7 @@ type consoleWriter struct {
 	color bool
 }
 
-// consoleHandler 以 CONTRACTS §14.2 的控制台格式输出记录：
+// consoleHandler 以控制台格式输出记录：
 //
 //	[时:分:秒.毫秒] [来源] [级别] [目录/文件:行号]: 消息 key=value ...
 //

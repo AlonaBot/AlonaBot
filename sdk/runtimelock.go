@@ -8,7 +8,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
 )
 
-// acquireRuntimeLock 在任何用户回调或受管 DB 打开之前取得 <plugins>/<id>/runtime.lock（CONTRACTS §12.2），
+// acquireRuntimeLock 在任何用户回调或受管 DB 打开之前取得 <plugins>/<id>/runtime.lock，
 // 由 Run 持有至进程退出。取不到锁说明旧写入者（或 Core 的停机复制）仍在，必须拒绝启动，
 // 不能删除锁文件或等待重试。
 func acquireRuntimeLock(path string) (*oslock.Lock, error) {

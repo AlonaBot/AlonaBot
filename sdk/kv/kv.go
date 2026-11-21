@@ -1,6 +1,6 @@
 // Package kv 在当前 Session 的受管 SQLite 中保存键值数据。
 //
-// 数据保存在保留表 _alonabot_kv，随受管数据库的候选副本、回退与清理处理（CONTRACTS §6.1）。
+// 数据保存在保留表 _alonabot_kv，随受管数据库的候选副本、回退与清理处理。
 // 调用须传入 Handler 或生命周期回调的 context；连接由 SDK 管理。
 // [Get]、[Set]、[Delete] 操作单个键，[List] 按字节前缀与排他游标分页返回 [Page]。
 // 键须为 1～512 字节 UTF-8，且须避开 HTTP 路径中的独立点段 . 与 ..。

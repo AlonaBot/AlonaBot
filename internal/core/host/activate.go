@@ -15,7 +15,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
-// State 表示 Core 侧插件实例的可见状态（CONTRACTS §12.1），这里覆盖 Activating 之后的部分。
+// State 表示 Core 侧插件实例的可见状态，这里覆盖 Activating 之后的部分。
 type State int32
 
 // 实例状态，按生命周期顺序排列。
@@ -129,7 +129,7 @@ func (in *Instance) control(env *pb.Envelope) error {
 }
 
 // Activate 完成「提交 → ACTIVATE → OnReady → ACTIVATED」。提交失败时不发送 ACTIVATE，旧代次保持权威；
-// 提交之后 OnReady 失败、超时或断链进入 Degraded，状态库中仍是新代次（CONTRACTS §4.1、§12.3）。
+// 提交之后 OnReady 失败、超时或断链进入 Degraded，状态库中仍是新代次。
 // 返回的 Instance 在 Degraded 时也非 nil，便于调用方记录与清理。
 func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt ActivateOptions) (*Instance, error) {
 	// 1. 新候选先提交；失败时通知插件并关闭，不发送 ACTIVATE。

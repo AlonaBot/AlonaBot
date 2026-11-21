@@ -8,7 +8,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-// AdapterRegister 原子校验 Adapter 身份与角色互斥的注册集（WIRE §3.4）。
+// AdapterRegister 原子校验 Adapter 身份与角色互斥的注册集。
 func AdapterRegister(r *pb.Register, adapterID string) error {
 	// 1. 核对安装身份以及角色互斥的注册字段。
 	descriptor := r.GetAdapter()

@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-// CONTRACTS §15.1 规定实例名的字符集和长度，且跨 Adapter 唯一。
+// 实例名的字符集和长度在设置边界校验，名称跨 Adapter 唯一。
 const maxInstanceNameBytes = 64
 
 // 各名称入口先检查长度，避免编译展开有界重复。

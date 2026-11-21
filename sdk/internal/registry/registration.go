@@ -1,7 +1,7 @@
 // Package registry 保存根 SDK 与分类子包共用的注册状态和调用边界。
 //
 // Scope 经私有嵌入只允许插件与子插件登记；状态归插件对象，按原登记顺序收集。
-// 根包设置运行时入口，子包复用 Session 门禁、父调用和资源身份（CONTRACTS §3、§9.1）。
+// 根包设置运行时入口，子包复用 Session 门禁、父调用和资源身份。
 package registry
 
 import (

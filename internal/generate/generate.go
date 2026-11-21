@@ -1,12 +1,12 @@
 // Package generate 按组件入口包扫描所属 module 的源码，生成资源登记代码。
 //
-// 命令、文本匹配与事件登记在插件对象上（CONTRACTS §9.1）。
+// 命令、文本匹配与事件登记在插件对象上。
 // 入口包按调用方 module 的构建列表解析，支持模块缓存中的第三方组件。
 // 扫描遵守 GOOS/GOARCH 和 build tags，仅收集入口所属 module，排除 vendor 与测试文件。
-// 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对（CONTRACTS §5.1、§5.3）。
+// 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对。
 // 工程 plugin.yaml 声明 Adapter 时按入口包登记身份与实例 Schema；旧实例声明目录仍只检查。
-// JSON Service 类型经 go/types 检查生成 Schema（§3）；注册规则见 §9、§2.2。
-// 构建入口的 i18n/*.json 按 §5.3、§5.4 检查并将原文嵌入生成代码。
+// JSON Service 类型经 go/types 检查生成 Schema。
+// 构建入口的 i18n/*.json 按声明检查并将原文嵌入生成代码。
 // commands 仅检查结构，覆盖路径与实际注册命令的对应由 SDK 在 Run 收集注册时检查。
 //
 // 包的组成：[Scan] 接收 [Options]，返回描述、源码与 [Diagnostic] 汇总的 [Result]。

@@ -17,7 +17,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-// HTTP Listener 只接受这两个 loopback 地址（WIRE-FORMAT §3.3）。
+// HTTP Listener 只接受这两个 loopback 地址。
 const (
 	LoopbackIPv4 = "127.0.0.1"
 	LoopbackIPv6 = "::1"
@@ -74,7 +74,7 @@ func IsJSONObject(b []byte) bool {
 	return len(b) > 0 && b[0] == '{' && json.Valid(b)
 }
 
-// Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
+// Register 原子校验整份注册集：任一项不合法都整体拒绝，调用方不得保留部分注册。
 // 命令路径、别名、事件过滤器与按钮 action、定时任务、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
 	return register(r, false)

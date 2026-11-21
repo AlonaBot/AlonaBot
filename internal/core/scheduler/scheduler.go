@@ -3,7 +3,7 @@
 // [Scheduler] 分别用 plugin_id/job_id 和 plugin_id/name/key 保存静态与动态实际运行槽，
 // 用本次 Attach 的注册保存定时器与到期队列；[Scheduler.Services] 提供任务和静态调度的固定服务。
 // 超时结束 RPC 结果后仍保留槽，直到迟到响应或 [Scheduler.Released] 确认进程退出；
-// 正常休眠保留计划，到期经注入的 Waker 等待新 Session；异常离线恢复只安排未来 tick（CONTRACTS §4.3）。
+// 正常休眠保留计划，到期经注入的 Waker 等待新 Session；异常离线恢复只安排未来 tick。
 // 装配处负责激活后 [Scheduler.Attach]、空闲停止时 [Scheduler.Suspend]、管理排空时 [Scheduler.Drain]、
 // 撤销时 [Scheduler.Detach] 与退出后的 Released。
 package scheduler

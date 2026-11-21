@@ -10,7 +10,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
-// Core 沿用 MESSAGE-MODEL §1 的会话编码；SDK 的类型留在 SDK 模块内。
+// Core 使用统一的会话编码；SDK 的类型留在 SDK 模块内。
 var chatEscape = strings.NewReplacer("%", "%25", "#", "%23")
 var chatUnescape = strings.NewReplacer("%25", "%", "%23", "#")
 

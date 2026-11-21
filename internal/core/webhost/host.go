@@ -2,7 +2,7 @@
 //
 // [Host] 将 /plugins/ 请求交给代理、/media/ 交给媒体处理器，其余交给管理处理器。
 // WebUI 后台与管理入口同源，管理认证由代理按 Session 执行。
-// 插件响应经过沙箱 CSP、Cookie 与凭证 CORS 过滤，规则见 CONTRACTS §7.3。
+// 插件响应经过沙箱 CSP、Cookie 与凭证 CORS 过滤。
 package webhost
 
 import (

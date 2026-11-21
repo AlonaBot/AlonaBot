@@ -56,7 +56,7 @@ func (s *Schema) ProfilePaths() []string {
 }
 
 // ValidateProfileValue 校验已标记字段的一个完整 JSON 值，不补缺失值。
-// 错误包含字段路径，不包含取值（CONTRACTS §5.6）。
+// 错误包含字段路径，不包含取值。
 func (s *Schema) ValidateProfileValue(path string, raw json.RawMessage) error {
 	f := s.fieldAt(strings.Split(path, "."))
 	if f == nil {

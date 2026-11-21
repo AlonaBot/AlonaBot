@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	dataPageDefault = 50 // ADMIN-API §21。
+	dataPageDefault = 50
 	dataPageMaximum = 500
-	dataBusyTimeout = "5000" // CONTRACTS §6.1，单位毫秒。
+	dataBusyTimeout = "5000" // 单位毫秒。
 	dataKVTable     = "_alonabot_kv"
 )
 

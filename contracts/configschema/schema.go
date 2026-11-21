@@ -6,7 +6,7 @@
 // Correct 按声明补值并校正完整配置，返回校正记录；未知键保留。
 // SecretPaths 与 CheckI18n 分别提供秘密字段路径与翻译核对。
 // ExampleImages 汇总已检查的回复示例所引用的包内图片。
-// 配置格式见 spec/CONTRACTS-v0.1.md §5.1、§5.3 与 §5.5。
+// 配置格式见 docs/plugin-guide.md。
 package configschema
 
 import (

@@ -59,7 +59,7 @@ func (s *Service) deleteConversation(w http.ResponseWriter, r *http.Request) boo
 	err = conversation.New(s.opt.Store).Clear(r.Context(), id, key)
 	if err != nil {
 		// 会话服务的键校验返回普通错误；在进入状态库前的失败按请求错误呈现。
-		// 其有效键限制来自 CONTRACTS §13.3，保留服务给出的完整错误文本。
+		// 会话键由服务校验，保留服务给出的完整错误文本。
 		if key == "" || len(key) > conversationKeyBytes || !utf8.ValidString(key) {
 			err = invalid(err.Error())
 		}
@@ -68,4 +68,4 @@ func (s *Service) deleteConversation(w http.ResponseWriter, r *http.Request) boo
 	return true
 }
 
-const conversationKeyBytes = 256 // CONTRACTS §13.3。
+const conversationKeyBytes = 256

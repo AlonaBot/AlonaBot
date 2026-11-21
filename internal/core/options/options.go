@@ -1,7 +1,7 @@
 // Package options 按组件 Active 配置声明查询内置或私有 Service 提供的选项。
 //
 // [Service.Query] 从 schema 读取来源和 filter，经 [Options] 注入 Router、Broker、实例快照与聊天查询。
-// 配置值的补齐、保存与校验继续由 configschema 负责（CONTRACTS §5.1）。
+// 配置值的补齐、保存与校验继续由 configschema 负责。
 package options
 
 import (

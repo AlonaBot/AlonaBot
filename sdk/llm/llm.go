@@ -1,7 +1,7 @@
 // Package llm 提供 Agent 文本生成服务的共享声明与调用辅助。
 //
 // [Ask] 使用对话模型完成一问一答，完整请求通过 sdk/agent.Generate 发送。
-// 服务以 @agent 定位当前安装的 Agent，调用许可与期限见 CONTRACTS §13.5。
+// 服务以 @agent 定位当前安装的 Agent，调用许可与期限见 docs/plugin-guide.md。
 package llm
 
 import (

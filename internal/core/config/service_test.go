@@ -13,7 +13,7 @@ import (
 )
 
 // 配置编辑以 base_generation 判定陈旧提交，Pending 随 Active 变化失效；Patch 叠加在有效 Pending
-// 或 Active 配置上，保留未知键、显式空值与超出 2^53 的数字（CONTRACTS §5.1、V-23、V-38）。
+// 或 Active 配置上，保留未知键、显式空值与超出 2^53 的数字。
 func TestPendingConfigEdits(t *testing.T) {
 	ctx := context.Background()
 

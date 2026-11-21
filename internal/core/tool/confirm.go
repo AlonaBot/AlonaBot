@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// CONTRACTS §13.2 的摘要和实际参数展示上限，以 UTF-8 字节计数。
+// 摘要和实际参数展示上限，以 UTF-8 字节计数。
 const (
 	maxSummaryBytes          = 1024
 	maxArgumentsDisplayBytes = 2048

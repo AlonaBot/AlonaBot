@@ -1,4 +1,4 @@
-// Package logging 汇集 Core 进程的全部日志：Core 自己的记录与插件进程输出的记录（CONTRACTS §14）。
+// Package logging 汇集 Core 进程的全部日志：Core 自己的记录与插件进程输出的记录。
 //
 // 每条记录写到 Core 的 stderr（控制台格式或 JSON），启用日志文件后同时以不着色的控制台格式写入
 // 按日期轮转的文件。记录的来源由 component 字段区分：core、plugin 或 adapter；插件与 Adapter 的记录
@@ -28,7 +28,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-// 记录中表示来源的字段名（CONTRACTS §14.1）。
+// 记录中表示来源的字段名。
 const (
 	KeyComponent    = "component" // 来源类别：ComponentCore、ComponentPlugin 或 ComponentAdapter
 	KeyPluginID     = "plugin_id"
@@ -58,7 +58,7 @@ const LevelCritical = slog.Level(12)
 // LevelOff 高于任何记录的级别，用作来源级别 off：该来源的记录全部不输出。
 const LevelOff = slog.Level(math.MaxInt)
 
-// Format 选择 stderr 上的输出格式（CONTRACTS §14.2）。
+// Format 选择 stderr 上的输出格式。
 type Format string
 
 // stderr 的输出格式。

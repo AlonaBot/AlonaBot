@@ -1,4 +1,4 @@
-// 工具描述、调用策略与工具目录载荷（CONTRACTS §13.1、WIRE-FORMAT §3.5）。
+// 工具描述、调用策略与工具目录载荷。
 syntax = "proto3";
 
 package alonabot.v1;

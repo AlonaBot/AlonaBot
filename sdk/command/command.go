@@ -1,6 +1,6 @@
 // Package command 查询当前调用者在默认会话中可用的路径命令。
 //
-// List 接收 Handler 的 Context，返回 Core 筛选并本地化的 Entry（CONTRACTS §2.2、§2.3、§5.4）。
+// List 接收 Handler 的 Context，返回 Core 筛选并本地化的 Entry。
 package command
 
 import (

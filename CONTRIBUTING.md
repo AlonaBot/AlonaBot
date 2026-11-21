@@ -1,61 +1,63 @@
-# 参与 AlonaBot 开发
+# Contributing to AlonaBot
 
-欢迎修复问题、改善文档、完善平台支持和开发社区组件。本文说明从反馈问题到提交 PR 的流程；环境和命令见[开发指南](docs/development.md)，代码规则见[编码规范](docs/coding-standards.md)。
+[简体中文](CONTRIBUTING.zh-CN.md)
 
-组件变更提交到对应的[官方组件仓库](README.zh-CN.md#官方组件)。本仓库维护 Core、SDK、协议、示例与整合发行。
+Contribute fixes, documentation, platform support and community components. This guide covers the process from reporting an issue to submitting a PR. See [development](docs/development.md) for tools and commands and [coding standards](docs/coding-standards.md) for code rules.
 
-## 从一个明确的问题开始
+Submit component changes to the corresponding [official repository](README.md#official-components). This repository maintains Core, SDK, protocols, examples and bundled releases.
 
-先搜索已有的 Issue、打开和已合并的 PR，并核对当前源码。已有修复时，可以帮助复现或审阅；准备较大的功能、协议或数据改动时，先开 Issue 说明问题、预期行为与方案，等待维护者确认方向。
+## Start with a concrete problem
 
-- **Bug**：提供版本、操作系统与架构、复现步骤、预期结果、实际结果和完整报错。尽量缩小到可重复的示例。
-- **功能建议**：说明具体使用场景、现有能力的缺口和期望效果。平台集成优先考虑独立组件。
-- **文档改进**：指出读到哪一步遇到困难，以及对应命令或行为；小修正可以直接提交 PR。
+Search existing Issues and open or merged PRs, and check current source. If a fix already exists, help reproduce or review it. For larger features, protocol changes or data changes, open an Issue describing the problem, expected behavior and approach, and wait for maintainer agreement.
 
-分享日志、配置或诊断包前检查并脱敏，移除 Bot Token、管理 token、数据库凭据和真实用户数据。疑似凭据泄露或安全漏洞请通过维护者 GitHub 主页提供的联系方式私下报告，避免在公开 Issue 中披露可利用细节。
+- **Bugs**: provide version, operating system and architecture, reproduction steps, expected and actual results, and complete errors. Reduce the issue to a repeatable example where possible.
+- **Features**: describe the actual use case, missing capability and expected result. Prefer separate components for platform integrations.
+- **Documentation**: identify the step that caused difficulty and its command or behavior. Small corrections can go directly into a PR.
 
-## 准备开发环境
+Before sharing logs, configuration or diagnostics, redact Bot Tokens, management tokens, database credentials and real user data. Report suspected credential leaks or security vulnerabilities privately using the contact details on the maintainer's GitHub profile. Avoid publishing exploitable details in public Issues.
 
-先按[源码开发](docs/development.md#准备环境)准备所需工具。只改 Go 代码通常只需要 Go；修改协议生成产物还需要 protoc，修改 WebUI 还需要 Node 与 npm。
+## Prepare the environment
 
-从最新 main 创建一个用途明确的分支；通过 Fork 贡献时，先同步上游 main。分支名可以采用 `fix/问题`、`feat/功能` 或 `docs/主题`。一个 PR 解决一个连贯问题，避免夹带无关重构、个人配置或临时验收产物。使用 worktree 可以同时处理多个独立任务。
+Follow [environment setup](docs/development.md#prepare-the-environment). Go changes usually need only Go. Protocol generation also needs protoc; WebUI changes need Node and npm.
 
-## 保持实现与规范一致
+Create a focused branch from the latest main. Fork contributors should first synchronize upstream main. Suggested names include `fix/problem`, `feat/feature` and `docs/topic`. Each PR should address one coherent problem. Keep unrelated refactoring, personal settings and temporary acceptance artifacts out of it. Worktrees support parallel independent tasks.
 
-- 先查看[架构地图](ARCHITECTURE.md)，确认模块所有者、import 方向和数据归属；精确行为由[技术规范](spec/README.md)定义。
-- 遵循[编码规范](docs/coding-standards.md)：代码注释与文档使用简体中文，日志、错误和 CLI 输出使用英文，面向用户的界面及机器人回复通过 i18n 提供。
-- 新增或扩大第三方依赖的使用范围前，说明必要性、替代方案及链接开销，取得维护者批准。现行范围见[依赖管理](docs/development.md#依赖管理)。
-- 生成代码修改源文件及生成器后重新生成，保留可重复生成的结果。
-- 接口调整同步全部调用方；已发布状态库只追加迁移，遵循[版本与兼容性规则](docs/coding-standards.md#版本与兼容性)。
-- 修改行为时同步对应契约、示例、文档与必要验证；涉及数据库、进程生命周期或公开协议时，说明失败处理和恢复方法。
+## Keep implementation and documentation aligned
 
-## 验证改动
+- Read the [architecture](ARCHITECTURE.md) to identify module ownership, import directions and state ownership. See the [plugin guide](docs/plugin-guide.md) for supported component behavior.
+- Follow [coding standards](docs/coding-standards.md): Simplified Chinese comments, English logs, errors and CLI output, and i18n for user-facing interfaces and bot replies. Public documentation defaults to English with a complete Simplified Chinese counterpart.
+- Before adding a dependency or expanding its use, explain the need, alternatives and linking cost, and obtain explicit maintainer approval. See [dependency management](docs/development.md#dependency-management).
+- Edit generator sources and regenerate their output. Preserve reproducibility.
+- Update every caller when an interface changes. Add migrations for published state databases; see [versioning and compatibility](docs/coding-standards.md#versioning-and-compatibility).
+- Update related contracts, examples, documentation and necessary verification when behavior changes. Explain failure handling and recovery for database, process lifecycle or public protocol changes.
 
-根据实际影响选择最小充分检查，命令见[开发指南](docs/development.md#验证改动)。文档修改检查内容、链接、锚点和 `git diff --check`；Go 修改运行受影响包的测试与静态检查；前端修改运行类型检查和构建，并实际检查关键交互。
+## Verify the change
 
-新增的非平凡逻辑至少通过一项测试验证。仓库提交集成测试和协议编号检查；单元测试、临时复现及前端局部测试在被忽略的本地文件中运行。默认每个 PR 提交一个覆盖主路径的集成测试，增加时说明原因；完整规则见[测试提交规则](docs/coding-standards.md#测试提交规则)。
+Choose the smallest sufficient checks for its actual effects; commands are in [development](docs/development.md#verify-changes). Check documentation content, links, anchors and `git diff --check`. Run affected Go tests and static checks. For frontend changes, check types, build and inspect the main interactions in the actual interface.
 
-PR 中记录实际命令、平台、结果，以及本地运行但未提交的测试。缺少环境的项目写明「未运行」及原因。交叉编译、模拟平台与真实平台结果分别说明；较大的跨模块改动需要独立审查。
+New nontrivial logic needs at least one meaningful test. The repository commits integration tests and protocol-number checks; unit tests, temporary reproductions and frontend local tests run in ignored local files. The default is one integration test covering the PR's main path; explain additional tests. See [test submission rules](docs/coding-standards.md#test-submission-rules).
 
-## 提交 PR
+Record actual commands, platform, results and local tests omitted from the commit in the PR. Mark checks lacking an environment as "not run" with the reason. Distinguish cross-compilation, emulated execution and real-platform results. Larger changes across modules require an independent review.
 
-1. 使用简体中文 commit message，说明改了什么和必要原因，无固定类型前缀要求。
-2. PR 标题统一为 `type/scope: 中文摘要`，例如 `fix/scheduler: 修复休眠唤醒后的任务交付`。`type` 使用 `feat`、`fix`、`docs`、`refactor`、`test`、`ci`、`build`、`chore`、`perf` 或 `revert`；`scope` 使用实际模块的小写英文名称，可用连字符连接。摘要说明技术变化，省略任务编号、模型与执行工具署名。
-3. 将 PR 指向 main，按[PR 模板](.github/PULL_REQUEST_TEMPLATE.md)填写变更原因、验证、兼容性与风险，并完成清单。关联 Issue 时使用 `Closes #编号`。
-4. 核对 diff：仅包含本次改动及必要相邻修改，排除凭据、个人工作记录、运行数据和临时测试。
-5. 等待当前 head 的检查与维护者审阅；根据意见补充修正和受影响验证。
+## Submit a PR
 
-维护者确认范围、实现、验证及延期项后使用 squash 合并，并核对合并后 main 的检查。贡献者通过 PR 交付；正式版本、签名和发布由维护者控制。
+1. Write a Simplified Chinese commit message explaining the change and its reason. No fixed type prefix is required.
+2. Use `type/scope: 中文摘要` for PR titles, for example `fix/scheduler: 修复休眠唤醒后的任务交付`. Types are `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `build`, `chore`, `perf` and `revert`. Use the affected module's lowercase English name for scope; hyphens are allowed. Describe the technical change without task numbers, model names or tool attribution in the title.
+3. Target main and complete the [PR template](.github/PULL_REQUEST_TEMPLATE.md): reason, verification, compatibility, risks and checklist. Link an Issue with `Closes #number`.
+4. Review the diff for scope and necessary adjacent changes. Exclude credentials, personal task records, runtime data and temporary tests.
+5. Wait for checks on the current head and maintainer review. Make requested corrections and run affected verification.
 
-## CI 与审查
+After confirming scope, implementation, verification and deferred items, the maintainer squash-merges and checks main. Contributors deliver through PRs; maintainers control official versions, signatures and releases.
 
-- [Quality gate](.github/workflows/ci.yml) 检查空白与 main 文件范围；修改 Go 源码、协议或依赖时，再运行 Go 格式、生成一致性、vet、race 与五目标 pure-Go 构建。前端验证由改动者按开发指南执行。
-- [PR metadata](.github/workflows/pr-metadata.yml) 检查打开且非草稿 PR 的标题格式、必要说明与确认项；维护者审查其实际内容。
-- 路径标签、指派与审阅请求由 GitHub 自动化处理；元数据工作流保持代码与 secret 隔离。
-- main 保存产品、现行规范和公共工程资料。个人 Agent 配置、任务调度记录、历史实施与验收材料由 CI 路径检查拒绝。
+## CI and review
 
-分支保护配置由维护者管理；具体 CI 命令与权限以工作流为准。
+- [Quality gate](.github/workflows/ci.yml) checks whitespace and allowed main paths. Go, protocol or dependency changes additionally run formatting, generation consistency, vet, race tests and five-target pure-Go builds. Authors verify frontend changes following the development guide.
+- [PR metadata](.github/workflows/pr-metadata.yml) checks the title, required description and checklist of open non-draft PRs. Maintainers review their actual contents.
+- GitHub automation handles path labels, assignment and review requests. Metadata workflows keep code separate from secrets.
+- main contains the product, current conventions and public engineering documentation. CI rejects personal Agent configuration, coordination records and historical implementation or acceptance artifacts.
 
-## 贡献许可
+Maintainers manage branch protection; workflows define actual CI commands and permissions.
 
-AlonaBot 与官方组件采用 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）。提交贡献时，请确认你有权以该许可证提供相关代码与文档；引用第三方材料时保留其版权与许可声明。插件模板使用其独立仓库声明的许可证。
+## Contribution license
+
+AlonaBot and official components use the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). Ensure you can contribute your code and documentation under this license. Preserve third-party copyright and license notices. Plugin templates follow the license declared by their own repository.

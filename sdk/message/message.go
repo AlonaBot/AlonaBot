@@ -3,7 +3,7 @@
 // [Chain] 按顺序组成一次逻辑发送，[Segment] 与 Chain 都实现 [Content]。
 // 会话、消息句柄与用户身份使用 string，由 [SID]、[Ref]、[UID] 拼接，Parse 函数校验并拆分。
 // [Event] 与 [SendResult] 提供关联消息的句柄。
-// 类型语义见 spec/MESSAGE-MODEL.md §1～§4。
+// 对应的协议类型见 contracts/proto/alonabot/v1/message.proto 与 identity.proto。
 package message
 
 import (

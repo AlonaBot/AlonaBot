@@ -1,4 +1,4 @@
-// Package task 声明、登记与管理带 JSON 对象参数的动态任务，也控制静态任务状态（CONTRACTS §9.1）。
+// Package task 声明、登记与管理带 JSON 对象参数的动态任务，也控制静态任务状态。
 package task
 
 import (

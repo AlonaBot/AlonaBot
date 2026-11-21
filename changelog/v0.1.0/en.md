@@ -23,7 +23,7 @@ Before upgrading from a development build, stop Core and all components and back
 
 ### Known limitations
 
-- OneBot 11 receives events; sending returns `UNSUPPORTED`. The welcome and rss plugins and the Telegram follow-up features listed in CONTRACTS §15.2 remain planned.
+- OneBot 11 receives events; sending returns `UNSUPPORTED`. The welcome and rss plugins and the Telegram follow-up features listed in the current guides remain planned.
 - Native components execute trusted local code. Library components share the Core process: an unhandled panic ends it, and a timed-out goroutine cannot be forcibly stopped.
 - Components declaring `prepare_effects=external` require explicit maintenance, backup permission and component-specific recovery for external effects.
 - The scratch image includes CA certificates. MCP stdio tools requiring shell, Node or Python need a custom image containing those runtimes.

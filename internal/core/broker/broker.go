@@ -1,7 +1,7 @@
 // Package broker 将插件的 Service 调用转发到目标插件当前已激活的 Session。
 //
 // [Broker.Call] 在转发前校验访问规则、编码、schema 和 JSON 语法，并保留每跳请求的关联。
-// SDK 负责按业务类型解码。调用与资源预算复用 wire.Session（CONTRACTS §1.2、§3）。
+// SDK 负责按业务类型解码。调用与资源预算复用 wire.Session。
 package broker
 
 import (

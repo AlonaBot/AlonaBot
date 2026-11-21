@@ -204,4 +204,4 @@ func (s *streamOutput) edit() (*message.SendResult, error) {
 	return callMessage(c.ctx, wire.ServiceEdit, &pb.EditRequest{To: target, PlatformMessageId: id, Chain: chain}, c.inbound)
 }
 
-const streamEditInterval = time.Second // MESSAGE-MODEL §4A 的同目标最小编辑间隔。
+const streamEditInterval = time.Second // 同目标最小编辑间隔。

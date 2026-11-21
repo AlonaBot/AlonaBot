@@ -2,7 +2,7 @@
 //
 // Collect 保护 Active、最近三个已提交代次、Pending 和未完成 Journal。
 // 调用方在 Core 持锁且管理操作串行化时调用；恢复操作完成前仍有 Journal 引用的资源持续保留。
-// 资源保护和备份约定见 CONTRACTS §6.3、§12。
+// 备份与恢复步骤见 docs/deployment.md。
 package gc
 
 import (
