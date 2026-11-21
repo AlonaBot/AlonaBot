@@ -31,8 +31,6 @@ English · [简体中文](README.zh-CN.md)
 - **Go development**: Chain command and event registrations, with hot reload, managed SQLite, configuration forms, i18n and a plugin test harness that runs against a real Core.
 - **Unified management**: Use WebUI or CLI to manage components, accounts, models, permissions, sessions, configuration, logs and updates. WebUI supports desktop and narrow screens.
 
-The official Agent supports streaming conversations, tool calls, MCP, skills, personas, memory and scheduled tasks. Model support includes OpenAI, OpenAI Compatible, Responses, Anthropic, Gemini and Ollama; provider SDKs are linked into the Agent as needed.
-
 ## Official components
 
 | Component | Repository | Bundled deployment |
@@ -42,8 +40,6 @@ The official Agent supports streaming conversations, tool calls, MCP, skills, pe
 | Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | Install as needed |
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | Install as needed; currently supports receiving |
 | Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) | Install as needed |
-
-The Core repository contains the SDK, protocol, examples, bundled releases and cross-component tests. Components build and release independently; the [component source lock](components.lock.json) pins the bundled versions.
 
 ## Documentation and contributing
 
