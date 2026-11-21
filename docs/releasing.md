@@ -28,7 +28,7 @@ go run ./scripts/dist --version 0.1.0 \
 
 `--public-key` 指向独立信任的标准 base64 Ed25519 公钥；正式发行使用 [`.github/release.pub`](../.github/release.pub)。整合构建只需要公钥。组件仓库的 `pack --key` 接收维护者保存的 64 字节私钥，其本机备份权限设为 0600。
 
-每个平台生成 `alonabot-<version>-<os>-<arch>.tar.gz`，Windows 为 `.zip`；默认归档仅含 Core 可执行文件、AGPL 许可证与记录源码版本的 `source.json`。`--bundle` 额外收录 `packages/<组件ID>/`，每个组件目录含本平台安装包和完整的 `release.json`、`release.json.sig`、`release.pub`，源码记录列出实际整合的 Agent 与 WebUI。WebUI 包包含后台进程和同一份前端产物。
+每个平台生成 `alonabot-<version>-<os>-<arch>.tar.gz`，Windows 为 `.zip`；默认归档仅含 Core 可执行文件、MIT 许可证与记录源码版本的 `source.json`。`--bundle` 额外收录 `packages/<组件ID>/`，每个组件目录含本平台安装包和完整的 `release.json`、`release.json.sig`、`release.pub`，源码记录列出实际整合的 Agent 与 WebUI。WebUI 包包含后台进程和同一份前端产物。
 
 整合模式的 `<输出目录>/packages/<组件ID>/` 汇集所选平台包及三份元数据。默认下载 URL 指向该组件仓库的 `releases/download/v<组件版本>`。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
 
