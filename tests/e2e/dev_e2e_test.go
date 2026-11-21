@@ -29,7 +29,7 @@ func TestDevelopmentConsole(t *testing.T) {
 	if _, err := io.WriteString(input, "/hello\n"); err != nil {
 		t.Fatal(err)
 	}
-	c.waitFor(`(?m)^stdout: Hello!$`)
+	c.waitFor(`(?m)^stdout: Hello AlonaBot$`)
 	var configuration struct {
 		Adapters map[string]struct {
 			Instances map[string]json.RawMessage `json:"instances"`

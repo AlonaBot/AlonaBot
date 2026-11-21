@@ -1,6 +1,6 @@
 # AlonaBot 开发约定
 
-本仓库维护 Core、SDK、协议、示例和整合发行。官方组件在各自仓库维护，入口见 [README](README.md#官方组件)。
+本仓库维护 Core、SDK、协议、示例和整合发行。官方组件在各自仓库维护，入口见 [README](README.zh-CN.md#官方组件)。
 
 ## 开发入口
 
