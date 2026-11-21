@@ -37,18 +37,6 @@ jobs:
           go run ./scripts/dist --version "${TAG#v}" --public-key .github/release.pub --out dist
           go run ./scripts/release-check --candidate dist --version "${TAG#v}" \
             --public-key .github/release.pub --out "$RUNNER_TEMP/release-evidence"
-      - name: 比对已公开的组件资产
-        shell: bash
-        run: |
-          set -euo pipefail
-          for component in agent webui; do
-            repo="AlonaBot/alonabot-$component"
-            id=$(find dist/packages -maxdepth 1 -type d -name "alonabot-$component-*")
-            version=$(jq -r .version "$id/release.json")
-            mkdir -p "$RUNNER_TEMP/$component"
-            gh release download "v$version" --repo "$repo" --dir "$RUNNER_TEMP/$component"
-            for file in "$id"/*; do cmp "$file" "$RUNNER_TEMP/$component/$(basename "$file")"; done
-          done
       - name: 验收本次归档首次启动
         env:
           ALONABOT_RELEASE_DIR: ${{ github.workspace }}/dist

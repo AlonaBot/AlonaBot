@@ -1,10 +1,10 @@
 # AlonaBot v0.1.0
 
-v0.1.0 当前为发布候选。Core、官方组件和发行工具已完成实现；正式 SDK tag、官方密钥签名、GitHub Release 与 GHCR 镜像待维护者发布。以下说明列出候选的实际验证范围和发行使用方法。
+AlonaBot 首个正式版本，提供五平台归档、官方签名组件和 Core + WebUI + Agent 整合发行，可通过公开 Docker Compose 文件安装。
 
 ## 发行内容
 
-五个目标分别提供 `alonabot-0.1.0-<os>-<arch>.tar.gz`，Windows 使用 `.zip`。归档包含 Core 与相邻的 `packages/`，WebUI 与 Agent 两个组件各有平台包、`release.json`、`release.json.sig` 和 `release.pub`。整合包 Release 配套 `SHA256SUMS`、`install.sh` 与固定版本的 `docker-compose.yml`。构建同时生成外部组件资产，其元数据发布方式待维护者按下述限制完成。Core 与整合的两个组件的版本均为 `0.1.0`，组件后续更新使用各自的版本号。
+五个目标分别提供 `alonabot-0.1.0-<os>-<arch>.tar.gz`，Windows 使用 `.zip`。归档包含 Core 与相邻的 `packages/`，WebUI 与 Agent 两个组件各有平台包、`release.json`、`release.json.sig` 和 `release.pub`。整合包 Release 配套 `SHA256SUMS`、`install.sh` 与固定版本的 `docker-compose.yml`。整合构建先验签已发布组件，再原样收录资产，同时附带 AGPL 许可证与 `source.json` 源码版本记录。五个官方组件均采用 AGPL-3.0-only。Core 与整合的两个组件的版本均为 `0.1.0`，组件后续更新使用各自的版本号。
 
 首次启动预装 Agent 与 WebUI，启用 WebUI；Agent 配置 Provider 与模型后由管理员启用。Telegram、OneBot 11 Adapter 和 help 插件从各自独立仓库按需安装。整合发行、Dockerfile 与根目录 `docker-compose.yml` 保留在 Core 主仓。OneBot 11 当前仅支持接收，发送返回 `UNSUPPORTED`；welcome、rss 及 CONTRACTS §15.2 列出的 Telegram 后续功能留待后续发行。
 
@@ -22,7 +22,7 @@ v0.1.0 当前为发布候选。Core、官方组件和发行工具已完成实现
 
 ## 安装与首次使用
 
-正式资产发布后，从 v0.1.0 GitHub Release 选择同一版本的资产，按[安装与部署](https://github.com/AlonaBot/AlonaBot/blob/main/docs/deployment.md)操作。当前可按 [README 快速开始](https://github.com/AlonaBot/AlonaBot/blob/main/README.md#快速开始)从源码运行本地示例。
+从 v0.1.0 GitHub Release 选择同一版本的资产，按[安装与部署](https://github.com/AlonaBot/AlonaBot/blob/main/docs/deployment.md)操作。公开镜像为 `ghcr.io/alonabot/alonabot:0.1.0`，`latest` 同步指向本版本。
 
 预编译运行无需 Go 或 Node。Linux 自动安装需要 systemd 和 root，macOS 使用当前登录用户的 launchd。脚本依赖 POSIX sh、curl、tar 和 sha256sum/shasum，下载校验通过后才替换安装。
 
@@ -45,14 +45,12 @@ Linux 服务的程序目录为 `/opt/alonabot`、数据目录为 `/var/lib/alona
 
 构建使用 Go 1.27.1、WebUI 使用 Node 26.5.1 与锁定的 npm 依赖；平台验收的 Linux ARM 容器使用 Go 1.27.3。普通发行物为 `CGO_ENABLED=0`。GORM 已恢复直接使用上游 `gorm.io/gorm v1.31.2`，依赖清单见[源码开发](https://github.com/AlonaBot/AlonaBot/blob/main/docs/development.md#依赖管理)。上述历史资源测量使用组织补丁版本 `github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d`，该补丁通过九种 hook 的常量方法名查找帮助链接器裁剪无关方法；恢复上游后的产物体积与运行内存可能增加，资源测量沿用停止新增的决定。
 
-## 已知限制与待完成项
+## 已知限制
 
 - Native 组件是管理员信任的本机代码；签名证明发布来源。库模式共享 Core 进程，未捕获 panic 会结束进程，停止超时无法强制结束 goroutine。
 - 声明 `prepare_effects=external` 的组件需显式维护、备份许可及组件专用恢复流程；外部写入和已发送消息按各自业务处理。
 - 候选业务联验使用本地 Telegram Bot API 与合成 Provider。最终候选的真实 Telegram、付费 LLM Provider 凭据未运行；Windows 实跑与 CGO 已批准延期，原计费失败和未运行项保留在历史验收记录。
-- 首次发布前的组件 ID、状态结构与初始迁移直接更新；已有开发数据先保留完整备份，再按契约重建。
-- 官方[插件模板](https://github.com/AlonaBot/alonabot-plugin-template)的修复位于 [PR #3](https://github.com/AlonaBot/alonabot-plugin-template/pull/3)，当前固定候选 SDK `v0.0.0-20261120071651-46c35d0eebcb`。网络下载与本地功能验证通过；首次 CI 因主仓库私有而认证失败，2026-11-20 主仓库公开后，同一候选的模板 PR 与 main CI 均通过，PR #3 已合并。正式发行前替换为正式 SDK tag。
-- 官方组件各自使用独立仓库和 Release，分别上传自己的 `release.json`、签名、公钥及平台包。整合归档只预装 WebUI 与 Agent；正式公开下载与更新链仍须在组件 Release 发布后验收。
-- 维护者仍须使用正式 SDK tag 与官方私钥构建签名资产，发布 GitHub Release 与 `ghcr.io/alonabot/alonabot:0.1.0`、`:latest`。当前候选使用测试密钥，操作步骤见[发行维护](https://github.com/AlonaBot/AlonaBot/blob/main/docs/releasing.md)。
+- 从开发版本切换时先备份完整数据；开发期间组件 ID、状态结构和初始迁移已有调整。
+- SDK 使用 `v0.1.0` tag。组件先固定已审查的 Core 精确提交，发布后再固定整合版本，避免循环引用尚未发布的 tag；插件模板随后更新至正式 SDK tag。
 
-候选核对程序的输入和结果格式见 [release-check](https://github.com/AlonaBot/AlonaBot/blob/main/scripts/release-check/README.md)。
+发行核对程序的输入和结果格式见 [release-check](https://github.com/AlonaBot/AlonaBot/blob/main/scripts/release-check/README.md)。

@@ -11,7 +11,7 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
   --out /tmp/alonabot-release-evidence
 ```
 
-`--public-key` 使用独立保存、由调用者信任的测试公钥。正式签名和公开发布由维护者执行。
+`--public-key` 使用独立保存、由调用者信任的公钥；正式发行公钥见 [`.github/release.pub`](../../.github/release.pub)。
 
 | 参数 | 含义 |
 | --- | --- |
@@ -19,8 +19,8 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 | `--version` | 必填；外层发行归档和 Core 的构建版本。组件版本分别读取各自签名清单。 |
 | `--public-key` | 必填；标准 base64 编码的 Ed25519 公钥文件。资产旁的公钥须与此输入一致。 |
 | `--out` | 必填；尚不存在的证据目录，父目录须已存在，位置须在候选目录之外。已有目录原样保留。 |
-| `--platforms` | 逗号分隔的目标，缺省 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`。必须与发行归档和每个组件清单的目标集合一致。 |
-| `--asset-base` | 期望的资产 URL 前缀；缺省使用各组件仓库 `releases/download/v<组件版本>`，与构建候选时的 `dist --asset-base` 对应。 |
+| `--platforms` | 逗号分隔的目标，缺省 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`。须与发行归档的目标集合一致；组件保留完整签名清单，其中须包含这些目标。 |
+| `--asset-base` | 期望的资产 URL 前缀；缺省使用各组件仓库 `releases/download/v<组件版本>`；用于核对历史候选的自定义下载前缀。 |
 | `--install-candidate` | 可选运行链的初始组件包目录：从现有 configdb 示例打包，使用独立第三方测试发布者。 |
 | `--update-candidate` | 同 ID、来源、发布者，组件自身 SemVer 严格递增的包目录。 |
 | `--wrong-source-candidate` | 同更新版本、ID、发布者，来源不同的有效签名包目录。 |
