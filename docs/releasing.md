@@ -59,7 +59,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 [release-check](../scripts/release-check/README.md)读取实际归档、两组件的签名元数据、包内容和 build-info，并在新目录保存逐项结果。按改动影响选择目标和生命周期检查，复用仍适用的历史证据。
 
-跨组件测试运行 `uv run --no-project python scripts/integration.py`。平台、崩溃恢复与安装更新分别使用[平台工具](../scripts/platform/README.md)和[场景工具](../scripts/scenarios/README.md)。交叉构建结果与实际运行结果分别记录。Windows 实跑已批准延期，原结果见[v0.1.0 候选说明](../changelog/v0.1.0/zh-CN.md)。
+跨组件测试运行 `uv run --no-project python scripts/integration.py`。平台、崩溃恢复与安装更新分别使用[平台工具](../scripts/platform/README.md)和[场景工具](../scripts/scenarios/README.md)。交叉构建结果与实际运行结果分别记录。Windows 实跑已批准延期，原结果见[v0.1.0 发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 修改 `install.sh` 后执行 `sh -n deploy/install.sh`。真实 systemd/launchd 安装、升级、校验失败和卸载在授权、可恢复的环境验收。
 
@@ -71,7 +71,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 1. 将组件 SDK 固定到已审查的 Core 精确提交；验证并合并五个组件的源码 PR。
 2. 在五组件仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包，以官方密钥签名，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`。
-3. 在主仓 `components.lock.json` 固定已发布组件版本，验证并合并后创建 Core `v<版本>` tag。Release 工作流构建五平台整合归档、核对签名及许可证、比对已发布组件资产并验收首次启动，再创建 Release 草稿。正文读取 `dist/release-notes.md`。
+3. 在主仓 `components.lock.json` 固定已发布组件版本，验证并合并后创建 Core `v<版本>` tag。Release 工作流构建五平台整合归档、核对签名、已发布组件资产及许可证并验收首次启动，再创建 Release 草稿。正文读取 `dist/release-notes.md`。
 4. 原生 amd64、arm64 runner 各自解压本次归档，通过 Dockerfile 的 `published` target 构建镜像并用发行 Compose 验收登录、默认组件、卷内凭证持久化和退出；通过后推送平台镜像并合并版本 tag 与 `latest`。
 5. 首次发布时将 GHCR package visibility 设置为 public。工作流匿名拉取两架构并验收公开 Compose 后公开 Release；随后更新 README、同步 dev，并将插件模板切到正式 SDK tag。
 

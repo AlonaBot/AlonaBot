@@ -8,7 +8,7 @@
   <a href="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml"><img src="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml/badge.svg?branch=main" alt="Quality gate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="AGPL-3.0"></a>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27.1"></a>
-  <a href="changelog/v0.1.0/zh-CN.md"><img src="https://img.shields.io/badge/v0.1.0-发布候选-22B8CF?style=flat-square" alt="v0.1.0 发布候选"></a>
+  <a href="https://github.com/AlonaBot/AlonaBot/releases/latest"><img src="https://img.shields.io/github/v/release/AlonaBot/AlonaBot?style=flat-square&amp;color=22B8CF" alt="Release"></a>
 </p>
 
 <p align="center">轻量级、跨平台的 Go 聊天机器人框架。<br>按需安装组件，把机器人搭成你需要的样子。</p>
@@ -32,18 +32,18 @@
 
 ## 快速开始
 
-v0.1.0 目前为发布候选，官方发行归档和镜像待发布。现在可以从源码运行本地示例，无需聊天平台或模型凭据。准备 Go **1.27.1** 后执行：
+准备 Docker Compose，下载正式发行的 Compose 文件即可安装：
 
 ```fish
-git clone https://github.com/AlonaBot/AlonaBot.git
-cd AlonaBot
-go build -o bin/alonabot ./cmd/alonabot
-bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
+curl --fail --location --proto '=https' --proto-redir '=https' \
+  -o docker-compose.yml https://github.com/AlonaBot/AlonaBot/releases/download/v0.1.0/docker-compose.yml
+docker compose up -d
+docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
-在同一个终端输入 `/ping`，即可看到 `pong`。修改示例源码后会自动重载；按 Ctrl-C 停止。使用独立的 `data` 目录，避免与正在运行的机器人共用数据。
+打开 `http://127.0.0.1:7650`，用读出的一次性 token 登录。官方镜像支持 Linux amd64/arm64，预装 Core、WebUI 与 Agent，数据保存在命名卷中。首次启动启用 WebUI；配置 Provider 与模型后再启用 Agent。Telegram、OneBot 11 Adapter 和 help 插件按需安装。
 
-官方整合包包含 Core、WebUI 与 Agent，根目录提供 `docker-compose.yml`。首次启动启用 WebUI；配置 Provider 与模型后再启用 Agent。Telegram、OneBot 11 Adapter 和 help 插件从各自仓库按需安装。正式发布后的归档、Docker Compose 与系统服务安装步骤见[安装与部署](docs/deployment.md)，平台实跑情况与已知限制见[v0.1.0 发布说明](changelog/v0.1.0/zh-CN.md)。
+[GitHub Release](https://github.com/AlonaBot/AlonaBot/releases/latest) 同时提供五平台归档和系统服务安装脚本。配置、升级与备份见[安装与部署](docs/deployment.md)，平台实跑情况与已知限制见[v0.1.0 发布说明](changelog/v0.1.0/zh-CN.md)。开发者可按[源码开发](docs/development.md)运行本地示例。
 
 ## 官方组件
 
