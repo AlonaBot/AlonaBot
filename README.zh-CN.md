@@ -31,8 +31,6 @@
 - **Go 开发体验**：链式注册命令与事件，支持热重载、受管 SQLite、配置表单、i18n，以及通过真实 Core 运行的插件测试套件。
 - **统一管理**：WebUI 与 CLI 管理组件、账号、模型、权限、会话、配置、日志和更新，支持桌面与窄屏。
 
-官方 Agent 提供流式对话、工具调用、MCP、技能、人格、记忆与定时任务。模型支持 OpenAI、OpenAI Compatible、Responses、Anthropic、Gemini 与 Ollama；模型 SDK 按需链接在 Agent 中。
-
 ## 官方组件
 
 | 组件 | 仓库 | 整合包 |
@@ -42,8 +40,6 @@
 | Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | 按需安装 |
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | 按需安装，当前支持接收 |
 | Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) | 按需安装 |
-
-Core 仓库保留 SDK、协议、示例、整合发行与跨组件测试。组件各自构建和发布；[发行源码锁](components.lock.json)固定整合版本。
 
 ## 文档与贡献
 
