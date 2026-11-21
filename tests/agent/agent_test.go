@@ -213,7 +213,6 @@ func startAgentAt(t *testing.T, dir string, loop *loopback, configuration map[st
 		coreConfig[key] = value
 	}
 	writeJSON(t, filepath.Join(dir, "core_config.json"), coreConfig)
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	logger := slog.Default()
 	genresources.Bind(root, agentResources(t))
 	genresources.Bind(loop, loopResources)
@@ -221,6 +220,8 @@ func startAgentAt(t *testing.T, dir string, loop *loopback, configuration map[st
 	for _, plugin := range plugins {
 		options = append(options, alonabot.Plugin(plugin))
 	}
+	// 资源扫描可能触发冷编译，运行期限从准备完成后开始。
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	core, err := alonabot.Start(ctx, options...)
 	if err != nil {
 		cancel()
