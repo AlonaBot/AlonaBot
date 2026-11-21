@@ -1,0 +1,159 @@
+# 固定 tag 构建一次归档；原生双架构 runner 复用归档构建和验收镜像。
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已存在的发行 tag
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  archives:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: 构建并核对正式归档
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./scripts/dist --version "${TAG#v}" --public-key .github/release.pub --out dist
+          go run ./scripts/release-check --candidate dist --version "${TAG#v}" \
+            --public-key .github/release.pub --out "$RUNNER_TEMP/release-evidence"
+      - name: 比对已公开的组件资产
+        shell: bash
+        run: |
+          set -euo pipefail
+          for component in agent webui; do
+            repo="AlonaBot/alonabot-$component"
+            id=$(find dist/packages -maxdepth 1 -type d -name "alonabot-$component-*")
+            version=$(jq -r .version "$id/release.json")
+            mkdir -p "$RUNNER_TEMP/$component"
+            gh release download "v$version" --repo "$repo" --dir "$RUNNER_TEMP/$component"
+            for file in "$id"/*; do cmp "$file" "$RUNNER_TEMP/$component/$(basename "$file")"; done
+          done
+      - name: 验收本次归档首次启动
+        env:
+          ALONABOT_RELEASE_DIR: ${{ github.workspace }}/dist
+        working-directory: tests
+        run: go test ./e2e -run '^TestFirstRunDistribution$' -count=1
+      - name: 创建发行草稿
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" --verify-tag --draft --title "$TAG" \
+            --notes-file dist/release-notes.md dist/alonabot-* dist/SHA256SUMS \
+            dist/install.sh dist/docker-compose.yml .github/release.pub
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: distribution
+          path: dist/
+          if-no-files-found: error
+
+  image:
+    needs: archives
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      packages: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: distribution
+          path: dist
+      - name: 从归档构建镜像并通过 Compose 验收
+        env:
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/alonabot/alonabot:${TAG#v}-$ARCH"
+          mkdir -p "$RUNNER_TEMP/distribution"
+          tar -xzf "dist/alonabot-${TAG#v}-linux-$ARCH.tar.gz" -C "$RUNNER_TEMP/distribution" --strip-components=1
+          mkdir -p "$RUNNER_TEMP/distribution/data" "$RUNNER_TEMP/distribution/etc/ssl/certs"
+          cp /etc/ssl/certs/ca-certificates.crt "$RUNNER_TEMP/distribution/etc/ssl/certs/"
+          docker buildx create --use
+          docker buildx build --target published --platform "linux/$ARCH" \
+            --build-context "distribution=$RUNNER_TEMP/distribution" \
+            --label org.opencontainers.image.source=https://github.com/AlonaBot/AlonaBot \
+            --label "org.opencontainers.image.version=${TAG#v}" \
+            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
+            --label org.opencontainers.image.licenses=AGPL-3.0-only \
+            -t "$image" --load .
+          python3 scripts/release-smoke.py --compose dist/docker-compose.yml --image "$image"
+      - name: 推送已验收的平台镜像
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/docker-auth"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          unset REGISTRY_TOKEN
+          docker push "ghcr.io/alonabot/alonabot:${TAG#v}-$ARCH"
+
+  publish:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - name: 发布双架构清单
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/docker-auth"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          unset REGISTRY_TOKEN
+          docker buildx imagetools create -t "ghcr.io/alonabot/alonabot:${TAG#v}" -t ghcr.io/alonabot/alonabot:latest \
+            "ghcr.io/alonabot/alonabot:${TAG#v}-amd64" "ghcr.io/alonabot/alonabot:${TAG#v}-arm64"
+      - name: 匿名拉取并验收公开 Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG="$RUNNER_TEMP/docker-anonymous"
+          mkdir -p "$DOCKER_CONFIG"
+          for arch in arm64 amd64; do docker pull --platform "linux/$arch" "ghcr.io/alonabot/alonabot:${TAG#v}"; done
+          python3 scripts/release-smoke.py --compose docker-compose.yml --image "ghcr.io/alonabot/alonabot:${TAG#v}"
+          gh release edit "$TAG" --draft=false --latest

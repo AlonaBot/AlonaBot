@@ -7,7 +7,7 @@
 1. 选择已审查的 Core 提交和发行版本，确认相应检查通过。
 2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试还使用其他条目。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
 3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`，约定见[更新日志](../changelog/README.zh-CN.md)。
-4. 正式发行前固定 SDK tag，并更新组件和插件模板的引用。模板已在公开 Core 上通过 CI；更换 SDK tag 后核对对应检查。
+4. 先将组件 SDK 固定到已验证的 Core 精确提交，待组件发布后再固定整合锁和 Core tag，避免相互引用尚未发布的版本。插件模板随后更新至正式 SDK tag。
 
 生成的 Release 正文英文在前、简体中文在后，自动去掉 HTML 编辑注释：
 
@@ -21,16 +21,16 @@ go run ./scripts/release-notes --version 0.1.0 > /tmp/alonabot-release-notes.md
 
 ```fish
 go run ./scripts/dist --version 0.1.0 \
-  --key ~/.config/alonabot/release.key --out ./dist
+  --public-key .github/release.pub --out ./dist
 ```
 
-构建需要 Go、Node/npm 及已锁定的 Go/npm 依赖，版本见[开发环境](development.md#准备环境)。工具按发行锁下载 Agent 与 WebUI，在临时副本中构建前端和平台包；Core 源码取当前 checkout。源仓库中的 `node_modules`、`dist` 和依赖文件保持原样。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，用 `--platforms linux/amd64,linux/arm64` 选择子集。
+构建需要 Go 和网络。工具构建当前 checkout 的 Core，按 `components.lock.json` 的正式版本下载 Agent 与 WebUI 的公开 Release，先用可信公钥验签，再核对来源、ID、版本、平台、包长度与清单摘要。签名清单与组件包逐字收录到整合归档；前端在 WebUI 自身发布时构建。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，用 `--platforms linux/amd64,linux/arm64` 选择子集。
 
-`--key` 文件保存标准 base64 编码的 64 字节 Ed25519 私钥，可带末尾空白。密钥置于仓库与组件资源之外，权限设为 0600。候选验收使用临时测试密钥，正式签名由维护者使用官方私钥执行。私钥只由 dist 读取，子进程只得到构建所需的公钥。
+`--public-key` 指向独立信任的标准 base64 Ed25519 公钥；正式发行使用 [`.github/release.pub`](../.github/release.pub)。整合构建只需要公钥。组件仓库的 `pack --key` 接收维护者保存的 64 字节私钥，其本机备份权限设为 0600。
 
-每个平台生成 `alonabot-<version>-<os>-<arch>.tar.gz`，Windows 为 `.zip`；归档含 Core 与 `packages/<组件ID>/`。每个组件目录含本平台安装包和完整的 `release.json`、`release.json.sig`、`release.pub`。WebUI 包包含后台进程和同一份前端产物。
+每个平台生成 `alonabot-<version>-<os>-<arch>.tar.gz`，Windows 为 `.zip`；归档含 Core、AGPL 许可证、记录源码版本的 `source.json` 与 `packages/<组件ID>/`。每个组件目录含本平台安装包和完整的 `release.json`、`release.json.sig`、`release.pub`。WebUI 包包含后台进程和同一份前端产物。
 
-`dist/packages/<组件ID>/` 汇集该组件全部平台包及三份元数据。默认下载 URL 指向该组件仓库的 `releases/download/v<组件版本>`；`--asset-base https://example.com/releases/v0.1.0` 可显式覆盖。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
+`dist/packages/<组件ID>/` 汇集该组件全部平台包及三份元数据。默认下载 URL 指向该组件仓库的 `releases/download/v<组件版本>`。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
 
 输出目录还包含：
 
@@ -41,18 +41,17 @@ go run ./scripts/dist --version 0.1.0 \
 
 ## 构建容器镜像
 
-根目录 Dockerfile 复用同一 dist 入口，镜像只预装 Core、WebUI 和 Agent。签名密钥通过 BuildKit secret 传入；签名阶段重新构建，使本次密钥生效：
+发布工作流从已核对归档构建 `published` target；两个原生架构 runner 复用同一批发行产物。源码构建仍可通过根 Dockerfile 的默认 target 调用 dist：
 
 ```fish
 set version 0.1.0
-set release_key ~/.config/alonabot/release.key
-docker buildx build --platform linux/amd64,linux/arm64 --no-cache-filter build \
-  --build-arg VERSION=$version --secret id=release_key,src=$release_key \
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=$version \
   --output type=oci,dest=/tmp/alonabot-$version.oci.tar \
   -t ghcr.io/alonabot/alonabot:$version .
 ```
 
-需要覆盖组件下载前缀时，加 `--build-arg ASSET_BASE=https://example.com/releases/v0.1.0`。本机验收可用 `--load` 构建单平台镜像，再执行根目录 `docker compose up -d`；Compose 默认使用正式 GHCR tag，验证本地候选时将 `image` 改为相应的本地 tag。
+本机验收可用 `--load` 构建单平台镜像。发行工作流用 `scripts/release-smoke.py --compose docker-compose.yml --image <候选镜像>` 创建独立项目和数据卷，完成登录、默认组件、凭证持久化及停止验收后清理该项目。
 
 镜像采用 scratch、UID/GID 10001、独立 `/data` 卷与 init，端口只发布到 loopback。使用需要 shell、Node 或 Python 的 MCP stdio 工具时，自行构建含相应运行时的镜像。
 
@@ -70,10 +69,12 @@ docker buildx build --platform linux/amd64,linux/arm64 --no-cache-filter build \
 
 正式发布按以下顺序执行：
 
-1. 发布正式 SDK tag，更新并验证组件与插件模板的 SDK 引用。
-2. 按固定源码和官方密钥构建组件；在对应仓库发布各组件的同版本签名资产。Adapter 与 help 使用各自的 `alonabot pack` 输出。
-3. 构建、核对整合归档，将五平台归档、`SHA256SUMS`、`install.sh` 和 `docker-compose.yml` 上传 Core Release；正文从 `dist/release-notes.md` 读取：`gh release create v0.1.0 --notes-file dist/release-notes.md ...`。
-4. 推送核对过的 linux/amd64、linux/arm64 镜像与多架构清单，确认版本 tag、latest 和 Compose 版本一致。
-5. 正式资产可用后更新 README 的默认安装入口。
+1. 将组件 SDK 固定到已审查的 Core 精确提交；验证并合并五个组件的源码 PR。
+2. 在五组件仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包，以官方密钥签名，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`。
+3. 在主仓 `components.lock.json` 固定已发布组件版本，验证并合并后创建 Core `v<版本>` tag。Release 工作流构建五平台整合归档、核对签名及许可证、比对已发布组件资产并验收首次启动，再创建 Release 草稿。正文读取 `dist/release-notes.md`。
+4. 原生 amd64、arm64 runner 各自解压本次归档，通过 Dockerfile 的 `published` target 构建镜像并用发行 Compose 验收登录、默认组件、卷内凭证持久化和退出；通过后推送平台镜像并合并版本 tag 与 `latest`。
+5. 首次发布时将 GHCR package visibility 设置为 public。工作流匿名拉取两架构并验收公开 Compose 后公开 Release；随后更新 README、同步 dev，并将插件模板切到正式 SDK tag。
 
-当前仍为候选；正式 SDK tag、官方签名、GitHub Release 与 GHCR 发布由维护者执行。发布失败时保存完整错误、产物和当前线上版本，修复受影响步骤后继续。
+官方公钥保存在 [`.github/release.pub`](../.github/release.pub)，五组件 Release 工作流通过 `ALONABOT_RELEASE_KEY` secret 读取同一发布者私钥；本机备份权限为 0600。工作流只记录公钥和签名产物。
+
+发布失败时保留草稿、完整错误、产物与当前线上版本，修复受影响步骤后继续。`workflow_dispatch` 的 `tag` 指向已存在 tag，可恢复尚未完成的发行；已公开版本不覆盖资产或改写 tag。

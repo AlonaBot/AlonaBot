@@ -1,5 +1,8 @@
 # 构建上下文只包含发行构建所需源码，运行数据与凭证留在上下文之外。
 **
+!.github/
+!.github/release.pub
+!LICENSE
 !go.mod
 !go.sum
 !components.lock.json
