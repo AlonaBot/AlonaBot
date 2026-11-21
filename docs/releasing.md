@@ -73,7 +73,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 2. 在五组件仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包，以官方密钥签名，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`。
 3. 在主仓 `components.lock.json` 固定已发布组件版本，验证并合并后创建 Core `v<版本>` tag。Release 工作流构建五平台整合归档、核对签名、已发布组件资产及许可证并验收首次启动，再创建 Release 草稿。正文读取 `dist/release-notes.md`。
 4. 原生 amd64、arm64 runner 各自解压本次归档，通过 Dockerfile 的 `published` target 构建镜像并用发行 Compose 验收登录、默认组件、卷内凭证持久化和退出；通过后推送平台镜像并合并版本 tag 与 `latest`。
-5. 首次发布时将 GHCR package visibility 设置为 public。工作流匿名拉取两架构并验收公开 Compose 后公开 Release；随后更新 README、同步 dev，并将插件模板切到正式 SDK tag。
+5. 首次发布时，先在组织 Settings → Packages → Package creation 中允许 Public，再将 GHCR 包的 visibility 设置为 public。工作流匿名拉取两架构并验收公开 Compose 后公开 Release；随后更新 README、同步 dev，并将插件模板切到正式 SDK tag。
 
 官方公钥保存在 [`.github/release.pub`](../.github/release.pub)，五组件 Release 工作流通过 `ALONABOT_RELEASE_KEY` secret 读取同一发布者私钥；本机备份权限为 0600。工作流只记录公钥和签名产物。
 
