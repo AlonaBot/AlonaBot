@@ -646,7 +646,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 | Method / path | 成功响应 | 语义 |
 | --- | --- | --- |
 | `GET /api/v1/packages/{id}/changelog` | `{"locale":"en-US","entries":[{"version":"1.2.1","date":"2026-11-17","markdown":"…"}]}` | 当前已安装版本包中的 changelog（D-166）。单文件按围栏代码块之外的 `## [版本] - 日期` 或 `## [版本]` 切分，版本须为 SemVer，省略 `[Unreleased]`；`locale` 为 `en-US`。目录形式逐版本选择语言，`locale` 为最新条目所用文件的标签，条目省略 `date` |
-| `GET /api/v1/core/changelog` | 同上 | 读取从 `changelog/v<SemVer>/{en,zh-CN}.md` 编进可执行文件的正式日志，排除 `unreleased`；按 `Accept-Language` 精确或主语言匹配 `en-US` / `zh-CN`，缺省或未匹配时使用英文。版本去掉目录名前缀 `v`，按单文件规则返回，未提供的发布日期省略 |
+| `GET /api/v1/core/changelog` | 同上 | 读取从 `changelog/v<SemVer>/{en,zh-CN}.md` 编进可执行文件的正式日志，排除 `unreleased`；按 `Accept-Language` 精确或主语言匹配 `en-US` / `zh-CN`，缺省或未匹配时使用英文。版本与日期从文件内标题按单文件规则提取，未提供的发布日期省略 |
 
 条目按 SemVer 倒序，`markdown` 保留原文（单文件只返回节正文），日期缺省时省略 `date`。无发布条目时返回 `locale: "en-US"` 与 `entries: []`。
 
@@ -726,7 +726,8 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 | --- | --- | --- |
 | `GET /stats` | `?range=24h`，返回 `{"timezone":"Local","observed_since":"…","buckets":[…]}` | range 必须为 `24h`、`7d` 或 `30d`；按后台本地时区返回小时桶 |
 | `GET /users` | `[{"user":"telegram:123","display_name":"…","first_seen_at":"…","last_seen_at":"…"}]` | 见过的用户按 user 排序；同一 Adapter 的不同实例共用用户字符串 |
-| `GET /store` | `?source=AlonaBot/plugin-store&role=plugin&q=&offset=0&limit=24`，返回 `{"source":"…","fetched_at":"…","stale":false,"items":[…],"total":42}` | source 必须为 `owner/repo`，offset 与 limit 必须显式给出非负与正整数；role 可为空或为四种组件角色；搜索与筛选后分页，total 为精确总数 |
+| `GET /store` | `?source=AlonaBot/plugin-store&role=plugin&q=&sort=stars&offset=0&limit=9&refresh=false`，返回 `{"source":"…","fetched_at":"…","stale":false,"items":[…],"total":42,"counts":{"all":50,"plugin":42,"adapter":6,"agent":1,"webui":1}}` | source 必须为 `owner/repo`，offset 与 limit 必须显式给出非负与正整数；role 可为空或为四种组件角色；refresh 可省略或为 `true`、`false`，见下文快照规则；搜索、角色筛选与排序后分页；total 为当前搜索及角色的精确总数 |
+| `GET /store/check` | `?repo=owner/repo`，返回 `{"repo":"…","role":"plugin","id":"…","name":"…","version":"1.2.3","release_url":"…","description":"…","author":"…","warnings":[]}` | repo 必须为 `owner/repo`；直接只读检查最新 Release 与包内 manifest，description、author 可省略；warnings 保留 manifest 解析警告原文及顺序，空数组也返回 |
 | `GET /updates` | `?repo=owner/repo`，返回 `{"repo":"…","version":"1.2.3","release_url":"…","markdown":"…","fetched_at":"…","stale":false}` | GitHub 最新 Release 的标签去掉前导 v 后须为 SemVer；markdown 保留 Release 正文 |
 | `GET /changelog/seen` | `?component=组件ID`，返回 `{"version":null}` 或 `{"version":"1.2.3"}` | component 必填，Core 使用 `core`；尚无已读记录时为 null |
 | `PUT /changelog/seen` | `{"component":"core","version":"1.2.3"}` → `{}` | 只接收这两个字段及单个 JSON 对象；component 非空，version 为 SemVer，在 SQLite 事务内比较并单调推进，较旧或相等版本保持现值 |
@@ -735,13 +736,21 @@ tools 的写入从下一次工具策略操作生效，在途确认保留已接�
 
 商店 items 项为 `{repo,role,tags,id,name,version,description?,author?,stars?,icon_url?}`。名称、版本等来自最新 Release 的 release.json 与包内 manifest；stars 省略表示未知，0 保持为 0。官方源首次预置 `AlonaBot/plugin-store`，源列表在浏览器持久化，主动清空后保持空列表。用户页取见过的用户、Core Admin 与全局禁止用户的并集，修改禁止用户时保留聊天禁止列表。
 
-每次商店或 Release 查询先刷新；源缓存按小写 source 隔离，Release 缓存按小写 repo 隔离。刷新失败而有成功缓存时，返回 `stale: true`、原 `fetched_at` 与完整 `error`；无缓存的一般失败返回 500 / `INTERNAL` 与实际错误。`/updates` 的 latest 404 总是返回 404 / `NO_RELEASE`；前端 `getLatestRelease(repo: string): Promise<LatestRelease | null>` 将其映射为 null。源 index.json 的 404 在无可用缓存时返回 404 / `SOURCE_INDEX_MISSING`。界面在对应商店或更新位置显示本地化短提示与缓存时间，API 客户端保留完整错误响应。
+`q` 对 name、description、repo、author 与空格连接的 tags 进行不区分大小写的子串搜索，缺失字段视为空串。counts 在搜索后、role 筛选前统计全部及四种角色；total 在 role 筛选后统计。sort 省略或为空时使用 `stars`，按已知星标数降序，未知值排在已知值之后；`name` 按不区分大小写的名称升序。同值保留索引顺序，未知 sort 返回 400 / `INVALID_ARGUMENT`。界面每页显示九张卡片，切换搜索、角色或排序后从第一页开始。
 
-远端请求的初始 URL 与每跳重定向均校验 HTTPS、主机与路径；只接受规定的 GitHub API、Release 下载及 Release CDN 资产路径，初始资产下载绑定索引声明的组件仓库。抓取与解包使用下列 `alonabot-webui/store.go` 组件内安全常量（CONTRACTS §16）：
+`/store/check` 每次读取 GitHub 最新 Release、release.json 及其首个平台归档，校验 Release URL 所属仓库、标签的 SemVer、release.json 结构、版本与标签一致、release 来源与请求仓库一致，并解析包内 plugin.yaml，核对组件 ID、版本、来源与 release.json 一致；来源字符串在包内与 release.json 之间精确匹配。响应 repo 取已验证的 release.json `Source` 去掉 `github.com/` 前缀后的值，保留来源声明的规范大小写。归档扫描和声明图标读取沿用下述安全限制。签名、公钥与归档大小、摘要完整性由 Core 安装预检校验。检查结果及失败均不读写 fetch_cache 或其他持久状态。仅 latest Release API 的 404 返回 404 / `NO_RELEASE`；release.json、归档等坏资产的 404 及其他错误返回 500 / `INTERNAL`，保留实际错误。
+
+索引格式为 `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`，tags 可省略。收录检查后由用户填写标签，通过浏览器打开 `https://github.com/<source>/issues/new?template=submit-plugin.yml&repo=…&role=…&tags=…&release_url=…`；repo 使用检查响应中的规范值，四个字段值按 URL 查询参数编码。所有收录申请由浏览器提交 GitHub Issue，WebUI 使用现有管理接口安装组件。
+
+`/store` 的 refresh 仅接受字面量 `true`、`false`，其他值（含空串）返回 400 / `INVALID_ARGUMENT`。省略或为 `true` 时每次查询执行刷新，成功后持久化完整快照；`false` 且存在成功持久快照时，直接在该快照上执行搜索、角色筛选、计数、排序及分页，保留原 `fetched_at`，全程不发远端请求；无快照时执行正常首次抓取。快照读取返回 `stale: false`，表示本次未发生刷新失败；`fetched_at` 始终显示该快照的实际抓取时间，供用户判断新旧。UI 进入商店、切换源及手动刷新显式传 `refresh=true`，搜索、角色、排序和分页传 `refresh=false`；手动刷新控件支持键盘操作。
+
+`/updates` 维持每次查询先刷新的语义。源缓存按小写 source 隔离，Release 缓存按小写 repo 隔离。刷新失败而有成功缓存时，返回 `stale: true`、原 `fetched_at` 与完整 `error`，保留原成功快照；无缓存的一般失败返回 500 / `INTERNAL` 与实际错误。`/updates` 的 latest 404 总是返回 404 / `NO_RELEASE`；前端 `getLatestRelease(repo: string): Promise<LatestRelease | null>` 将其映射为 null。源 index.json 的 404 在无可用缓存时返回 404 / `SOURCE_INDEX_MISSING`。界面在对应商店或更新位置显示本地化短提示与缓存时间，API 客户端保留完整错误响应。
+
+远端请求的初始 URL 与每跳重定向均校验 HTTPS、主机与路径；只接受规定的 GitHub API、Release 下载及 Release CDN 资产路径，初始资产下载绑定索引或收录检查指定的组件仓库。`/store`、`/updates` 与 `/store/check` 的每个 HTTP 请求各自使用下述 20 秒期限，覆盖响应体读取；串行依赖请求的总耗时可超过 20 秒，聚合刷新沿调用 ctx 取消，不另设同一期限。抓取与解包使用下列 `alonabot-webui/internal/admin/store.go` 组件内安全常量（CONTRACTS §16）：
 
 | 常量 | 值 | 作用 |
 | --- | --- | --- |
-| `remoteFetchTimeout` | 20 秒 | 整次源/Release 刷新与单个 HTTP 请求期限 |
+| `remoteFetchTimeout` | 20 秒 | 每个 HTTP 请求的期限，包含响应体读取 |
 | `remoteMetadataBytes` | 1 MiB | Release、仓库信息与 release.json 响应上限 |
 | `remoteIndexBytes` | 4 MiB | index.json 响应上限 |
 | `remoteArchiveBytes` | 64 MiB | 压缩归档响应上限 |
