@@ -126,3 +126,9 @@ const ServiceProfileSet = "core.profile.set"
 
 // ServiceProfileSetOverrides 整体更新 SDK 的有效覆盖集合。
 const ServiceProfileSetOverrides = "sdk.profile.set_overrides"
+
+// ServiceReadNodes 查询合并转发的完整递归节点。
+const ServiceReadNodes = "core.message.read_nodes"
+
+// ServiceAdapterReadNodes 从指定 Adapter 实例查询合并转发。
+const ServiceAdapterReadNodes = "adapter.message.read_nodes"

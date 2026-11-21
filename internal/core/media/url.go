@@ -22,11 +22,16 @@ const (
 	mediaPrefix   = "/media/"
 )
 
+type urlGrant struct {
+	entry *entry
+	host  string // 仅放行签发前缀对应的主机名，支持协议端的容器地址。
+}
+
 // AddURLService 注册临时 URL 服务，保存 settings 已校验的缺省前缀。
 func (s *Store) AddURLService(m *router.Mux, baseURL *url.URL) {
 	prefix := *baseURL
 	s.baseURL = &prefix
-	s.urls = make(map[string]*entry)
+	s.urls = make(map[string]urlGrant)
 	m.Handle(wire.ServiceMediaURL, s.operation(s.mediaURL))
 }
 
@@ -54,7 +59,7 @@ func (s *Store) mediaURL(_ context.Context, c router.Caller, in *wire.Inbound) w
 	random := make([]byte, urlTokenBytes)
 	rand.Read(random)
 	id := base64.RawURLEncoding.EncodeToString(random)
-	s.urls[id] = e
+	s.urls[id] = urlGrant{entry: e, host: prefix.Hostname()}
 	e.lease.urls = append(e.lease.urls, id)
 	address := *prefix
 	address.Path = strings.TrimRight(address.Path, "/") + mediaPrefix + id
@@ -74,12 +79,19 @@ func (s *Store) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 1. 在同一回收锁下校验 URL 和打开文件，避免打开已回收的对象。
 	s.mu.Lock()
 	s.sweep()
-	e := s.urls[id]
-	if e == nil {
+	grant, exists := s.urls[id]
+	if !exists {
 		s.mu.Unlock()
 		http.NotFound(w, r)
 		return
 	}
+	address := url.URL{Host: r.Host}
+	if !strings.EqualFold(address.Hostname(), grant.host) {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusMisdirectedRequest), http.StatusMisdirectedRequest)
+		return
+	}
+	e := grant.entry
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		s.mu.Unlock()
 		w.Header().Set("Allow", "GET, HEAD")

@@ -1305,8 +1305,10 @@ type ActionRequest struct {
 	Name              string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	Version           uint32                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
 	ParamsJson        string                 `protobuf:"bytes,5,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 仅绑定 Handler 的客户端设置；按声明范围选择可信默认会话或账号。
+	UseDefaultTarget bool `protobuf:"varint,6,opt,name=use_default_target,json=useDefaultTarget,proto3" json:"use_default_target,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ActionRequest) Reset() {
@@ -1372,6 +1374,13 @@ func (x *ActionRequest) GetParamsJson() string {
 		return x.ParamsJson
 	}
 	return ""
+}
+
+func (x *ActionRequest) GetUseDefaultTarget() bool {
+	if x != nil {
+		return x.UseDefaultTarget
+	}
+	return false
 }
 
 // ActionResponse 保留平台返回的 JSON 原文，可以与安全错误同时返回。
@@ -1746,6 +1755,67 @@ func (*AdapterCommandsSyncResponse) Descriptor() ([]byte, []int) {
 	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{27}
 }
 
+// AdapterReadNodesRequest 将查询绑定到实例账号及当前会话。
+type AdapterReadNodesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Target        *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Segment       *ForwardSegment        `protobuf:"bytes,3,opt,name=segment,proto3" json:"segment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdapterReadNodesRequest) Reset() {
+	*x = AdapterReadNodesRequest{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdapterReadNodesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdapterReadNodesRequest) ProtoMessage() {}
+
+func (x *AdapterReadNodesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdapterReadNodesRequest.ProtoReflect.Descriptor instead.
+func (*AdapterReadNodesRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *AdapterReadNodesRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *AdapterReadNodesRequest) GetTarget() *Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *AdapterReadNodesRequest) GetSegment() *ForwardSegment {
+	if x != nil {
+		return x.Segment
+	}
+	return nil
+}
+
 var File_alonabot_v1_adapter_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_adapter_proto_rawDesc = "" +
@@ -1844,14 +1914,15 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12.\n" +
 	"\x05scope\x18\x03 \x01(\x0e2\x18.alonabot.v1.ActionScopeR\x05scope\x12,\n" +
 	"\x12params_schema_json\x18\x04 \x01(\tR\x10paramsSchemaJson\x12,\n" +
-	"\x12result_schema_json\x18\x05 \x01(\tR\x10resultSchemaJson\"\xb3\x01\n" +
+	"\x12result_schema_json\x18\x05 \x01(\tR\x10resultSchemaJson\"\xe1\x01\n" +
 	"\rActionRequest\x12#\n" +
 	"\x02to\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x02to\x12.\n" +
 	"\x13adapter_instance_id\x18\x02 \x01(\tR\x11adapterInstanceId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\rR\aversion\x12\x1f\n" +
 	"\vparams_json\x18\x05 \x01(\tR\n" +
-	"paramsJson\"1\n" +
+	"paramsJson\x12,\n" +
+	"\x12use_default_target\x18\x06 \x01(\bR\x10useDefaultTarget\"1\n" +
 	"\x0eActionResponse\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\tR\n" +
 	"resultJson\"\xb3\x01\n" +
@@ -1879,7 +1950,12 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x128\n" +
 	"\bcommands\x18\x02 \x03(\v2\x1c.alonabot.v1.CommandMenuItemR\bcommands\"\x1d\n" +
-	"\x1bAdapterCommandsSyncResponse*a\n" +
+	"\x1bAdapterCommandsSyncResponse\"\x9e\x01\n" +
+	"\x17AdapterReadNodesRequest\x12\x1f\n" +
+	"\vinstance_id\x18\x01 \x01(\tR\n" +
+	"instanceId\x12+\n" +
+	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x125\n" +
+	"\asegment\x18\x03 \x01(\v2\x1b.alonabot.v1.ForwardSegmentR\asegment*a\n" +
 	"\x14AdapterInstanceState\x12&\n" +
 	"\"ADAPTER_INSTANCE_STATE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dADAPTER_INSTANCE_STATE_FAILED\x10\x01*\\\n" +
@@ -1901,7 +1977,7 @@ func file_alonabot_v1_adapter_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_adapter_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(AdapterInstanceState)(0),            // 0: alonabot.v1.AdapterInstanceState
 	(ActionScope)(0),                     // 1: alonabot.v1.ActionScope
@@ -1933,38 +2009,42 @@ var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(*CommandMenuItem)(nil),              // 27: alonabot.v1.CommandMenuItem
 	(*AdapterCommandsSyncRequest)(nil),   // 28: alonabot.v1.AdapterCommandsSyncRequest
 	(*AdapterCommandsSyncResponse)(nil),  // 29: alonabot.v1.AdapterCommandsSyncResponse
-	nil,                                  // 30: alonabot.v1.CommandMenuItem.DescriptionsEntry
-	(*Capability)(nil),                   // 31: alonabot.v1.Capability
-	(*Target)(nil),                       // 32: alonabot.v1.Target
-	(*MessageChain)(nil),                 // 33: alonabot.v1.MessageChain
-	(*Event)(nil),                        // 34: alonabot.v1.Event
-	(*ErrorInfo)(nil),                    // 35: alonabot.v1.ErrorInfo
+	(*AdapterReadNodesRequest)(nil),      // 30: alonabot.v1.AdapterReadNodesRequest
+	nil,                                  // 31: alonabot.v1.CommandMenuItem.DescriptionsEntry
+	(*Capability)(nil),                   // 32: alonabot.v1.Capability
+	(*Target)(nil),                       // 33: alonabot.v1.Target
+	(*MessageChain)(nil),                 // 34: alonabot.v1.MessageChain
+	(*Event)(nil),                        // 35: alonabot.v1.Event
+	(*ErrorInfo)(nil),                    // 36: alonabot.v1.ErrorInfo
+	(*ForwardSegment)(nil),               // 37: alonabot.v1.ForwardSegment
 }
 var file_alonabot_v1_adapter_proto_depIdxs = []int32{
-	31, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
+	32, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
 	3,  // 1: alonabot.v1.AdapterDescriptor.extensions:type_name -> alonabot.v1.ExtensionDeclaration
 	4,  // 2: alonabot.v1.AdapterDescriptor.permissions:type_name -> alonabot.v1.PermissionDeclaration
 	5,  // 3: alonabot.v1.AdapterDescriptor.events:type_name -> alonabot.v1.EventDeclaration
 	21, // 4: alonabot.v1.AdapterDescriptor.actions:type_name -> alonabot.v1.ActionDeclaration
-	31, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
-	32, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
-	33, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	34, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
+	32, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
+	33, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
+	34, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	35, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
 	0,  // 9: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
-	35, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
-	32, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
-	33, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
-	32, // 13: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
+	36, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
+	33, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
+	34, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
+	33, // 13: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
 	1,  // 14: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
-	32, // 15: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
-	32, // 16: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
-	30, // 17: alonabot.v1.CommandMenuItem.descriptions:type_name -> alonabot.v1.CommandMenuItem.DescriptionsEntry
+	33, // 15: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
+	33, // 16: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
+	31, // 17: alonabot.v1.CommandMenuItem.descriptions:type_name -> alonabot.v1.CommandMenuItem.DescriptionsEntry
 	27, // 18: alonabot.v1.AdapterCommandsSyncRequest.commands:type_name -> alonabot.v1.CommandMenuItem
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	33, // 19: alonabot.v1.AdapterReadNodesRequest.target:type_name -> alonabot.v1.Target
+	37, // 20: alonabot.v1.AdapterReadNodesRequest.segment:type_name -> alonabot.v1.ForwardSegment
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_adapter_proto_init() }
@@ -1982,7 +2062,7 @@ func file_alonabot_v1_adapter_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_adapter_proto_rawDesc), len(file_alonabot_v1_adapter_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   29,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

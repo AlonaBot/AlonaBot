@@ -59,7 +59,7 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if request.PlatformMessageId == "" {
 		return reject(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "platform_message_id is empty")
 	}
-	if safe := checkEditChain(request.Chain); safe != nil {
+	if safe := s.checkEdit(request.Chain, target); safe != nil {
 		return editRejected(target, safe)
 	}
 	// 4. 校验实例身份绑定与显式声明的编辑能力。
@@ -86,12 +86,12 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return editRejected(target, safe)
 	}
 	request.Chain = chain
-	if safe := checkEditChain(request.Chain); safe != nil {
+	if safe := s.checkEdit(request.Chain, target); safe != nil {
 		return editRejected(target, safe)
 	}
 	// 5. 改写后仍须符合编辑片段限制，拒绝时不签发按钮、不调用平台。
 	if s.hooks != nil {
-		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation, checkEditChain)
+		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation, func(chain *pb.MessageChain) *pb.ErrorInfo { return s.checkEdit(chain, target) })
 		if safe != nil {
 			return editRejected(target, safe)
 		}
@@ -142,4 +142,11 @@ func editRejected(target *pb.Target, safe *pb.ErrorInfo) wire.Response {
 		Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target,
 		PartResults: []*pb.PartResult{{Status: pb.PartStatus_PART_STATUS_REJECTED, Error: safe}},
 	}, safe)
+}
+
+func (s *Service) checkEdit(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {
+	if safe := s.normalizeMarkdown(chain, target); safe != nil {
+		return safe
+	}
+	return checkEditChain(chain)
 }

@@ -159,13 +159,14 @@ message ConfigCorrection {
 Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流程（CONTRACTS §8、D-26），区别如下：
 
 - 启动的是插件还是 Adapter 由 Core 依据安装记录决定，不采信进程自报。Adapter 的 REGISTER 必须携带 Adapter 描述（adapter_id、平台 Capability、extension 声明及其 Schema、平台动作声明，D-92），可以携带 HTTP 路由与实际监听的 loopback endpoint（D-94、D-136，路径、内部代理认证与生命周期规则同插件，CONTRACTS §7.2），不得携带其他插件路由或迁移信息；插件的 REGISTER 不得携带 Adapter 描述。不一致按注册失败处理。
-- Core 与 Adapter 之间的固定服务如下（共十二个），服务名不含 `/`：
+- Core 与 Adapter 之间的固定服务如下（共十三个），服务名不含 `/`：
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
 | `adapter.instance.start` | Core→Adapter | instance_id、实例配置 JSON（含已解析凭证）、已保存的游标 → account_id、账号展示名、账号用户名（`account_username`，平台上可寻址的标识，用于 `/cmd@username` 与 mention；平台没有时 absent，D-67）、该实例的 Capability |
 | `adapter.instance.stop` | Core→Adapter | instance_id → 空结果；实例停止接收，不再交付事件 |
 | `adapter.send` | Core→Adapter | instance_id、Target、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 |
+| `adapter.message.read_nodes` | Core→Adapter | AdapterReadNodesRequest（instance_id=1、target=2、segment=3）→ ReadNodesResponse（repeated ForwardItem items=1）及可并存的 ErrorInfo |
 | `adapter.edit` | Core→Adapter | instance_id、Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo，语义同 MESSAGE-MODEL §4 的 Edit |
 | `adapter.media.read` | Core→Adapter | instance_id、平台文件标识、offset、length（1～1 MiB）→ bytes、next_offset、eof |
 | `adapter.action` | Core→Adapter | instance_id、Target?（作用范围为 chat 时必有）、动作完整名、版本、JSON 参数 → JSON 结果与/或 ErrorInfo（D-92） |
@@ -175,6 +176,12 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.adapter.cursor` | Adapter→Core | instance_id、游标 → 空结果；用于没有事件时的游标变化 |
 | `core.adapter.status` | Adapter→Core | instance_id、实例状态、安全错误 → 空结果；用于 401/409 等使实例停止接收的错误 |
 | `core.media.url` | Adapter→Core | Core 为本次发送签发的只读 token、可选的 URL 前缀 → 临时媒体 URL 与到期时间（CONTRACTS §1.3，D-88） |
+
+**通用 Markdown 与节点读取的字段**
+
+`Segment.data` 的字段 11 为 `MarkdownSegment markdown`，`MarkdownSegment.content` 为字段 1（string）。`ForwardItem.occurred_at_unix_ms` 为字段 4（int64），零表示时间未知；节点 chain 可递归包含 forward 和 file，chain 与 platform_message_id 互斥。资源 ID 为 `ForwardSegment.platform_forward_id`，其语义与消息 ID 分开。
+
+`core.message.read_nodes` 与 `adapter.message.read_nodes` 均使用 schema_version=1 的 Protobuf。查询输入只含资源 ID 或消息引用 ID 列表，拒绝调用者提供的内联节点链。查询响应允许有效节点与 ErrorInfo 并存。Adapter 返回的媒体描述先由 Core 登记，再为请求 Session 和完整 Target 签发 incoming_ref；字段布局由 `contracts/wirespec_test.go` 固定。
 
 - 命令说明（D-138）：T-03.17 在 `route.proto` 的 `CommandSpec` 追加 `optional string description`，保存 builder 登记的英文原文；覆盖键由现有规范 path（Group 前缀在内，token 以单个 ASCII 空格连接）推导。生成器不扫描注册，check/build 只检查顶层 commands 的结构（键为字符串，值为含字符串 description 的对象）；SDK 的 Collect 对没有对应已注册命令或命令未用 Description 登记英文原文的覆盖路径拒绝注册，错误为英文并带出路径。T-03.17 同时在 `adapter.proto` 追加 `CommandMenuItem{name, descriptions}`、`AdapterCommandsSyncRequest{instance_id, commands}` 与空的 `AdapterCommandsSyncResponse`，descriptions 为 string → string 的 locale 文本映射。字段号按合入时 main 追加，不预分配；`core.command.list` 复用本字段与翻译规则。
 - 平台 Capability（D-135）在 `identity.proto` 的 `Capability` 中追加可选消息字段 `TextLimit text_limit`；`TextLimit` 含 `uint64 max` 与 `TextUnit unit`，枚举取 `TEXT_UNIT_UNSPECIFIED`、`TEXT_UNIT_UTF16_CODE_UNITS`、`TEXT_UNIT_UNICODE_CODE_POINTS`、`TEXT_UNIT_BYTES`（UTF-8 字节）。只有 supported=true 的 `message.send` 可以声明，max 必须大于 0，unit 必须为后三者之一；Core 在 REGISTER 与实例启动结果的信任边界校验。未声明用 absent 表示，不推定平台上限。AdapterDescriptor、实例启动结果、Event 与 SendResult 中的 Capability 保留该字段；SDK 的对应类型见 CONTRACTS §8 与 goal-109。由 T-03.18 追加字段与枚举，字段号不预分配，遵守 §5A 与并行切片的只追加规则。
@@ -189,8 +196,9 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 
 | 服务 | 请求 → 响应 | 契约 |
 | --- | --- | --- |
+| `core.message.read_nodes` | ReadNodesRequest（to=1、segment=2）→ ReadNodesResponse（repeated ForwardItem items=1）及可并存的 ErrorInfo | MESSAGE-MODEL §2.1；父调用期限、目标权限与递归媒体授权 |
 | `core.edit` | Target、platform_message_id、MessageChain → SendResult 与/或 ErrorInfo | CONTRACTS §8、MESSAGE-MODEL §4 |
-| `core.action` | Target 或 adapter_instance_id、动作完整名、版本、JSON 参数 → JSON 结果与/或 ErrorInfo | CONTRACTS §8（平台动作）、D-92 |
+| `core.action` | Target 或 adapter_instance_id、动作完整名、版本、JSON 参数；use_default_target 按声明使用父调用默认会话或账号 → JSON 结果与/或 ErrorInfo | CONTRACTS §8（平台动作）、D-92 |
 | `core.delete` | Target、platform_message_ids（1～100）→ 每个 ID 的状态与安全错误 | CONTRACTS §8、MESSAGE-MODEL §4A |
 | `core.continuation.start` | 必须带 parent_call_id → 空结果，超过每 Session 128 个进行中的延续调用时 RESOURCE_EXHAUSTED；原调用成功结束后 Core 发出 Handler REQUEST，HandlerRequest 的 `continuation_of` 为原调用的 call_id，SDK 据此找到登记的延续函数 | CONTRACTS §2.4 |
 | `core.wait` | 必须带 parent_call_id（延续调用）、超时 → 命中的 Event | CONTRACTS §2.4 |

@@ -11,7 +11,7 @@ Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用�
 
 | 模块（路径） | 负责 | 不负责 |
 | --- | --- | --- |
-| `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、调度触发计算（`schedule`）、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 |
+| `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、调度触发计算（`schedule`）、通用 Markdown 解析（`markdown`，Goldmark）、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 |
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 |
 | `internal/tune/` | 调优参数表：名称、缺省值、单位、约束与 `--args` 解析（CONTRACTS §16） | 参数的业务含义（由使用方实现） |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） |
@@ -73,6 +73,8 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 [Agent pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、记忆、用户任务及嵌入资源，接口见 [ADMIN-API §15.2](spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
 
 `sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 从 ctx 所属 Session 的 Plugin 读取当前有效覆盖集合并返回深拷贝，HTTP 与生命周期共用该所有者，同进程多个插件各自隔离；独立进程沿用默认 Session。数据复用 Bootstrap/通知的原子发布，Agent 将其与基础配置、`core.profile.list` 合并计算人格引用（D-182）。
+
+`sdk.AdapterClient` 由 `Context.Adapter()` 绑定可信平台身份，复用 `Context.CallAction`、`core.action` 与 `adapter.action`。`ActionRequest.use_default_target` 仅供绑定客户端按已声明 scope 选取父调用默认会话或账号；声明、Schema、实例许可、出站 Hook 禁用与生命周期仍由现有链路执行。`sdk/action.Caller` 同时接受绑定客户端、Context 和后台 Client；Instance 的必需方法保持原有集合。
 
 ## 依赖方向
 

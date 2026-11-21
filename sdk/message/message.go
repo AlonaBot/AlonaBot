@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/markdown"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/messagecodec"
 )
 
@@ -31,8 +32,11 @@ func (c Chain) content() Chain { return c }
 func (c Chain) Text() string {
 	var out strings.Builder
 	for _, s := range c {
-		if text, ok := s.(TextSegment); ok {
+		switch text := s.(type) {
+		case TextSegment:
 			out.WriteString(text.Text)
+		case MarkdownSegment:
+			out.WriteString(text.Content)
 		}
 	}
 	return out.String()
@@ -117,6 +121,7 @@ type ForwardSource struct{ DisplayName, ExternalUserID string }
 
 // ForwardItem 保存一条转发的来源与消息内容。
 type ForwardItem struct {
+	OccurredAt        time.Time // 零值表示平台未提供时间。
 	Source            *ForwardSource
 	Chain             Chain
 	PlatformMessageID string // 与 Chain 恰有一个，引用同一会话的已有消息。
@@ -197,3 +202,16 @@ func Forward(items ...ForwardItem) Segment { return ForwardSegment{Items: items}
 
 func (s VoiceSegment) segment()       {}
 func (s VoiceSegment) content() Chain { return Chain{s} }
+
+// MarkdownSegment 保存通用 CommonMark 与删除线正文。
+type MarkdownSegment struct{ Content string }
+
+// Markdown 构造通用 Markdown 片段。
+func Markdown(content string) MarkdownSegment { return MarkdownSegment{Content: content} }
+
+// PlainText 显式转换为保留段落、列表、引用和链接的普通文本。
+func (m MarkdownSegment) PlainText() TextSegment {
+	return TextSegment{Text: markdown.PlainText(m.Content)}
+}
+func (m MarkdownSegment) segment()       {}
+func (m MarkdownSegment) content() Chain { return Chain{m} }

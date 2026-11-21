@@ -151,6 +151,8 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target, outbound bool
 	}
 	out := &pb.Segment{}
 	switch v := s.(type) {
+	case message.MarkdownSegment:
+		out.Data = &pb.Segment_Markdown{Markdown: &pb.MarkdownSegment{Content: v.Content}}
 	case message.TextSegment:
 		text := &pb.TextSegment{Text: v.Text, Format: optional(pb.TextFormat(v.Format))}
 		for _, e := range v.Entities {
@@ -221,7 +223,7 @@ func segmentToProto(s message.Segment, enclosingTarget *pb.Target, outbound bool
 			if err != nil {
 				return nil, err
 			}
-			next := &pb.ForwardItem{Chain: chain, PlatformMessageId: optional(item.PlatformMessageID)}
+			next := &pb.ForwardItem{Chain: chain, PlatformMessageId: optional(item.PlatformMessageID), OccurredAtUnixMs: milliseconds(item.OccurredAt)}
 			if item.Source != nil {
 				next.Source = &pb.ForwardSource{DisplayName: optional(item.Source.DisplayName), ExternalUserId: optional(item.Source.ExternalUserID)}
 			}
@@ -301,6 +303,8 @@ func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chai
 	out := make(message.Chain, 0, len(c.Segments))
 	for _, s := range c.Segments {
 		switch v := s.Data.(type) {
+		case *pb.Segment_Markdown:
+			out = append(out, message.Markdown(v.Markdown.GetContent()))
 		case *pb.Segment_Text:
 			text := message.TextSegment{Text: v.Text.Text, Format: message.TextFormat(v.Text.GetFormat())}
 			for _, e := range v.Text.Entities {
@@ -342,8 +346,8 @@ func ChainFromProto(c *pb.MessageChain, enclosingTarget *pb.Target) message.Chai
 		case *pb.Segment_Forward:
 			f := message.ForwardSegment{PlatformForwardID: v.Forward.GetPlatformForwardId()}
 			for _, item := range v.Forward.Items {
-				next := message.ForwardItem{Chain: ChainFromProto(item.Chain, enclosingTarget), PlatformMessageID: item.GetPlatformMessageId()}
-				if item.Source != nil {
+				next := message.ForwardItem{Chain: ChainFromProto(item.GetChain(), enclosingTarget), PlatformMessageID: item.GetPlatformMessageId(), OccurredAt: timestamp(item.GetOccurredAtUnixMs())}
+				if item.GetSource() != nil {
 					next.Source = &message.ForwardSource{DisplayName: item.Source.GetDisplayName(), ExternalUserID: item.Source.GetExternalUserId()}
 				}
 				f.Items = append(f.Items, next)

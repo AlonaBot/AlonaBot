@@ -21,7 +21,7 @@ const pluginPrefix = "/plugins/"
 type Options struct {
 	BaseURL *url.URL     // 来自已校验的 settings，构造后不再修改
 	Admin   http.Handler // nil 时管理入口返回 404
-	Media   http.Handler // nil 时保留的 /media/ 路径返回 404
+	Media   http.Handler // 自行校验签发 Host；nil 时保留的 /media/ 路径返回 404。
 	Proxy   *httpproxy.Server
 	Now     func() time.Time
 }
@@ -32,8 +32,13 @@ type Host struct{ opt Options }
 // New 构造受控 Host 入口；opt 的 Base URL 已由 settings 校验。
 func New(opt Options) *Host { return &Host{opt: opt} }
 
-// ServeHTTP 按受控主机名分派管理、媒体与插件路由，其他 Host 返回 421。
+// ServeHTTP 分派媒体取件与受控主机名下的管理、插件请求。
 func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 媒体处理器按令牌校验签发主机，允许协议端使用独立的容器取件地址。
+	if strings.HasPrefix(r.URL.Path, "/media/") && h.opt.Media != nil {
+		h.opt.Media.ServeHTTP(w, r)
+		return
+	}
 	pluginPath := strings.HasPrefix(r.URL.Path, pluginPrefix)
 	if !strings.EqualFold(requestHostname(r.Host), h.opt.BaseURL.Hostname()) {
 		if pluginPath {
@@ -50,11 +55,7 @@ func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/media/") {
-		if h.opt.Media == nil {
-			http.NotFound(w, r)
-			return
-		}
-		h.opt.Media.ServeHTTP(w, r)
+		http.NotFound(w, r)
 		return
 	}
 	if h.opt.Admin == nil {

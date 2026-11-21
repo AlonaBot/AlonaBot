@@ -296,6 +296,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return fail(err)
 	}
 	c.assembly.core = c
+	c.assembly.media.AddURLService(c.assembly.mux, baseURL)
 	var runtimeAdmins []policy.Admin
 	for _, admin := range o.RuntimeAdmins {
 		runtimeAdmins = append(runtimeAdmins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
@@ -518,7 +519,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		}
 		adminMux.ServeHTTP(w, r)
 	})
-	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: admin})
+	publicHost := webhost.New(webhost.Options{BaseURL: baseURL, Proxy: c.assembly.http, Admin: admin, Media: c.assembly.media})
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
 		return fail(fmt.Errorf("listen HTTP: %w", err))

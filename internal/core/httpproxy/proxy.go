@@ -187,6 +187,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ServeWithIsolation 使用同一 Session 快照决定认证、响应隔离和转发端点。
 // isolate 包装普通插件的响应，并返回写完 trailer 后执行的清理函数。
 func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isolate func(http.ResponseWriter) (http.ResponseWriter, func())) {
+	parent := r.Context()
 	if s.RequestTimeout > 0 {
 		ctx, cancel := context.WithTimeout(r.Context(), s.RequestTimeout)
 		defer cancel()
@@ -332,7 +333,16 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 	} else if policy, ok := w.(interface{ ModifyResponse(*http.Response) error }); ok {
 		proxy.ModifyResponse = policy.ModifyResponse
 	}
-	proxy.ServeHTTP(&upgradeWriter{ResponseWriter: w, binding: current}, r)
+	writer := &upgradeWriter{ResponseWriter: w, binding: current}
+	if s.RequestTimeout > 0 && r.Header.Get("Upgrade") != "" {
+		// 握手前沿用请求期限；成功劫持后停止期限传播，父请求取消仍关闭连接。
+		ctx, cancel := context.WithCancel(parent)
+		defer cancel()
+		writer.stopTimeout = context.AfterFunc(r.Context(), cancel)
+		defer writer.stopTimeout()
+		r = r.WithContext(ctx)
+	}
+	proxy.ServeHTTP(writer, r)
 }
 
 func (s *Server) authorized(w http.ResponseWriter, r *http.Request, pluginID string) bool {
@@ -354,7 +364,8 @@ func stripIdentity(r *http.Request, platformToken bool) {
 // upgradeWriter 登记 ReverseProxy 劫持的客户端连接；关闭客户端也会结束代理的双向复制。
 type upgradeWriter struct {
 	http.ResponseWriter
-	binding *binding
+	binding     *binding
+	stopTimeout func() bool // 仅在 ReverseProxy 校验上游升级响应并成功劫持后停止请求期限传播。
 }
 
 func (w *upgradeWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
@@ -374,6 +385,9 @@ func (w *upgradeWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if closed {
 		_ = conn.Close() // 撤销先于 Hijack 完成时，已经劫持的连接同样由本绑定回收。
 		return nil, nil, net.ErrClosed
+	}
+	if w.stopTimeout != nil {
+		w.stopTimeout()
 	}
 	return tracked, rw, nil
 }
