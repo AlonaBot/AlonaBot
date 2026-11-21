@@ -47,8 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$TAG" --verify-tag --draft --title "$TAG" \
-            --notes-file dist/release-notes.md dist/alonabot-* dist/SHA256SUMS \
-            dist/install.sh dist/docker-compose.yml .github/release.pub
+            --notes-file dist/release-notes.md dist/alonabot-*.tar.gz dist/alonabot-*.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: distribution
