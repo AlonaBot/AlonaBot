@@ -60,4 +60,4 @@ Maintainers manage branch protection; workflows define actual CI commands and pe
 
 ## Contribution license
 
-AlonaBot and official components use the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). Ensure you can contribute your code and documentation under this license. Preserve third-party copyright and license notices. Plugin templates follow the license declared by their own repository.
+AlonaBot and official components use the [MIT License](LICENSE). Ensure you can contribute your code and documentation under this license. Preserve third-party copyright and license notices. Plugin templates also use MIT.

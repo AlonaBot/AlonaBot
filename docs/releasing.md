@@ -30,7 +30,7 @@ Building requires Go and network access. The default builds only Core from the c
 
 `--public-key` points to an independently trusted, standard base64 Ed25519 public key. Official releases use [`.github/release.pub`](../.github/release.pub). Bundling needs only the public key. Component `pack --key` accepts the maintainer's 64-byte private key; local backups use mode 0600.
 
-Each platform produces `alonabot-<version>-<os>-<arch>.tar.gz`, or `.zip` for Windows. Default archives contain only Core, the AGPL license and `source.json` recording source versions. `--bundle` additionally includes `packages/<componentID>/`, with the target package and complete `release.json`, `release.json.sig` and `release.pub`. Source records list the actual bundled Agent and WebUI. The WebUI package contains its backend process and the same frontend build.
+Each platform produces `alonabot-<version>-<os>-<arch>.tar.gz`, or `.zip` for Windows. Default archives contain only Core, the MIT license and `source.json` recording source versions. `--bundle` additionally includes `packages/<componentID>/`, with the target package and complete `release.json`, `release.json.sig` and `release.pub`. Source records list the actual bundled Agent and WebUI. The WebUI package contains its backend process and the same frontend build.
 
 In bundle mode, `<output>/packages/<componentID>/` collects selected platform packages and the three metadata files. Default asset URLs point to the component repository's `releases/download/v<componentVersion>`. `--version` injects the Core version, available through `GET /api/v1/core`.
 
