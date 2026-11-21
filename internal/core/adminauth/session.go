@@ -21,12 +21,18 @@ func (a *Auth) currentSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	confirmed, err := a.confirmed(credential.AuthGeneration)
+	if err != nil {
+		a.respondError(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(struct {
-		CSRFToken string `json:"csrf_token"`
-		ExpiresAt int64  `json:"expires_at_unix_ms"`
-	}{session.CSRFToken, session.ExpiresAt}); err != nil {
+		BootstrapPending bool   `json:"bootstrap_pending"`
+		CSRFToken        string `json:"csrf_token"`
+		ExpiresAt        int64  `json:"expires_at_unix_ms"`
+	}{!confirmed && a.bootstrapConnection(r), session.CSRFToken, session.ExpiresAt}); err != nil {
 		slog.Error("write admin session response", "err", err)
 	}
 }

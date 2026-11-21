@@ -221,7 +221,7 @@ func (h *runtimeHost) serveManagement() (func() error, error) {
 }
 
 func (h *runtimeHost) cli(name string, args ...string) ([]byte, error) {
-	args = append(args, "--data-dir", h.data, "--admin-url", h.adminURL, "--token-file", filepath.Join(h.data, "admin_token"))
+	args = append(args, "--data-dir", h.data, "--admin-url", h.adminURL)
 	command := exec.CommandContext(h.ctx, h.binary, args...)
 	command.Dir, command.Env = h.cwd, runtimeEnvironment()
 	var stdout, stderr bytes.Buffer

@@ -296,10 +296,7 @@ func waitRecoveryRuntime(t *testing.T, dir string) {
 
 func recoveryCommand(t *testing.T, c *core, dir string, args ...string) *exec.Cmd {
 	t.Helper()
-	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	destination, err := url.Parse("http://" + c.address())
 	if err != nil {
 		t.Fatal(err)
@@ -313,8 +310,7 @@ func recoveryCommand(t *testing.T, c *core, dir string, args ...string) *exec.Cm
 	proxy.Director = func(r *http.Request) { director(r); r.Host = base.Host }
 	server := httptest.NewServer(proxy)
 	t.Cleanup(server.Close)
-	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--admin-url", server.URL)...)
-	command.Env = append(os.Environ(), "ALONABOT_ADMIN_TOKEN="+strings.TrimSpace(string(token)))
+	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--data-dir", dir, "--admin-url", server.URL)...)
 	return command
 }
 

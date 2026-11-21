@@ -47,7 +47,7 @@ Docker Desktop 验收时，将 `TMPDIR` 指向容器本地文件系统中的目�
 
 JSON 包含运行时 OS/架构/Go 版本、系统版本原始输出、Core 与组件包的 Go build info、包路径与长度，以及各步骤的 UTC 时间、毫秒耗时、完整合并输出、退出码和错误。`host_description` 由操作者声明，系统命令输出与编译目标另行记录。`runs` 保存 Core 命令、PID、动态监听地址、完整日志位置和组件激活 PID/代次；`purpose` 区分首次业务、循环、强杀和恢复，`cycle` 记录 1–100，每一步的 `core_pid` 对应所属运行。`bot_calls` 保留本地 Bot API 模拟服务收到的真实请求。
 
-首次启动无 TTY，经 `admin-token show` 取得凭证后，使用 Cookie/Origin/CSRF 登录及启用组件；安装走真实 CLI Bearer 认证。程序显式配置受控的 `base_url`，按现有集成测试的方式转发 Host 到实际动态 Listener。管理 token、登录请求和成功登录响应的凭证值以 `output_redacted` 标记遮蔽；CLI 的私有 token 文件留在临时目录，供故障复现。首次登录后核对 `admin_token` 已删除。
+首次启动无 TTY，管理 token 以 0600 权限持久保存在本次数据目录的 `admin_token`；经 `admin-token show` 显式取得凭证后，使用 Cookie/Origin/CSRF 登录及启用组件。安装走真实 CLI Bearer 认证，由 CLI 自动读取所选 `--data-dir` 的凭据。程序显式配置受控的 `base_url`，按现有集成测试的方式转发 Host 到实际动态 Listener。管理 token、登录请求和成功登录响应的凭证值以 `output_redacted` 标记遮蔽；数据目录及凭据文件留在临时目录，供故障复现。首次登录后核对 `admin_token` 仍保留。
 
 Telegram Adapter 与 echo、showcase 均为独立真实组件进程；Bot API 为验收程序内的 loopback 模拟服务。发送一条 `/echo` 后核对回复正文与会话，再访问受认证的 showcase `/status`、页面与桥脚本引用。
 

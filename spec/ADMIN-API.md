@@ -21,7 +21,9 @@ Cookie 为 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；HTTP 下名�
 
 | Method / path | 认证与请求 | 成功响应 | 失败 |
 | --- | --- | --- | --- |
-| `POST /api/auth/login` | 受控 `Origin`；`Content-Type: application/json`；`{"token":"<管理 token>"}` | 200、`application/json`、`{"csrf_token":"..."}`，同时设置管理 Cookie；首次成功登录删除数据目录中的 `admin_token` 文件 | Origin 无效为 403 `forbidden`；Content-Type 无效为 415 `expected application/json`；token、JSON 或多份 JSON 无效为 401 `unauthorized`；管理凭证未初始化为 503；存储或首次 token 文件删除失败为 500 |
+| `POST /api/auth/login` | 受控 `Origin`；`Content-Type: application/json`；`{"token":"<管理 token>"}` | 200、`application/json`、`{"csrf_token":"..."}`，同时设置管理 Cookie；保留数据目录中的持久 `admin_token` 文件 | Origin 无效为 403 `forbidden`；Content-Type 无效为 415 `expected application/json`；token、JSON 或多份 JSON 无效为 401 `unauthorized`；管理凭证未初始化为 503；存储失败为 500 |
+| `POST /api/auth/bootstrap` | 直接 loopback 连接、受控回环管理 Host（localhost 或回环 IP）、同源 Origin，拒绝 Forwarded、X-Forwarded-*、X-Real-IP | 200 `{"token":"...","csrf_token":"..."}`，建立固定期限管理 Cookie；`Cache-Control: no-store`；仅待确认代次可领取 | 连接/Host/Origin/转发头无效为 403；当前代次已确认为 409；凭据文件读取或会话存储失败为 500 |
+| `POST /api/auth/bootstrap/confirm` | 当前管理 Cookie、同源 Origin 与 X-Alonabot-CSRF | 204；将当前代次原子保存到 0600 的 `admin_token.confirmed`，保留 `admin_token`；`Cache-Control: no-store` | 会话或 CSRF 无效为 403；持久化失败为 500，向已认证调用方返回完整文件错误，保持待确认 |
 | `POST /api/auth/logout` | 管理认证；Cookie 调用须带 Origin/CSRF | 204、空正文；撤销当前 Cookie 会话并发送删除 Cookie | 401、503 或 500 的认证错误；撤销会话失败为 500 |
 
 以上错误使用 `text/plain; charset=utf-8`，正文末尾有换行。登录请求自身也检查 Origin。
@@ -337,14 +339,14 @@ Rename 前保存失败保留旧设置与内存阈值；Rename 后目录同步失
 
 Cookie 写级别须同时提供受控 Origin 和 `X-Alonabot-CSRF`；Bearer 沿用管理客户端规则。认证在读取或开始 SSE 响应前完成，未认证的 recent/stream 返回 401。
 
-CLI 用法：`alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]`；缺省 recent，date 读取 history，follow 直接消费含快照的 stream；date 与 follow 同时给出时返回用法错误。`alonabot log-level [ID] [LEVEL]` 无参数列出全部设置，单独 ID 显示该设置（文件未覆盖时显示 inherit），`ID=global` 选择全局。两个命令复用 `--data-dir`、`--admin-url`、`--token-file` 与 Bearer 客户端。
+CLI 用法：`alonabot logs [--source ID] [--level L] [--trace T] [--follow] [--date YYYY-MM-DD]`；缺省 recent，date 读取 history，follow 直接消费含快照的 stream；date 与 follow 同时给出时返回用法错误。`alonabot log-level [ID] [LEVEL]` 无参数列出全部设置，单独 ID 显示该设置（文件未覆盖时显示 inherit），`ID=global` 选择全局。两个命令复用 `--data-dir`、`--admin-url` 与 Bearer 客户端。
 
 ## 9. 刷新后取回管理会话
 
-浏览器刷新后，先用现有管理 Cookie 调用 `GET /api/auth/session`，取回当前会话原有的 CSRF 和固定到期时刻。成功为 200、`Content-Type: application/json`，并带 `Cache-Control: no-store`：
+本机待确认会话的 `bootstrap_pending` 为 true，界面继续领取展示；域名或代理会话恢复后进入管理页。浏览器刷新后，先用现有管理 Cookie 调用 `GET /api/auth/session`，取回当前会话原有的 CSRF 和固定到期时刻。成功为 200、`Content-Type: application/json`，并带 `Cache-Control: no-store`：
 
 ```json
-{"csrf_token":"<当前会话原有值>","expires_at_unix_ms":1790000000000}
+{"bootstrap_pending":false,"csrf_token":"<当前会话原有值>","expires_at_unix_ms":1790000000000}
 ```
 
 此接口只接受有效管理 Cookie。仅有 Bearer、Cookie 无效、过期、已登出或认证代次失配时返回 401。管理凭证未初始化返回 503；状态库故障返回 500，真实错误记录到 Core 日志。错误使用第 1/2 节的英文纯文本格式。成功读取保持会话 ID、CSRF、认证代次和已保存的到期时刻，响应无 `Set-Cookie`。后续变更请求继续携带这个 CSRF 与受控 Origin。
@@ -605,7 +607,7 @@ MCP GET 读取 gate 保护的状态，刷新时按 Session 身份接收结束通
 | `POST /api/v1/plugins/{id}/jobs/{job_id}/pause`、`…/resume` | 无正文，`{}` | 与 `core.job.pause/resume` 共用持久暂停状态（CONTRACTS §4.3，D-126）；已登记任务要求当前 Activated Session，休眠时返回 412 / FAILED_PRECONDITION；未知任务返回 404 |
 | `GET /api/v1/adapter/instances` | `{"instances":[{"instance_id":"main","adapter_id":"telegram","package_id":"…","state":"running","safe_error":"","default":true}]}` | 按实例 ID 排列已配置的实例；`state` 为 `running`、`stopped` 或 `failed`；`default` 遵循显式默认与单实例自动默认规则 |
 | `GET /api/v1/chats` | `?q=词&adapter_id=telegram&chat_type=group&offset=0&limit=50`，返回 `{"chats":[{"session":"telegram:-100…","title":"…","chat_type":"group","instance_id":"main","last_active_at":"…"}],"total":53}` | 聊天目录（D-130），筛选后按最近活跃降序，`total` 为筛选后的精确总数 |
-| `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 再认证后在同一事务中替换令牌并删除全部管理会话（包括当前会话）；响应清除会话 Cookie，带 `Cache-Control: no-store`，只交付一次新令牌 |
+| `POST /api/auth/token/rotate` | `{"token":"<当前管理 token>"}`，返回 `{"token":"<新 token>"}` | 再认证后在同一事务中替换令牌并删除全部管理会话（包括当前会话）；响应清除会话 Cookie，带 `Cache-Control: no-store`，返回新令牌并同步持久凭据文件；新代次重新待确认 |
 
 - **代次：** `created_at` 取 generation 元数据；安装来源的 `version` 取该代次的 committed Journal 程序快照，缺失时返回错误，`has_db` 检查 `plugins/{id}/generations/{generation}/db.sqlite`。开发组件的固定代次使用当前登记版本，`has_db` 检查 `plugins/{id}/dev.sqlite`。路径均相对于 `data_dir`。
 - **任务：** 暂停前已派发的调用可以完成，恢复沿原时间锚点安排后续触发。`job_id` 按 SDK/REGISTER 规则取原值，客户端将其百分号编码为单个不透明路径段；Core 在认证后、路径规范化前只解码一次，保留冒号、斜杠、点段、字面百分号和反斜杠。

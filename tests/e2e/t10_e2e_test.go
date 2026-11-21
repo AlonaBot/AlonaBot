@@ -360,7 +360,7 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 	if cookie.Name != "alonabot_admin" || cookie.Path != "/" || cookie.Domain != "" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Secure {
 		t.Fatal("management cookie attributes do not match the HTTP contract")
 	}
-	if _, err := os.Stat(tokenFile); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(tokenFile); err != nil {
 		t.Fatalf("first token file after successful login: %v", err)
 	}
 	packages := func() []manage.Package {

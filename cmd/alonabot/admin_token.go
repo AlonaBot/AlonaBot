@@ -12,14 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// terminal 可由本地自测替换；生产使用平台的终端查询，避免把 /dev/null 当作终端。
-var terminal = isTerminal
-
 func adminTokenCommand(code *int) *cobra.Command {
 	var dataDir string
 	group := &cobra.Command{Use: "admin-token", Short: "Show, initialize or reset the admin token", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() }}
-	group.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Core data directory")
+	group.PersistentFlags().StringVar(&dataDir, "data-dir", "data", "Core data directory")
 	for _, action := range []string{"init", "reset"} {
 		var ifMissing bool
 		command := &cobra.Command{Use: action, Short: action + " the offline admin token (Core must be stopped)", Args: cobra.NoArgs}
@@ -30,15 +27,12 @@ func adminTokenCommand(code *int) *cobra.Command {
 			if dataDir == "" {
 				return errors.New("--data-dir is required")
 			}
-			if !terminal(os.Stdin) || !terminal(os.Stderr) {
-				return errors.New("admin-token requires stdin and stderr to be terminals")
-			}
 			*code = exitFailure
 			return writeAdminToken(cmd.Context(), dataDir, action == "reset", ifMissing)
 		}
 		group.AddCommand(command)
 	}
-	show := &cobra.Command{Use: "show", Short: "Show the first admin token file", Args: cobra.NoArgs,
+	show := &cobra.Command{Use: "show", Short: "Show the persistent admin token file", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dataDir == "" {
 				return errors.New("--data-dir is required")
@@ -46,7 +40,7 @@ func adminTokenCommand(code *int) *cobra.Command {
 			*code = exitFailure
 			token, err := os.ReadFile(filepath.Join(dataDir, adminauth.FirstTokenFile))
 			if err != nil {
-				return fmt.Errorf("read first admin token file: %w", err)
+				return fmt.Errorf("read admin token file: %w", err)
 			}
 			if _, err := cmd.OutOrStdout().Write(token); err != nil {
 				return fmt.Errorf("write admin token: %w", err)
@@ -77,17 +71,17 @@ func writeAdminToken(ctx context.Context, dataDir string, reset, ifMissing bool)
 		}
 	}
 
-	// 2. 凭证事务成功后只写一次本机终端，不经过 Logger。
-	var token string
+	// 2. 凭据持久化成功后只输出文件位置。
+
 	if reset {
-		token, err = adminauth.ResetToken(ctx, store)
+		_, err = adminauth.ResetToken(ctx, store, dataDir)
 	} else {
-		token, err = adminauth.InitToken(ctx, store)
+		_, err = adminauth.InitToken(ctx, store, dataDir)
 	}
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(os.Stderr, token); err != nil {
+	if _, err := fmt.Fprintln(os.Stderr, "Admin token saved:", filepath.Join(dataDir, adminauth.FirstTokenFile)); err != nil {
 		return fmt.Errorf("write admin token: %w", err)
 	}
 	return nil

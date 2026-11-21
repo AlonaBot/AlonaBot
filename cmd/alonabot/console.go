@@ -155,7 +155,10 @@ func (i *consoleInstance) writeMessage(to, id string, chain message.Chain, prefi
 }
 
 // write 将异步输出移到提示符后的新行，再恢复仍在等待输入的提示符；调用方持有 mu。
-func (a *consoleAdapter) write(text string) error {
+func (a *consoleAdapter) write(text string) error { return a.writeTo(a.output, text) }
+
+// writeTo 串行输出整条消息或日志，最后恢复一次提示符；调用方持有 mu。
+func (a *consoleAdapter) writeTo(output io.Writer, text string) error {
 	if a.prompted {
 		text = "\n" + text
 		a.prompted = false
@@ -164,7 +167,7 @@ func (a *consoleAdapter) write(text string) error {
 		text += "> "
 		a.prompted = true
 	}
-	_, err := io.WriteString(a.output, text)
+	_, err := io.WriteString(output, text)
 	return err
 }
 
@@ -256,4 +259,19 @@ func (i *consoleInstance) Stop(context.Context) error {
 	i.stopped = true
 	i.cancel()
 	return nil
+}
+
+// consoleLogWriter 接收日志 Handler 一次写出的完整记录，多行报错共用一个提示符。
+type consoleLogWriter struct {
+	console *consoleAdapter
+	output  io.Writer
+}
+
+func (w consoleLogWriter) Write(p []byte) (int, error) {
+	w.console.mu.Lock()
+	defer w.console.mu.Unlock()
+	if err := w.console.writeTo(w.output, string(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

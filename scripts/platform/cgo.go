@@ -186,7 +186,7 @@ func linkedLibraries(path string) ([]string, error) {
 	}
 }
 
-func (r *report) runCGO(ctx context.Context, opt options, original *adminSession, ids []string, cliToken string) (err error) {
+func (r *report) runCGO(ctx context.Context, opt options, original *adminSession, ids []string) (err error) {
 	// 百次启停与强杀恢复结束后，独立一次运行验证 CGO；原有四组件继续参与资源检查。
 	core, startErr := r.startCore(ctx, opt)
 	if core != nil {
@@ -203,7 +203,7 @@ func (r *report) runCGO(ctx context.Context, opt options, original *adminSession
 		return err
 	}
 	defer cli.Close()
-	if err := r.command(ctx, "install_"+cgoPackageID, opt.core, "install", r.CGO.Build.Archive, "--yes", "--admin-url", cli.URL, "--token-file", cliToken); err != nil {
+	if err := r.command(ctx, "install_"+cgoPackageID, opt.core, "install", r.CGO.Build.Archive, "--yes", "--admin-url", cli.URL, "--data-dir", r.DataDir); err != nil {
 		return err
 	}
 	if _, err := session.request(ctx, "enable_"+cgoPackageID, http.MethodPost, "/api/v1/packages/enable", map[string]string{"id": cgoPackageID}, http.StatusOK, false); err != nil {

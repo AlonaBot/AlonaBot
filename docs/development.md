@@ -149,7 +149,7 @@ printf 'DEVBOT_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_DATA $DEVBOT_OUTPUT
 bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVBOT_DATA --reload
 ```
 
-另开终端，设置相同的 `DEVBOT_DATA`、`DEVBOT_OUTPUT`。终端首次启动的 token 在 stderr 显示一次；非终端启动可用 `bin/alonabot admin-token show --data-dir $DEVBOT_DATA` 读取 `admin_token`。令 `token` 为该值后：
+另开终端，设置相同的 `DEVBOT_DATA`、`DEVBOT_OUTPUT`。首次启动将管理 token 以 0600 权限持久保存在 `$DEVBOT_DATA/admin_token`，启动只输出文件位置；管理 CLI 通过 `--data-dir $DEVBOT_DATA` 自动读取凭据。下面手工调用 HTTP API 时，先用 `bin/alonabot admin-token show --data-dir $DEVBOT_DATA` 显式读取 token，令 `token` 为该值后：
 
 ```fish
 curl --fail-with-body -X POST -H "Authorization: Bearer $token" \

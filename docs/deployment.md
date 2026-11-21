@@ -19,7 +19,7 @@
 ./alonabot run --data-dir ./data
 ```
 
-后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动的组件清单为空。按[管理认证](#core-设置与-http-入口)领取管理 token，在另一终端设置 `ALONABOT_ADMIN_TOKEN` 后，按[管理组件](#管理组件)安装所需组件。安装并启用 WebUI 后可打开 `http://127.0.0.1:7650` 登录；Agent 配置 Provider 与模型后再启用。
+后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动的组件清单为空。按[管理认证](#core-设置与-http-入口)领取管理 token，按[管理组件](#管理组件)安装所需组件。安装并启用 WebUI 后可打开 `http://127.0.0.1:7650` 登录；Agent 配置 Provider 与模型后再启用。
 
 ## 系统服务安装与升级
 
@@ -38,7 +38,7 @@ sh install.sh --version $version
 
 Linux 使用 `/opt/alonabot/`、数据目录 `/var/lib/alonabot` 和系统服务 `alonabot.service`；服务以系统用户 `alonabot` 运行并启用开机启动。macOS 使用 `~/Library/Application Support/AlonaBot/`、其中的 `data/` 和用户 LaunchAgent `io.github.alonabot`，登录后启动。工作目录设为程序目录，启动参数为 `run --data-dir <完整数据路径>`。
 
-有控制终端时，脚本在停服后以服务身份运行 `admin-token init --if-missing`，stdin 与 stderr 连接 `/dev/tty`；新 token 仅显示一次，已有凭证保持原值。经管道执行同样使用控制终端。无控制终端时跳过初始化，服务照常启动，Core 首次启动写入 `admin_token`。文件存在时按脚本输出的完整命令领取：
+脚本在停服后，有控制终端时以服务身份运行 `admin-token init --if-missing`，通过 `/dev/tty` 初始化；无控制终端时交给 Core 首次启动初始化。新 CLI 以 0600 权限持久保存凭据，只输出路径；已有凭据沿用。远程 WebUI 登录时可显式读取：
 ```fish
 # Linux，以服务身份读取
 sudo runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /var/lib/alonabot
@@ -46,7 +46,7 @@ sudo runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /
 "$HOME/Library/Application Support/AlonaBot/alonabot" admin-token show --data-dir "$HOME/Library/Application Support/AlonaBot/data"
 ```
 
-首次登录成功后 Core 删除 `admin_token`。再次运行安装命令即升级，保留数据、`core_config.json`、状态库、已安装组件与未领取的 token。组件通过各自的来源独立安装和更新。
+登录及确认均保留持久凭据。再次安装即升级，保留数据、配置、状态库和已安装组件。
 ```fish
 # Linux 卸载
 sudo sh install.sh --uninstall
@@ -67,7 +67,7 @@ docker compose up -d
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
-打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将一次性 token 写入 `/data/admin_token`，首次登录成功后删除该文件。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
+打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将管理 token 写入 `/data/admin_token`，登录后保留该文件供本机 CLI 使用。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
 
 镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
 
@@ -80,7 +80,7 @@ docker compose exec alonabot alonabot admin-token show --data-dir /data
 alonabot run --data-dir ./data
 ```
 
-`run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，token 取自 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，管理地址可用 `--admin-url` 覆盖：
+`run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，从所选 `--data-dir` 自动读取持久凭据并直连本机 listen，Host 沿用 base_url；本机连接地址可用 `--admin-url` 覆盖：
 ```fish
 alonabot install pkg.tar.gz --yes             # release.json、签名和公钥缺省取归档同目录
 alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
@@ -115,7 +115,7 @@ alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
 
 默认收集近 24 小时的日志、当前设置和 Active 配置、组件与环境信息，并开启脱敏。`--no-logs`、`--no-settings`、`--no-components` 可分别省略一组，至少保留一组。`-o` 也可写作 `--output`；省略时在当前目录生成 `alonabot-diagnostics-<UTC 时间>.zip`。
 
-在线使用管理 API 和 Bearer token：优先读 `--token-file`，其次取 `ALONABOT_ADMIN_TOKEN`，两者均未指定时尝试 `<data_dir>/admin_token`。`--admin-url` 可覆盖管理地址。连接被拒绝后尝试停机导出，无需 token；数据目录须已有可读的 `core.lock` 且锁未被占用。离线导出只读原目录，组件状态为 `Stopped`。
+在线使用管理 API 和 Bearer token，自动读取 `<data_dir>/admin_token`。默认直连本机 listen 并保留 base_url Host；`--admin-url` 覆盖本机连接地址。连接被拒绝后尝试停机导出；原目录的 core.lock 须未被占用。离线导出只读原目录。
 
 缺少可用的 Adapter 实例 schema 时，默认遮盖该组实例配置的全部叶值，保留结构和完整的 `${环境变量}` 表达式。`--no-redact` 会导出凭证明文；日志可能包含聊天内容，提交 issue 前请先检查归档。
 
@@ -148,18 +148,18 @@ Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HT
 
 设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 
-首次启动且尚无管理凭证时，Core 自动生成管理 token：stdin 与 stderr 都是终端时只向 stderr 显示一次；系统服务、容器等非终端启动时，以 0600 权限写入 `<data_dir>/admin_token`，INFO 日志记录文件路径。读取文件中的 token：
+首次启动统一以 0600 权限持久保存 `<data_dir>/admin_token`，仅输出管理地址和文件路径。本机 WebUI 自动展示待确认的 token；复制保存后点击“我已保存”。远程浏览器可显式读取：
 ```fish
 alonabot admin-token show --data-dir ./data
 ```
 
-`show` 直接读取文件，可在 Core 运行时执行，也可从非终端调用；文件不存在时返回英文错误。第一次登录成功后，Core 删除该文件。登录接口为 `base_url` 下的 `POST /api/auth/login`，要求受控 Origin、`Content-Type: application/json` 与正文 `{"token":"<token>"}`，成功后返回管理 Cookie 和 `csrf_token`；CLI 可用 `Authorization: Bearer <token>`。
+`show` 直接读取持久凭据，可在 Core 运行时执行。普通登录使用 `POST /api/auth/login`，要求受控 Origin 和 JSON token，成功返回管理 Cookie 与 CSRF。登录和确认保留文件。
 
 私有插件路由复用管理认证：有效管理 Cookie 或 Bearer token；Cookie 认证的非 GET/HEAD 请求还须携带 `X-Alonabot-CSRF` 与受控 Origin，校验失败返回 401。公开路由无需管理会话，由插件按其声明的回调来源校验规则处理。转发给插件前，Core 清除管理 Cookie、Authorization 与 CSRF 头。
 
-需要在启动前初始化凭证时，停止 Core 后在本机终端运行 `alonabot admin-token init --data-dir ./data`。token 遗失时用 `alonabot admin-token reset --data-dir ./data` 重新生成，旧 token 与全部管理会话随之失效。`init` 与 `reset` 都要求 stdin 与 stderr 是终端，只向 stderr 显示 token 一次；Core 运行中执行会因 core.lock 失败。
+启动前可运行 `alonabot admin-token init --data-dir ./data`。凭据文件遗失时显式执行 `admin-token reset`，旧凭据与会话随之失效，新代次重新待确认；init/reset 输出文件位置，无需 TTY，均须先停止 Core。
 
-Core 运行且仍持有当前 token 时，可调用 `POST /api/auth/token/rotate` 在线轮换（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。从响应保存新 token，更新 CLI 使用的 `ALONABOT_ADMIN_TOKEN` 或 `--token-file`，并用新 token 重新登录。轮换会撤销全部旧管理会话。
+Core 运行且持有当前 token 时，可通过 `POST /api/auth/token/rotate` 在线轮换。响应和持久文件同步更新；旧会话全部撤销，新代次重新待确认。CLI 自动读取更新后的文件。
 
 调优参数在启动时解析；修改后重启生效。`default` 的前缀与 `reply` 属于 `core_config.json`；配置文件覆盖集合沿用固定 4 MiB 帧上限，`core.profile.*` 与 `sdk.profile.set_overrides` 沿用普通 RPC 的期限与 Session 预算（CONTRACTS §16、`internal/tune/params.go`）。查看全部调优参数及当前生效值：
 ```fish
@@ -179,7 +179,7 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 `internal/tune` 统一登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 CONTRACTS §16。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。自动空闲策略：`sleep.mode` 缺省 `always_on`，`sleep.idle_timeout` 缺省 `15m`，`sleep.plugins` 缺省为空；覆盖接受 `never` 或正时长，删除覆盖恢复自动准入。`SLEEP_MIN_UPTIME=5m`（>0）、`SLEEP_COLD_START_WINDOW=1h`（>0）与 `SLEEP_COLD_START_MAX=3`（≥1）统一登记，窗口内冷启动超过上限后固定常驻一个窗口，期间启动保持原冷却截止。 Scheduler 自然到期唤醒，复用同一 Waker 与上述等待预算；payload 按完整 HandlerRequest 的编码字节计入。静态 deadline 为原 scheduled_at 加 `JOB_TIMEOUT=15m`（>0），动态从取得并发名额开始计算，冷启动计入原期限；等待继续占用原运行槽与 `TASK_CONCURRENCY=16` 名额（≥1 且 ≤ SESSION_MAX_INFLIGHT）。
 
-管理 CLI 可直接查询和调整逐插件策略（复用既有 `--data-dir`、`--admin-url` 与 `--token-file`）：
+管理 CLI 可直接查询和调整逐插件策略（复用 `--data-dir` 与 `--admin-url`）：
 ```fish
 alonabot sleep-policy
 alonabot sleep-policy my-plugin

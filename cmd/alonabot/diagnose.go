@@ -45,14 +45,6 @@ func diagnoseCommand(code *int) *cobra.Command {
 		if output == "" {
 			output = "alonabot-diagnostics-" + time.Now().UTC().Format("20060102T150405.000000000Z") + ".zip"
 		}
-		if options.tokenFile == "" && os.Getenv("ALONABOT_ADMIN_TOKEN") == "" {
-			name := filepath.Join(options.dataDir, "admin_token")
-			if _, err := os.Stat(name); err == nil {
-				options.tokenFile = name
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-		}
 		client, err := options.client(false)
 		if err != nil {
 			return err
