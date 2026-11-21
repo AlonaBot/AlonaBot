@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import tempfile
 
@@ -28,7 +29,9 @@ def main():
         subprocess.run(['go', 'mod', 'edit', '-modfile', str(modfile), '-require', lock['module'] + '@' + lock['version']], cwd=root, check=True)
         overlay = directory / 'overlay.json'
         overlay.write_text(json.dumps({'Replace': {str(root / 'internal/app/agent_service_test.go'): str(root / 'tests/app/agent_service_test.go.tmpl')}}))
-        subprocess.run(['go', 'test', '-mod=mod', '-modfile', str(modfile), '-overlay', str(overlay), *flags, '-run', args.run, './internal/app'], cwd=root, env=environment, check=True)
+        # 测试内的资源扫描也调用 go list，沿用同一份临时 module 图。
+        overlay_environment = {**environment, 'GOFLAGS': environment.get('GOFLAGS', '') + ' ' + shlex.join(['-modfile=' + str(modfile), '-mod=mod'])}
+        subprocess.run(['go', 'test', '-overlay', str(overlay), *flags, '-run', args.run, './internal/app'], cwd=root, env=overlay_environment, check=True)
 
 
 if __name__ == '__main__':
