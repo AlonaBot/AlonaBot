@@ -7,7 +7,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
 RUN : "${VERSION:?VERSION is required}" && \
-    go run ./scripts/dist --version "$VERSION" --public-key .github/release.pub --out /dist --platforms "$TARGETOS/$TARGETARCH" && \
+    go run ./scripts/dist --bundle --version "$VERSION" --public-key .github/release.pub --out /dist --platforms "$TARGETOS/$TARGETARCH" && \
     mkdir /image && \
     tar -xzf "/dist/alonabot-$VERSION-$TARGETOS-$TARGETARCH.tar.gz" -C /image --strip-components=1 && \
     mkdir /image/data

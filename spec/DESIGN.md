@@ -372,8 +372,8 @@ AlonaBot 同时面向直接使用机器人的用户和写插件的开发者（D-
 
 | | 部署（用户） | 开发（开发者） |
 | --- | --- | --- |
-| 入口 | 从本仓库的 Release 用发行归档、`install.sh` 或 `docker compose` 安装（官方整合包），`alonabot run` 启动，在 `core_config.json` 或 WebUI 中配置 | `alonabot init` 创建组件工程，`alonabot run --reload` 在工程目录中运行 |
-| 包含 | Core、Agent 与 WebUI；首次运行自动安装，默认启用 WebUI，Agent 由管理员按需启用；Adapter 与 help 从独立仓库按需安装（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
+| 入口 | 从本仓库的 Release 归档或 `install.sh` 安装 Core，或用 `docker compose` 安装 Core、WebUI 与 Agent 整合包，`alonabot run` 启动，在 `core_config.json` 或 WebUI 中配置 | `alonabot init` 创建组件工程，`alonabot run --reload` 在工程目录中运行 |
+| 包含 | 纯 Core 归档初始组件清单为空；整合镜像预装 Agent 与 WebUI，默认启用 WebUI，Agent 由管理员按需启用；其他组件从独立仓库按需安装（D-50、D-62、D-82） | 与部署相同的 Core 与已安装组件，外加当前工程（或给出的多个目录）中开发的组件 |
 | 组件进程 | 每个已启用的包一个独立进程（纯静态 WebUI 除外，官方 WebUI 含 Go 后台） | 开发中的组件也是独立进程；改动源码后自动重新构建，只重启该组件 |
 
 开发者只写组件本身，不写 `main.go`，也不写任何生成相关的代码（D-145）：`alonabot build` 生成正式入口，`run` 每次启动前都会构建。开发时与生产时的行为只差安装来源（dev）与固定代次。热部署时 Core 常驻，源码改动后重新编译，只重启变化的组件，Adapter 连接、其他插件与按钮都不受影响；编译失败时旧版本继续运行；只改配置时不重新编译（CONTRACTS §15.4）。

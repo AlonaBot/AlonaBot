@@ -1,4 +1,4 @@
-// dist 命令构建 Core，验签已发布官方组件并生成五平台整合发行归档。
+// dist 命令构建五平台 Core 归档，整合模式另收录已验签的官方组件。
 package main
 
 import (
@@ -43,8 +43,14 @@ var components = []component{
 	{webuiDir, "alonabot-webui-admin"},
 }
 
+type componentSource struct {
+	Module  string `json:"module"`
+	Version string `json:"version"`
+}
+
 type options struct {
 	version, publicKey, out, platforms string
+	bundle                             bool
 }
 
 func main() {
@@ -61,6 +67,7 @@ func run(ctx context.Context, args []string) (err error) {
 	flags.StringVar(&opt.publicKey, "public-key", "", "trusted base64 Ed25519 public key file (required)")
 	flags.StringVar(&opt.out, "out", "", "output directory (required)")
 	flags.StringVar(&opt.platforms, "platforms", defaultPlatforms, "comma-separated OS/arch targets")
+	flags.BoolVar(&opt.bundle, "bundle", false, "include signed WebUI and Agent packages for the integrated image")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -99,20 +106,27 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 
-	// 2. 整合包只消费已发布的签名资产，构建环境无需官方私钥或前端工具链。
-	rawLock, err := os.ReadFile("components.lock.json")
-	if err != nil {
-		return err
-	}
-	var lock map[string]struct{ Module, Version string }
-	if err := json.Unmarshal(rawLock, &lock); err != nil {
-		return err
+	// 2. Core 归档独立构建；整合模式才读取组件锁和公开签名资产。
+	var lock map[string]componentSource
+	if opt.bundle {
+		rawLock, err := os.ReadFile("components.lock.json")
+		if err != nil {
+			return err
+		}
+		var sources map[string]componentSource
+		if err := json.Unmarshal(rawLock, &sources); err != nil {
+			return err
+		}
+		lock = make(map[string]componentSource)
+		for _, component := range components {
+			lock[component.dir] = sources[component.dir]
+		}
 	}
 	roots := make(map[string]string)
 	for _, target := range targets {
 		goos, goarch, _ := strings.Cut(target, "/")
 		root := filepath.Join(staging, fmt.Sprintf("alonabot-%s-%s-%s", opt.version, goos, goarch))
-		if err := os.MkdirAll(filepath.Join(root, "packages"), directoryMode); err != nil {
+		if err := os.MkdirAll(root, directoryMode); err != nil {
 			return err
 		}
 		if err := buildCore(ctx, filepath.Join(root, executableName(goos)), goos, goarch, opt.version, public); err != nil {
@@ -122,9 +136,9 @@ func run(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		provenance, err := json.MarshalIndent(struct {
-			Source     string `json:"source"`
-			Version    string `json:"version"`
-			Components any    `json:"components"`
+			Source     string                     `json:"source"`
+			Version    string                     `json:"version"`
+			Components map[string]componentSource `json:"components,omitempty"`
 		}{"https://github.com/AlonaBot/AlonaBot/tree/v" + opt.version, opt.version, lock}, "", "  ")
 		if err != nil {
 			return err
@@ -138,13 +152,15 @@ func run(ctx context.Context, args []string) (err error) {
 		return err
 	}
 	// 3. 原样收录组件清单与平台包，公开安装和预装使用同一份资产。
-	for _, component := range components {
-		source := lock[component.dir]
-		if source.Module == "" || source.Version == "" {
-			return fmt.Errorf("missing component lock for %s", component.dir)
-		}
-		if err := collectComponent(ctx, component, source.Module, source.Version, out, targets, roots, public); err != nil {
-			return fmt.Errorf("collect %s: %w", component.id, err)
+	if opt.bundle {
+		for _, component := range components {
+			source := lock[component.dir]
+			if source.Module == "" || source.Version == "" {
+				return fmt.Errorf("missing component lock for %s", component.dir)
+			}
+			if err := collectComponent(ctx, component, source.Module, source.Version, out, targets, roots, public); err != nil {
+				return fmt.Errorf("collect %s: %w", component.id, err)
+			}
 		}
 	}
 	var sums strings.Builder

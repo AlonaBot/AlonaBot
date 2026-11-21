@@ -129,7 +129,7 @@ func verifyLifecycle(opt options, r *report) (err error) {
 	}()
 	if err := r.perform("runtime/start", func() error {
 		var startErr error
-		host, startErr = startRuntime(ctx, filepath.Join(distribution, rootName, executable), cwd, data, evidence)
+		host, startErr = startRuntime(ctx, filepath.Join(distribution, rootName, executable), cwd, data, evidence, opt.bundle)
 		if host != nil {
 			r.Runtime.PID = host.command.Process.Pid
 		}
@@ -163,8 +163,8 @@ func verifyLifecycle(opt options, r *report) (err error) {
 		if err != nil {
 			return err
 		}
-		if len(packages) != len(components) {
-			return fmt.Errorf("preinstalled count = %d; want %d", len(packages), len(components))
+		if len(packages) != len(r.Components) {
+			return fmt.Errorf("preinstalled count = %d; want %d", len(packages), len(r.Components))
 		}
 		for _, expected := range r.Components {
 			item, ok := packages[expected.ID]

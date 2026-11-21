@@ -37,68 +37,6 @@ func componentAssetBase(opt options, c component, version string) string {
 }
 
 func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
-	if err := r.perform("package-inventory", func() error {
-		entries, err := os.ReadDir(filepath.Join(opt.candidate, "packages"))
-		if err != nil {
-			return err
-		}
-		var actual, expected []string
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				return fmt.Errorf("package entry %q is not a directory", entry.Name())
-			}
-			actual = append(actual, entry.Name())
-		}
-		for _, c := range components {
-			expected = append(expected, c.id)
-		}
-		return sameFiles(actual, expected)
-	}); err != nil {
-		return err
-	}
-	// 1. 清单与公钥先验证，随后才读取和解包其声明的资产。
-	publications := map[string]*release.Release{}
-	for _, c := range components {
-		if err := r.perform("release/"+c.id, func() error {
-			dir := filepath.Join(opt.candidate, "packages", c.id)
-			raw, err := readRegular(filepath.Join(dir, "release.json"))
-			if err != nil {
-				return err
-			}
-			sig, err := readRegular(filepath.Join(dir, "release.json.sig"))
-			if err != nil {
-				return err
-			}
-			if len(sig) == 0 {
-				return errors.New("official release signature is empty")
-			}
-			pub, err := readRegular(filepath.Join(dir, "release.pub"))
-			if err != nil {
-				return err
-			}
-			decoded, err := release.DecodePublicKey(pub)
-			if err != nil {
-				return err
-			}
-			if !bytes.Equal(public, decoded) {
-				return errors.New("release.pub does not match the independently trusted public key")
-			}
-			publication, err := release.Verify(raw, sig, public)
-			if err != nil {
-				return err
-			}
-			if publication.PluginID != c.id || publication.Source != c.source {
-				return fmt.Errorf("release identity = %q from %q; want %q from %q", publication.PluginID, publication.Source, c.id, c.source)
-			}
-			if len(publication.Assets) < len(r.Platforms) {
-				return fmt.Errorf("release has %d platforms; want %d", len(publication.Assets), len(r.Platforms))
-			}
-			publications[c.id] = publication
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
 	if err := r.perform("installer", func() error {
 		raw, err := readRegular(filepath.Join(opt.candidate, "install.sh"))
 		if err != nil {
@@ -111,63 +49,127 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 	}); err != nil {
 		return err
 	}
-	// 2. 每个独立组件包核对平台、签名描述的内容及构建资源。
-	for _, c := range components {
-		publication := publications[c.id]
-		index := len(r.Components)
-		r.Components = append(r.Components, componentResult{ID: c.id, Version: publication.Version, Source: publication.Source, Assets: []assetResult{}})
-		expectedFiles := []string{"release.json", "release.json.sig", "release.pub"}
-		for _, target := range r.Platforms {
-			goos, goarch, _ := strings.Cut(target, "/")
-			if err := r.perform("package/"+c.id+"/"+target, func() error {
-				asset, exists := publication.Asset(goos, goarch)
-				if !exists {
-					return fmt.Errorf("missing release asset for %s", target)
+	publications := map[string]*release.Release{}
+	if opt.bundle {
+		if err := r.perform("package-inventory", func() error {
+			entries, err := os.ReadDir(filepath.Join(opt.candidate, "packages"))
+			if err != nil {
+				return err
+			}
+			var actual, expected []string
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					return fmt.Errorf("package entry %q is not a directory", entry.Name())
 				}
-				name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", c.id, publication.Version, goos, goarch)
-				base := componentAssetBase(opt, c, publication.Version)
-				if asset.URL != base+"/"+name {
-					return fmt.Errorf("asset URL = %q; want %q", asset.URL, base+"/"+name)
-				}
-				filename := filepath.Join(opt.candidate, "packages", c.id, name)
-				size, digest, err := archiveDigest(filename)
+				actual = append(actual, entry.Name())
+			}
+			for _, c := range components {
+				expected = append(expected, c.id)
+			}
+			return sameFiles(actual, expected)
+		}); err != nil {
+			return err
+		}
+		// 1. 清单与公钥先验证，随后才读取和解包其声明的资产。
+		for _, c := range components {
+			if err := r.perform("release/"+c.id, func() error {
+				dir := filepath.Join(opt.candidate, "packages", c.id)
+				raw, err := readRegular(filepath.Join(dir, "release.json"))
 				if err != nil {
 					return err
 				}
-				if size != asset.Size || digest != asset.SHA256 {
-					return fmt.Errorf("asset size/digest = %d/%s; release declares %d/%s", size, digest, asset.Size, asset.SHA256)
-				}
-				destination := filepath.Join(opt.out, c.id+"-"+goos+"-"+goarch)
-				files, err := extractArchive(filename, destination)
+				sig, err := readRegular(filepath.Join(dir, "release.json.sig"))
 				if err != nil {
 					return err
 				}
-				resources, err := checkPackage(destination, files, c, publication.Version, goos, goarch)
+				if len(sig) == 0 {
+					return errors.New("official release signature is empty")
+				}
+				pub, err := readRegular(filepath.Join(dir, "release.pub"))
 				if err != nil {
 					return err
 				}
-				r.Components[index].Assets = append(r.Components[index].Assets, assetResult{target, filename, size, digest, resources})
-				expectedFiles = append(expectedFiles, name)
+				decoded, err := release.DecodePublicKey(pub)
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(public, decoded) {
+					return errors.New("release.pub does not match the independently trusted public key")
+				}
+				publication, err := release.Verify(raw, sig, public)
+				if err != nil {
+					return err
+				}
+				if publication.PluginID != c.id || publication.Source != c.source {
+					return fmt.Errorf("release identity = %q from %q; want %q from %q", publication.PluginID, publication.Source, c.id, c.source)
+				}
+				if len(publication.Assets) < len(r.Platforms) {
+					return fmt.Errorf("release has %d platforms; want %d", len(publication.Assets), len(r.Platforms))
+				}
+				publications[c.id] = publication
 				return nil
 			}); err != nil {
 				return err
 			}
 		}
-		if err := r.perform("inventory/"+c.id, func() error {
-			entries, err := os.ReadDir(filepath.Join(opt.candidate, "packages", c.id))
-			if err != nil {
+		// 2. 每个独立组件包核对平台、签名描述的内容及构建资源。
+		for _, c := range components {
+			publication := publications[c.id]
+			index := len(r.Components)
+			r.Components = append(r.Components, componentResult{ID: c.id, Version: publication.Version, Source: publication.Source, Assets: []assetResult{}})
+			expectedFiles := []string{"release.json", "release.json.sig", "release.pub"}
+			for _, target := range r.Platforms {
+				goos, goarch, _ := strings.Cut(target, "/")
+				if err := r.perform("package/"+c.id+"/"+target, func() error {
+					asset, exists := publication.Asset(goos, goarch)
+					if !exists {
+						return fmt.Errorf("missing release asset for %s", target)
+					}
+					name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", c.id, publication.Version, goos, goarch)
+					base := componentAssetBase(opt, c, publication.Version)
+					if asset.URL != base+"/"+name {
+						return fmt.Errorf("asset URL = %q; want %q", asset.URL, base+"/"+name)
+					}
+					filename := filepath.Join(opt.candidate, "packages", c.id, name)
+					size, digest, err := archiveDigest(filename)
+					if err != nil {
+						return err
+					}
+					if size != asset.Size || digest != asset.SHA256 {
+						return fmt.Errorf("asset size/digest = %d/%s; release declares %d/%s", size, digest, asset.Size, asset.SHA256)
+					}
+					destination := filepath.Join(opt.out, c.id+"-"+goos+"-"+goarch)
+					files, err := extractArchive(filename, destination)
+					if err != nil {
+						return err
+					}
+					resources, err := checkPackage(destination, files, c, publication.Version, goos, goarch)
+					if err != nil {
+						return err
+					}
+					r.Components[index].Assets = append(r.Components[index].Assets, assetResult{target, filename, size, digest, resources})
+					expectedFiles = append(expectedFiles, name)
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+			if err := r.perform("inventory/"+c.id, func() error {
+				entries, err := os.ReadDir(filepath.Join(opt.candidate, "packages", c.id))
+				if err != nil {
+					return err
+				}
+				var actual []string
+				for _, entry := range entries {
+					actual = append(actual, entry.Name())
+				}
+				return sameFiles(actual, expectedFiles)
+			}); err != nil {
 				return err
 			}
-			var actual []string
-			for _, entry := range entries {
-				actual = append(actual, entry.Name())
-			}
-			return sameFiles(actual, expectedFiles)
-		}); err != nil {
-			return err
 		}
 	}
-	// 3. 五目标发行归档的 SHA256SUMS、Core 身份及包副本逐项核对。
+	// 3. 核对归档摘要与 Core 身份；整合模式另外核对组件副本。
 	var sums map[string]string
 	if err := r.perform("SHA256SUMS", func() error {
 		var err error
@@ -232,27 +234,47 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 					return fmt.Errorf("empty distribution resource %s", name)
 				}
 			}
+			sourceRaw, err := readRegular(filepath.Join(destination, rootName, "source.json"))
+			if err != nil {
+				return err
+			}
+			var source struct {
+				Source     string                     `json:"source"`
+				Version    string                     `json:"version"`
+				Components map[string]json.RawMessage `json:"components"`
+			}
+			if err := json.Unmarshal(sourceRaw, &source); err != nil {
+				return err
+			}
+			if source.Source != "https://github.com/AlonaBot/AlonaBot/tree/v"+opt.version || source.Version != opt.version {
+				return errors.New("distribution source/version differs from release")
+			}
+			if !opt.bundle && len(source.Components) != 0 {
+				return errors.New("Core archive declares bundled components")
+			}
 			expected := []string{rootName + "/" + coreName, rootName + "/LICENSE", rootName + "/source.json"}
-			for _, c := range components {
-				asset, _ := publications[c.id].Asset(goos, goarch) // 独立包检查已验证该平台存在。
-				address, err := url.Parse(asset.URL)
-				if err != nil {
-					return err
-				}
-				for _, file := range []string{"release.json", "release.json.sig", "release.pub", filepath.Base(address.Path)} {
-					rel := filepath.Join("packages", c.id, file)
-					outside, err := readRegular(filepath.Join(opt.candidate, rel))
+			if opt.bundle {
+				for _, c := range components {
+					asset, _ := publications[c.id].Asset(goos, goarch) // 独立包检查已验证该平台存在。
+					address, err := url.Parse(asset.URL)
 					if err != nil {
 						return err
 					}
-					inside, err := readRegular(filepath.Join(destination, rootName, rel))
-					if err != nil {
-						return err
+					for _, file := range []string{"release.json", "release.json.sig", "release.pub", filepath.Base(address.Path)} {
+						rel := filepath.Join("packages", c.id, file)
+						outside, err := readRegular(filepath.Join(opt.candidate, rel))
+						if err != nil {
+							return err
+						}
+						inside, err := readRegular(filepath.Join(destination, rootName, rel))
+						if err != nil {
+							return err
+						}
+						if !bytes.Equal(outside, inside) {
+							return fmt.Errorf("inner and external %s differ", rel)
+						}
+						expected = append(expected, rootName+"/"+filepath.ToSlash(rel))
 					}
-					if !bytes.Equal(outside, inside) {
-						return fmt.Errorf("inner and external %s differ", rel)
-					}
-					expected = append(expected, rootName+"/"+filepath.ToSlash(rel))
 				}
 			}
 			if err := sameFiles(files, expected); err != nil {
