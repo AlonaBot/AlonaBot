@@ -198,7 +198,7 @@ func projectResources(dir string, project *manifest.Manifest, process bool) (map
 	if err := checkChangelog(dir, project.Version); err != nil {
 		return nil, err
 	}
-	for _, name := range []string{changelogFile, changelogDirectory} {
+	for _, name := range []string{"LICENSE", changelogFile, changelogDirectory} {
 		if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {

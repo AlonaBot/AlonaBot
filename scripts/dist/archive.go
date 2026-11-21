@@ -3,10 +3,7 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
-	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -97,40 +94,4 @@ func copyFile(source, destination string, mode fs.FileMode) (err error) {
 	}
 	defer func() { err = errors.Join(err, file.Close()) }()
 	return copyTo(file, source)
-}
-
-// checkPrivateKey 拒绝误放进组件资源的签名私钥，检查不泄漏资源原文。
-func checkPrivateKey(path string, key ed25519.PrivateKey) (err error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, file.Close()) }()
-	compressed, err := gzip.NewReader(file)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, compressed.Close()) }()
-	archive := tar.NewReader(compressed)
-	encoded := []byte(base64.StdEncoding.EncodeToString(key))
-	for {
-		_, err := archive.Next()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		raw, err := io.ReadAll(archive)
-		if err != nil {
-			return err
-		}
-		if bytes.Contains(raw, key) || bytes.Contains(raw, encoded) {
-			return errors.New("signing key is included in component resources")
-		}
-		decoded, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(raw)))
-		if err == nil && bytes.Equal(decoded, key) {
-			return errors.New("signing key is included in component resources")
-		}
-	}
 }

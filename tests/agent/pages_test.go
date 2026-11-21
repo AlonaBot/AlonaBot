@@ -58,7 +58,7 @@ func TestAgentPages(t *testing.T) {
 		var messages struct {
 			Pages map[string]string `json:"pages"`
 		}
-		if err := json.Unmarshal(agentResources.I18n[locale], &messages); err != nil {
+		if err := json.Unmarshal(agentResources(t).I18n[locale], &messages); err != nil {
 			t.Fatal(err)
 		}
 		for _, page := range []string{"personas", "mcp", "skills", "memory", "tasks"} {

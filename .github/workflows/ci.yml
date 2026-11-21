@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_go: ${{ steps.sources.outputs.has_go }}
+      has_release: ${{ steps.sources.outputs.has_release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -36,7 +37,7 @@ jobs:
           rejected=0
           while IFS= read -r -d '' path; do
             case "$path" in
-              AGENTS.md|CLAUDE.md|.agents/*|.claude/*|.codex/*|.serena/*|.playwright-cli/*|docs/goals/*|docs/execution-order.md|docs/benchmarks.md|spec/PLAN.md|spec/plan/*|spec/TEST-MATRIX.md|spec/adr/*|goal-[0-9]*/*|delegation-skills-workspace/*|experiments/*)
+              .agents/*|.claude/*|.codex/*|.serena/*|.playwright-cli/*|docs/goals/*|docs/execution-order.md|docs/benchmarks.md|spec/PLAN.md|spec/plan/*|spec/TEST-MATRIX.md|spec/adr/*|goal-[0-9]*/*|delegation-skills-workspace/*|experiments/*)
                 printf 'main 包含个人维护资料：%q\n' "$path"
                 rejected=1
                 ;;
@@ -59,14 +60,18 @@ jobs:
           fi
           git diff --name-only -z "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths"
           has_go=false
+          has_release=false
           while IFS= read -r -d '' path; do
             case "$path" in
-              go.mod|go.sum|*.go|*.proto|components.lock.json|tests/go.mod|tests/go.sum|scripts/integration.py) has_go=true ;;
+              internal/pluginkit/*|scripts/dist/*|scripts/release-check/*|scripts/release-smoke.py|Dockerfile|.github/workflows/release.yml) has_release=true ;;
+              *_test.go|tests/*|scripts/*) ;;
+              go.mod|go.sum|*.go|*.proto) has_go=true ;;
             esac
           done < "$RUNNER_TEMP/changed-paths"
           echo "has_go=$has_go" >> "$GITHUB_OUTPUT"
+          echo "has_release=$has_release" >> "$GITHUB_OUTPUT"
           if [ "$has_go" = false ]; then
-            echo '本次未修改 Go 源码、协议或依赖，跳过 Go 全仓检查。' >> "$GITHUB_STEP_SUMMARY"
+            echo '本次采用受影响范围检查，跳过 Go 全仓检查。' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   go:
@@ -130,3 +135,23 @@ jobs:
             echo "构建 $target"
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build ./...
           done
+
+  release-tools:
+    name: Release tools
+    needs: repository
+    if: needs.repository.outputs.has_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go test ./internal/pluginkit ./scripts/dist ./scripts/release-check
+      - run: python3 -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/release-smoke.py').read_text())"
+      - working-directory: tests
+        run: go test ./agent
+      - working-directory: tests
+        run: go test -c -o /tmp/release-e2e.test ./e2e
