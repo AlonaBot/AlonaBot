@@ -16,7 +16,8 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     environment = os.environ.copy()
-    flags = ['-p', '1'] + (['-race'] if args.race else [])
+    # 托管 runner 的端到端包已超过 Go 缺省的 10 分钟总期限，包含组件冷构建。
+    flags = ['-p', '1', '-timeout', '30m'] + (['-race'] if args.race else [])
     subprocess.run(['go', 'test', *flags, '-run', args.run, './...'], cwd=root / 'tests', env=environment, check=True)
     lock = json.loads((root / 'components.lock.json').read_text())['agent']
     with tempfile.TemporaryDirectory(prefix='alonabot-integration-') as directory:
