@@ -4,9 +4,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,22 +29,11 @@ import (
 
 // TestFirstRunDistribution 联验真实发行物的首次预装、凭证交付与卸载选择持久化。
 func TestFirstRunDistribution(t *testing.T) {
-	// 1. 临时发布密钥只用于本次发行物，构建与正式 dist 共用入口。
-	_, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
+	out := os.Getenv("ALONABOT_RELEASE_DIR")
+	if out == "" {
+		t.Skip("set ALONABOT_RELEASE_DIR to verify prebuilt release assets")
 	}
 	dir := t.TempDir()
-	keyFile := filepath.Join(dir, "signing.key")
-	if err := os.WriteFile(keyFile, []byte(base64.StdEncoding.EncodeToString(key)), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	out := filepath.Join(dir, "dist")
-	build := exec.CommandContext(t.Context(), "go", "run", "./scripts/dist", "--version", "0.1.0", "--key", keyFile, "--out", out, "--platforms", runtime.GOOS+"/"+runtime.GOARCH)
-	build.Dir = "../.."
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build distribution: %v\n%s", err, output)
-	}
 	root := fmt.Sprintf("alonabot-0.1.0-%s-%s", runtime.GOOS, runtime.GOARCH)
 	extracted := filepath.Join(dir, "extracted")
 	if err := packages.Extract(filepath.Join(out, root+".tar.gz"), extracted, packages.NewLimits(tune.Defaults())); err != nil {
@@ -97,7 +83,7 @@ func TestFirstRunDistribution(t *testing.T) {
 		}
 		return raw
 	}
-	// 2. API 与发行 CLI 比对同一状态；转发器只适配临时监听地址的 Host。
+	// 1. API 与发行 CLI 比对同一状态；转发器只适配临时监听地址的 Host。
 	target, err := url.Parse("http://" + c.address())
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +129,7 @@ func TestFirstRunDistribution(t *testing.T) {
 	if raw := call(http.MethodGet, "/", ""); !bytes.Contains(raw, []byte("<html")) {
 		t.Fatalf("static WebUI: %s", raw)
 	}
-	// 3. 登录领取凭证后删除文件；卸载选择跨真实进程重启保留。
+	// 2. 登录领取凭证后删除文件；卸载选择跨真实进程重启保留。
 	input, err := json.Marshal(map[string]string{"token": token})
 	if err != nil {
 		t.Fatal(err)

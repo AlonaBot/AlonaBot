@@ -3,9 +3,9 @@ module github.com/AlonaBot/AlonaBot/tests
 go 1.27.1
 
 require (
-	github.com/AlonaBot/AlonaBot v0.0.0-20261120143159-a9c9e4d5812e
-	github.com/AlonaBot/alonabot-adapter-telegram v0.0.0-20261120145524-d94cb9629d05
-	github.com/AlonaBot/alonabot-agent v0.0.0-20261120145556-4bc5ef1fd901
+	github.com/AlonaBot/AlonaBot v0.0.0-20261121011820-c3006b954c6f
+	github.com/AlonaBot/alonabot-adapter-telegram v0.1.0
+	github.com/AlonaBot/alonabot-agent v0.1.0
 	github.com/modelcontextprotocol/go-sdk v1.3.1
 	google.golang.org/protobuf v1.36.12
 )
@@ -55,5 +55,3 @@ require (
 )
 
 replace github.com/AlonaBot/AlonaBot => ..
-
-replace gorm.io/gorm => github.com/AlonaBot/gorm v1.31.3-0.20261120022453-34b98340007d

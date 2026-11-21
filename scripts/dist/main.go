@@ -1,4 +1,4 @@
-// dist 命令构建 Core 和官方组件，生成签名清单及可重复的五平台发行归档。
+// dist 命令构建 Core，验签已发布官方组件并生成五平台整合发行归档。
 package main
 
 import (
@@ -12,17 +12,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
-	"net/url"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/releasenotes"
 )
@@ -47,7 +44,7 @@ var components = []component{
 }
 
 type options struct {
-	version, key, out, platforms, assetBase string
+	version, publicKey, out, platforms string
 }
 
 func main() {
@@ -61,26 +58,18 @@ func run(ctx context.Context, args []string) (err error) {
 	var opt options
 	flags := flag.NewFlagSet("dist", flag.ContinueOnError)
 	flags.StringVar(&opt.version, "version", "", "Core release version (required)")
-	flags.StringVar(&opt.key, "key", "", "base64 Ed25519 private key file (required)")
+	flags.StringVar(&opt.publicKey, "public-key", "", "trusted base64 Ed25519 public key file (required)")
 	flags.StringVar(&opt.out, "out", "", "output directory (required)")
 	flags.StringVar(&opt.platforms, "platforms", defaultPlatforms, "comma-separated OS/arch targets")
-	flags.StringVar(&opt.assetBase, "asset-base", "", "absolute https asset URL prefix")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || opt.version == "" || opt.key == "" || opt.out == "" {
-		return errors.New("--version, --key and --out are required; positional arguments are not accepted")
+	if flags.NArg() != 0 || opt.version == "" || opt.publicKey == "" || opt.out == "" {
+		return errors.New("--version, --public-key and --out are required; positional arguments are not accepted")
 	}
-	// 1. 所有外部参数与密钥在构建前检查；私钥只留在当前进程。
+	// 1. 构建前检查目标与可信公钥。
 	if strings.ContainsAny(opt.version, "/\\\x00 \t\n") || opt.version == "." || opt.version == ".." {
 		return errors.New("version must be a single path component")
-	}
-	if opt.assetBase != "" {
-		base, err := url.Parse(opt.assetBase)
-		if err != nil || base.Scheme != "https" || base.Host == "" || base.RawQuery != "" || base.Fragment != "" {
-			return errors.New("--asset-base must be an absolute https URL without a query or fragment")
-		}
-		opt.assetBase = strings.TrimRight(opt.assetBase, "/")
 	}
 	targets := strings.Split(opt.platforms, ",")
 	slices.Sort(targets)
@@ -92,19 +81,14 @@ func run(ctx context.Context, args []string) (err error) {
 			return fmt.Errorf("duplicate platform %q", target)
 		}
 	}
-	raw, err := os.ReadFile(opt.key)
+	raw, err := os.ReadFile(opt.publicKey)
 	if err != nil {
-		return fmt.Errorf("read signing key: %w", err)
+		return err
 	}
-	decoded, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(raw)))
+	public, err := release.DecodePublicKey(raw)
 	if err != nil {
-		return fmt.Errorf("decode signing key: %w", err)
+		return err
 	}
-	if len(decoded) != ed25519.PrivateKeySize {
-		return fmt.Errorf("private key length %d, want %d", len(decoded), ed25519.PrivateKeySize)
-	}
-	key := ed25519.PrivateKey(decoded)
-	public := key.Public().(ed25519.PublicKey)
 	out, err := filepath.Abs(opt.out)
 	if err != nil {
 		return err
@@ -115,45 +99,13 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 
-	// 2. 主机 CLI 驱动所有 pack，交叉编译的程序只放入发行物。
-	host := filepath.Join(staging, executableName(runtime.GOOS))
-	if err := buildCore(ctx, host, runtime.GOOS, runtime.GOARCH, opt.version, public); err != nil {
-		return err
-	}
-	// 每个独立仓库按发行锁取源码；暂存副本承载 npm 产物与打包过程。
+	// 2. 整合包只消费已发布的签名资产，构建环境无需官方私钥或前端工具链。
 	rawLock, err := os.ReadFile("components.lock.json")
 	if err != nil {
 		return err
 	}
 	var lock map[string]struct{ Module, Version string }
 	if err := json.Unmarshal(rawLock, &lock); err != nil {
-		return err
-	}
-	sources := make(map[string]string)
-	for _, component := range components {
-		source := lock[component.dir]
-		if source.Module == "" || source.Version == "" {
-			return fmt.Errorf("missing component lock for %s", component.dir)
-		}
-		output, err := command(ctx, ".", nil, "go", "mod", "download", "-json", source.Module+"@"+source.Version)
-		if err != nil {
-			return err
-		}
-		var downloaded struct{ Dir string }
-		if err := json.Unmarshal(output, &downloaded); err != nil {
-			return err
-		}
-		destination := filepath.Join(staging, "project", component.dir)
-		if err := copyProject(downloaded.Dir, destination); err != nil {
-			return err
-		}
-		sources[component.dir] = destination
-	}
-	webui := sources[webuiDir]
-	if _, err := command(ctx, webui, nil, "npm", "ci"); err != nil {
-		return err
-	}
-	if _, err := command(ctx, webui, nil, "npm", "run", "build"); err != nil {
 		return err
 	}
 	roots := make(map[string]string)
@@ -166,16 +118,33 @@ func run(ctx context.Context, args []string) (err error) {
 		if err := buildCore(ctx, filepath.Join(root, executableName(goos)), goos, goarch, opt.version, public); err != nil {
 			return err
 		}
+		if err := copyFile("LICENSE", filepath.Join(root, "LICENSE"), fileMode); err != nil {
+			return err
+		}
+		provenance, err := json.MarshalIndent(struct {
+			Source     string `json:"source"`
+			Version    string `json:"version"`
+			Components any    `json:"components"`
+		}{"https://github.com/AlonaBot/AlonaBot/tree/v" + opt.version, opt.version, lock}, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(root, "source.json"), append(provenance, '\n'), fileMode); err != nil {
+			return err
+		}
 		roots[target] = root
 	}
 	if err := os.MkdirAll(out, directoryMode); err != nil {
 		return err
 	}
-	// 3. 每个组件只调用一次多平台 pack，再签名并将同一清单复制到各平台目录。
+	// 3. 原样收录组件清单与平台包，公开安装和预装使用同一份资产。
 	for _, component := range components {
-		component.dir = sources[component.dir]
-		if err := packComponent(ctx, opt, component, host, staging, out, targets, roots, key); err != nil {
-			return fmt.Errorf("pack %s: %w", component.id, err)
+		source := lock[component.dir]
+		if source.Module == "" || source.Version == "" {
+			return fmt.Errorf("missing component lock for %s", component.dir)
+		}
+		if err := collectComponent(ctx, component, source.Module, source.Version, out, targets, roots, public); err != nil {
+			return fmt.Errorf("collect %s: %w", component.id, err)
 		}
 	}
 	var sums strings.Builder
@@ -244,87 +213,98 @@ func command(ctx context.Context, dir string, env []string, name string, args ..
 	return output, nil
 }
 
-func packComponent(ctx context.Context, opt options, component component, host, staging, out string, targets []string, roots map[string]string, key ed25519.PrivateKey) error {
-	directory := filepath.Join(staging, "packed", component.id)
-	assetBase := opt.assetBase
-	if assetBase == "" {
-		raw, err := os.ReadFile(filepath.Join(component.dir, "plugin.yaml"))
+// collectComponent 先验签发布清单，再校验下载包的完整性并复制到发行树。
+func collectComponent(ctx context.Context, component component, source, version, out string, targets []string, roots map[string]string, public ed25519.PublicKey) error {
+	directory := filepath.Join(out, "packages", component.id)
+	if err := os.MkdirAll(directory, directoryMode); err != nil {
+		return err
+	}
+	base := "https://" + source + "/releases/download/" + version
+	metadata := make(map[string][]byte)
+	for _, name := range []string{"release.json", "release.json.sig", "release.pub"} {
+		var err error
+		metadata[name], err = download(ctx, base+"/"+name)
 		if err != nil {
 			return err
 		}
-		project, err := manifest.ParseProject(raw)
-		if err != nil {
+	}
+	key, err := release.DecodePublicKey(metadata["release.pub"])
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(key, public) {
+		return errors.New("component public key differs from trusted official key")
+	}
+	if len(metadata["release.json.sig"]) == 0 {
+		return errors.New("official release signature is empty")
+	}
+	publication, err := release.Verify(metadata["release.json"], metadata["release.json.sig"], public)
+	if err != nil {
+		return err
+	}
+	if publication.PluginID != component.id || publication.Source != source || publication.Version != strings.TrimPrefix(version, "v") {
+		return fmt.Errorf("component identity differs from lock: %s %s %s", publication.PluginID, publication.Source, publication.Version)
+	}
+	for name, raw := range metadata {
+		if err := os.WriteFile(filepath.Join(directory, name), raw, fileMode); err != nil {
 			return err
 		}
-		assetBase = "https://" + strings.TrimPrefix(project.Manifest.Source, "https://") + "/releases/download/v" + project.Manifest.Version
 	}
-	args := []string{"pack", component.dir, "--asset-base", assetBase, "--out", directory}
-	for _, target := range targets {
-		args = append(args, "--target", target)
-	}
-	if _, err := command(ctx, ".", nil, host, args...); err != nil {
-		return err
-	}
-	raw, err := os.ReadFile(filepath.Join(directory, "release.json"))
-	if err != nil {
-		return err
-	}
-	publication, err := release.Verify(raw, nil, nil)
-	if err != nil {
-		return err
-	}
-	archives := make(map[string]string)
 	for _, target := range targets {
 		goos, goarch, _ := strings.Cut(target, "/")
 		asset, ok := publication.Asset(goos, goarch)
 		if !ok {
-			asset, ok = publication.Asset("any", "any")
-		}
-		if !ok {
 			return fmt.Errorf("release has no asset for %s", target)
 		}
-		address, err := url.Parse(asset.URL)
+		name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", component.id, publication.Version, goos, goarch)
+		if asset.URL != base+"/"+name {
+			return fmt.Errorf("unexpected official asset URL %q", asset.URL)
+		}
+		raw, err := download(ctx, asset.URL)
 		if err != nil {
 			return err
 		}
-		archive := filepath.Join(directory, filepath.Base(address.Path))
-		if err := checkPrivateKey(archive, key); err != nil {
+		digest := sha256.Sum256(raw)
+		if int64(len(raw)) != asset.Size || fmt.Sprintf("%x", digest) != asset.SHA256 {
+			return fmt.Errorf("asset integrity mismatch: %s", name)
+		}
+		if err := os.WriteFile(filepath.Join(directory, name), raw, fileMode); err != nil {
 			return err
 		}
-		archives[target] = archive
-	}
-	public := key.Public().(ed25519.PublicKey)
-	publication.PublisherKeyID = release.KeyID(public)
-	raw, err = json.MarshalIndent(publication, "", "  ")
-	if err != nil {
-		return err
-	}
-	raw = append(raw, '\n')
-	signature := []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw)) + "\n")
-	if _, err := release.Verify(raw, signature, public); err != nil {
-		return fmt.Errorf("verify release: %w", err)
-	}
-	metadata := map[string][]byte{
-		"release.json":     raw,
-		"release.json.sig": signature,
-		"release.pub":      []byte(base64.StdEncoding.EncodeToString(public) + "\n"),
-	}
-	for _, target := range targets {
-		for _, directory := range []string{filepath.Join(roots[target], "packages", component.id), filepath.Join(out, "packages", component.id)} {
-			if err := os.MkdirAll(directory, directoryMode); err != nil {
+		destination := filepath.Join(roots[target], "packages", component.id)
+		if err := os.MkdirAll(destination, directoryMode); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(destination, name), raw, fileMode); err != nil {
+			return err
+		}
+		for name, raw := range metadata {
+			if err := os.WriteFile(filepath.Join(destination, name), raw, fileMode); err != nil {
 				return err
-			}
-			if err := copyFile(archives[target], filepath.Join(directory, filepath.Base(archives[target])), fileMode); err != nil {
-				return err
-			}
-			for name, content := range metadata {
-				if err := os.WriteFile(filepath.Join(directory, name), content, fileMode); err != nil {
-					return err
-				}
 			}
 		}
 	}
 	return nil
+}
+
+func download(ctx context.Context, address string) (_ []byte, err error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, response.Body.Close()) }()
+	raw, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download %s: %s: %s", address, response.Status, raw)
+	}
+	return raw, nil
 }
 
 func archiveDigest(path string) (digestBytes []byte, err error) {
@@ -338,37 +318,4 @@ func archiveDigest(path string) (digestBytes []byte, err error) {
 		return nil, err
 	}
 	return digest.Sum(nil), nil
-}
-
-// copyProject 复制独立组件源码到暂存目录，跳过依赖与旧的构建产物。
-func copyProject(from, to string) error {
-	return filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(from, path)
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() && (rel == "node_modules" || rel == "dist") {
-			return filepath.SkipDir
-		}
-		target := filepath.Join(to, rel)
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		switch {
-		case entry.IsDir():
-			return os.MkdirAll(target, directoryMode)
-		case info.Mode().IsRegular():
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			return os.WriteFile(target, raw, info.Mode().Perm())
-		default:
-			return fmt.Errorf("unsupported file in WebUI project: %s", rel)
-		}
-	})
 }

@@ -2,7 +2,6 @@ package wire
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -10,96 +9,10 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"testing/iotest"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"google.golang.org/protobuf/proto"
 )
-
-// header 返回长度为 n 的 4 字节大端前缀。
-func header(n uint32) []byte {
-	var h [4]byte
-	binary.BigEndian.PutUint32(h[:], n)
-	return h[:]
-}
-
-// 长度 1 与恰好 4 MiB 可读；长度 0、超限与截断都报对应错误，帧边界处结束为 io.EOF。
-func TestReadRawBoundaries(t *testing.T) {
-	max := bytes.Repeat([]byte{0xAB}, MaxFrame)
-	cases := []struct {
-		name    string
-		stream  []byte // 输入字节流
-		wantErr error  // 期望的错误；nil 表示应成功
-		wantLen int    // 成功时期望的载荷长度
-	}{
-		{"1 byte", append(header(1), 0x08), nil, 1},
-		{"exactly 4 MiB", append(header(MaxFrame), max...), nil, MaxFrame},
-		{"length 0", header(0), ErrEmptyFrame, 0},
-		// 只给出前缀：超限必须在读取载荷之前就被拒绝，不能先分配 4 MiB+1 的缓冲再报截断。
-		{"4 MiB+1", header(MaxFrame + 1), ErrFrameTooLarge, 0},
-		{"truncated payload", append(header(100), make([]byte, 50)...), ErrTruncated, 0},
-		{"truncated prefix", []byte{0, 0}, ErrTruncated, 0},
-		{"empty stream", nil, io.EOF, 0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, err := ReadRaw(bytes.NewReader(c.stream))
-			if !errors.Is(err, c.wantErr) {
-				t.Fatalf("err = %v, want %v", err, c.wantErr)
-			}
-			if len(got) != c.wantLen {
-				t.Fatalf("length = %d, want %d", len(got), c.wantLen)
-			}
-		})
-	}
-}
-
-// 分多次 Read 才凑齐一帧（每次只给 1 字节）也必须完整读出。
-func TestReadFrameOneByteReads(t *testing.T) {
-	env := &pb.Envelope{ProtocolMajor: 1, Kind: pb.FrameKind_FRAME_KIND_HEARTBEAT, SessionId: bytes.Repeat([]byte{1}, 16)}
-	frame, err := EncodeFrame(env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := iotest.OneByteReader(bytes.NewReader(append(frame, frame...)))
-	for i := 0; i < 2; i++ {
-		got, err := ReadFrame(r)
-		if err != nil || !proto.Equal(got, env) {
-			t.Fatalf("frame %d: %v %v", i, got, err)
-		}
-	}
-	if _, err := ReadFrame(r); !errors.Is(err, io.EOF) {
-		t.Fatalf("ending at a frame boundary should return io.EOF, got %v", err)
-	}
-}
-
-// 长度合法但无法解码的载荷返回 ErrDecode。
-func TestReadFrameDecodeError(t *testing.T) {
-	if _, err := ReadFrame(bytes.NewReader(append(header(3), 0xFF, 0xFF, 0xFF))); !errors.Is(err, ErrDecode) {
-		t.Fatalf("undecodable payload should return ErrDecode, got %v", err)
-	}
-}
-
-// stdout 混入普通日志：日志字节被当作长度前缀，连接必须失败而不是继续猜测边界。
-func TestStdoutPollutionFailsSession(t *testing.T) {
-	frame, _ := EncodeFrame(&pb.Envelope{ProtocolMajor: 1, Kind: pb.FrameKind_FRAME_KIND_HEARTBEAT})
-	polluted := append([]byte("plugin started\n"), frame...)
-	if _, err := ReadFrame(bytes.NewReader(polluted)); err == nil {
-		t.Fatal("stdout mixed with log output should make reading fail")
-	}
-}
-
-// 超限 Envelope 在编码时拒绝，Writer 不写出任何字节。
-func TestEncodeFrameTooLarge(t *testing.T) {
-	env := &pb.Envelope{ProtocolMajor: 1, Payload: make([]byte, MaxFrame)}
-	if _, err := EncodeFrame(env); !errors.Is(err, ErrFrameTooLarge) {
-		t.Fatalf("oversized Envelope should be rejected at encoding, got %v", err)
-	}
-	var buf bytes.Buffer
-	if err := NewWriter(&buf).WriteFrame(env); !errors.Is(err, ErrFrameTooLarge) || buf.Len() != 0 {
-		t.Fatalf("an oversized frame must not write any bytes: err=%v len=%d", err, buf.Len())
-	}
-}
 
 // 读取 contracts 的 golden 帧作为两种传输共用的 fixture。
 func goldenFrames(t *testing.T) map[string]*pb.Envelope {

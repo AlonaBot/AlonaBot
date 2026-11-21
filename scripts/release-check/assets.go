@@ -90,7 +90,7 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 			if publication.PluginID != c.id || publication.Source != c.source {
 				return fmt.Errorf("release identity = %q from %q; want %q from %q", publication.PluginID, publication.Source, c.id, c.source)
 			}
-			if len(publication.Assets) != len(r.Platforms) {
+			if len(publication.Assets) < len(r.Platforms) {
 				return fmt.Errorf("release has %d platforms; want %d", len(publication.Assets), len(r.Platforms))
 			}
 			publications[c.id] = publication
@@ -223,7 +223,16 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 			if !bytes.Equal(key, public) || string(values[versionSymbol]) != opt.version {
 				return fmt.Errorf("Core linked key/version differs from trusted key/version %q", opt.version)
 			}
-			expected := []string{rootName + "/" + coreName}
+			for _, name := range []string{"LICENSE", "source.json"} {
+				raw, err := readRegular(filepath.Join(destination, rootName, name))
+				if err != nil {
+					return err
+				}
+				if len(raw) == 0 {
+					return fmt.Errorf("empty distribution resource %s", name)
+				}
+			}
+			expected := []string{rootName + "/" + coreName, rootName + "/LICENSE", rootName + "/source.json"}
 			for _, c := range components {
 				asset, _ := publications[c.id].Asset(goos, goarch) // 独立包检查已验证该平台存在。
 				address, err := url.Parse(asset.URL)

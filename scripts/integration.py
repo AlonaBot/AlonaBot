@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import tempfile
 
@@ -16,7 +17,8 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     environment = os.environ.copy()
-    flags = ['-p', '1'] + (['-race'] if args.race else [])
+    # 托管 runner 的端到端包已超过 Go 缺省的 10 分钟总期限，包含组件冷构建。
+    flags = ['-p', '1', '-timeout', '30m'] + (['-race'] if args.race else [])
     subprocess.run(['go', 'test', *flags, '-run', args.run, './...'], cwd=root / 'tests', env=environment, check=True)
     lock = json.loads((root / 'components.lock.json').read_text())['agent']
     with tempfile.TemporaryDirectory(prefix='alonabot-integration-') as directory:
@@ -27,7 +29,9 @@ def main():
         subprocess.run(['go', 'mod', 'edit', '-modfile', str(modfile), '-require', lock['module'] + '@' + lock['version']], cwd=root, check=True)
         overlay = directory / 'overlay.json'
         overlay.write_text(json.dumps({'Replace': {str(root / 'internal/app/agent_service_test.go'): str(root / 'tests/app/agent_service_test.go.tmpl')}}))
-        subprocess.run(['go', 'test', '-mod=mod', '-modfile', str(modfile), '-overlay', str(overlay), *flags, '-run', args.run, './internal/app'], cwd=root, env=environment, check=True)
+        # 测试内的资源扫描也调用 go list，沿用同一份临时 module 图。
+        overlay_environment = {**environment, 'GOFLAGS': environment.get('GOFLAGS', '') + ' ' + shlex.join(['-modfile=' + str(modfile), '-mod=mod'])}
+        subprocess.run(['go', 'test', '-overlay', str(overlay), *flags, '-run', args.run, './internal/app'], cwd=root, env=overlay_environment, check=True)
 
 
 if __name__ == '__main__':
