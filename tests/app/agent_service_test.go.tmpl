@@ -351,7 +351,7 @@ func callAgentService(t *testing.T, core *Core, id, service string, req llm.Requ
 }
 
 var scanOfficialAgent = sync.OnceValues(func() (*generate.Result, error) {
-	return generate.Scan(context.Background(), generate.Options{Dir: ".", Package: "github.com/AlonaBot/alonabot-agent"})
+	return generate.Scan(context.Background(), generate.Options{Dir: "../../tests", Package: "github.com/AlonaBot/alonabot-agent"})
 })
 
 func agentServiceFixture(t testing.TB) genresources.Resources {
