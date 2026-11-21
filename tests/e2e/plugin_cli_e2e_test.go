@@ -8,6 +8,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,7 +22,6 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
-	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
@@ -32,6 +33,13 @@ import (
 
 // TestDevelopmentCLI 通过真实 CLI、组件进程与预检闭合作者工程到可安装包的主路径。
 func TestDevelopmentCLI(t *testing.T) {
+	for _, role := range []string{"plugin", "agent"} {
+		t.Run(role, func(t *testing.T) { testDevelopmentCLI(t, role) })
+	}
+}
+
+func testDevelopmentCLI(t *testing.T, role string) {
+	id := "alonabot-" + role + "-cli"
 	dir := filepath.Join(t.TempDir(), "alonabot-plugin-cli")
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
@@ -46,18 +54,22 @@ func TestDevelopmentCLI(t *testing.T) {
 		}
 		return string(output)
 	}
-	cli("init")
+	if role == "plugin" {
+		cli("init")
+	} else {
+		cli("init", "--role", role, "--id", id)
+	}
 	if mod := string(developmentRead(t, filepath.Join(dir, "go.mod"))); !strings.Contains(mod, "module alonabot-plugin-cli\n") {
 		t.Fatalf("default module: %s", mod)
 	}
-	for _, name := range []string{"plugin.go", "plugin.yaml", "config_schema.json", "i18n/en-US.json", ".gitignore"} {
+	for _, name := range []string{"plugin.go", "plugin.yaml", "config_schema.json", ".gitignore"} {
 		developmentRead(t, filepath.Join(dir, name))
 	}
 	if _, err := os.Stat(filepath.Join(dir, "main.go")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected main.go: %v", err)
 	}
 	source := string(developmentRead(t, filepath.Join(dir, "plugin.go")))
-	for _, required := range []string{"package plugin", "func New() *sdk.Plugin", "sdk.NewPlugin()", `p.Command("hello")`, `.Description("Show a greeting")`} {
+	for _, required := range []string{"package plugin", "func New() *sdk.Plugin", "sdk.NewPlugin()", `p.Command("hello")`, `.Description("Show a greeting")`, `c.Reply("Hello AlonaBot")`} {
 		if !strings.Contains(source, required) {
 			t.Fatalf("template missing %q", required)
 		}
@@ -89,7 +101,7 @@ import (
 func TestHello(t *testing.T) {
  h := plugintest.Start(t, plugintest.Plugin(New()))
  result := h.Message(plugintest.Private("alice"), plugintest.User{ID:"alice"}, message.Text("/hello"))
- if len(result.Sends) != 1 || result.Sends[0].Text() != "Hello!" { t.Fatalf("unexpected greeting: %+v", result) }
+ if len(result.Sends) != 1 || result.Sends[0].Text() != "Hello AlonaBot" { t.Fatalf("unexpected greeting: %+v", result) }
 }
 `)
 	if !strings.Contains(string(developmentRead(t, filepath.Join(dir, ".gitignore"))), "data/") {
@@ -100,15 +112,23 @@ func TestHello(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if project.Manifest.ID != "alonabot-plugin-cli" || len(project.Warnings) != 0 {
+	if project.Manifest.ID != id || len(project.Warnings) != 0 {
 		t.Fatalf("default identity: %+v", project)
 	}
 	if _, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "config_schema.json"))); len(problems) > 0 {
 		t.Fatal(problems)
 	}
-	if _, problems := i18n.Parse(map[string][]byte{"en-US.json": developmentRead(t, filepath.Join(dir, "i18n/en-US.json"))}); len(problems) > 0 {
-		t.Fatal(problems)
+	if _, err := os.Stat(filepath.Join(dir, "i18n")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected i18n directory: %v", err)
 	}
+	parsed, err := parser.ParseFile(token.NewFileSet(), "plugin.go", source, parser.ParseComments)
+	if err != nil || len(parsed.Comments) != 0 {
+		t.Fatalf("template comments: %v", err)
+	}
+	if bytes.HasPrefix(author, []byte("#")) {
+		t.Fatal("manifest contains a header comment")
+	}
+
 	// 外部作者工程用明确版本和本 checkout 的 replace，所有 module 写入都在临时目录。
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -134,7 +154,7 @@ func TestHello(t *testing.T) {
 	noGenerated()
 	output := cli("test", dir)
 	noGenerated()
-	for _, required := range []string{"Activated alonabot-plugin-cli (plugin)", "Command: hello", "Removed temporary test data:"} {
+	for _, required := range []string{"Activated " + id + " (" + role + ")", "Command: hello", "Removed temporary test data:"} {
 		if !strings.Contains(output, required) {
 			t.Fatalf("missing %q:\n%s", required, output)
 		}
@@ -174,23 +194,23 @@ func TestHello(t *testing.T) {
 	for _, target := range []string{runtime.GOOS + "/" + runtime.GOARCH, other} {
 		goos, goarch, _ := strings.Cut(target, "/")
 		asset, ok := publication.Asset(goos, goarch)
-		name := "alonabot-plugin-cli-0.1.0-" + goos + "-" + goarch + ".tar.gz"
+		name := id + "-0.1.0-" + goos + "-" + goarch + ".tar.gz"
 		want := "https://github.com/CHANGE-ME/CHANGE-ME/releases/download/v0.1.0/" + name
 		if !ok || asset.URL != want {
 			t.Fatalf("asset %s: %+v want %s", target, asset, want)
 		}
 		developmentRead(t, filepath.Join(out, name))
 	}
-	archive := filepath.Join(out, "alonabot-plugin-cli-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	archive := filepath.Join(out, id+"-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
 	candidate, err := packages.Preflight(packages.Input{ReleaseJSON: raw, Signature: sig, PublicKey: pub, Source: "github.com/CHANGE-ME/CHANGE-ME", OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: archive}, t.TempDir(), packages.NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := candidate.Manifest
-	if m.Role != "plugin" || m.MigrationMode != manifest.MigrationNone || m.PrepareEffects != manifest.EffectsNone || m.OS != runtime.GOOS || m.Arch != runtime.GOARCH {
+	if m.Role != role || m.MigrationMode != manifest.MigrationNone || m.PrepareEffects != manifest.EffectsNone || m.OS != runtime.GOOS || m.Arch != runtime.GOARCH {
 		t.Fatalf("package manifest: %+v", m)
 	}
-	for _, name := range []string{m.Entrypoint, "plugin.yaml", "config_schema.json", "i18n/en-US.json", "build-info"} {
+	for _, name := range []string{m.Entrypoint, "plugin.yaml", "config_schema.json", "build-info"} {
 		developmentRead(t, filepath.Join(candidate.Dir, name))
 	}
 	info, err := debug.ParseBuildInfo(string(developmentRead(t, filepath.Join(candidate.Dir, "build-info"))))
@@ -204,7 +224,7 @@ func TestHello(t *testing.T) {
 	if settings["GOOS"] != m.OS || settings["GOARCH"] != m.Arch {
 		t.Fatal("build-info target differs from manifest", settings)
 	}
-	for _, name := range []string{"data", "config.json", "release.json", "release.json.sig", "release.pub", "release.key"} {
+	for _, name := range []string{"i18n", "data", "config.json", "release.json", "release.json.sig", "release.pub", "release.key"} {
 		if _, err := os.Stat(filepath.Join(candidate.Dir, name)); !os.IsNotExist(err) {
 			t.Fatalf("unexpected package material %s: %v", name, err)
 		}
@@ -234,7 +254,7 @@ func TestHello(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(cwd)
-	if installed.ID != "alonabot-plugin-cli" || installed.Source != "github.com/CHANGE-ME/CHANGE-ME" {
+	if installed.ID != id || installed.Source != "github.com/CHANGE-ME/CHANGE-ME" {
 		t.Fatalf("installed: %+v", installed)
 	}
 	var registered []manage.Package

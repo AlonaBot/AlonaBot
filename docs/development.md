@@ -90,7 +90,7 @@ go generate ./...
 
 协议源文件位于 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。生成器核对 protoc 版本后重新生成 `contracts/pb/`，protoc-gen-go 通过 `go tool` 定位。
 
-更新 `changelog/unreleased/en.md` 后可定点运行 `go generate ./internal/core/manage`，一同交付生成的 `changelog_core.go`。
+更新 `changelog/v<SemVer>/{en,zh-CN}.md` 后可定点运行 `go generate ./internal/core/manage`，一同交付生成的 `changelog_core.go`。
 
 ## 验证改动
 
@@ -130,7 +130,7 @@ go test -race ./...
 
 1. 创建工程：`bin/alonabot init ./alonabot-plugin-hello`。
 2. 运行：`bin/alonabot run ./alonabot-plugin-hello`。
-3. 在同一个终端输入 `/hello`，看到 `Hello!`；Ctrl-C 停止 Core。
+3. 在同一个终端输入 `/hello`，看到 `Hello AlonaBot`；Ctrl-C 停止 Core。
 
 已安装 CLI 时，可在工程目录直接运行 `alonabot run`。stdin 是终端且设置文件没有任何 Adapter 实例时，自动启用内置终端对话；`--console` 强制启用并接受管道输入，`--console=false` 关闭。终端用户 `console:local` 在本次运行中具有 Core Admin 权限；实例和管理员保持在内存中。回复中的媒体显示为 `[image]`、`[file: 名称]` 等占位，输入 `#1` 点击最近一条带按钮消息的第一个回调按钮，编辑显示为 `(edited)` 新段。stdin 结束后 Core 继续运行，直到收到停止信号。
 
@@ -173,7 +173,7 @@ bin/alonabot test ./alonabot-plugin-hello
 bin/alonabot pack ./alonabot-plugin-hello
 ```
 
-`init`、`build`、`check`、`test`、`pack` 至多接受一个位置目录，省略时使用当前目录；旧的 `--dir` 会报未知参数。`init` 要求空目录，非空时在写入前报错。`--id` 缺省取目标目录绝对路径的目录名；例如 `alonabot-plugin-hello` 直接作为市场 ID，`my_plugin` 保持本地 ID 并输出缺市场前缀的警告。非法目录名会保留原字符并提示显式给出 `--id`。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 的 `--adapter-id` 缺省等于最终组件 ID，可显式覆盖。插件与 Agent 导出 `New()`，包含一个英文示例命令、schema、i18n；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.md)。
+`init`、`build`、`check`、`test`、`pack` 至多接受一个位置目录，省略时使用当前目录；旧的 `--dir` 会报未知参数。`init` 要求空目录，非空时在写入前报错。`--id` 缺省取目标目录绝对路径的目录名；例如 `alonabot-plugin-hello` 直接作为市场 ID，`my_plugin` 保持本地 ID 并输出缺市场前缀的警告。非法目录名会保留原字符并提示显式给出 `--id`。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 的 `--adapter-id` 缺省等于最终组件 ID，可显式覆盖。插件与 Agent 导出 `New()`，包含一个直接回复 `Hello AlonaBot` 的英文示例命令与 schema；需要翻译时自行添加 i18n 目录；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.md)。
 
 位于现有 Go module 中时复用该 module，保持其 go.mod；外部空目录的 module 缺省同为目录名，可用 `--module example.com/myplugin` 覆盖。发布版 CLI 用自身模块版本写 SDK require，并在生成的工程目录运行 `go mod tidy`，随后可直接 `run`。依赖解析失败时保留工程，命令以失败状态退出并显示手动补齐的命令。开发版 `(devel)`（含本地修改的 `+dirty` 构建，以及从仓库 checkout 构建时 Go 自动盖上的伪版本）会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
 

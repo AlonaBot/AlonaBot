@@ -52,7 +52,6 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	if err != nil {
 		return false, err
 	}
-	raw = append([]byte("# Change source to your component repository before publishing.\n"), raw...)
 	project, err := manifest.ParseProject(raw)
 	if err != nil {
 		if defaultID {
@@ -75,7 +74,6 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	case "plugin", "agent":
 		files["plugin.go"] = []byte(pluginTemplate)
 		files["config_schema.json"] = []byte("{}\n")
-		files["i18n/en-US.json"] = []byte("{\"messages\":{\"hello\":\"Hello!\"}}\n")
 	case "adapter":
 		files["adapter.go"] = []byte(fmt.Sprintf(adapterTemplate, adapterID))
 		files["adapter_config_schema.json"] = []byte("{}\n")
@@ -185,23 +183,20 @@ func sdkVersion(version string) string {
 	return "v" + normalized
 }
 
-const pluginTemplate = `// Package plugin 提供组件的示例命令。
-package plugin
+const pluginTemplate = `package plugin
 
 import "github.com/AlonaBot/AlonaBot/sdk"
 
-// New 创建独立插件并登记路由。
 func New() *sdk.Plugin {
  p := sdk.NewPlugin()
  p.Command("hello").Description("Show a greeting").Handle(func(c *sdk.Context) error {
-  return c.Reply(c.T("hello"))
+  return c.Reply("Hello AlonaBot")
  })
  return p
 }
 `
 
-const adapterTemplate = `// Package component 提供 Adapter 的可导入入口。
-package component
+const adapterTemplate = `package component
 
 import (
  "context"
@@ -211,7 +206,6 @@ import (
 
 type platform struct{}
 
-// New 创建 Adapter；平台实例由作者实现 Start 接入。
 func New() adapter.Adapter {return &platform{}}
 func (*platform) Descriptor() *adapter.Descriptor {return &adapter.Descriptor{AdapterID:%q}}
 func (*platform) Start(context.Context,adapter.StartRequest,adapter.Core)(adapter.Instance,error){

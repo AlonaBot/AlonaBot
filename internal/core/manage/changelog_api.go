@@ -59,7 +59,9 @@ func (s *Service) packageChangelog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) coreChangelog(w http.ResponseWriter, r *http.Request) {
-	respond(w, changelogResponse{Locale: changelogLocale, Entries: splitChangelog(coreChangelogMarkdown)}, nil)
+	tags, _, _ := language.ParseAcceptLanguage(r.Header.Get("Accept-Language"))
+	locale := selectChangelogLocale([]string{"en-US", "zh-CN"}, tags)
+	respond(w, changelogResponse{Locale: locale, Entries: splitChangelog(coreChangelogMarkdown[locale])}, nil)
 }
 
 func readChangelog(root fs.FS, acceptLanguage string) (changelogResponse, error) {
