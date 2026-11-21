@@ -646,7 +646,7 @@ KV 键遵守 CONTRACTS §6.1 的键约束，恰为 `.` 或 `..` 的键在 GET/PU
 | Method / path | 成功响应 | 语义 |
 | --- | --- | --- |
 | `GET /api/v1/packages/{id}/changelog` | `{"locale":"en-US","entries":[{"version":"1.2.1","date":"2026-11-17","markdown":"…"}]}` | 当前已安装版本包中的 changelog（D-166）。单文件按围栏代码块之外的 `## [版本] - 日期` 或 `## [版本]` 切分，版本须为 SemVer，省略 `[Unreleased]`；`locale` 为 `en-US`。目录形式逐版本选择语言，`locale` 为最新条目所用文件的标签，条目省略 `date` |
-| `GET /api/v1/core/changelog` | 同上 | 读取从 `changelog/unreleased/en.md` 编进可执行文件的日志，按单文件规则返回 |
+| `GET /api/v1/core/changelog` | 同上 | 读取从 `changelog/v<SemVer>/{en,zh-CN}.md` 编进可执行文件的正式日志，排除 `unreleased`；按 `Accept-Language` 精确或主语言匹配 `en-US` / `zh-CN`，缺省或未匹配时使用英文。版本去掉目录名前缀 `v`，按单文件规则返回，未提供的发布日期省略 |
 
 条目按 SemVer 倒序，`markdown` 保留原文（单文件只返回节正文），日期缺省时省略 `date`。无发布条目时返回 `locale: "en-US"` 与 `entries: []`。
 

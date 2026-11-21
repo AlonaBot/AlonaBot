@@ -14,7 +14,7 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-在同一个终端输入 `/hello`，预期回复 `Hello!`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 与 `i18n/` 提供配置及文案。发布前填写自己的来源仓库。
+在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
