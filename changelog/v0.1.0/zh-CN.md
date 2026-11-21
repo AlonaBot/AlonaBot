@@ -4,7 +4,7 @@ AlonaBot 首个正式版本，提供五平台归档、官方签名组件和 Core
 
 ## 发行内容
 
-五个目标分别提供 `alonabot-0.1.0-<os>-<arch>.tar.gz`，Windows 使用 `.zip`。归档包含 Core 与相邻的 `packages/`，WebUI 与 Agent 两个组件各有平台包、`release.json`、`release.json.sig` 和 `release.pub`。整合包 Release 配套 `SHA256SUMS`、`install.sh` 与固定版本的 `docker-compose.yml`。整合构建先验签已发布组件，再原样收录资产，同时附带 AGPL 许可证与 `source.json` 源码版本记录。五个官方组件均采用 AGPL-3.0-only。Core 与整合的两个组件的版本均为 `0.1.0`，组件后续更新使用各自的版本号。
+五个目标分别提供 `alonabot-0.1.0-<os>-<arch>.tar.gz`，Windows 使用 `.zip`。归档包含 Core 与相邻的 `packages/`，WebUI 与 Agent 两个组件各有平台包、`release.json`、`release.json.sig` 和 `release.pub`。Release 附件仅提供五个平台归档，源码压缩包由 GitHub 自动提供。`install.sh` 从主仓 `main/deploy/install.sh` 下载，固定版本的 `docker-compose.yml` 从对应 tag 下载；官方安装器使用 GitHub Release API 的资产摘要校验归档。整合构建先验签已发布组件，再原样收录资产，同时附带 AGPL 许可证与 `source.json` 源码版本记录。五个官方组件均采用 AGPL-3.0-only。Core 与整合的两个组件的版本均为 `0.1.0`，组件后续更新使用各自的版本号。
 
 首次启动预装 Agent 与 WebUI，启用 WebUI；Agent 配置 Provider 与模型后由管理员启用。Telegram、OneBot 11 Adapter 和 help 插件从各自独立仓库按需安装。整合发行、Dockerfile 与根目录 `docker-compose.yml` 保留在 Core 主仓。OneBot 11 当前仅支持接收，发送返回 `UNSUPPORTED`；welcome、rss 及 CONTRACTS §15.2 列出的 Telegram 后续功能留待后续发行。
 

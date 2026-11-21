@@ -32,7 +32,9 @@ go run ./scripts/dist --version 0.1.0 \
 
 `dist/packages/<组件ID>/` 汇集该组件全部平台包及三份元数据。默认下载 URL 指向该组件仓库的 `releases/download/v<组件版本>`。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
 
-输出目录还包含：
+公开 Release 仅上传五个平台归档；源码 zip 与 tar.gz 由 GitHub 自动提供。安装脚本从主仓 `main/deploy/install.sh` 下载，Compose 从对应 tag 的根目录下载，官方公钥保留在 `.github/release.pub`。安装器通过 GitHub Release API 的资产摘要校验官方归档。
+
+构建和验收输出目录还包含以下辅助文件，保留在 Actions artifact 中：
 
 - `SHA256SUMS`：整合归档的完整性摘要。
 - `install.sh`：系统服务安装与升级入口。

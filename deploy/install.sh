@@ -162,7 +162,37 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 fetch --output "$staging/$archive" "$release_url/$(url_component "$archive")"
-fetch --output "$staging/SHA256SUMS" "$release_url/SHA256SUMS"
+if [ "$release_base" = https://github.com/AlonaBot/AlonaBot/releases ]; then
+    fetch --header 'Accept: application/vnd.github+json' --output "$staging/release.json" \
+        "https://api.github.com/repos/AlonaBot/AlonaBot/releases/tags/v$(url_component "$version")"
+    # shortcut: 按 GitHub API 的逐字段 JSON 格式读取；格式变化时需换用完整 JSON 解析器。
+    ARCHIVE_NAME=$archive awk '
+        BEGIN {
+            name = ENVIRON["ARCHIVE_NAME"]
+            quoted = "\""
+            for (i = 1; i <= length(name); i++) {
+                c = substr(name, i, 1)
+                if (c == "\\" || c == "\"") quoted = quoted "\\"
+                quoted = quoted c
+            }
+            quoted = quoted "\""
+        }
+        /^[[:space:]]*"name"[[:space:]]*:/ {
+            value = $0
+            sub(/^[[:space:]]*"name"[[:space:]]*:[[:space:]]*/, "", value)
+            sub(/,[[:space:]]*$/, "", value)
+            selected = (value == quoted)
+        }
+        selected && /^[[:space:]]*"digest"[[:space:]]*:[[:space:]]*"sha256:/ {
+            digest = $0
+            sub(/^[[:space:]]*"digest"[[:space:]]*:[[:space:]]*"sha256:/, "", digest)
+            sub(/"[,]?[[:space:]]*$/, "", digest)
+            print digest "  " name
+        }
+    ' "$staging/release.json" > "$staging/SHA256SUMS"
+else
+    fetch --output "$staging/SHA256SUMS" "$release_url/SHA256SUMS"
+fi
 expected=$(awk -v name="$archive" '
     substr($0, 67) == name && substr($0, 65, 2) == "  " {
         count++; digest = substr($0, 1, 64)

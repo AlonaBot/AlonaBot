@@ -779,7 +779,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 官方组件的包 ID 固定为 `alonabot-adapter-telegram`、`alonabot-adapter-onebot11`、`alonabot-agent-official`、`alonabot-webui-admin`、`alonabot-plugin-help-official`；示例使用 `alonabot-plugin-configdb`、`alonabot-plugin-devbot` 与 `alonabot-adapter-devbot`。`adapter_id` 仍为 `telegram`、`onebot11` 或 `devloop`。整合发行默认包含 WebUI 与 Agent；Adapter 与 help 独立发行并按需安装。D-172 在首次发布前直接改名，状态库与开发数据目录需要重建；不提供旧市场 ID 别名或数据迁移。
 
 - 官方整合包是同一套发行物的三种安装方式（D-64）：发行归档、容器镜像与 `docker-compose.yml`（§15.3），以及 `install.sh`（§15.6）。三者包含相同的 Core 与官方组件。
-- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中包含官方 Agent 与官方 WebUI 的组件包，以及各自归档外的 `release.json`、`.sig` 与 `release.pub`（§9.2）。Adapter 和 help 在各自独立仓库发布，由用户按需安装。同一 Release 另附 `install.sh` 与列出全部发行归档 SHA256 的 `SHA256SUMS`。
+- 每个目标平台发布一个发行归档 `alonabot-<version>-<os>-<arch>`（Windows 为 zip，其他为 tar.gz），包含 `alonabot` 可执行文件和 `packages/` 目录。`packages/` 中包含官方 Agent 与官方 WebUI 的组件包，以及各自归档外的 `release.json`、`.sig` 与 `release.pub`（§9.2）。Adapter 和 help 在各自独立仓库发布，由用户按需安装。Release 附件仅包含五个平台归档；GitHub 自动提供源码压缩包。`install.sh` 从主仓 `main/deploy/install.sh` 下载。
 - 官方 WebUI 分别提供 linux/amd64、linux/arm64、windows/amd64、darwin/amd64 与 darwin/arm64 平台包；每包携带相应的后台进程与同一份 dist。首次启用官方 WebUI 时运行其组件进程，Agent 默认保留未启用状态。
 - 发行版 Core 内置官方发布者公钥作为已信任来源：运行官方发行包即视为接受该来源，预装包不再逐个确认。签名与摘要照常校验，校验失败的包不安装并记 ERROR。
 - 数据目录首次初始化时，Core 按普通安装流程安装 `packages/` 中的全部包，整合包默认启用官方 WebUI，Agent 只安装不启用。需要 AI 对话时，管理员配置 Provider 与模型后启用 Agent；Agent 在没有配置 Provider 时也能启用，`/ask` 回复提示管理员配置。Adapter 由用户按需安装；`core_config.json` 的 `adapters` 中有实例时自动启用。某个官方 Adapter 已配置实例但尚未安装时，Core 先查 `packages/`，缺失时从该 Adapter 独立仓库的最新 Release 下载，验证确切来源、组件 ID、官方公钥、签名和归档摘要后安装。首次预装与后续整合更新只信任组件 ID 对应的官方仓库。
@@ -794,7 +794,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 镜像以非 root 用户（UID 10001）运行 `alonabot run --data-dir /data`，数据目录 `/data` 是卷。容器须以 Docker 的 init 运行（`docker run --init` 或 compose 的 `init: true`），由它回收孤儿进程；Core 不承担 PID 1 的回收职责。
 - 镜像设置环境变量 `ALONABOT_CONTAINER=1`，`core_config.json` 的缺省 `listen` 改为 `0.0.0.0:7650`，`base_url` 的缺省值不变（`http://127.0.0.1:7650`）。只有在这个环境变量下，Core 才允许非本机的 listen 搭配本机 http 的 `base_url`；容器的端口只应发布到宿主的本机地址（`127.0.0.1:7650:7650`），Core 启动时为此输出一条 WARN 提示。远程访问按 §15.1 使用 SSH 隧道或 HTTPS 反向代理。Adapter 的凭证可以经 `${环境变量}` 从容器环境传入。
 - 容器首次启动时没有交互终端，Core 把一次性管理 token 写入 `/data/admin_token`（§7.4）。镜像不含 shell，用 `docker compose exec alonabot alonabot admin-token show` 读出它，登录成功后该文件被删除。
-- 仓库根目录的 `Dockerfile` 用多阶段构建产生镜像。`docker-compose.yml` 是官方整合包的 compose 入口，随每个 Release 发布：使用对应版本的官方镜像，包含卷、`init: true` 与只发布到宿主本机的端口；`docker compose up -d` 即可启动，不需要先单独初始化。
+- 仓库根目录的 `Dockerfile` 用多阶段构建产生镜像。`docker-compose.yml` 是官方整合包的 compose 入口，从对应发行 tag 的仓库下载：使用对应版本的官方镜像，包含卷、`init: true` 与只发布到宿主本机的端口；`docker compose up -d` 即可启动，不需要先单独初始化。
 
 ### 15.4 开发运行与热部署
 
@@ -851,10 +851,10 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | 数据目录 | `/var/lib/alonabot` | `~/Library/Application Support/AlonaBot/data` |
 | 服务 | systemd 单元 `alonabot.service`，以系统用户 `alonabot` 运行 `alonabot run --data-dir <数据目录>`，开机启动 | 用户 LaunchAgent `io.github.alonabot`，登录后启动 |
 
-- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档与 `SHA256SUMS` 并校验，不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 与 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），token 只在当前终端显示一次 → 写入服务定义并启动服务。
+- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档，并使用 GitHub Release API 的资产 SHA256 摘要校验（自定义镜像站下载同一 Release 的 `SHA256SUMS`），不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 与 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），token 只在当前终端显示一次 → 写入服务定义并启动服务。
 - 以 `curl … | sh` 运行时，初始化从 `/dev/tty` 读写终端；没有可用终端时跳过初始化，Core 首次启动时按 §15.1 把一次性 token 写入数据目录的 `admin_token`，脚本输出读取它的命令（`alonabot admin-token show --data-dir <数据目录>`）。
 - 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 校正设置），新版本 `packages/` 中更高版本的官方组件按 §15.2 作为可用更新列出。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
-- 只经 HTTPS 下载。`SHA256SUMS` 与归档来自同一 Release，只防止传输损坏，不证明发布者身份；归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
+- 只经 HTTPS 下载。官方归档与摘要来自同一 GitHub Release，自定义镜像站使用同版本的 `SHA256SUMS` 校验下载完整性；归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
 
 ## 16. 调优参数
 

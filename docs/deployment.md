@@ -23,18 +23,18 @@
 
 ## 系统服务安装与升级
 
-在支持 systemd 的 Linux 上以 root 运行；macOS 在当前用户的登录会话运行。支持两种系统的 amd64、arm64。先从同一 Release 下载脚本，再安装指定版本（以下命令使用 fish，把 `VERSION` 换成发行版本号，省略前导 `v`）：
+在支持 systemd 的 Linux 上以 root 运行；macOS 在当前用户的登录会话运行。支持两种系统的 amd64、arm64。先从主仓下载安装脚本，再安装指定版本（以下命令使用 fish，把 `VERSION` 换成发行版本号，省略前导 `v`）：
 ```fish
 set version VERSION
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o install.sh https://github.com/AlonaBot/AlonaBot/releases/download/v$version/install.sh
+  -o install.sh https://raw.githubusercontent.com/AlonaBot/AlonaBot/main/deploy/install.sh
 # Linux
 sudo sh install.sh --version $version
 # macOS
 sh install.sh --version $version
 ```
 
-省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档与 `SHA256SUMS`。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址，基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服并替换 `alonabot` 与完整的 `packages/`。
+省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档，并与 GitHub Release API 的资产 SHA256 摘要核对。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址；自定义镜像站继续从同一 Release 下载 `SHA256SUMS`。基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服并替换 `alonabot` 与完整的 `packages/`。
 
 Linux 使用 `/opt/alonabot/`、数据目录 `/var/lib/alonabot` 和系统服务 `alonabot.service`；服务以系统用户 `alonabot` 运行并启用开机启动。macOS 使用 `~/Library/Application Support/AlonaBot/`、其中的 `data/` 和用户 LaunchAgent `io.github.alonabot`，登录后启动。工作目录设为程序目录，启动参数为 `run --data-dir <完整数据路径>`。
 
@@ -62,7 +62,7 @@ sh install.sh --uninstall
 下载发行的 Compose 文件，启动整合包并读出首次登录的 token：
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://github.com/AlonaBot/AlonaBot/releases/download/v0.1.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.1.0/docker-compose.yml
 docker compose up -d
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
