@@ -36,7 +36,7 @@
 
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://github.com/AlonaBot/AlonaBot/releases/download/v0.1.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.1.0/docker-compose.yml
 docker compose up -d
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```

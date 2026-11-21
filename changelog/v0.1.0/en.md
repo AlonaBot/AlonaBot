@@ -4,6 +4,7 @@ The first official AlonaBot release provides a signed component ecosystem, five 
 
 ## Included
 
+- Release assets contain only the five platform archives; GitHub provides source archives automatically. Download `deploy/install.sh` from `main` and `docker-compose.yml` from the version tag. The installer verifies official downloads against GitHub Release API asset digests.
 - Five archive targets: linux/amd64, linux/arm64, windows/amd64, darwin/amd64 and darwin/arm64. Windows uses ZIP; other targets use tar.gz.
 - Core, WebUI and Agent form the integrated distribution. The repository retains its Dockerfile, installer and root `docker-compose.yml`. WebUI is enabled on first start; configure a Provider and model before enabling Agent.
 - Telegram and OneBot 11 adapters and the help plugin are installed separately from their component repositories. OneBot 11 currently receives events; sending returns `UNSUPPORTED`.
