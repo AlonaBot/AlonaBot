@@ -4,7 +4,7 @@
 
 ## 选择安装方式
 
-v0.1.0 当前为发布候选，正式发行归档与镜像待维护者发布。以下发行安装步骤在对应资产发布后使用；现在可以按 [README 的源码快速开始](../README.md#快速开始)运行本地示例。具体平台实跑与已知限制见[发布说明](../changelog/v0.1.0/zh-CN.md)。
+从 [v0.1.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.1.0) 下载正式资产。整合包包含 Core、WebUI 与 Agent；Adapter 和 help 插件按需安装。具体平台实跑与已知限制见[发布说明](../changelog/v0.1.0/zh-CN.md)。
 
 | 方式 | 适用场景 |
 | --- | --- |
@@ -59,8 +59,10 @@ sh install.sh --uninstall
 
 ## 容器镜像
 
-从仓库根目录启动对应版本的官方整合包，然后读出首次登录的 token：
+下载发行的 Compose 文件，启动整合包并读出首次登录的 token：
 ```fish
+curl --fail --location --proto '=https' --proto-redir '=https' \
+  -o docker-compose.yml https://github.com/AlonaBot/AlonaBot/releases/download/v0.1.0/docker-compose.yml
 docker compose up -d
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
