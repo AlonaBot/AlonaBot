@@ -220,7 +220,7 @@ awk 'substr($0,1,1) != "d" && substr($0,1,1) != "-" { exit 1 }' "$staging/modes"
 mkdir "$staging/unpacked"
 tar -xzf "$staging/$archive" -C "$staging/unpacked"
 source_dir=$staging/unpacked/$archive_root
-[ -f "$source_dir/alonabot" ] && [ -x "$source_dir/alonabot" ] && [ -d "$source_dir/packages" ] || fail 'archive is missing alonabot or packages'
+[ -f "$source_dir/alonabot" ] && [ -x "$source_dir/alonabot" ] || fail 'archive is missing alonabot'
 
 stop_service
 if [ "$os" = linux ]; then
@@ -233,15 +233,21 @@ if [ "$os" = linux ]; then
     chown alonabot:alonabot "$data_dir"
 fi
 chmod 700 "$data_dir"
-# data/ 在 macOS 程序目录内，始终只替换两个发行入口。
+# data/ 在 macOS 程序目录内；替换 Core 并移除旧发行附带的安装包，保留已安装组件。
 rm -f "$program_dir/alonabot"
 rm -rf "$program_dir/packages"
 mv "$source_dir/alonabot" "$program_dir/alonabot"
-mv "$source_dir/packages" "$program_dir/packages"
 chmod 755 "$program_dir" "$program_dir/alonabot"
-chmod -R a+rX "$program_dir/packages"
 if [ "$os" = linux ]; then
-    chown -R root:root "$program_dir/alonabot" "$program_dir/packages"
+    chown root:root "$program_dir/alonabot"
+fi
+# 自定义镜像站仍可分发旧整合归档，保留该安装入口。
+if [ -d "$source_dir/packages" ]; then
+    mv "$source_dir/packages" "$program_dir/packages"
+    chmod -R a+rX "$program_dir/packages"
+    if [ "$os" = linux ]; then
+        chown -R root:root "$program_dir/packages"
+    fi
 fi
 
 # 先由当前用户打开控制终端，再把同一描述符交给服务身份，避免终端属主限制。

@@ -43,7 +43,7 @@ docker compose exec alonabot alonabot admin-token show --data-dir /data
 
 打开 `http://127.0.0.1:7650`，用读出的一次性 token 登录。官方镜像支持 Linux amd64/arm64，预装 Core、WebUI 与 Agent，数据保存在命名卷中。首次启动启用 WebUI；配置 Provider 与模型后再启用 Agent。Telegram、OneBot 11 Adapter 和 help 插件按需安装。
 
-[GitHub Release](https://github.com/AlonaBot/AlonaBot/releases/latest) 同时提供五平台归档和系统服务安装脚本。配置、升级与备份见[安装与部署](docs/deployment.md)，平台实跑情况与已知限制见[v0.1.0 发布说明](changelog/v0.1.0/zh-CN.md)。开发者可按[源码开发](docs/development.md)运行本地示例。
+[GitHub Release](https://github.com/AlonaBot/AlonaBot/releases/latest) 提供五平台纯 Core 归档；系统服务安装脚本同样安装 Core。WebUI、Agent 与 Adapter 可按需安装，Compose 提供整合部署。配置、升级与备份见[安装与部署](docs/deployment.md)，平台实跑情况与已知限制见[v0.1.0 发布说明](changelog/v0.1.0/zh-CN.md)。开发者可按[源码开发](docs/development.md)运行本地示例。
 
 ## 官方组件
 

@@ -32,6 +32,7 @@ const (
 type options struct {
 	candidate, version, publicKey, out, platforms, assetBase       string
 	installCandidate, updateCandidate, wrongSource, wrongPublisher string
+	bundle                                                         bool
 	runtimeTimeout                                                 time.Duration // 调用者给出的整条功能联验截止时间。
 }
 
@@ -94,6 +95,7 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 	flags.StringVar(&opt.publicKey, "public-key", "", "independently trusted base64 Ed25519 public key file (required)")
 	flags.StringVar(&opt.out, "out", "", "new evidence directory, outside candidate (required)")
 	flags.StringVar(&opt.platforms, "platforms", defaultPlatforms, "comma-separated OS/arch targets; must match the candidate")
+	flags.BoolVar(&opt.bundle, "bundle", false, "verify integrated archives containing signed WebUI and Agent packages")
 	flags.StringVar(&opt.assetBase, "asset-base", "", "expected https asset URL prefix (default: official download URL for version)")
 	flags.StringVar(&opt.installCandidate, "install-candidate", "", "signed configdb example package directory; enables host runtime checks")
 	flags.StringVar(&opt.updateCandidate, "update-candidate", "", "same-source, same-publisher package with a higher component SemVer")

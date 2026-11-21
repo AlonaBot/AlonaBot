@@ -35,7 +35,7 @@ type cliEvidenceError struct{ err error }
 func (e *cliEvidenceError) Error() string { return e.err.Error() }
 func (e *cliEvidenceError) Unwrap() error { return e.err }
 
-func startRuntime(ctx context.Context, binary, cwd, data, evidence string) (*runtimeHost, error) {
+func startRuntime(ctx context.Context, binary, cwd, data, evidence string, bundle bool) (*runtimeHost, error) {
 	h := &runtimeHost{ctx: ctx, binary: binary, cwd: cwd, data: data, evidence: evidence, done: make(chan struct{})}
 	// 环境只保留平台运行所需变量，排除调用者的 token、调参及开发注入。
 	h.command = exec.Command(binary, "run", "--data-dir", data, "--listen", "127.0.0.1:0", "--console=false", "--log-format", "json")
@@ -81,8 +81,8 @@ func startRuntime(ctx context.Context, binary, cwd, data, evidence string) (*run
 				if event.Message == "plugin activated" {
 					activated[event.PluginID] = true
 				}
-				// HTTP 开始监听先于预装激活；等两端正式握手后读取初始快照。
-				if !announced && started && activated["alonabot-webui-admin"] {
+				// 整合包的 HTTP 监听先于 WebUI 握手；Core 模式启动后即可读取快照。
+				if !announced && started && (!bundle || activated["alonabot-webui-admin"]) {
 					ready <- address
 					announced = true
 				}

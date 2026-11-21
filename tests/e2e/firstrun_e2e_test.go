@@ -27,14 +27,32 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
-// TestFirstRunDistribution 联验真实发行物的首次预装、凭证交付与卸载选择持久化。
+// TestFirstRunDistribution 联验 Core 与整合发行物的凭证交付、组件清单及重启持久化。
 func TestFirstRunDistribution(t *testing.T) {
-	out := os.Getenv("ALONABOT_RELEASE_DIR")
-	if out == "" {
-		t.Skip("set ALONABOT_RELEASE_DIR to verify prebuilt release assets")
+	for _, edition := range []struct {
+		name, directory string
+		bundle          bool
+	}{
+		{"core", os.Getenv("ALONABOT_RELEASE_DIR"), false},
+		{"bundle", os.Getenv("ALONABOT_BUNDLE_DIR"), true},
+	} {
+		t.Run(edition.name, func(t *testing.T) {
+			if edition.directory == "" {
+				t.Skip("set ALONABOT_RELEASE_DIR or ALONABOT_BUNDLE_DIR to verify prebuilt assets")
+			}
+			verifyFirstRunDistribution(t, edition.directory, edition.bundle)
+		})
 	}
+}
+
+func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
+	t.Helper()
 	dir := t.TempDir()
-	root := fmt.Sprintf("alonabot-0.1.0-%s-%s", runtime.GOOS, runtime.GOARCH)
+	archives, err := filepath.Glob(filepath.Join(out, fmt.Sprintf("alonabot-*-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)))
+	if err != nil || len(archives) != 1 {
+		t.Fatalf("host archives: %v %v", archives, err)
+	}
+	root := strings.TrimSuffix(filepath.Base(archives[0]), ".tar.gz")
 	extracted := filepath.Join(dir, "extracted")
 	if err := packages.Extract(filepath.Join(out, root+".tar.gz"), extracted, packages.NewLimits(tune.Defaults())); err != nil {
 		t.Fatal(err)
@@ -42,7 +60,10 @@ func TestFirstRunDistribution(t *testing.T) {
 	binary := filepath.Join(extracted, root, "alonabot")
 	data := filepath.Join(dir, "data")
 	c := startRecoveryCore(t, binary, data, "")
-	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"alonabot-webui-admin"`)
+	c.waitFor(`"msg":"Core started"`)
+	if bundle {
+		c.waitFor(`"msg":"plugin activated"`)
+	}
 	tokenFile := filepath.Join(data, adminauth.FirstTokenFile)
 	info, err := os.Stat(tokenFile)
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -110,10 +131,13 @@ func TestFirstRunDistribution(t *testing.T) {
 	if err := json.Unmarshal(cli("list"), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(api) != 2 || !reflect.DeepEqual(api, listed) {
+	want := map[string]bool{}
+	if bundle {
+		want = map[string]bool{"alonabot-webui-admin": true, "alonabot-agent-official": false}
+	}
+	if len(api) != len(want) || !reflect.DeepEqual(api, listed) {
 		t.Fatalf("package states: API=%+v CLI=%+v", api, listed)
 	}
-	want := map[string]bool{"alonabot-webui-admin": true, "alonabot-agent-official": false}
 	for _, item := range api {
 		enabled, exists := want[item.ID]
 		if !exists || item.Enabled != enabled || item.Uninstalled || !item.Signed || item.AvailableUpdate != "" {
@@ -123,11 +147,15 @@ func TestFirstRunDistribution(t *testing.T) {
 			t.Fatalf("activation: %+v", item)
 		}
 	}
-	if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 {
-		t.Fatalf("unexpected component processes:\n%s", c.log())
-	}
-	if raw := call(http.MethodGet, "/", ""); !bytes.Contains(raw, []byte("<html")) {
-		t.Fatalf("static WebUI: %s", raw)
+	if bundle {
+		if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 {
+			t.Fatalf("unexpected component processes:\n%s", c.log())
+		}
+		if raw := call(http.MethodGet, "/", ""); !bytes.Contains(raw, []byte("<html")) {
+			t.Fatalf("static WebUI: %s", raw)
+		}
+	} else if strings.Contains(c.log(), `"msg":"plugin activated"`) {
+		t.Fatalf("unexpected component process:\n%s", c.log())
 	}
 	// 2. 登录领取凭证后删除文件；卸载选择跨真实进程重启保留。
 	input, err := json.Marshal(map[string]string{"token": token})
@@ -138,7 +166,9 @@ func TestFirstRunDistribution(t *testing.T) {
 	if _, err := os.Stat(tokenFile); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("token file after login: %v", err)
 	}
-	cli("uninstall", "alonabot-webui-admin")
+	if bundle {
+		cli("uninstall", "alonabot-webui-admin")
+	}
 	stopTestCore(t, c)
 	c = startRecoveryCore(t, binary, data, "")
 	c.waitFor(`"msg":"Core started"`)
@@ -146,7 +176,7 @@ func TestFirstRunDistribution(t *testing.T) {
 	if err := json.Unmarshal(call(http.MethodGet, "/api/v1/packages", ""), &api); err != nil {
 		t.Fatal(err)
 	}
-	if len(api) != 2 {
+	if len(api) != len(want) {
 		t.Fatalf("restart packages: %+v", api)
 	}
 	for _, item := range api {
