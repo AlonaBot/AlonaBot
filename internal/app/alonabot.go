@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -44,12 +45,12 @@ import (
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
-	"github.com/mattn/go-isatty"
 	"google.golang.org/protobuf/proto"
 )
 
 // Options 汇总一次运行的装配参数；监听与日志覆盖为 nil 时沿用 core_config.json。
 type Options struct {
+	ConsoleOutput      io.Writer   // 文本日志与交互提示符共享的输出入口。
 	DataDir            string      // 原样交给 filepath.Abs；不设缺省值
 	Args               []string    // 调优参数与参数文件，后于 ALONABOT_ARGS 应用
 	Components         []Component // 开发组件，按登记顺序
@@ -127,7 +128,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if o.LogFormat != nil {
 		bootstrap.LogFormat = *o.LogFormat
 	}
-	output, err := logging.Open(logging.Options{Format: logging.Format(bootstrap.LogFormat), Level: bootstrap.LogLevel, StderrLevel: stderrLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	output, err := logging.Open(logging.Options{Format: logging.Format(bootstrap.LogFormat), Level: bootstrap.LogLevel, StderrLevel: stderrLevel, Stderr: os.Stderr, ConsoleOutput: o.ConsoleOutput, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return nil, startupUsage(err)
 	}
@@ -222,7 +223,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	for i := range c.development {
 		c.development[i].stdio = o.Stdio
 	}
-	output, err = logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, StderrLevel: stderrLevel, Stderr: os.Stderr, BufferRecords: values.LogBufferRecords})
+	output, err = logging.Open(logging.Options{Format: logging.Format(configuration.LogFormat), Level: configuration.LogLevel, StderrLevel: stderrLevel, Stderr: os.Stderr, ConsoleOutput: o.ConsoleOutput, BufferRecords: values.LogBufferRecords})
 	if err != nil {
 		return fail(startupUsage(err))
 	}
@@ -250,23 +251,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			return fail(err)
 		}
 	}
-	interactive := isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
-	token, err := adminauth.FirstToken(ctx, store, dir, interactive)
-	if err != nil {
+	if err := adminauth.FirstToken(ctx, store, dir); err != nil {
 		return fail(err)
 	}
-	if token != "" {
-		if _, err := fmt.Fprintln(os.Stderr, token); err != nil {
-			return fail(fmt.Errorf("write admin token: %w", err))
-		}
-	} else if !interactive {
-		name := filepath.Join(dir, adminauth.FirstTokenFile)
-		if _, err := os.Stat(name); err == nil {
-			slog.Info("first admin token is available", "path", name)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fail(fmt.Errorf("stat first admin token file: %w", err))
-		}
-	}
+	slog.Info("admin credentials", "url", configuration.BaseURL, "path", filepath.Join(dir, adminauth.FirstTokenFile))
 	if configuration.Proxy != "" {
 		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
 			if err := os.Setenv(name, configuration.Proxy); err != nil {

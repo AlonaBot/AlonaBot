@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 )
 
 func (a *Auth) rotateToken(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +31,7 @@ func (a *Auth) rotateToken(w http.ResponseWriter, r *http.Request) {
 		rotationError(w, http.StatusForbidden, "PERMISSION_DENIED", "admin token reauthentication failed")
 		return
 	}
-	token, err := ResetToken(r.Context(), a.store)
+	token, err := ResetToken(r.Context(), a.store, filepath.Dir(a.firstTokenPath))
 	if err != nil {
 		a.respondError(w, err)
 		return

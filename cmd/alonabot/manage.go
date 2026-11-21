@@ -23,17 +23,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type managementOptions struct{ dataDir, adminURL, tokenFile string }
+type managementOptions struct{ dataDir, adminURL string }
 type managementClient struct {
+	host  string
 	base  *url.URL
 	token string
 }
 
 func (o *managementOptions) flags(command *cobra.Command) {
 	flags := command.PersistentFlags()
-	flags.StringVar(&o.dataDir, "data-dir", "data", "Core data directory (used to discover base_url)")
-	flags.StringVar(&o.adminURL, "admin-url", "", "Core management URL (default: base_url in core_config.json)")
-	flags.StringVar(&o.tokenFile, "token-file", "", "file containing the Core management Bearer token")
+	flags.StringVar(&o.dataDir, "data-dir", "data", "Core data directory (settings and persistent credentials)")
+	flags.StringVar(&o.adminURL, "admin-url", "", "Local Core connection URL (default: listen in core_config.json)")
 }
 
 func managementCommands(code *int) []*cobra.Command {
@@ -410,54 +410,71 @@ func managementCall(cmd *cobra.Command, code *int, opt *managementOptions, metho
 }
 
 func (o *managementOptions) client(required bool) (*managementClient, error) {
-	address := o.adminURL
-	if address == "" {
-		address = settings.Defaults().BaseURL
-		// 客户端只读发现地址；settings.Load 还会创建或迁移文件，交由持有 core.lock 的 Core 调用。
-		content, err := os.ReadFile(filepath.Join(o.dataDir, settings.FileName))
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
+	defaults := settings.Defaults()
+	configuration := struct {
+		Listen  string `json:"listen"`
+		BaseURL string `json:"base_url"`
+	}{defaults.Listen, defaults.BaseURL}
+	content, err := os.ReadFile(filepath.Join(o.dataDir, settings.FileName))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("read Core settings: %w", err)
+	}
+	if err == nil {
+		if err := json.Unmarshal(content, &configuration); err != nil {
 			return nil, fmt.Errorf("read Core settings: %w", err)
 		}
-		if err == nil {
-			var document struct {
-				BaseURL string `json:"base_url"`
+	}
+	expand := func(value string) (string, error) {
+		if strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") {
+			name := strings.TrimSuffix(strings.TrimPrefix(value, "${"), "}")
+			result, ok := os.LookupEnv(name)
+			if !ok {
+				return "", fmt.Errorf("environment variable %s is not set", name)
 			}
-			if err := json.Unmarshal(content, &document); err != nil {
-				return nil, fmt.Errorf("read base_url: %w", err)
-			}
-			if document.BaseURL != "" {
-				address = document.BaseURL
-			}
+			return result, nil
 		}
-		if strings.HasPrefix(address, "${") && strings.HasSuffix(address, "}") {
-			name := strings.TrimSuffix(strings.TrimPrefix(address, "${"), "}")
-			value, exists := os.LookupEnv(name)
-			if !exists {
-				return nil, fmt.Errorf("environment variable %s is not set", name)
-			}
-			address = value
+		return value, nil
+	}
+	controlled, err := expand(configuration.BaseURL)
+	if err != nil {
+		return nil, err
+	}
+	controlledURL, err := url.Parse(controlled)
+	if err != nil || controlledURL.Host == "" {
+		return nil, errors.New("base_url must be an absolute URL")
+	}
+	address := o.adminURL
+	if address == "" {
+		listen, err := expand(configuration.Listen)
+		if err != nil {
+			return nil, err
 		}
+		host, port, err := net.SplitHostPort(listen)
+		if err != nil {
+			return nil, fmt.Errorf("read local management listen address: %w", err)
+		}
+		if host == "" || net.ParseIP(host).IsUnspecified() {
+			host = "127.0.0.1"
+		}
+		address = "http://" + net.JoinHostPort(host, port)
 	}
 	base, err := url.Parse(address)
 	if err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
 		return nil, errors.New("admin URL must be an absolute HTTP(S) URL without credentials, query or fragment")
 	}
 	hostname := strings.TrimSuffix(base.Hostname(), ".")
-	if base.Scheme == "http" && !strings.EqualFold(hostname, "localhost") && !net.ParseIP(hostname).IsLoopback() {
-		return nil, errors.New("non-loopback admin URL requires HTTPS")
+	if !strings.EqualFold(hostname, "localhost") && !net.ParseIP(hostname).IsLoopback() {
+		return nil, errors.New("admin URL must be local; use ssh or docker exec for remote Core")
 	}
-	token := os.Getenv("ALONABOT_ADMIN_TOKEN")
-	if o.tokenFile != "" {
-		content, err := os.ReadFile(o.tokenFile)
-		if err != nil {
-			return nil, fmt.Errorf("read admin token file: %w", err)
-		}
-		token = strings.TrimSpace(string(content))
+	content, err = os.ReadFile(filepath.Join(o.dataDir, "admin_token"))
+	if err != nil && (required || !errors.Is(err, os.ErrNotExist)) {
+		return nil, fmt.Errorf("read admin token; run admin-token reset if missing: %w", err)
 	}
+	token := strings.TrimSpace(string(content))
 	if required && token == "" {
-		return nil, errors.New("ALONABOT_ADMIN_TOKEN or --token-file is required")
+		return nil, errors.New("admin token file is empty; run admin-token reset")
 	}
-	return &managementClient{base: base, token: token}, nil
+	return &managementClient{base: base, host: controlledURL.Host, token: token}, nil
 }
 
 func (c *managementClient) request(ctx context.Context, method, path string, body any) (json.RawMessage, error) {
@@ -495,6 +512,7 @@ func (c *managementClient) open(ctx context.Context, method, path string, body a
 	if err != nil {
 		return nil, err
 	}
+	request.Host = c.host
 	request.Header.Set("Authorization", "Bearer "+c.token)
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")

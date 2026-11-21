@@ -416,10 +416,11 @@ func Migrations(p *sdk.Plugin, list []Migration) // 辅助迁移
 
 ### 7.4 首次管理认证与恢复
 
-- 首发使用一个 Core 管理凭证，不引入多用户账号体系。Core 首次启动且尚无管理凭证时生成 32-byte 随机 token，状态库只存 SHA256（D-82）：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时（系统服务、容器）写入 `<data_dir>/admin_token`，文件只有运行账号可读，日志只输出文件路径，第一次登录成功后 Core 删除该文件。`alonabot admin-token show` 在本机读出并显示这个文件，文件不存在时报错，供没有 shell 的容器使用；`alonabot admin-token init` 在启动前离线完成同样的初始化，只向终端显示；已有凭证时报错，加 `--if-missing` 则已有凭证时成功返回且不输出 token，供 `install.sh` 升级时使用（D-175）。`alonabot admin-token reset` 仅在 Core 停止并持锁后替换该凭证、递增认证代次并撤销旧管理会话。`init` 与 `reset` 先取得同一 data_dir 的 core.lock；这些命令都不走公开 HTTP，不把凭证写入日志。
+- Core 使用一个管理凭证，首次启动统一生成 32-byte 随机 token，状态库保存摘要和认证代次（D-82），明文以 0600 权限持久保存在 `<data_dir>/admin_token`。启动、日志和 `admin-token init/reset` 只输出结果、地址及文件路径；显式 `admin-token show` 读取明文供远程 WebUI 登录。登录及确认保留该文件，本机 CLI 自动读取。旧实例缺文件时提示显式 reset，保留原摘要和会话。`init/reset` 取得同一 data_dir 的 core.lock；reset 和在线 rotate 同步更新凭据文件与摘要、递增认证代次并撤销全部旧会话，文件或数据库更新失败时恢复旧文件并返回完整错误。
+- 本机 WebUI 通过 `POST /api/auth/bootstrap` 领取待确认代次的 token 并建立会话；校验直接连接为 loopback、受控回环 Host（localhost 或回环 IP）、同源 Origin，并拒绝转发头。代理或远程访问沿用普通登录。`POST /api/auth/bootstrap/confirm` 校验会话及 CSRF 后将当前认证代次以 0600 权限原子写入 `<data_dir>/admin_token.confirmed`。已确认代次拒绝领取；reset/rotate 的新代次重新待确认。未确认时刷新可继续领取；响应 `Cache-Control: no-store`，前端只在内存展示，复制后由“我已保存”显式确认；确认成功清空明文进入管理页，失败保留展示和错误。
 - 浏览器通过 POST `/api/auth/login` 提交 token，Core 验证 Origin/登录 CSRF 后恒时比较摘要，成功签发随机的、固定 **8h** 到期的管理会话。登出撤销该会话及其派生授权；会话检查同时校验认证代次。修改管理状态继续采用 §7.3 的 Cookie/CSRF 规则，明文查看 secret 使用当前 token 再认证。
 - Core 运行时可经管理认证及当前 token 再认证调用 `POST /api/auth/token/rotate`（ADMIN-API §20，D-164）。替换凭证、递增认证代次与撤销全部管理会话在同一事务完成；响应清除会话 Cookie，只交付一次新 token。之后使用新 token 登录或发起 Bearer 请求。
-- 管理 CLI 仅使用用户显式配置的 Bearer token 访问 Core，不从插件环境继承凭证；该认证不依赖浏览器 Cookie。非 loopback 的管理入口必须 HTTPS，可由已配置可信反代终止 TLS；纯本机 loopback 开发允许 HTTP。Core 管理 token 与聊天事件中的 Core Admin 列表是不同入口，平台角色不能兑换管理会话。
+- 管理 CLI 从 `--data-dir`（缺省 `./data`）读取持久凭据和实例设置，使用 Bearer 认证。默认直连本机 `listen`，请求 Host 保留 `base_url` 的受控主机；`--admin-url` 覆盖本机连接地址，跨机器通过 SSH 或 docker exec 操作。WebUI 的远程入口使用 HTTPS，纯本机允许 HTTP。
 
 ### 7.5 组件静态文件
 
@@ -775,7 +776,7 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 任何字符串值都可以写成 `${环境变量}`，启动时展开；变量不存在时该值按不合法处理，按 §5.5 恢复为缺省值并记校正记录（D-161）。敏感值也可以直接写明文，文件权限保护它们。
 - WebUI 与 CLI 修改这些设置时写回该文件（先写临时文件再替换），保留原有的 `${...}` 写法，不把展开后的值写回。手动修改后重启 Core 生效；`alonabot run --reload` 时 Core 监视该文件：`admins`、`command_prefixes`、`reply`、`default_locale`、`log.level`、`log.sources`、`sleep` 与 `adapters` 立即生效（Adapter 只重启变化的实例；`default_locale` 对运行中的插件从它的下一个 Session 起生效），其他键输出 WARN 提示需要重启。启动时文件不是合法的 JSON 对象则拒绝启动并指出位置，其中的值不合法时按 §5.5 校正，不改写文件；运行中重新读取失败时保留当前设置并记 ERROR。管理入口的 `settings.File.Update`/`Reload` 共用受管视图，经 Core 生命周期循环串行发布，与空闲判定读取同一生效策略；包括命令前缀、Prune、BindAdapter 与 PrepareInstances 引发的内部写回。有效 sleep 变化后，调用者在循环及文件锁、插件锁外等待原代次恢复；保存已提交时继续应用新策略，并聚合持久化错误与各插件恢复失败。
 - 调优参数用 `--args` 覆盖（§16）。命令行参数覆盖 `core_config.json` 中的同名项，只对本次运行有效。Core 全局禁止表、插件的命令策略与发信许可等按插件或按用户记录的管理数据仍在状态库，经管理服务修改。缺省只监听本机地址。远程管理有两种方式：经 SSH 隧道访问本机地址，或改为非本机地址并满足 §7.3、§7.4 的 Host、HTTPS 与可信反代要求；容器镜像的例外见 §15.3。
-- 首次启动且尚无管理凭证时按 §7.4 生成管理 token：stdin 与 stderr 都是终端时只在该终端显示一次；不是终端时写入 `<data_dir>/admin_token`，日志只输出该文件的路径。
+- 首次启动统一按 §7.4 将管理凭据持久保存到 `<data_dir>/admin_token`，启动输出仅含地址及文件路径。
 
 ### 15.2 发行包、官方整合包与预装组件
 
@@ -796,14 +797,14 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 - 每个版本发布官方容器镜像 `ghcr.io/alonabot/alonabot:<version>`（同时更新 `latest`），平台为 linux/amd64 与 linux/arm64。镜像从该平台的内部整合归档构建：包含 `alonabot`、`LICENSE`、`source.json`、Agent 与 WebUI 的 `packages/`，另含 CA 证书；不含 shell、Node 或 Python，需要这些运行时的 MCP stdio 服务器须使用自行构建的镜像。
 - 镜像以非 root 用户（UID 10001）运行 `alonabot run --data-dir /data`，数据目录 `/data` 是卷。容器须以 Docker 的 init 运行（`docker run --init` 或 compose 的 `init: true`），由它回收孤儿进程；Core 不承担 PID 1 的回收职责。
 - 镜像设置环境变量 `ALONABOT_CONTAINER=1`，`core_config.json` 的缺省 `listen` 改为 `0.0.0.0:7650`，`base_url` 的缺省值不变（`http://127.0.0.1:7650`）。只有在这个环境变量下，Core 才允许非本机的 listen 搭配本机 http 的 `base_url`；容器的端口只应发布到宿主的本机地址（`127.0.0.1:7650:7650`），Core 启动时为此输出一条 WARN 提示。远程访问按 §15.1 使用 SSH 隧道或 HTTPS 反向代理。Adapter 的凭证可以经 `${环境变量}` 从容器环境传入。
-- 容器首次启动时没有交互终端，Core 把一次性管理 token 写入 `/data/admin_token`（§7.4）。镜像不含 shell，用 `docker compose exec alonabot alonabot admin-token show` 读出它，登录成功后该文件被删除。
+- 容器首次启动将管理凭据持久保存到 `/data/admin_token`。本机 CLI 通过 docker exec 自动读取；远程 WebUI 登录可显式执行 `docker compose exec alonabot alonabot admin-token show`。
 - 仓库根目录的 `Dockerfile` 用多阶段构建产生镜像。`docker-compose.yml` 是官方整合包的 compose 入口，从对应发行 tag 的仓库下载：使用对应版本的官方镜像，包含卷、`init: true` 与只发布到宿主本机的端口；`docker compose up -d` 即可启动，不需要先单独初始化。
 
 ### 15.4 开发运行与热部署
 
 - `alonabot run [目录...] [--reload]` 同时运行开发中的组件（D-77）。每个目录是一个组件工程（含 `plugin.yaml`）；没有给出目录且当前目录有 `plugin.yaml` 时为当前目录。数据目录缺省仍为工作目录下的 `data/`，`alonabot init` 生成的 `.gitignore` 忽略它。
 - 给出开发目录（含缺省的当前目录）时 `--reload` 缺省开启，`--reload=false` 关闭（D-181）。
-- 终端对话（D-181）：`alonabot run` 内置同进程的终端 Adapter（adapter_id 与实例名都是 `console`）。`--console` 缺省为自动，stdin 是终端且 `core_config.json` 没有任何 Adapter 实例时启用；`--console` 强制启用，`--console=false` 关闭。stdin 的每一行作为用户 `console:local` 的私聊 `message.created` 注入，该用户在本次运行中是 Core Admin，不写入设置文件。回复逐条写到 stdout：非文本片段写成方括号占位，按钮按顺序编号，输入 `#<编号>` 点击最近一条带按钮的消息，编辑写成带 `(edited)` 的新行。stdin 结束不停止 Core。启用且没有显式 `--log-level` 时 stderr 只输出 WARN 及以上（§14.2），日志文件不受影响。
+- 终端对话（D-181）：`alonabot run` 内置同进程的终端 Adapter（adapter_id 与实例名都是 `console`）。`--console` 缺省为自动，stdin 是终端且 `core_config.json` 没有任何 Adapter 实例时启用；`--console` 强制启用，`--console=false` 关闭。stdin 的每一行作为用户 `console:local` 的私聊 `message.created` 注入，该用户在本次运行中是 Core Admin，不写入设置文件。回复逐条写到 stdout：非文本片段写成方括号占位，按钮按顺序编号，输入 `#<编号>` 点击最近一条带按钮的消息，编辑写成带 `(edited)` 的新行。stdin 结束不停止 Core。启用且没有显式 `--log-level` 时 stderr 只输出 WARN 及以上（§14.2），日志文件不受影响。 消息和文本日志共用串行输出入口，完整多行记录输出后，等待 stdin 时恰好恢复一个 `> `；文件与 JSON 日志保持原格式。
 - 每个开发组件先按 `alonabot build` 构建到 `<data_dir>/dev/bin/`，再按 manifest 的 `role` 运行：插件、Adapter 与 Agent 以独立进程运行，进程、隔离与有限重启和已安装的组件相同；WebUI 以该目录的 `assets` 为静态根目录，代替已安装的 WebUI，按请求读取文件，不经安装与签名（Admin API 主版本检查照常进行）。构建失败或同一 ID、adapter_id 与已安装的包冲突时，`run` 在启动任何组件前报错退出。
 - 开发组件的规则（`alonabot run` 与库模式 §15.5 相同）：
   - Core 为它们创建 dev 来源的安装记录，不做来源、签名与归档摘要校验，Hello 的 build_digest 使用 Core 为本次运行生成的值；dev 来源的组件不能 update、rollback 或 uninstall。
@@ -854,8 +855,8 @@ Core 只提供 Agent 需要的基础能力，不链接任何 Provider 客户端�
 | 数据目录 | `/var/lib/alonabot` | `~/Library/Application Support/AlonaBot/data` |
 | 服务 | systemd 单元 `alonabot.service`，以系统用户 `alonabot` 运行 `alonabot run --data-dir <数据目录>`，开机启动 | 用户 LaunchAgent `io.github.alonabot`，登录后启动 |
 
-- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档，并使用 GitHub Release API 的资产 SHA256 摘要校验（自定义镜像站下载同一 Release 的 `SHA256SUMS`），不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 并清理旧的相邻 `packages/` 安装介质；自定义镜像站仍提供整合归档时复制其 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），token 只在当前终端显示一次 → 写入服务定义并启动服务。
-- 以 `curl … | sh` 运行时，初始化从 `/dev/tty` 读写终端；没有可用终端时跳过初始化，Core 首次启动时按 §15.1 把一次性 token 写入数据目录的 `admin_token`，脚本输出读取它的命令（`alonabot admin-token show --data-dir <数据目录>`）。
+- 执行顺序：识别 OS/arch → 下载 `--version` 指定的版本（缺省为最新 Release）的发行归档，并使用 GitHub Release API 的资产 SHA256 摘要校验（自定义镜像站下载同一 Release 的 `SHA256SUMS`），不一致时退出且不改动已有安装 → 停止已有服务 → 替换程序目录中的 `alonabot` 并清理旧的相邻 `packages/` 安装介质；自定义镜像站仍提供整合归档时复制其 `packages/` → 以服务的身份运行 `alonabot admin-token init --if-missing`（数据目录尚无管理凭证时初始化），凭据持久保存，输出文件路径 → 写入服务定义并启动服务。
+- 以 `curl … | sh` 运行时，有控制终端则通过 `/dev/tty` 以服务身份初始化；无控制终端时交给 Core 首次启动。此路径兼容已发布 CLI 的终端要求；新 CLI 仅输出凭据路径。脚本输出显式读取命令供远程 WebUI 登录使用。
 - 再次运行即升级：数据目录、`core_config.json` 与已安装组件不变（Core 按 §5.5 校正设置），组件从各自来源独立更新；自定义整合归档中的更高版本组件按 §15.2 列为可用更新。`--uninstall` 停止并删除服务定义与程序目录，保留数据目录并输出其路径。
 - 只经 HTTPS 下载。官方归档与摘要来自同一 GitHub Release，自定义镜像站使用同版本的 `SHA256SUMS` 校验下载完整性；自定义整合归档内的组件包仍由 Core 按 §9.2 验签。脚本不修改防火墙、反向代理与 `core_config.json`，Core 缺省只监听本机（§15.1）。
 

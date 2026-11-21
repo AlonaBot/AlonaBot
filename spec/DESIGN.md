@@ -276,7 +276,7 @@ if m := p.Config().Template("music"); m.Key() == "netease" {
 
 ## K. WebUI、安装与运行安全
 
-WebUI 是可替换的组件（§T），静态文件由 Core 提供，也可带使用 SDK 的 Go 进程；通过带主版本号的 Admin API 管理 Core（CONTRACTS §7.5）。官方 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次启动生成管理 token（终端中显示一次，非终端时写入数据目录的 `admin_token`）、admin-token init/show/reset、浏览器登录与 CLI Bearer 按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
+WebUI 是可替换的组件（§T），静态文件由 Core 提供，也可带使用 SDK 的 Go 进程；通过带主版本号的 Admin API 管理 Core（CONTRACTS §7.5）。官方 WebUI 提供状态/日志、安装启停、更新/恢复、配置表单与命令权限。管理 API 采用 Core 的管理员认证、CSRF 与独立 Session；首次启动生成管理 token，以 0600 权限持久保存在数据目录的 `admin_token`，启动只输出文件位置。管理 CLI 自动读取所选 `--data-dir` 的凭据；admin-token init/show/reset、浏览器首次领取确认与常规登录按 CONTRACTS §7.4 实现；插件页面不会收到管理 Cookie。没有可信来源/合法归档就不执行程序，首次信任与后续更新绑定持久化。
 
 环境变量只传该插件所需信息，SDK 将日志标记 plugin/session/route/call；secret 原文不进入普通日志。工作目录与进程隔离不是 OS 权限隔离，首发只支持可信 Native 插件。进程树按 Linux/macOS/Windows 的合作型子进程机制回收，验证不涵盖恶意 detach。
 

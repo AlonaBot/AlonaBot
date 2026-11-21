@@ -301,7 +301,7 @@ EOF_LAUNCHD
     launchctl bootstrap "$domain" "$service_file"
 fi
 printf 'Installed AlonaBot %s. Data directory: %s\n' "$version" "$data_dir"
-printf 'If %s/admin_token exists, retrieve the first token with:\n' "$data_dir"
+printf 'If %s/admin_token exists, retrieve the token for remote WebUI login with:\n' "$data_dir"
 if [ "$os" = linux ]; then
     printf '  runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /var/lib/alonabot\n'
 else
@@ -309,4 +309,4 @@ else
     quoted_program=$(printf '%s' "$program_dir" | sed "s/'/'\\\\''/g")
     printf "  '%s/alonabot' admin-token show --data-dir '%s/data'\n" "$quoted_program" "$quoted_program"
 fi
-printf 'The first token file is deleted after the first successful login.\n'
+printf 'Local management commands read this persistent file automatically.\n'

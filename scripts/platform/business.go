@@ -175,12 +175,8 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 		return errors.New("login did not establish one cookie and a CSRF token")
 	}
 	session.csrf = login.CSRFToken
-	if _, err := os.Stat(filepath.Join(r.DataDir, firstTokenFile)); !errors.Is(err, os.ErrNotExist) {
-		return errors.Join(errors.New("first token file remains after login"), err)
-	}
-	cliToken := filepath.Join(r.Workspace, "cli-token")
-	if err := os.WriteFile(cliToken, []byte(token), privateFileMode); err != nil {
-		return err
+	if _, err := os.Stat(filepath.Join(r.DataDir, firstTokenFile)); err != nil {
+		return errors.Join(errors.New("admin token file missing after login"), err)
 	}
 	// 3. 动态监听地址沿用集成测试的 Host 转发器，认证仍由真实 Core 完成。
 	cli, err := session.cliProxy()
@@ -189,7 +185,7 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 	}
 	defer cli.Close()
 	for _, id := range ids {
-		if err := r.command(ctx, "install_"+id, opt.core, "install", archives[id], "--yes", "--admin-url", cli.URL, "--token-file", cliToken); err != nil {
+		if err := r.command(ctx, "install_"+id, opt.core, "install", archives[id], "--yes", "--admin-url", cli.URL, "--data-dir", r.DataDir); err != nil {
 			return err
 		}
 		if _, err := session.request(ctx, "enable_"+id, http.MethodPost, "/api/v1/packages/enable", map[string]string{"id": id}, http.StatusOK, false); err != nil {
@@ -276,7 +272,7 @@ func (r *report) business(ctx context.Context, opt options) (err error) {
 		return err
 	}
 	if r.CGO != nil {
-		return r.runCGO(ctx, opt, session, ids, cliToken)
+		return r.runCGO(ctx, opt, session, ids)
 	}
 	return nil
 }

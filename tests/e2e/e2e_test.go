@@ -164,8 +164,7 @@ func (c *core) management(t *testing.T, dir, token string, args ...string) strin
 	proxy.Director = func(r *http.Request) { director(r); r.Host = baseURL.Host }
 	server := httptest.NewServer(proxy)
 	defer server.Close()
-	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--admin-url", server.URL)...)
-	command.Env = append(os.Environ(), "ALONABOT_ADMIN_TOKEN="+token)
+	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--data-dir", dir, "--admin-url", server.URL)...)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("management %v: %v\n%s\nCore:\n%s", args, err, output, c.log())
@@ -516,26 +515,24 @@ func TestUnknownSettingIgnored(t *testing.T) {
 	}
 }
 
-// TestAdminTokenRequiresTerminal 验证非终端命令以 usage 退出且没有初始化凭证。
-func TestAdminTokenRequiresTerminal(t *testing.T) {
+// TestAdminTokenOffline 验证非终端初始化和重置只输出结果，凭据留在文件中。
+func TestAdminTokenOffline(t *testing.T) {
+	dir := t.TempDir()
+	previous := ""
 	for _, action := range []string{"init", "reset"} {
-		t.Run(action, func(t *testing.T) {
-			dir := t.TempDir()
-			command := exec.Command(filepath.Join(binDir, "alonabot"), "admin-token", action, "--data-dir", dir)
-			output, err := command.CombinedOutput()
-			if err == nil || command.ProcessState.ExitCode() != exitUsage || !strings.Contains(string(output), "stdin and stderr to be terminals") {
-				t.Fatalf("non-terminal %s: err=%v, output=%s", action, err, output)
-			}
-			store, err := state.Open(context.Background(), dir)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, readErr := store.AdminCredential(context.Background())
-			closeErr := store.Close()
-			if !errors.Is(readErr, state.ErrNotFound) || closeErr != nil {
-				t.Fatalf("credential after non-terminal %s: read=%v, close=%v", action, readErr, closeErr)
-			}
-		})
+		output, err := exec.Command(filepath.Join(binDir, "alonabot"), "admin-token", action, "--data-dir", dir).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: %v %s", action, err, output)
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, "admin_token"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := strings.TrimSpace(string(raw))
+		if token == "" || token == previous || bytes.Contains(output, []byte(token)) {
+			t.Fatalf("%s failed credential delivery", action)
+		}
+		previous = token
 	}
 }
 
@@ -577,7 +574,7 @@ func TestAdminAuthRun(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				token, err = adminauth.InitToken(context.Background(), store)
+				token, err = adminauth.InitToken(context.Background(), store, dir)
 				closeErr := store.Close()
 				if err != nil || closeErr != nil {
 					t.Fatalf("prepare credential: %v; close: %v", err, closeErr)
@@ -838,13 +835,13 @@ func TestFirstAdminToken(t *testing.T) {
 	if response.StatusCode != http.StatusOK || len(response.Cookies()) != 1 {
 		t.Fatalf("login: status=%d body=%s", response.StatusCode, content)
 	}
-	if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(name); err != nil {
 		t.Fatalf("first token file after login: %v", err)
 	}
 
 	command = exec.Command(binary, "admin-token", "show", "--data-dir", dir)
 	output, err = command.CombinedOutput()
-	if err == nil || command.ProcessState.ExitCode() != exitFailure || !strings.Contains(string(output), "read first admin token file") {
+	if err != nil || strings.TrimSpace(string(output)) != token {
 		t.Fatalf("show after login: err=%v output=%s", err, output)
 	}
 	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {

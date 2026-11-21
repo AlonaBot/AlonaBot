@@ -116,8 +116,7 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 	defer server.Close()
 	cli := func(args ...string) []byte {
 		t.Helper()
-		command := exec.CommandContext(t.Context(), binary, append(args, "--admin-url", server.URL)...)
-		command.Env = append(os.Environ(), "ALONABOT_ADMIN_TOKEN="+token)
+		command := exec.CommandContext(t.Context(), binary, append(args, "--data-dir", data, "--admin-url", server.URL)...)
 		output, err := command.CombinedOutput()
 		if err != nil {
 			t.Fatalf("CLI %v: %v\n%s\n%s", args, err, output, c.log())
@@ -157,13 +156,13 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 	} else if strings.Contains(c.log(), `"msg":"plugin activated"`) {
 		t.Fatalf("unexpected component process:\n%s", c.log())
 	}
-	// 2. 登录领取凭证后删除文件；卸载选择跨真实进程重启保留。
+	// 2. 登录后保留持久凭据；卸载选择跨真实进程重启保留。
 	input, err := json.Marshal(map[string]string{"token": token})
 	if err != nil {
 		t.Fatal(err)
 	}
 	call(http.MethodPost, "/api/auth/login", string(input))
-	if _, err := os.Stat(tokenFile); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(tokenFile); err != nil {
 		t.Fatalf("token file after login: %v", err)
 	}
 	if bundle {

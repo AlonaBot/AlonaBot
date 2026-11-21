@@ -1607,12 +1607,8 @@ func lastSession(t *testing.T, c *core) string {
 
 func managementFailure(t *testing.T, c *core, dir string, args ...string) string {
 	t.Helper()
-	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--admin-url", "http://"+c.address())...)
-	command.Env = append(os.Environ(), "ALONABOT_ADMIN_TOKEN="+strings.TrimSpace(string(token)))
+
+	command := exec.Command(filepath.Join(binDir, "alonabot"), append(args, "--data-dir", dir, "--admin-url", "http://"+c.address())...)
 	output, err := command.CombinedOutput()
 	if err == nil {
 		t.Fatalf("command unexpectedly succeeded: %v: %s", args, output)

@@ -119,12 +119,8 @@ func TestLogManagement(t *testing.T) {
 		c.management(t, dir, "", "log-level", "global", "debug")
 	})
 	// follow 直接取得快照，再观察一次请求触发的新日志。
-	token, err := os.ReadFile(filepath.Join(dir, "admin_token"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	follow := exec.Command(filepath.Join(binDir, "alonabot"), "logs", "--follow", "--source", "log-fixture", "--admin-url", "http://"+c.address())
-	follow.Env = append(os.Environ(), "ALONABOT_ADMIN_TOKEN="+strings.TrimSpace(string(token)))
+
+	follow := exec.Command(filepath.Join(binDir, "alonabot"), "logs", "--follow", "--source", "log-fixture", "--data-dir", dir, "--admin-url", "http://"+c.address())
 	stdout, err := follow.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

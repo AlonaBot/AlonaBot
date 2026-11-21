@@ -39,7 +39,7 @@ func TestToolPolicyIdentities(t *testing.T) {
 	if err := store.AddInstall(t.Context(), state.Install{PluginID: "demo", Role: state.RolePlugin, BuildDigest: []byte{}}); err != nil {
 		t.Fatal(err)
 	}
-	token, err := adminauth.InitToken(t.Context(), store)
+	token, err := adminauth.InitToken(t.Context(), store, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

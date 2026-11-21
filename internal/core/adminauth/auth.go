@@ -6,13 +6,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -42,7 +40,7 @@ type Auth struct {
 
 // New 使用已校验的管理 Base URL 构造认证入口。
 // HTTPS 决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
-// 登录成功时删除 dataDir 下的首次 token 文件。
+// dataDir 下的凭据文件供本机 CLI 和首次领取读取。
 func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth {
 	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, FirstTokenFile)}
 }
@@ -50,6 +48,8 @@ func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir s
 // Routes 注册受控主机上的登录、当前会话、登出与令牌更换接口。
 func (a *Auth) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("POST /api/auth/bootstrap", a.bootstrap)
+	mux.HandleFunc("POST /api/auth/bootstrap/confirm", a.confirmBootstrap)
 	mux.HandleFunc("GET /api/auth/session", a.currentSession)
 	mux.Handle("POST /api/auth/logout", a.Require(http.HandlerFunc(a.logout)))
 	mux.Handle("POST /api/auth/token/rotate", a.Require(http.HandlerFunc(a.rotateToken)))
@@ -193,12 +193,6 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	if err := a.store.CreateAdminSession(r.Context(), session, now.UnixMilli()); err != nil {
 		a.loginFailed(r)
 		a.respondError(w, err)
-		return
-	}
-	// 3. 文件删除失败时撤销尚未交付的会话，保留 token 以便修复后重新登录。
-	if err := os.Remove(a.firstTokenPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		a.loginFailed(r)
-		a.respondError(w, errors.Join(fmt.Errorf("remove first admin token file: %w", err), a.store.DeleteAdminSession(r.Context(), session.SessionID)))
 		return
 	}
 	cookie := a.cookie(session.SessionID)

@@ -100,6 +100,7 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 	if _, enabled := options.RuntimeAdapters[consoleAdapterID]; enabled {
 		console = &consoleAdapter{input: os.Stdin, output: os.Stdout, terminal: isTerminal(os.Stdout), inputTerminal: isTerminal(os.Stdin)}
 		options.Components = append(options.Components, app.AdapterComponent(console))
+		options.ConsoleOutput = consoleLogWriter{console, os.Stderr}
 	}
 	core, err := app.Start(ctx, options)
 	if err == context.Canceled {

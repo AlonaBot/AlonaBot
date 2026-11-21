@@ -73,6 +73,7 @@ type Options struct {
 	Level       slog.Level  // 全局级别
 	StderrLevel *slog.Level // stderr 的额外阈值；nil 时只按全局与来源级别过滤。
 	// Stderr 是 Core 的 stderr。它是终端且未设置 NO_COLOR 时，控制台格式才着色。
+	ConsoleOutput io.Writer // 可选文本输出协调器；颜色仍由 Stderr 决定。
 	Stderr        io.Writer
 	BufferRecords int // 每个来源的记录与每个订阅的后续发送队列上限，必须为正。
 }
@@ -94,7 +95,11 @@ func Open(opt Options) (*Output, error) {
 	var stderr slog.Handler
 	switch opt.Format {
 	case FormatText:
-		stderr = newConsoleHandler(opt.Stderr, colorEnabled(opt.Stderr))
+		writer := opt.Stderr
+		if opt.ConsoleOutput != nil {
+			writer = opt.ConsoleOutput
+		}
+		stderr = newConsoleHandler(writer, colorEnabled(opt.Stderr))
 	case FormatJSON:
 		stderr = slog.NewJSONHandler(opt.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.Level(math.MinInt), ReplaceAttr: logLevelAttr})
 	default:
