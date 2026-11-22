@@ -440,11 +440,11 @@ go test -race -count=2 ./plugintest/... ./examples/plugins/...
 
 ```go
 p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
-    text, err := llm.Ask(c, prompt)
+    response, err := llm.Generate(c, llm.Request{Messages: []llm.Message{{Role: "user", Text: prompt}}})
     if err != nil {
         return nil, err
     }
-    return message.Text(text), nil
+    return message.Text(response.Text), nil
 })
 ```
 
@@ -470,7 +470,7 @@ func TestLLMReply(t *testing.T) {
                 return llm.Response{}, errcode.InvalidArgument.New("unexpected prompt")
             }
             return llm.Response{
-                Text: "fixed answer", Provider: "synthetic", Model: "test-model",
+                Text: "fixed answer", Model: "test-model",
                 InputTokens: nil, OutputTokens: nil,
             }, nil
         }))
@@ -515,3 +515,7 @@ The Core→Adapter service `adapter.command.menu` handles set/get/delete; plugin
 The shared messages are `CommandMenuRequest{instance_id=1, operation=2, menu=3}`, `CommandMenu{scope=1, language_code=2, commands=3}`, `CommandMenuScope{type=1, chat_id=2, user_id=3}`, `CommandMenuEntry{name=1, description=2}`, `CommandMenuResponse{commands=1, config=2, ready=3, last_error=4, positions=5}` and `CommandMenuPosition{scope=1, language_code=2, mode=3, owner_plugin_id=4}`. commands and positions are repeated. Scope types are default/chat/chat_administrators/chat_member; plugins use the last three, without threads.
 
 `EventPayload.kind` adds command_menu_ready=13, with string fields adapter_id=1, adapter_instance_id=2, account_id=3 and chat_id=4. Core targets `bot.command_menu_ready`; an empty chat_id indicates instance manual readiness, otherwise chat availability. Adapter-reported standard events retain the existing allowlist. See the [Adapter protocol](../contracts/proto/alonabot/v1/adapter.proto), [routes](../contracts/proto/alonabot/v1/route.proto) and [messages](../contracts/proto/alonabot/v1/message.proto) for definitions, and [command menus](plugin-guide.md#command-menus) for lifecycle and permission rules.
+
+## Agent, streaming services and lifecycle API
+
+[Complete parameters, capability status, eight hook stages and Goal recovery](agent-api.md).

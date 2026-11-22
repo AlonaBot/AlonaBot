@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -38,7 +39,7 @@ type Spec[In, Out any] struct {
 	encoding pb.PayloadEncoding
 }
 
-// JSON 声明完整目标的 JSON 服务，Schema 由生成器提供。
+// JSON 声明 JSON 服务；调用使用完整目标，服务端可用 /name 绑定本插件身份，Schema 由生成器提供。
 func JSON[In, Out any](target string) Spec[In, Out] {
 	return Spec[In, Out]{target: target, encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON}
 }
@@ -64,6 +65,9 @@ func Serve[In, Out any](owner sdk.Registrar, declaration Spec[In, Out]) *Builder
 	scope.Check()
 	_, name, _ := strings.Cut(declaration.target, "/")
 	b := &registry.ServiceBuilder[*sdk.Context, sdk.Permission]{Scope: scope, Target: declaration.target, Name: name, Encoding: declaration.encoding}
+	if strings.HasPrefix(declaration.target, "/") {
+		b.Target = ""
+	}
 	s := &Builder[In, Out]{builder: b}
 	b.Prepare = func() (registry.Service[*sdk.Context], error) {
 		if s.effectBeforeTool {
@@ -119,19 +123,16 @@ func (s *Builder[In, Out]) prepareJSON() (registry.Service[*sdk.Context], error)
 		if err := json.Unmarshal(data, &input); err != nil {
 			return nil, &sdk.Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
 		}
-		out, err := handler(c, input)
-		if err != nil {
-			return nil, err
-		}
+		out, handlerErr := handler(c, input)
 		encoded, err := json.Marshal(out)
 		if err != nil {
-			return nil, fmt.Errorf("encode service output: %w", err)
+			return nil, errors.Join(handlerErr, fmt.Errorf("encode service output: %w", err))
 		}
 		if err := registry.ValidateJSON(outputSchema, encoded); err != nil {
 			c.Logger().Error("service output schema validation failed", "schema_id", outputID)
-			return nil, &sdk.Error{Code: errcode.Internal, Message: "invalid service output"}
+			return nil, errors.Join(handlerErr, &sdk.Error{Code: errcode.Internal, Message: "invalid service output"})
 		}
-		return encoded, nil
+		return encoded, handlerErr
 	})
 	// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给注册收集阶段。
 	if s.toolDescription != nil {
@@ -162,15 +163,12 @@ func (s *Builder[In, Out]) prepareProto() (registry.Service[*sdk.Context], error
 		if err := proto.Unmarshal(data, input); err != nil {
 			return nil, &sdk.Error{Code: errcode.InvalidArgument, Message: "decode service input: " + err.Error()}
 		}
-		output, err := handler(c, input.(In))
-		if err != nil {
-			return nil, err
-		}
+		output, handlerErr := handler(c, input.(In))
 		encoded, err := proto.Marshal(any(output).(proto.Message))
 		if err != nil {
-			return nil, fmt.Errorf("encode service output: %w", err)
+			return nil, errors.Join(handlerErr, fmt.Errorf("encode service output: %w", err))
 		}
-		return encoded, nil
+		return encoded, handlerErr
 	}), nil
 }
 
@@ -273,23 +271,54 @@ func (s Spec[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 		registry.Logger(ctx).DebugContext(ctx, "service input schema validation failed", "target", s.target, "schema_id", inputID)
 		return out, errcode.InvalidArgument.Errorf("invalid service input for %q", s.target)
 	}
-	response, err := registry.Call(ctx, session, s.target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded})
-	if err != nil {
-		return out, err
+	target := s.target
+	payload := wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded}
+	if stream, ok := ctx.Value(streamCallKey{}).(streamCall); ok {
+		request := &pb.ServiceStreamCallRequest{Target: target, StreamId: stream.id, Encoding: payload.Encoding, SchemaId: inputID, SchemaVersion: inputVersion, Payload: encoded}
+		data, err := proto.Marshal(request)
+		if err != nil {
+			return out, err
+		}
+		payload = wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: data}
+		target = "core.service.stream.call"
+	}
+	response, callErr := registry.Call(ctx, session, target, payload)
+	if response.SchemaID == "" && callErr != nil {
+		return out, callErr
 	}
 	if response.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON || response.SchemaID != outputID || response.SchemaVersion != outputVersion {
-		return out, &sdk.Error{Code: errcode.Internal, Message: "expected JSON service output"}
+		return out, errors.Join(callErr, errcode.Internal.New("expected JSON service output"))
 	}
 	if err := registry.ValidateJSON(outputSchema, response.Bytes); err != nil {
 		registry.Logger(ctx).DebugContext(ctx, "service output schema validation failed", "target", s.target, "schema_id", outputID)
-		return out, errcode.Internal.Errorf("invalid service output for %q", s.target)
+		return out, errors.Join(callErr, errcode.Internal.Errorf("invalid service output for %q", s.target))
 	}
 	if err := json.Unmarshal(response.Bytes, &out); err != nil {
-		return out, &sdk.Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
+		return out, errors.Join(callErr, &sdk.Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()})
 	}
-	return out, nil
+	return out, callErr
 }
 
 func (s Spec[In, Out]) callProto(ctx context.Context, in In) (Out, error) {
 	return registry.Proto[In, Out](s.target).Call(ctx, in)
+}
+
+// Reentrant 允许通过显式声明的服务回调当前插件；调用仍受授权与深度检查。
+func (s *Builder[In, Out]) Reentrant() *Builder[In, Out] {
+	s.builder.Scope.Check()
+	if s.builder.Handles != 0 {
+		s.builder.AfterHandle = true
+	}
+	s.builder.Reentrant = true
+	return s
+}
+
+// Priority 设置发现与执行排序，数值越小越先。
+func (s *Builder[In, Out]) Priority(priority int32) *Builder[In, Out] {
+	s.builder.Scope.Check()
+	if s.builder.Handles != 0 {
+		s.builder.AfterHandle = true
+	}
+	s.builder.Priority = priority
+	return s
 }

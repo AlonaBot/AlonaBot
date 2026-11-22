@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -60,13 +61,13 @@ func (s ProtoSpec[In, Out]) Call(ctx context.Context, in In) (Out, error) {
 	if err != nil {
 		return zero, &errcode.Error{Code: errcode.InvalidArgument, Message: "encode service input: " + err.Error()}
 	}
-	response, err := Call(ctx, session, s.target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(input), SchemaVersion: SchemaVersion, Bytes: encoded})
-	if err != nil {
-		return zero, err
+	response, callErr := Call(ctx, session, s.target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(input), SchemaVersion: SchemaVersion, Bytes: encoded})
+	if response.SchemaID == "" && callErr != nil {
+		return zero, callErr
 	}
 	out := NewMessage[Out]()
 	if err := Decode(response, out); err != nil {
-		return zero, &errcode.Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()}
+		return zero, errors.Join(callErr, &errcode.Error{Code: errcode.Internal, Message: "decode service output: " + err.Error()})
 	}
-	return out.(Out), nil
+	return out.(Out), callErr
 }

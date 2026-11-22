@@ -109,6 +109,8 @@ message ServiceInvocation {
   uint32 schema_version = 5;
   // 业务载荷。
   bytes payload = 6;
+  // 流式调用的不透明关联 ID，由 Core 绑定真实在途父调用。
+  string stream_id = 7;
 }
 
 // Propagation 决定事件是否继续传给后续 Handler。

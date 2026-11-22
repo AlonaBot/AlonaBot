@@ -1588,8 +1588,13 @@ type ServiceSpec struct {
 	Tool *ToolSpec `protobuf:"bytes,5,opt,name=tool,proto3" json:"tool,omitempty"`
 	// 固定 Schema、仅 Core 与本组件可调用的配置选项来源。
 	OptionsSource bool `protobuf:"varint,6,opt,name=options_source,json=optionsSource,proto3" json:"options_source,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// 显式允许受控回调重入，须协商 service_reentrant@1。
+	Reentrant bool `protobuf:"varint,7,opt,name=reentrant,proto3" json:"reentrant,omitempty"`
+	// 流式增量声明，须协商 service_stream@1。
+	DeltaSchemaId      string `protobuf:"bytes,8,opt,name=delta_schema_id,json=deltaSchemaId,proto3" json:"delta_schema_id,omitempty"`
+	DeltaSchemaVersion uint32 `protobuf:"varint,9,opt,name=delta_schema_version,json=deltaSchemaVersion,proto3" json:"delta_schema_version,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ServiceSpec) Reset() {
@@ -1662,6 +1667,27 @@ func (x *ServiceSpec) GetOptionsSource() bool {
 		return x.OptionsSource
 	}
 	return false
+}
+
+func (x *ServiceSpec) GetReentrant() bool {
+	if x != nil {
+		return x.Reentrant
+	}
+	return false
+}
+
+func (x *ServiceSpec) GetDeltaSchemaId() string {
+	if x != nil {
+		return x.DeltaSchemaId
+	}
+	return ""
+}
+
+func (x *ServiceSpec) GetDeltaSchemaVersion() uint32 {
+	if x != nil {
+		return x.DeltaSchemaVersion
+	}
+	return 0
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
@@ -2058,14 +2084,17 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x0ftriggers_config\x18\x04 \x01(\tR\x0etriggersConfig\"d\n" +
 	"\bHookSpec\x12,\n" +
 	"\x05phase\x18\x01 \x01(\x0e2\x16.alonabot.v1.HookPhaseR\x05phase\x12*\n" +
-	"\x11event_type_filter\x18\x02 \x03(\tR\x0feventTypeFilter\"\xa2\x02\n" +
+	"\x11event_type_filter\x18\x02 \x03(\tR\x0feventTypeFilter\"\x9a\x03\n" +
 	"\vServiceSpec\x12!\n" +
 	"\fservice_name\x18\x01 \x01(\tR\vserviceName\x122\n" +
 	"\x06access\x18\x02 \x01(\x0e2\x1a.alonabot.v1.ServiceAccessR\x06access\x120\n" +
 	"\x14allowlist_plugin_ids\x18\x03 \x03(\tR\x12allowlistPluginIds\x128\n" +
 	"\bencoding\x18\x04 \x01(\x0e2\x1c.alonabot.v1.PayloadEncodingR\bencoding\x12)\n" +
 	"\x04tool\x18\x05 \x01(\v2\x15.alonabot.v1.ToolSpecR\x04tool\x12%\n" +
-	"\x0eoptions_source\x18\x06 \x01(\bR\roptionsSource\"\xad\x01\n" +
+	"\x0eoptions_source\x18\x06 \x01(\bR\roptionsSource\x12\x1c\n" +
+	"\treentrant\x18\a \x01(\bR\treentrant\x12&\n" +
+	"\x0fdelta_schema_id\x18\b \x01(\tR\rdeltaSchemaId\x120\n" +
+	"\x14delta_schema_version\x18\t \x01(\rR\x12deltaSchemaVersion\"\xad\x01\n" +
 	"\fScheduleSpec\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
 	"\x04cron\x18\x02 \x01(\tH\x00R\x04cron\x12!\n" +

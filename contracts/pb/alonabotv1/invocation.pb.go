@@ -739,7 +739,9 @@ type ServiceInvocation struct {
 	// 业务载荷的契约版本。
 	SchemaVersion uint32 `protobuf:"varint,5,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	// 业务载荷。
-	Payload       []byte `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload []byte `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
+	// 流式调用的不透明关联 ID，由 Core 绑定真实在途父调用。
+	StreamId      string `protobuf:"bytes,7,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -814,6 +816,13 @@ func (x *ServiceInvocation) GetPayload() []byte {
 		return x.Payload
 	}
 	return nil
+}
+
+func (x *ServiceInvocation) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
 }
 
 // HandlerOutcome 描述 Handler 的结果；错误放在 Envelope.error，可与本结果并存以保留传播标记。
@@ -1327,14 +1336,15 @@ const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\auser_id\x18\x06 \x01(\tH\x00R\x06userId\x121\n" +
 	"\x05image\x18\a \x01(\v2\x19.alonabot.v1.ImageSegmentH\x00R\x05image\x125\n" +
 	"\amessage\x18\b \x01(\v2\x19.alonabot.v1.MessageChainH\x00R\amessageB\a\n" +
-	"\x05value\"\x80\x02\n" +
+	"\x05value\"\x9d\x02\n" +
 	"\x11ServiceInvocation\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
 	"\acontext\x18\x02 \x01(\v2\x1e.alonabot.v1.InvocationContextR\acontext\x128\n" +
 	"\bencoding\x18\x03 \x01(\x0e2\x1c.alonabot.v1.PayloadEncodingR\bencoding\x12\x1b\n" +
 	"\tschema_id\x18\x04 \x01(\tR\bschemaId\x12%\n" +
 	"\x0eschema_version\x18\x05 \x01(\rR\rschemaVersion\x12\x18\n" +
-	"\apayload\x18\x06 \x01(\fR\apayload\"\x97\x01\n" +
+	"\apayload\x18\x06 \x01(\fR\apayload\x12\x1b\n" +
+	"\tstream_id\x18\a \x01(\tR\bstreamId\"\x97\x01\n" +
 	"\x0eHandlerOutcome\x12\x18\n" +
 	"\amatched\x18\x01 \x01(\bR\amatched\x12:\n" +
 	"\vpropagation\x18\x02 \x01(\x0e2\x18.alonabot.v1.PropagationR\vpropagation\x12/\n" +
