@@ -239,7 +239,7 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Active configuration | `GET /api/v1/plugins/{id}/config`; inspect `corrections` and `unknown` |
 | Edit Pending | `PUT`/`PATCH /api/v1/plugins/{id}/config/pending` with `base_generation` and full `config` or RFC 7396 `patch`; `DELETE` discards Pending |
 | Import and apply | `POST /api/v1/plugins/{id}/config/import` reads editable config.json into Pending; `POST /api/v1/plugins/{id}/reload` prepares/commits it |
-| Adapter instances | `GET /api/v1/adapter/instances`; `POST /api/v1/adapter/instances/{create,start,stop,delete}`; create uses `package_id`, `instance_id`, `config`, optional `confirm`, others use `instance_id` |
+| Adapter instances | `GET /api/v1/adapter/instances`; `POST /api/v1/adapter/instances/{create,start,stop,delete}`; create uses `package_id`, `instance_id`, `config`, optional `confirm`, others use `instance_id`; each listed instance has `package_state`: `enabled`, `disabled` or `not_installed` (not installed or uninstalled, configuration retained) for its Adapter component |
 | Instance configuration | `GET /api/v1/adapters/{adapter_id}/instance-schema`; `GET`/`PUT`/`DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}`; PUT uses `{"config":{}}` |
 | Logs | `GET /api/v1/logs/recent`, `/stream` (SSE), `/history?date=YYYY-MM-DD`; optional `source`, `level`, `trace`; `GET`/`PUT /api/v1/logs/levels` uses `{"global":"info","sources":{}}` partial updates |
 | Profiles | `GET`/`POST /api/v1/profiles`; `PATCH`/`DELETE /api/v1/profiles/{id}`; assignments, plugin, platform and tool overrides are in [profile routes](../internal/core/manage/profile_api.go) |

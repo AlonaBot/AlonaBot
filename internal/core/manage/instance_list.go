@@ -9,13 +9,21 @@ import (
 )
 
 type instanceSummary struct {
-	InstanceID string `json:"instance_id"`
-	AdapterID  string `json:"adapter_id"`
-	PackageID  string `json:"package_id"`
-	State      string `json:"state"`
-	SafeError  string `json:"safe_error"`
-	Default    bool   `json:"default"`
+	InstanceID   string `json:"instance_id"`
+	AdapterID    string `json:"adapter_id"`
+	PackageID    string `json:"package_id"`
+	PackageState string `json:"package_state"` // 所属 Adapter 组件：enabled、disabled，或 not_installed（未安装或已卸载）。
+	State        string `json:"state"`
+	SafeError    string `json:"safe_error"`
+	Default      bool   `json:"default"`
 }
+
+// 实例所属 Adapter 组件的安装状态。停用与普通卸载保留实例配置，读取方据此提示。
+const (
+	packageEnabled      = "enabled"
+	packageDisabled     = "disabled"
+	packageNotInstalled = "not_installed"
+)
 
 func (s *Service) listInstances(w http.ResponseWriter, r *http.Request) {
 	s.instances.Lock()
@@ -38,8 +46,22 @@ func (s *Service) listInstances(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		packageState := packageNotInstalled
+		for _, in := range installs {
+			if in.PluginID == owner && !in.Uninstalled {
+				enabled, err := s.opt.Store.Enabled(r.Context(), owner)
+				if err != nil {
+					respond(w, nil, err)
+					return
+				}
+				packageState = packageDisabled
+				if enabled {
+					packageState = packageEnabled
+				}
+			}
+		}
 		for id := range group.Instances {
-			item := instanceSummary{InstanceID: id, AdapterID: adapterID, PackageID: owner, State: "stopped", Default: defaults[adapterID] == id}
+			item := instanceSummary{InstanceID: id, AdapterID: adapterID, PackageID: owner, PackageState: packageState, State: "stopped", Default: defaults[adapterID] == id}
 			if s.opt.InstanceStatus != nil {
 				item.State, item.SafeError, err = s.opt.InstanceStatus(r.Context(), owner, id)
 				if err != nil {

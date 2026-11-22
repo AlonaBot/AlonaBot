@@ -239,7 +239,7 @@ alonabot sleep-policy my-plugin auto
 | Active 配置 | `GET /api/v1/plugins/{id}/config`，查看 `corrections` 与 `unknown` |
 | 编辑 Pending | `PUT`/`PATCH /api/v1/plugins/{id}/config/pending`，带 `base_generation` 和完整 `config` 或 RFC 7396 `patch`；`DELETE` 丢弃 Pending |
 | 导入与应用 | `POST /api/v1/plugins/{id}/config/import` 将编辑文件导入 Pending；`POST /api/v1/plugins/{id}/reload` 准备并提交 |
-| Adapter 实例 | `GET /api/v1/adapter/instances`；`POST /api/v1/adapter/instances/{create,start,stop,delete}`；create 用 `package_id`、`instance_id`、`config`、可选 `confirm`，其余用 `instance_id` |
+| Adapter 实例 | `GET /api/v1/adapter/instances`；`POST /api/v1/adapter/instances/{create,start,stop,delete}`；create 用 `package_id`、`instance_id`、`config`、可选 `confirm`，其余用 `instance_id`；列表的 `package_state` 为所属 Adapter 组件的 `enabled`、`disabled` 或 `not_installed`（未安装或已卸载，实例配置保留） |
 | 实例配置 | `GET /api/v1/adapters/{adapter_id}/instance-schema`；`GET`/`PUT`/`DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}`；PUT 为 `{"config":{}}` |
 | 日志 | `GET /api/v1/logs/recent`、`/stream`（SSE）、`/history?date=YYYY-MM-DD`，可筛选 `source`、`level`、`trace`；`GET`/`PUT /api/v1/logs/levels` 用 `{"global":"info","sources":{}}` 部分更新 |
 | 配置文件 | `GET`/`POST /api/v1/profiles`；`PATCH`/`DELETE /api/v1/profiles/{id}`；指定、插件、平台、工具覆盖见[配置文件路由](../internal/core/manage/profile_api.go) |
