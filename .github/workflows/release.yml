@@ -100,7 +100,7 @@ jobs:
             --label org.opencontainers.image.source=https://github.com/AlonaBot/AlonaBot \
             --label "org.opencontainers.image.version=${TAG#v}" \
             --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
-            --label org.opencontainers.image.licenses=AGPL-3.0-only \
+            --label org.opencontainers.image.licenses=MIT \
             -t "$image" --load .
           python3 scripts/release-smoke.py --compose dist/bundle/docker-compose.yml --image "$image"
       - name: 推送已验收的平台镜像

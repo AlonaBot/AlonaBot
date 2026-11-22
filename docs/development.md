@@ -92,7 +92,7 @@ go generate ./...
 
 协议源文件位于 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。生成器核对 protoc 版本后重新生成 `contracts/pb/`，protoc-gen-go 通过 `go tool` 定位。
 
-更新 `changelog/v<SemVer>/{en,zh-CN}.md` 后可定点运行 `go generate ./internal/core/manage`，一同交付生成的 `changelog_core.go`。
+日常变更记录在 `changelog/unreleased/{en,zh-CN}.md`；发行准备时按[更新日志格式](../changelog/README.zh-CN.md)整理到 `changelog/v<SemVer>/{en,zh-CN}.md`。生成器按语言原样拼接正式文件，写入 `internal/core/manage/changelog_core.go`；API 从文件内标题提取版本与日期。更新正式日志后运行 `go generate ./internal/core/manage`，一同交付源文件与生成内容。
 
 ## 验证改动
 

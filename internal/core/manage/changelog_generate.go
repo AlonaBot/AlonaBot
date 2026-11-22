@@ -50,7 +50,7 @@ func generate(root string) ([]byte, error) {
 			if strings.TrimSpace(string(raw)) == "" {
 				return nil, fmt.Errorf("%s: Markdown must not be blank", path)
 			}
-			fmt.Fprintf(&markdown, "## [%s]\n\n%s\n", strings.TrimPrefix(name, "v"), raw)
+			fmt.Fprintf(&markdown, "%s\n", raw)
 		}
 		fmt.Fprintf(&source, "%q: %q,\n", locale.tag, markdown.String())
 	}
