@@ -1,0 +1,14 @@
+{
+  "listen": "127.0.0.1:7650",
+  "base_url": "http://127.0.0.1:7650",
+  "command_prefixes": ["/"],
+  "default_locale": "en-US",
+  "adapters": {
+    "devloop": {
+      "package": "alonabot-adapter-devbot",
+      "instances": {
+        "one": {"output": "${DEVBOT_OUTPUT}"}
+      }
+    }
+  }
+}

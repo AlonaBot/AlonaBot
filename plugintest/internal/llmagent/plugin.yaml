@@ -1,0 +1,8 @@
+# 插件测试套件的文本生成 Agent 身份。
+id: plugintest_llm_agent
+name: Plugin test LLM agent
+version: 0.1.0
+author: AlonaBot
+role: agent
+description: Text generation substitute for the plugin test harness
+source: github.com/AlonaBot/AlonaBot

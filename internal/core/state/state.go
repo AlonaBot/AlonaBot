@@ -2,7 +2,7 @@
 //
 // 状态库位于 <data_dir>/state.sqlite，实例锁位于 <data_dir>/core.lock。Open 先取得实例锁，
 // 保证同一个 data_dir 只有一个 Core；已有但无法读取的状态库会报错，不会被重建成空库。
-// 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。规则见 spec/CONTRACTS-v0.1.md §6.1 与 §12.2。
+// 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。
 //
 // Secret 与配置路径随代次保存；正式 Journal 与恢复编排由管理层负责。
 // Unix 核对数据库及 WAL/SHM 的 0600 权限，Windows 为 data_dir 设置当前账号专用的可继承 DACL。
@@ -14,6 +14,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 	"github.com/AlonaBot/AlonaBot/internal/oslock"
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
@@ -35,7 +37,7 @@ const (
 	stateFile = "state.sqlite" // data_dir 下的状态库
 )
 
-// 状态库连接设置（CONTRACTS §6.1），以回读 PRAGMA 时得到的值表示。
+// 状态库连接设置，以回读 PRAGMA 时得到的值表示。
 const (
 	journalModeWAL    = "wal"
 	synchronousFull   = 2
@@ -43,7 +45,7 @@ const (
 	busyTimeoutMillis = 5000
 )
 
-// pragmas 写在 DSN 中，驱动对每个新物理连接都会执行（CONTRACTS §6.1）。
+// pragmas 写在 DSN 中，驱动对每个新物理连接都会执行。
 var pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 var (
@@ -92,6 +94,7 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	// 3. 打开并核对状态库；失败时释放锁。
 	s, err := open(ctx, filepath.Join(dataDir, stateFile))
 	if err != nil {
+		slog.Log(ctx, databaseErrorLevel(err), "state database open or verification failed", "error", err)
 		_ = lock.Unlock()
 		return nil, err
 	}
@@ -126,7 +129,7 @@ func open(ctx context.Context, path string) (*Store, error) {
 			return nil, fmt.Errorf("close new state database %q: %w", path, err)
 		}
 	}
-	db, err := gorm.Open(sqlite.Open(path+"?"+pragmas), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := gorm.Open(sqlite.Open(path+"?"+pragmas), &gorm.Config{Logger: stateLogger{logger.Default.LogMode(logger.Silent)}})
 	if err != nil {
 		return nil, err
 	}
@@ -221,9 +224,11 @@ func preflight(ctx context.Context, path string) error {
 //go:embed schema.sql
 var initialSchema string
 
-// migrations 按顺序执行，版本号即下标加 1。首次发布前只有初始这一条，schema 改动直接写在其中，
-// 不追加迁移（编码规范「首次发布前不写兼容层」）。
-var migrations = []string{initialSchema}
+//go:embed command_menu.sql
+var commandMenuSchema string
+
+// migrations 保留已发布的初始迁移，后续结构按下标顺序追加。
+var migrations = []string{initialSchema, commandMenuSchema}
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
 func (s *Store) migrate(ctx context.Context, fresh bool) error {
@@ -253,8 +258,17 @@ func (s *Store) migrate(ctx context.Context, fresh bool) error {
 }
 
 // tx 在一个事务中执行 fn：fn 返回错误时回滚，否则提交。
-func (s *Store) tx(ctx context.Context, fn func(*gorm.DB) error) error {
-	return s.db.WithContext(ctx).Transaction(fn)
+func (s *Store) tx(ctx context.Context, fn func(*gorm.DB) error, opts ...*sql.TxOptions) error {
+	var operationErr error
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		operationErr = fn(tx)
+		return operationErr
+	}, opts...)
+	// SQL 执行错误已由 Trace 记录；这里记录事务开始或提交本身的失败。
+	if err != nil && operationErr == nil {
+		slog.Log(ctx, databaseErrorLevel(err), "state database transaction failed", "error", err)
+	}
+	return err
 }
 
 // LockPlugin 串行化同一插件的管理操作（install/enable/disable/reload/update/rollback/uninstall），
@@ -279,23 +293,32 @@ const (
 	RolePlugin Role = "plugin"
 	// RoleAdapter 指定承载平台账号实例的 Adapter 进程。
 	RoleAdapter Role = "adapter"
+	// RoleAgent 指定全局唯一的 Agent 组件。
+	RoleAgent Role = "agent"
+	// RoleWebUI 指定全局唯一的静态管理界面组件。
+	RoleWebUI Role = "webui"
 )
 
-// Install 记录插件的最小安装信息；尚不含来源绑定、pin、卸载保留等内容。
+// Install 保存组件身份、来源绑定、版本约束与卸载保留状态。
 type Install struct {
-	Role        Role   `gorm:"column:role"`                 // 必填的安装角色
-	AdapterID   string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
-	PluginID    string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
-	Source      string `gorm:"column:source"`               // 安装来源（开发模式为 dev-local）
-	Entrypoint  string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
-	BuildDigest []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
+	Role           Role   `gorm:"column:role"`                 // 必填的安装角色
+	AdapterID      string `gorm:"column:adapter_id"`           // RoleAdapter 必填的平台类型
+	PluginID       string `gorm:"column:plugin_id;primaryKey"` // 插件 ID，主键
+	Source         string `gorm:"column:source"`               // 安装来源（库模式为 dev）
+	Entrypoint     string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
+	BuildDigest    []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
+	Version        string `gorm:"column:version"`
+	PublisherKeyID string `gorm:"column:publisher_key_id"` // 无签名时为空串。
+	Pin            string `gorm:"column:pin"`              // 空串表示允许所有版本。
+	Uninstalled    bool   `gorm:"column:uninstalled"`      // 保留数据与来源绑定的已卸载记录。
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
-// Role 必须明确指定；Adapter 必须指定 adapter_id，且同一平台类型只允许安装一个包。
+// Role 必须明确指定；Adapter 按 adapter_id 唯一，Agent 与 WebUI 各自全局唯一。
+// 同来源、同发布者的已卸载记录可以重装，保留启用状态行与代次并刷新安装顺序。
 func (s *Store) AddInstall(ctx context.Context, in Install) error {
 	// 1. 校验安装角色与 Adapter 的必填身份。
-	if in.Role != RolePlugin && in.Role != RoleAdapter {
+	if in.Role != RolePlugin && in.Role != RoleAdapter && in.Role != RoleAgent && in.Role != RoleWebUI {
 		return fmt.Errorf("invalid installation role %q", in.Role)
 	}
 	if in.Role == RoleAdapter && in.AdapterID == "" {
@@ -303,13 +326,24 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 	}
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		// 2. 在单连接事务内核对平台类型唯一性并写入安装与启用状态。
-		if in.Role == RoleAdapter {
-			var count int64
-			if err := tx.Model(&installation{}).Where(&installation{Install: Install{Role: RoleAdapter, AdapterID: in.AdapterID}}).Count(&count).Error; err != nil {
-				return err
+		var rows []installation
+		if err := tx.Find(&rows).Error; err != nil {
+			return err
+		}
+		var previous *installation
+		for i := range rows {
+			row := &rows[i]
+			if row.PluginID == in.PluginID {
+				if !row.Uninstalled {
+					return fmt.Errorf("component %s is already installed", in.PluginID)
+				}
+				if row.Source != in.Source || row.PublisherKeyID != in.PublisherKeyID || row.Role != in.Role || row.AdapterID != in.AdapterID {
+					return fmt.Errorf("component %s installation binding differs", in.PluginID)
+				}
+				previous = row
 			}
-			if count > 0 {
-				return fmt.Errorf("adapter %q is already installed", in.AdapterID)
+			if !row.Uninstalled && row.Role == in.Role && (in.Role == RoleAgent || in.Role == RoleWebUI || (in.Role == RoleAdapter && row.AdapterID == in.AdapterID)) {
+				return fmt.Errorf("component %s of role %s is already installed", row.PluginID, in.Role)
 			}
 		}
 		var last installation
@@ -318,11 +352,22 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 			return err
 		}
 		sequence := last.InstallSeq + 1
+		if previous != nil {
+			in.Pin = previous.Pin
+			previous.Install, previous.InstallSeq = in, sequence
+			return tx.Save(previous).Error
+		}
 		row := installation{Install: in, InstallSeq: sequence, CreatedAt: time.Now().UnixMilli()}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		return tx.Create(&pluginState{PluginID: in.PluginID}).Error
+		if err := tx.Create(&pluginState{PluginID: in.PluginID}).Error; err != nil {
+			return err
+		}
+		if in.Role == RolePlugin || in.Role == RoleAgent {
+			return tx.Create(&pluginRuntime{PluginID: in.PluginID, RuntimeStatus: stoppedRuntime("installed")}).Error
+		}
+		return nil
 	})
 }
 
@@ -338,10 +383,10 @@ func (s *Store) GetInstall(ctx context.Context, pluginID string) (Install, error
 }
 
 // AddGeneration 持久化一个候选代次（尚未提交）。配置快照只能含 secret 引用，不含明文。
-func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string, configVersion uint32) error {
+func (s *Store) AddGeneration(ctx context.Context, pluginID, generationID, configSnapshot string) error {
 	return s.db.WithContext(ctx).Create(&generation{
-		GenerationID: generationID, PluginID: pluginID, ConfigSnapshot: configSnapshot,
-		ConfigVersion: configVersion, CreatedAt: time.Now().UnixMilli(),
+		GenerationID: generationID, PluginID: pluginID, ConfigSnapshot: configSnapshot, ConfigCorrections: "[]",
+		CreatedAt: time.Now().UnixMilli(),
 	}).Error
 }
 
@@ -368,6 +413,13 @@ func (s *Store) CommitActive(ctx context.Context, pluginID, expectedOld, newGen 
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) || candidate.PluginID != pluginID || candidate.CommittedAt != nil {
 			return fmt.Errorf("generation %s does not exist, does not belong to plugin %s, or was already committed", newGen, pluginID)
+		}
+		var installed installation
+		if err := tx.Where(clause.Eq{Column: clause.PrimaryColumn, Value: pluginID}).Take(&installed).Error; err != nil {
+			return err
+		}
+		if err := checkActiveCommitRoutes(tx, installed.Install, newGen); err != nil {
+			return err
 		}
 		committedAt := time.Now().UnixMilli()
 		candidate.CommittedAt = &committedAt
@@ -414,4 +466,21 @@ func (s *Store) Enabled(ctx context.Context, pluginID string) (bool, error) {
 		return false, fmt.Errorf("plugin %s: %w", pluginID, ErrNotFound)
 	}
 	return row.Enabled, err
+}
+
+// stateLogger 将数据库执行故障交给 Core 日志，避免输出可能包含秘密的 SQL。
+type stateLogger struct{ logger.Interface }
+
+func (stateLogger) Trace(ctx context.Context, _ time.Time, _ func() (string, int64), err error) {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		slog.Log(ctx, databaseErrorLevel(err), "state database operation failed", "error", err)
+	}
+}
+
+func databaseErrorLevel(err error) slog.Level {
+	// 请求生命周期结束无需严重告警，按返回的错误分类以保留独立存储故障的级别。
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return slog.LevelDebug
+	}
+	return logging.LevelCritical
 }

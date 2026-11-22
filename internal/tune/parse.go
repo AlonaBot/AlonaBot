@@ -93,7 +93,7 @@ func Parse(args []string) (Values, []Override, error) {
 			return Values{}, nil, fmt.Errorf("%s: must be > 0", describe(p.name))
 		}
 	}
-	for _, name := range []string{"SESSION_MAX_PAYLOAD", "DISPATCH_QUEUE_BYTES", "BUS_QUEUE_BYTES"} {
+	for _, name := range []string{"SESSION_MAX_PAYLOAD", "DISPATCH_QUEUE_BYTES", "BUS_QUEUE_BYTES", "WAKE_QUEUE_BYTES"} {
 		for _, p := range parameters {
 			if p.name == name && p.get(&v) < maxFrame {
 				return Values{}, nil, fmt.Errorf("%s: must be >= frame limit 4MiB", describe(name))
@@ -105,7 +105,11 @@ func Parse(args []string) (Values, []Override, error) {
 		names   []string
 		rule    string
 	}{
+		{v.TaskPayloadBytes > maxFrame, []string{"TASK_PAYLOAD_BYTES"}, "TASK_PAYLOAD_BYTES must be <= 4MiB"},
+		{v.TaskConcurrency > v.SessionMaxInflight, []string{"TASK_CONCURRENCY", "SESSION_MAX_INFLIGHT"}, "TASK_CONCURRENCY must be <= SESSION_MAX_INFLIGHT"},
+		{v.OptionsPage > maxOptionsPage, []string{"OPTIONS_PAGE"}, "OPTIONS_PAGE must be <= 200"},
 		{v.CoreMaxPayload < v.SessionMaxPayload, []string{"CORE_MAX_PAYLOAD", "SESSION_MAX_PAYLOAD"}, "CORE_MAX_PAYLOAD must be >= SESSION_MAX_PAYLOAD"},
+		{v.WakeQueueBytes > v.CoreMaxPayload, []string{"WAKE_QUEUE_BYTES", "CORE_MAX_PAYLOAD"}, "WAKE_QUEUE_BYTES must be <= CORE_MAX_PAYLOAD"},
 		{v.ContinuationMax >= v.SessionMaxInflight, []string{"CONTINUATION_MAX", "SESSION_MAX_INFLIGHT"}, "CONTINUATION_MAX must be < SESSION_MAX_INFLIGHT"},
 		{v.MediaMaxObject > v.MediaSessionBudget, []string{"MEDIA_MAX_OBJECT", "MEDIA_SESSION_BUDGET"}, "MEDIA_MAX_OBJECT must be <= MEDIA_SESSION_BUDGET"},
 		{v.MediaSessionBudget > v.MediaDiskBudget, []string{"MEDIA_SESSION_BUDGET", "MEDIA_DISK_BUDGET"}, "MEDIA_SESSION_BUDGET must be <= MEDIA_DISK_BUDGET"},

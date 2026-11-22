@@ -1,0 +1,11 @@
+{
+  "messages": {
+    "core.usage.command": "Usage: {prefix}{command}{aliases}{arguments}",
+    "core.tool.confirm": "Allow {name}?\n{detail}",
+    "core.tool.allow": "Allow",
+    "core.tool.deny": "Deny",
+    "core.tool.truncated": "[Arguments truncated]",
+    "core.tool.allowed": "Allowed: {name}",
+    "core.tool.denied": "Denied: {name}"
+  }
+}

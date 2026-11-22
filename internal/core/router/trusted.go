@@ -1,6 +1,8 @@
 package router
 
 import (
+	"time"
+
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"google.golang.org/protobuf/proto"
 )
@@ -8,8 +10,14 @@ import (
 // trustedEvent 分离来源绑定与可改写载荷；每条分发链独占其副本。
 // retained 只在链开始时更新权限，此后不交给 Prepare 或插件。
 type trustedEvent struct {
-	retained *pb.Event
-	payload  *pb.EventPayload
+	recipient       string // Core 定向菜单通知，只交付指定插件。
+	dispatch        *dispatchState
+	retained        *pb.Event
+	payload         *pb.EventPayload
+	invocation      *Invocation // 最近一次 Handler 的可信附件，自动回复继承。
+	finished        []func()    // 本条事件及自动回复结束后释放根调用。
+	commandConsumed bool        // 当前分发链的命令层消费结果，不接受插件回写。
+	deadline        time.Time   // 接纳时固定的 Handler 绝对期限，排队及唤醒共享。
 }
 
 func retainEvent(ev *pb.Event) *trustedEvent {
@@ -26,7 +34,7 @@ func retainEvent(ev *pb.Event) *trustedEvent {
 	case *pb.EventPayload_ReactionAdded:
 		bindings.Kind = &pb.EventPayload_ReactionAdded{ReactionAdded: &pb.ReactionAddedPayload{PlatformMessageId: p.ReactionAdded.GetPlatformMessageId()}}
 		p.ReactionAdded.PlatformMessageId = ""
-	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled:
+	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled, *pb.EventPayload_CommandInvoked:
 		bindings = payload
 		payload = nil
 	}
@@ -61,7 +69,7 @@ func (e *trustedEvent) rebuild() *pb.Event {
 		}
 		body.PlatformMessageId = p.ReactionAdded.GetPlatformMessageId()
 		ev.EventPayload = &pb.EventPayload{Kind: &pb.EventPayload_ReactionAdded{ReactionAdded: body}}
-	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled:
+	case *pb.EventPayload_MessageDeleted, *pb.EventPayload_ButtonClicked, *pb.EventPayload_Scheduled, *pb.EventPayload_CommandInvoked:
 		ev.EventPayload = bindings
 	}
 	return ev

@@ -2,7 +2,7 @@
 //
 // Store 在 Bootstrap 前解析所属插件的引用，在 REGISTER 后按 Schema 与保留路径抽取明文，
 // 并为管理读取提供脱敏结果。Collect 的调用方须提供 Active、Pending、保留代次和恢复操作的
-// 全部受保护快照，并在逐插件管理锁内协调抽取、持久化与清理。规则见 CONTRACTS §5.3。
+// 全部受保护快照，并在逐插件管理锁内协调抽取、持久化与清理。
 //
 // 包的组成：[New] 绑定 Core 状态库；[Store.Resolve] 与 [Store.Extract] 转换运行配置和快照；
 // [Store.Redact] 隐藏引用，[Store.Collect] 清理未受保护的版本。
@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -28,9 +29,8 @@ import (
 const RefKey = "$secret_ref"
 
 const (
-	keywordSecret = "x-alonabot-secret" // 与 sdk/config 的关键字一致，Core 保持独立依赖方向。
-	setKey        = "$secret_set"
-	refBytes      = 16
+	setKey   = "$secret_set"
+	refBytes = 16
 )
 
 // Store 通过 Core 状态库保存不可变秘密版本；管理调用由调用方持逐插件锁串行化。
@@ -59,10 +59,10 @@ func (s *Store) Resolve(ctx context.Context, pluginID string, snapshot []byte) (
 	return json.Marshal(result)
 }
 
-// Extract 按 Schema 与 keptPaths 抽取秘密值，保留未知字段；同位置的明文未变时复用原引用。
-// 新值创建独立版本；失败时产生的孤立版本由调用方在安全时机通过 Collect 清理。
+// Extract 按 config_schema.json 与 keptPaths 抽取秘密值，保留未知字段；同位置的明文未变时复用原引用。
+// 空串不生成引用，新值创建独立版本；失败时产生的孤立版本由调用方在安全时机通过 Collect 清理。
 func (s *Store) Extract(ctx context.Context, pluginID string, schema, candidate, previous []byte, keptPaths []string) ([]byte, []string, error) {
-	// 1. 解码对象并合并路径模式；Schema 来自构建期生成器，仅沿生成器创建的结构边读取。
+	// 1. 解码完整对象，合并手写 schema 与旧快照保留的秘密路径。
 	object, err := decodeObject(candidate)
 	if err != nil {
 		return nil, nil, err
@@ -79,11 +79,14 @@ func (s *Store) Extract(ctx context.Context, pluginID string, schema, candidate,
 		patterns[path] = strings.Split(path, ".")
 	}
 	if len(schema) > 0 {
-		description, err := decodeObject(schema)
-		if err != nil {
-			return nil, nil, err
+		description, problems := configschema.Parse(schema)
+		if len(problems) != 0 {
+			return nil, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT,
+				Message: "config schema is invalid at " + problems[0].Path + ": " + problems[0].Message}
 		}
-		schemaPaths(description, nil, patterns)
+		for _, path := range description.SecretPaths() {
+			patterns[strings.Join(path, ".")] = path
+		}
 	}
 	// 2. 每个具体位置只处理一次，数组下标和 map 键均用于查找上一快照的同位置值。
 	retained := make(map[string]bool)
@@ -106,6 +109,9 @@ func (s *Store) Extract(ctx context.Context, pluginID string, schema, candidate,
 		plaintext, ok := value.(string)
 		if !ok {
 			return nil, false, pathError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, path, "secret must be a string or null")
+		}
+		if plaintext == "" {
+			return nil, false, nil
 		}
 		id, found, err := reference(at(prior, path), path)
 		if err != nil {

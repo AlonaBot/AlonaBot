@@ -1,23 +1,16 @@
-# 文档索引
+# AlonaBot documentation / 文档
 
-[Wiki](https://github.com/AlonaBot/AlonaBot/wiki) 提供任务导航；使用求助和方案交流前往 [讨论区](https://github.com/AlonaBot/AlonaBot/discussions)，安全问题按 [安全政策](../SECURITY.md) 提交。
+[Wiki](https://github.com/AlonaBot/AlonaBot/wiki) · [Discussions / 讨论区](https://github.com/AlonaBot/AlonaBot/discussions) · [Security reports / 安全报告](../SECURITY.md)
 
-| 文档 | 用途 | 权威性 |
+| Task / 任务 | English | 简体中文 |
 | --- | --- | --- |
-| [spec/README.md](../spec/README.md) | 规格入口：PLAN、CONTRACTS、WIRE、MESSAGE、DESIGN、TEST-MATRIX | 行为的唯一权威 |
-| [spec/adr/README.md](../spec/adr/README.md) | D/P/Q 决策与历史审阅 | 解释「为什么」，不覆盖现行契约 |
-| [ARCHITECTURE.md](../ARCHITECTURE.md) | 模块职责、import 方向、状态归属 | 结构规则 |
-| [development.md](development.md) | 环境、命令、外部测试环境、规则与检查 | 验证入口 |
-| [coding-standards.md](coding-standards.md) | 命名与术语、按职责组织文件、包文档与注释、测试提交规则 | 编码审查规则 |
-| [plugin-guide.md](plugin-guide.md) | 插件作者的依赖、存储、日志、生命周期、协作与发布规则 | 插件作者规则；行为以 CONTRACTS 为准 |
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | Issue、PR、Git 授权和 GitHub 自动化 | 贡献流程 |
-| [AGENTS.md](../AGENTS.md) | 项目维护技能与规格的按任务路由 | Agent 工作入口 |
-| [goals/](goals/README.md) | 按章节分文件的切片 goal 语句与状态 | 派发入口 |
-| [execution-order.md](execution-order.md) | 并行派发、共享文件与合并顺序 | 并行约束 |
+| Install, configure and operate / 安装、配置与运维 | [Deployment](deployment.md) | [安装与部署](deployment.zh-CN.md) |
+| Develop components / 开发组件 | [Plugin guide](plugin-guide.md) | [插件开发指南](plugin-guide.zh-CN.md) |
+| Build, reload and test / 构建、热重载与测试 | [Development](development.md) | [源码开发](development.zh-CN.md) |
+| Run and debug devbot / 运行与调试 devbot | [Tutorial](../examples/devbot/README.md) | [教程](../examples/devbot/README.zh-CN.md) |
+| Contribute and follow coding rules / 贡献流程与编码规则 | [Contributing](../CONTRIBUTING.md) | [贡献指南](../CONTRIBUTING.zh-CN.md) |
+| Release contents, upgrades and limitations / 发行内容、升级与限制 | [Changelog](../changelog/README.md) | [更新日志](../changelog/README.zh-CN.md) |
 
-按任务找文档：
+[Runnable examples / 可运行示例](../examples/plugins): echo、lifecycle、showcase、configdb、media。
 
-- 修改协议、消息或生命周期行为：先读对应的 spec 文件；改动契约时同步 PLAN、TEST-MATRIX，并在 ADR 中记录原因。
-- 新增包或新的跨包 import：读 ARCHITECTURE.md，必要时先更新依赖表。
-- 编写官方插件、Adapter 或示例插件：读 plugin-guide.md，确认依赖、存储与常驻内存符合规则。
-- 记录验收证据：按 TEST-MATRIX §3 的字段，写进当前 goal 本地的 tasks.md；`goal-*/` 不入库，最终证据落在 PR 正文。
+维护者入口：[架构地图](../ARCHITECTURE.md)、[发行维护](releasing.md)。

@@ -1,0 +1,8 @@
+{
+  "messages": {
+    "media.caption": "Uploaded sample image",
+    "media.prompt": "Click to edit this text.",
+    "media.button": "Edit text",
+    "media.edited": "Text edited."
+  }
+}

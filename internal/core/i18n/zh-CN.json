@@ -1,0 +1,11 @@
+{
+  "messages": {
+    "core.usage.command": "用法：{prefix}{command}{aliases}{arguments}",
+    "core.tool.confirm": "是否允许 {name}？\n{detail}",
+    "core.tool.allow": "允许",
+    "core.tool.deny": "拒绝",
+    "core.tool.truncated": "[参数已截断]",
+    "core.tool.allowed": "已允许：{name}",
+    "core.tool.denied": "已拒绝：{name}"
+  }
+}

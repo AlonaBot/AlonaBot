@@ -5,7 +5,6 @@
 // 并确认已经清空后才返回。
 //
 // 这是对合作型子进程的管理：它不能阻止恶意进程脱离进程组，也不是安全沙箱。
-// 规则见 spec/CONTRACTS-v0.1.md §7.1 与 §12.2。
 //
 // 包的组成：
 //   - [Start] 按 [Spec] 启动进程，返回 [Process]；[Process.KillTree] 与 [Process.WaitTree] 结束并确认整棵进程树。
@@ -35,7 +34,7 @@ import (
 // inheritedEnv 列出从 Core 环境继承到插件的变量；其余变量（含管理凭证）一律不传。
 var inheritedEnv = []string{"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LANG", "TZ"}
 
-// secretBytes 是 Session Secret 的字节数（WIRE-FORMAT §3.1）。
+// secretBytes 是 Session Secret 的字节数。
 const secretBytes = 32
 
 // logBufferSize 限制单次从插件输出中读取一行日志的缓冲大小；更长的行分段记录。

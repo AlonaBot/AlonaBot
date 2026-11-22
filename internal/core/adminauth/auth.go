@@ -11,39 +11,48 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 const (
-	sessionLifetime   = 8 * time.Hour // CONTRACTS §7.4 的固定管理会话期限。
+	sessionLifetime   = 8 * time.Hour // 固定管理会话期限。
 	adminCookie       = "alonabot_admin"
 	secureAdminCookie = "__Host-" + adminCookie
 	csrfHeader        = "X-Alonabot-CSRF"
 )
 
-// Auth 校验管理凭证、持久会话与浏览器 CSRF；同时提供派生授权的原会话检查。
-// 构造后只读取配置，数据库操作由 state.Store 串行化。
+// Auth 校验管理与插件路由请求的凭证、持久会话与浏览器 CSRF。
+// 构造后只读取配置；credentials 串行化令牌校验、会话创建与令牌替换。
 type Auth struct {
-	store   *state.Store
-	now     func() time.Time
-	baseURL url.URL
-	secure  bool
+	credentials    sync.Mutex
+	store          *state.Store
+	now            func() time.Time
+	baseURL        url.URL
+	secure         bool
+	firstTokenPath string
 }
 
 // New 使用已校验的管理 Base URL 构造认证入口。
-// HTTPS 同时决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
-func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL) *Auth {
-	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https"}
+// HTTPS 决定 Cookie 的 Secure 属性与 __Host- 前缀；now 提供会话时钟。
+// dataDir 下的凭据文件供本机 CLI 和首次领取读取。
+func New(st *state.Store, now func() time.Time, adminBaseURL *url.URL, dataDir string) *Auth {
+	return &Auth{store: st, now: now, baseURL: *adminBaseURL, secure: adminBaseURL.Scheme == "https", firstTokenPath: filepath.Join(dataDir, FirstTokenFile)}
 }
 
-// Routes 注册登录与需认证的登出接口；装配方只在 admin host 调用这些路由。
+// Routes 注册受控主机上的登录、当前会话、登出与令牌更换接口。
 func (a *Auth) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("POST /api/auth/bootstrap", a.bootstrap)
+	mux.HandleFunc("POST /api/auth/bootstrap/confirm", a.confirmBootstrap)
+	mux.HandleFunc("GET /api/auth/session", a.currentSession)
 	mux.Handle("POST /api/auth/logout", a.Require(http.HandlerFunc(a.logout)))
+	mux.Handle("POST /api/auth/token/rotate", a.Require(http.HandlerFunc(a.rotateToken)))
 }
 
 // Require 允许当前 Bearer 凭证或有效管理 Cookie；Cookie 的变更请求须通过 CSRF 与 Origin 校验。
@@ -67,7 +76,24 @@ func (a *Auth) Require(next http.Handler) http.Handler {
 	})
 }
 
-// Lookup 返回当前 Cookie 会话及其到期时刻，供 webhost 绑定派生授权。
+// Authorize 按管理认证规则检查插件请求；Cookie 的非 GET/HEAD 请求须通过 CSRF 与 Origin 校验。
+// pluginID 仅在状态库故障日志中标识请求目标。
+func (a *Auth) Authorize(r *http.Request, pluginID string) bool {
+	credential, err := a.credential(r.Context())
+	if err != nil {
+		if !errors.Is(err, ErrNotInitialized) {
+			slog.Error("read plugin request authentication", "plugin_id", pluginID, "err", err)
+		}
+		return false
+	}
+	ok, err := a.authorized(r, credential)
+	if err != nil {
+		slog.Error("authorize plugin request", "plugin_id", pluginID, "err", err)
+	}
+	return ok && err == nil
+}
+
+// Lookup 返回当前有效 Cookie 会话及其到期时刻。
 // 无效凭证返回 ok=false，状态库故障用 slog 记录。
 func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, ok bool) {
 	credential, err := a.credential(r.Context())
@@ -85,7 +111,7 @@ func (a *Auth) Lookup(r *http.Request) (sessionID string, expiresAt time.Time, o
 	return session.SessionID, time.UnixMilli(session.ExpiresAt), true
 }
 
-// Valid 检查会话存在、尚未到期且认证代次仍匹配，供 webhost 即时撤销派生授权。
+// Valid 检查会话存在、尚未到期且认证代次仍匹配。
 func (a *Auth) Valid(sessionID string) bool {
 	if sessionID == "" {
 		return false
@@ -131,12 +157,6 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expected application/json", http.StatusUnsupportedMediaType)
 		return
 	}
-	credential, err := a.credential(r.Context())
-	if err != nil {
-		a.loginFailed(r)
-		a.respondError(w, err)
-		return
-	}
 	var input struct {
 		Token string `json:"token"`
 	}
@@ -150,6 +170,15 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		a.loginFailed(r)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// 请求体读完才持锁，避免慢请求占住凭证轮换；旧令牌的会话创建与轮换互斥。
+	a.credentials.Lock()
+	defer a.credentials.Unlock()
+	credential, err := a.credential(r.Context())
+	if err != nil {
+		a.loginFailed(r)
+		a.respondError(w, err)
 		return
 	}
 	if !matchesToken(input.Token, credential.TokenSHA256) {

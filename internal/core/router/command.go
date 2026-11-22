@@ -2,21 +2,27 @@ package router
 
 import (
 	"cmp"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
+	corei18n "github.com/AlonaBot/AlonaBot/internal/core/i18n"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
+
+const commandUsageKey = "core.usage.command"
 
 type commandRoute struct {
 	candidate
@@ -24,21 +30,20 @@ type commandRoute struct {
 }
 
 // cacheCommands 在持有 mu 时构建插件路由快照；描述已经过 REGISTER 校验。
-func (r *Router) cacheCommands(session *pluginSession) {
-	p := session.plugin
+func (r *Router) cacheCommands(pluginID string, source routeSnapshot) {
 	var routes []commandRoute
-	for _, route := range p.Routes() {
+	for _, route := range source.routes {
 		if route.GetKind() != pb.RouteKind_ROUTE_KIND_COMMAND {
 			continue
 		}
 		snapshot := proto.CloneOf(route)
-		next := commandRoute{candidate: candidate{pluginSession: session, pluginID: p.PluginID(), route: snapshot}}
+		next := commandRoute{candidate: candidate{pluginSession: source.session, pluginID: pluginID, generationID: source.generationID, committed: source.committed, route: snapshot}}
 		if snapshot.GetCommand().GetMatch() == pb.CommandMatch_COMMAND_MATCH_REGEX {
 			next.regex = regexp.MustCompile(snapshot.GetCommand().GetRegex())
 		}
 		routes = append(routes, next)
 	}
-	r.matches[p.PluginID()] = routes
+	r.matches[pluginID] = routes
 }
 
 func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
@@ -56,13 +61,25 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 	}
 	text := content.String()
 	head := commandHead(ev.GetEventPayload().GetMessageCreated().GetChain(), ev.GetAccountId())
-	if tokens, prefix := r.commandTokens(head, ev); len(tokens) != 0 {
+	tokens, prefix, err := r.commandTokens(head, ev)
+	if err != nil {
+		plugins := make([]string, 0, len(routes))
+		for _, route := range routes {
+			plugins = append(plugins, route.pluginID)
+		}
+		slices.Sort(plugins)
+		slog.Warn("read command prefixes failed", "target", event.retained.GetTarget(), "plugin_ids", slices.Compact(plugins), "error", err)
+		return false
+	}
+	if len(tokens) != 0 {
 		if entry, consumed, ok := index.Lookup(tokens); ok {
+			event.commandConsumed = true
 			for _, route := range routes {
 				if route.pluginID != entry.PluginID || route.route.GetRouteId() != entry.RouteID {
 					continue
 				}
-				if !route.plugin.Activated() || !r.commandPermitted(route.candidate, ev) {
+				route.names = entry.Names
+				if !r.commandAllowed(&route.candidate, ev) {
 					return false
 				}
 				tail := strings.TrimPrefix(head, prefix)
@@ -124,22 +141,43 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 				}
 			}
 		}
-		if matched && r.commandPermitted(route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandAllowed(&route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *Router) commandPermitted(c candidate, ev *pb.Event) bool {
+func (r *Router) commandPolicyFailure(ctx context.Context, c *candidate, ev *pb.Event) *pb.ErrorInfo {
+	profileID, enabled, err := r.Profile(ctx, c.pluginID, ev.GetTarget())
+	if err != nil {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+	}
+	if !enabled {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "plugin is disabled for this profile"}
+	}
+
+	c.profileID = profileID
 	if r.policy == nil {
-		return r.permitted(c, ev)
+		if !c.route.GetDefaultEnabled() {
+			return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "handler route is disabled"}
+		}
+		if r.permitted(*c, ev) {
+			return nil
+		}
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED}
 	}
-	if failure := r.policy.CheckCommand(r.ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget()); failure != nil {
+	failure := r.policy.CheckCommand(ctx, c.pluginID, c.route, ev.GetActor(), ev.GetTarget())
+	if failure == nil {
+		return nil
+	}
+	if commandPolicyResult(failure.GetCode()) == commandDenied {
+		r.metrics.Add(c.pluginID, "event", "denied")
 		slog.Debug("command policy denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode())
-		return false
+	} else {
+		slog.Warn("command policy check failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode(), "error", failure.GetSafeMessage())
 	}
-	return true
+	return failure
 }
 
 func commandPhase(route commandRoute) int {
@@ -177,38 +215,42 @@ func commandHead(chain *pb.MessageChain, accountID string) string {
 	return head.String()
 }
 
-func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string) {
+func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string, error) {
+	prefixes, err := r.prefixes(r.ctx, ev.GetTarget())
+	if err != nil {
+		return nil, "", fmt.Errorf("read platform for target %v: %w", ev.GetTarget(), err)
+	}
 	prefix := ""
 	matched := false
-	for _, candidate := range r.prefixes(ev.GetAdapterInstanceId()) {
+	for _, candidate := range prefixes {
 		if strings.HasPrefix(text, candidate) && (!matched || len(candidate) > len(prefix)) {
 			prefix, matched = candidate, true
 		}
 	}
 	if !matched {
-		return nil, ""
+		return nil, "", nil
 	}
 	remainder := strings.TrimPrefix(text, prefix)
 	// 路径紧接前缀，保留 / cmd 不被识别为 /cmd 的既有行为。
 	if remainder != strings.TrimLeftFunc(remainder, unicode.IsSpace) {
-		return nil, ""
+		return nil, "", nil
 	}
 	tokens := strings.Fields(remainder)
 	if len(tokens) == 0 {
-		return nil, ""
+		return nil, "", nil
 	}
 	if name, user, hasName := strings.Cut(tokens[0], "@"); hasName {
 		instance, ok := r.adapters.Get(ev.GetTarget().GetAdapterInstanceId())
 		if !ok {
-			return nil, ""
+			return nil, "", nil
 		}
 		named, ok := instance.(adapter.Named)
 		if !ok || user == "" || !strings.EqualFold(user, named.AccountName()) {
-			return nil, ""
+			return nil, "", nil
 		}
 		tokens[0] = name
 	}
-	return tokens, prefix
+	return tokens, prefix, nil
 }
 
 func matchPattern(text, pattern string, match pb.CommandMatch, ignoreCase bool) bool {
@@ -243,18 +285,32 @@ func foldText(text string) string {
 }
 
 func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
-	if r.ctx.Err() != nil || !c.plugin.Activated() {
+	if r.ctx.Err() != nil || !r.available(c) {
 		return false
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
-	response, callError := r.call(c, event, bind, trace)
+	started := time.Now()
+	response, callError := r.call(&c, event, bind, trace)
+	duration := time.Since(started)
 	if errors.Is(callError, errCommandArguments) {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
 		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
-			r.sendReply(c, ev, commandUsage(c.route.GetCommand(), prefix), trace)
+			usage, err := commandUsage(c, ev, prefix)
+			if err != nil {
+				slog.Warn("format command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+			} else {
+				r.sendReply(c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace, event.invocation)
+			}
 		}
 		return false
+	}
+	result := commandOK
+	if callError != nil || response.Err != nil {
+		result = commandError
+		if wire.CodeOf(callError) == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED || response.Err.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+			result = commandDenied
+		}
 	}
 	if callError != nil {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler call failed", "error", callError)
@@ -264,23 +320,41 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 	}
 	outcome, err := decodeOutcome(response.Payload)
 	if err != nil {
+		if result == commandOK {
+			result = commandError
+		}
+		r.commandInvoked(c, ev, result, duration)
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("decode command handler outcome failed", "error", err)
 		return false
 	}
-	if callError == nil && response.Err == nil && len(outcome.GetChain().GetSegments()) != 0 {
-		r.sendReply(c, ev, outcome.Chain, trace)
+	// SDK Rule 返回 false 时没有调用 Handler；保留实际调用错误与 Core 拒绝通知。
+	if outcome.GetMatched() || result != commandOK {
+		r.commandInvoked(c, ev, result, duration)
+	}
+	event.commandConsumed = event.commandConsumed || outcome.GetMatched()
+	if callError == nil && response.Err == nil && outcome.GetMatched() && c.route.GetCommand().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
+		r.sendReply(c, ev, outcome.Chain, trace, event.invocation)
 	}
 	return outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP
 }
 
-func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, trace []byte) {
+func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, trace []byte, parent *Invocation) {
+	if parent == nil {
+		profileID, _, err := r.Profile(r.ctx, c.pluginID, ev.GetTarget())
+		if err != nil {
+			slog.Warn("reply profile read failed", "plugin_id", c.pluginID, "error", err)
+			return
+		}
+		parent = &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget(), TraceID: trace}
+		defer parent.Begin()()
+	}
 	request := &pb.SendRequest{Chain: chain}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		slog.Warn("encode reply failed", "error", err)
 		return
 	}
-	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: &Invocation{PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget()}, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
+	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: parent, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
 		slog.Warn("decode reply result failed", "error", err)
@@ -292,11 +366,30 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 	}
 }
 
-func commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain {
-	// shortcut: usage_key 暂按缺省 usage 发送，T-08.8 文案目录接入后查找该键。
-	text := "Usage: " + prefix + strings.Join(spec.GetPath(), " ")
-	for _, alias := range spec.GetAliases() {
-		text += " | " + prefix + strings.Join(alias.GetPath(), " ")
+func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
+	spec := c.route.GetCommand()
+	locales := []string{ev.GetActor().GetLocale(), c.defaultLocale()}
+	names := c.names
+	if names == nil {
+		names = declaredCommandNames(spec)
+	}
+	command := strings.Join(names[0], " ")
+	if spec.GetUsageMode() == pb.UsageMode_USAGE_MODE_CUSTOM {
+		var text string
+		var err error
+		if catalog := c.messages(); catalog == nil {
+			err = errors.New("plugin has no message catalog")
+		} else {
+			text, err = catalog.Format(locales, spec.GetUsageKey(), map[string]string{"prefix": prefix, "command": prefix + command})
+		}
+		if err == nil {
+			return text, nil
+		}
+		slog.Warn("format custom command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+	}
+	var aliases, arguments string
+	for _, alias := range names[1:] {
+		aliases += " | " + prefix + strings.Join(alias, " ")
 	}
 	for _, param := range spec.GetParams() {
 		label := param.GetName()
@@ -318,10 +411,10 @@ func commandUsage(spec *pb.CommandSpec, prefix string) *pb.MessageChain {
 			label += "..."
 		}
 		if param.GetRequired() {
-			text += " <" + label + ">"
+			arguments += " <" + label + ">"
 		} else {
-			text += " [" + label + "]"
+			arguments += " [" + label + "]"
 		}
 	}
-	return &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: text}}}}}
+	return corei18n.Messages().Format(locales, commandUsageKey, map[string]string{"prefix": prefix, "command": command, "aliases": aliases, "arguments": arguments})
 }

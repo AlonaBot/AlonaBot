@@ -4,6 +4,7 @@ package process
 
 import (
 	"os/exec"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -16,8 +17,10 @@ type tree struct {
 	job windows.Handle
 }
 
-// prepareTree 无需在启动前设置：进程在启动后才加入 Job（见类型上的 shortcut）。
-func prepareTree(cmd *exec.Cmd) {}
+// prepareTree 隔离组件的控制台进程组，让 Core 独自接收正常停止信号并经协议停止组件。
+func prepareTree(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+}
 
 // attachTree 创建带 KILL_ON_JOB_CLOSE 的 Job Object，并把已启动的子进程加入其中。
 func attachTree(cmd *exec.Cmd) (*tree, error) {

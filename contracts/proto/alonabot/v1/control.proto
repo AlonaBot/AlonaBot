@@ -1,4 +1,4 @@
-// 控制帧载荷（WIRE-FORMAT §3、CONTRACTS §1.1/§4/§6.3）。REGISTER 载荷依赖 RouteDescriptor，定义在 route.proto。
+// 控制帧载荷。REGISTER 载荷依赖 RouteDescriptor，定义在 route.proto。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -53,10 +53,8 @@ message Bootstrap {
   string candidate_config_json = 2;
   // 可信安装包中配置 Schema 的摘要。
   bytes config_schema_hash = 3;
-  // 现有配置的版本；首次安装没有旧版本。
-  optional uint32 previous_config_version = 4;
-  // 配置迁移的目标版本。
-  uint32 target_config_version = 5;
+  reserved 4, 5;
+  reserved "previous_config_version", "target_config_version";
   // 插件业务数据库的准备视图。
   DatabaseDescriptor database_descriptor = 6;
   // 本 Session 的内部 HTTP 代理认证材料；仅在插件声明 HTTP 能力时设置。
@@ -65,13 +63,19 @@ message Bootstrap {
   PhaseLimits phase_limits = 8;
   // 准备阶段（配置、迁移、OnStart）的绝对截止，UTC 毫秒。
   int64 preparation_deadline_unix_ms = 9;
-  // 该来源当前生效的日志级别（CONTRACTS §14.3）；UNSPECIFIED 按 INFO 处理。
+  // 该来源当前生效的日志级别；UNSPECIFIED 按 INFO 处理。
   LogLevel log_level = 10;
-  // 本次运行生效的 Session 限额，由 Core 填写（CONTRACTS §16）。
+  // 本次运行生效的 Session 限额，由 Core 填写。
   SessionLimits session_limits = 11;
+  // Core 的全局默认语言，在本 Session 生命周期内保持不变。
+  string default_locale = 12;
+  // 插件自管数据目录的绝对路径。
+  string plugin_data_dir = 13;
+  // 本插件全部有效覆盖：配置文件 ID → 字段路径与完整值。
+  string profile_overrides_json = 14;
 }
 
-// SessionLimits 描述 Core 与 SDK 共同执行的 Session 限额（WIRE-FORMAT §3.2）。
+// SessionLimits 描述 Core 与 SDK 共同执行的 Session 限额。
 message SessionLimits {
   // 每个发起方向的在途业务请求上限。
   uint32 max_inflight = 1;
@@ -81,7 +85,7 @@ message SessionLimits {
   uint32 request_timeout_ms = 3;
 }
 
-// LogLevel 列出 Core 下发给 SDK 的日志级别（CONTRACTS §14.3）。
+// LogLevel 列出 Core 下发给 SDK 的日志级别。
 enum LogLevel {
   LOG_LEVEL_UNSPECIFIED = 0;
   LOG_LEVEL_DEBUG = 1;
@@ -90,6 +94,7 @@ enum LogLevel {
   LOG_LEVEL_ERROR = 4;
   // 不输出任何记录。
   LOG_LEVEL_OFF = 5;
+  LOG_LEVEL_CRITICAL = 6;
 }
 
 // DatabaseBackend 列出插件业务数据库的后端类型。
@@ -103,7 +108,7 @@ enum DatabaseBackend {
   reserved "DATABASE_BACKEND_POSTGRES";
 }
 
-// MigrationMode 列出插件声明的数据库迁移方式（CONTRACTS §6.3）。
+// MigrationMode 列出插件声明的数据库迁移方式。
 enum MigrationMode {
   MIGRATION_MODE_UNSPECIFIED = 0;
   // 不做迁移。
@@ -148,7 +153,7 @@ message HttpProxyAuth {
   bytes token = 1;
 }
 
-// PhaseLimits 描述主契约固定的阶段预算（毫秒），见 CONTRACTS §4.2。
+// PhaseLimits 描述启动与停止阶段的预算（毫秒）。
 message PhaseLimits {
   // 握手预算。
   uint32 handshake_ms = 1;
@@ -221,6 +226,7 @@ enum StopReason {
   STOP_REASON_RELOAD = 3;
   STOP_REASON_UPDATE = 4;
   STOP_REASON_CORE_SHUTDOWN = 5;
+  STOP_REASON_IDLE = 6;
 }
 
 // Stopping 承载 STOPPING（Core→Plugin）的载荷，deadline = min(t0+10s, 发送时刻+4s)。
@@ -260,3 +266,11 @@ message SessionError {
   // 触发失败的帧种类；与具体帧无关时为 UNSPECIFIED。
   FrameKind failed_kind = 2;
 }
+
+// LogSetLevelRequest 更新当前 SDK Session 的日志阈值。
+message LogSetLevelRequest {
+  LogLevel level = 1;
+}
+
+// LogSetLevelResponse 确认日志阈值已更新。
+message LogSetLevelResponse {}

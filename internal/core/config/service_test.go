@@ -13,7 +13,7 @@ import (
 )
 
 // 配置编辑以 base_generation 判定陈旧提交，Pending 随 Active 变化失效；Patch 叠加在有效 Pending
-// 或 Active 配置上，保留未知键、显式空值与超出 2^53 的数字（CONTRACTS §5.1、V-23、V-38）。
+// 或 Active 配置上，保留未知键、显式空值与超出 2^53 的数字。
 func TestPendingConfigEdits(t *testing.T) {
 	ctx := context.Background()
 
@@ -48,7 +48,7 @@ func TestPendingConfigEdits(t *testing.T) {
 		if p, found, err := service.Pending(ctx, "demo"); err != nil || !found || string(p.ConfigJSON) != `{"edited":true}` {
 			t.Fatalf("pending before the new generation: %+v %v %v", p, found, err)
 		}
-		if err := store.AddGeneration(ctx, "demo", "g2", `{"from":"g2"}`, 1); err != nil {
+		if err := store.AddGeneration(ctx, "demo", "g2", `{"from":"g2"}`); err != nil {
 			t.Fatal(err)
 		}
 		if err := store.CommitActive(ctx, "demo", "g1", "g2"); err != nil {
@@ -146,7 +146,7 @@ func activatedStore(t *testing.T, config string) (*state.Store, string) {
 	t.Helper()
 	store, dir := unactivatedStore(t)
 	ctx := context.Background()
-	if err := store.AddGeneration(ctx, "demo", "g1", config, 1); err != nil {
+	if err := store.AddGeneration(ctx, "demo", "g1", config); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CommitActive(ctx, "demo", "", "g1"); err != nil {

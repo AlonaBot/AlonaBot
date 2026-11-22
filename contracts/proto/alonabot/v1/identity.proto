@@ -1,4 +1,4 @@
-// Target、Actor 与平台能力（MESSAGE-MODEL §1）。单独成文件，避免 message 与 media 互相 import。公共标识符一律用字符串，缺省表示不存在，不用空串或零 ID 填补。
+// Target、Actor 与平台能力。单独成文件，避免 message 与 media 互相 import。公共标识符一律用字符串，缺省表示不存在，不用空串或零 ID 填补。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -9,9 +9,9 @@ option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
 message Target {
   // Adapter 类型，例如 telegram。
   string adapter_id = 1;
-  // 该 Adapter 的已配置实例。
+  // 该 Adapter 的已配置实例；插件发出时可以为空，由 Core 补齐。
   string adapter_instance_id = 2;
-  // 实例下用于发送的平台账号。
+  // 实例下用于发送的平台账号；插件发出时可以为空，由 Core 补齐。
   string account_id = 3;
   // 平台会话 ID。
   string chat_id = 4;
@@ -43,4 +43,20 @@ message Capability {
   uint32 version = 2;
   // 该实例当前是否支持。
   bool supported = 3;
+  // 单条文本限额；未声明时缺省，仅 supported=true 的 message.send 可携带。
+  TextLimit text_limit = 4;
+}
+
+// TextLimit 声明单条文本的正整数上限与计量单位。
+message TextLimit {
+  uint64 max = 1;
+  TextUnit unit = 2;
+}
+
+// TextUnit 指定文本限额的计量单位，bytes 按 UTF-8 编码计数。
+enum TextUnit {
+  TEXT_UNIT_UNSPECIFIED = 0;
+  TEXT_UNIT_UTF16_CODE_UNITS = 1;
+  TEXT_UNIT_UNICODE_CODE_POINTS = 2;
+  TEXT_UNIT_BYTES = 3;
 }

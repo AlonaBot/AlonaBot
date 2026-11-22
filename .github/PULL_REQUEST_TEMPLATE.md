@@ -10,8 +10,8 @@ Closes #123
 ## 变更与原因 / Changes
 
 <!--
-改了什么、为什么。关联 Issue 用 `Closes #123`（合并后关闭）；批次工作写明 T/V 编号。
-What changed and why. Link an issue with `Closes #123` (closes on merge). For batch work, cite the T/V numbers.
+改了什么、为什么。关联 Issue 用 `Closes #123`（合并后关闭）。
+What changed and why. Link an issue with `Closes #123` (closes on merge).
 -->
 
 ## 验证 / Verification

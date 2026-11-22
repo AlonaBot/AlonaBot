@@ -51,3 +51,90 @@ const ServiceMediaGrant = "core.media.grant"
 
 // ServiceToolList 指定调用插件可调用的工具目录服务。
 const ServiceToolList = "core.tool.list"
+
+// ServiceEdit 指定 Core 的消息编辑服务。
+const ServiceEdit = "core.edit"
+
+// ServiceAdapterEdit 向账号实例提交消息编辑。
+const ServiceAdapterEdit = "adapter.edit"
+
+// ServiceDelete 指定 Core 的消息撤回服务。
+const ServiceDelete = "core.delete"
+
+// ServiceAdapterDelete 向账号实例提交消息撤回。
+const ServiceAdapterDelete = "adapter.delete"
+
+// ServiceAction 指定 Core 的平台动作服务。
+const ServiceAction = "core.action"
+
+// ServiceAdapterAction 向账号实例提交已声明的平台动作。
+const ServiceAdapterAction = "adapter.action"
+
+// ServiceMediaURL 为本次发送的只读媒体令牌签发临时 URL。
+const ServiceMediaURL = "core.media.url"
+
+// ServiceAdapterCommandsSync 替换账号实例的命令菜单。
+const ServiceAdapterCommandsSync = "adapter.commands.sync"
+
+// ServiceContinuationStart 登记父 Handler 成功结束后的延续调用。
+const ServiceContinuationStart = "core.continuation.start"
+
+// ServiceWait 等待延续调用所属用户在原会话的下一条消息。
+const ServiceWait = "core.wait"
+
+// ServiceToolInvoke 指定沿父调用链执行工具的服务。
+const ServiceToolInvoke = "core.tool.invoke"
+
+// ServiceToolConfirm 指定操作的用户确认服务。
+const ServiceToolConfirm = "core.tool.confirm"
+
+// ServiceTaskSet 创建或替换动态实例。
+const ServiceTaskSet = "core.task.set"
+
+// ServiceTaskCancel 取消动态实例与在途调用。
+const ServiceTaskCancel = "core.task.cancel"
+
+// ServiceTaskList 分页列出动态实例。
+const ServiceTaskList = "core.task.list"
+
+// ServiceJobPause 暂停静态任务。
+const ServiceJobPause = "core.job.pause"
+
+// ServiceJobResume 恢复静态任务。
+const ServiceJobResume = "core.job.resume"
+
+// ServiceJobStatus 查询静态任务状态。
+const ServiceJobStatus = "core.job.status"
+
+// ServiceLogSetLevel 更新当前 SDK Session 的日志级别。
+const ServiceLogSetLevel = "sdk.log.set_level"
+
+// ServiceCommandList 查询父调用的 Actor 在默认目标中可用的路径命令。
+const ServiceCommandList = "core.command.list"
+
+// ServiceProfileList 列出全部配置文件。
+const ServiceProfileList = "core.profile.list"
+
+// ServiceProfileCurrent 查询默认目标的配置文件。
+const ServiceProfileCurrent = "core.profile.current"
+
+// ServiceProfileAssign 指定默认目标的配置文件。
+const ServiceProfileAssign = "core.profile.assign"
+
+// ServiceProfileSet 写入调用插件的配置文件字段。
+const ServiceProfileSet = "core.profile.set"
+
+// ServiceProfileSetOverrides 整体更新 SDK 的有效覆盖集合。
+const ServiceProfileSetOverrides = "sdk.profile.set_overrides"
+
+// ServiceReadNodes 查询合并转发的完整递归节点。
+const ServiceReadNodes = "core.message.read_nodes"
+
+// ServiceAdapterReadNodes 从指定 Adapter 实例查询合并转发。
+const ServiceAdapterReadNodes = "adapter.message.read_nodes"
+
+// ServiceAdapterCommandMenu 对指定菜单位置执行 set、get 或 delete。
+const ServiceAdapterCommandMenu = "adapter.command.menu"
+
+// ServiceCommandMenu 提供受准入控制的手动菜单及同步状态入口。
+const ServiceCommandMenu = "core.command.menu"

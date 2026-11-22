@@ -1,4 +1,4 @@
-// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷（WIRE §4、MESSAGE-MODEL §3/§5）。
+// Core→Plugin 的可信调用上下文、HandlerOutcome 与 Hook 载荷。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -22,6 +22,10 @@ message InvocationContext {
   repeated string plugin_chain = 4;
   // 出站 Hook 及其派生子调用为 true，再次 Send 返回 FAILED_PRECONDITION。
   bool send_forbidden = 5;
+  // Core 命令层已消费本条消息；只由 Core 设置，事件路由据此过滤命令。
+  bool command_consumed = 6;
+  // 本次调用的配置文件；default 编码为空串。
+  string profile_id = 7;
 }
 
 // HandlerRequest 描述命令、事件、scheduled 与按钮 Handler 的请求。
@@ -34,6 +38,25 @@ message HandlerRequest {
   Event event = 3;
   // 仅命令路由。
   CommandInvocation command = 4;
+  // 延续调用所对应的原 Handler call_id；普通调用 absent。
+  optional uint64 continuation_of = 5;
+}
+
+// ContinuationStartRequest 请求在父 Handler 成功结束后发出延续调用。
+message ContinuationStartRequest {}
+
+// ContinuationStartResponse 确认本次父调用已登记延续。
+message ContinuationStartResponse {}
+
+// WaitRequest 指定等待下一条消息的期限，单位为毫秒。
+message WaitRequest {
+  // 取值为 1～CONTINUATION_TIMEOUT 的毫秒数。
+  uint32 timeout_ms = 1;
+}
+
+// WaitResponse 返回为等待者 Session 准备的命中事件。
+message WaitResponse {
+  Event event = 1;
 }
 
 // CommandInvocation 描述命令匹配与参数解析的结果。
@@ -123,6 +146,13 @@ message PreEventResult {
   Propagation propagation = 2;
 }
 
+// SendOperation 标明本次出站操作是发送还是编辑。
+enum SendOperation {
+  SEND_OPERATION_UNSPECIFIED = 0;
+  SEND_OPERATION_SEND = 1;
+  SEND_OPERATION_EDIT = 2;
+}
+
 // BeforeSendRequest 描述 BeforeSend Hook 的请求。
 message BeforeSendRequest {
   // 被调用的 Hook 路由 ID。
@@ -133,6 +163,10 @@ message BeforeSendRequest {
   Target target = 3;
   // 待发送的消息链。
   MessageChain chain = 4;
+  // 本次操作。
+  SendOperation operation = 5;
+  // 编辑时被修改的平台消息 ID；发送时 absent。
+  optional string edited_platform_message_id = 6;
 }
 
 // BeforeSendResult 只能修改 Chain；拒绝通过 Envelope.error。修改后的 Chain 重新完整预检。
@@ -155,6 +189,10 @@ message AfterSendRequest {
   SendResult result = 5;
   // 发送失败时的错误；与 result 可以并存。
   ErrorInfo error = 6;
+  // 本次操作。
+  SendOperation operation = 7;
+  // 编辑时被修改的平台消息 ID；发送时 absent。
+  optional string edited_platform_message_id = 8;
 }
 
 // AfterSendResult 描述 AfterSend 的结果：只返回成功或 Envelope.error，不能修改 SendResult。

@@ -1,4 +1,4 @@
-// Adapter 描述、实例启停、发送、事件交付、游标与故障载荷（WIRE §3.4、CONTRACTS §8）。
+// Adapter 描述、实例启停、发送、平台动作、事件交付、游标与故障载荷。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -15,13 +15,14 @@ enum AdapterInstanceState {
   ADAPTER_INSTANCE_STATE_FAILED = 1;
 }
 
-// AdapterDescriptor 声明安装包提供的平台能力、片段、权限与扩展事件。
+// AdapterDescriptor 声明安装包提供的平台能力、片段、权限、扩展事件与动作。
 message AdapterDescriptor {
   string adapter_id = 1;
   repeated Capability capabilities = 2;
   repeated ExtensionDeclaration extensions = 3;
   repeated PermissionDeclaration permissions = 4;
   repeated EventDeclaration events = 5;
+  repeated ActionDeclaration actions = 6;
 }
 
 // ExtensionDeclaration 声明平台专有片段的名称、版本与 JSON Schema。
@@ -62,6 +63,8 @@ message AdapterInstanceStartResponse {
   optional string account_display_name = 2;
   repeated Capability capabilities = 3;
   optional string account_username = 4; // 平台上可寻址的账号标识；平台没有时 absent。
+  // 存在时使用按聊天管理的菜单协议；缺省保留传统同步入口。
+  CommandMenuConfig command_menu = 5;
 }
 
 // AdapterInstanceStopRequest 指定要停止接收的实例。
@@ -126,4 +129,148 @@ message AdapterMediaReadResponse {
   bytes data = 1;
   uint64 next_offset = 2;
   bool eof = 3;
+}
+
+// AdapterEditRequest 向指定实例提交消息编辑；响应为 SendResult。
+message AdapterEditRequest {
+  string instance_id = 1;
+  Target target = 2;
+  string platform_message_id = 3;
+  // 恰好一个 text 片段和至多一个 buttons 片段。
+  MessageChain chain = 4;
+}
+
+// AdapterDeleteRequest 向指定实例提交撤回，响应为 DeleteResult。
+message AdapterDeleteRequest {
+  string instance_id = 1;
+  Target target = 2;
+  repeated string platform_message_ids = 3;
+}
+
+// ActionScope 指定动作需要会话还是只需要账号实例。
+enum ActionScope {
+  ACTION_SCOPE_UNSPECIFIED = 0;
+  ACTION_SCOPE_CHAT = 1;
+  ACTION_SCOPE_ACCOUNT = 2;
+}
+
+// ActionDeclaration 声明平台动作的版本、作用范围与参数和结果 Schema。
+message ActionDeclaration {
+  string name = 1;
+  uint32 version = 2;
+  ActionScope scope = 3;
+  string params_schema_json = 4;
+  string result_schema_json = 5;
+}
+
+// ActionRequest 向 Core 提交动作；to 与 adapter_instance_id 互斥。
+message ActionRequest {
+  Target to = 1;
+  string adapter_instance_id = 2;
+  string name = 3;
+  uint32 version = 4;
+  string params_json = 5;
+  // 仅绑定 Handler 的客户端设置；按声明范围选择可信默认会话或账号。
+  bool use_default_target = 6;
+}
+
+// ActionResponse 保留平台返回的 JSON 原文，可以与安全错误同时返回。
+message ActionResponse {
+  string result_json = 1;
+}
+
+// AdapterActionRequest 向指定实例提交动作；账号动作省略 target。
+message AdapterActionRequest {
+  string instance_id = 1;
+  Target target = 2;
+  string name = 3;
+  uint32 version = 4;
+  string params_json = 5;
+}
+
+// MediaURLRequest 为本次发送的只读令牌申请临时 URL，载荷版本为 1。
+message MediaURLRequest {
+  string token = 1;
+  // 空值使用 Core 配置的 base_url。
+  string base_url = 2;
+}
+
+// MediaURLResponse 返回租约期限内有效的单对象 URL，载荷版本为 1。
+message MediaURLResponse {
+  string url = 1;
+  int64 expires_at_unix_ms = 2;
+}
+
+// CommandMenuItem 提供一个可用根命令及各语言的说明。
+message CommandMenuItem {
+  string name = 1;
+  map<string, string> descriptions = 2;
+}
+
+// AdapterCommandsSyncRequest 替换指定实例的命令菜单，空列表清空菜单。
+message AdapterCommandsSyncRequest {
+  string instance_id = 1;
+  repeated CommandMenuItem commands = 2;
+}
+
+// AdapterCommandsSyncResponse 确认菜单同步完成，错误沿用 ErrorInfo。
+message AdapterCommandsSyncResponse {
+}
+
+// CommandMenuConfig 由 Adapter 实例报告菜单模式，Core 无需解析平台配置。
+message CommandMenuConfig {
+  bool auto_sync_commands = 1;
+  bool clear_commands_on_disable = 2;
+}
+
+// CommandMenuScope 定位整个聊天或聊天内管理员、成员的菜单。
+message CommandMenuScope {
+  // default、chat、chat_administrators、chat_member。
+  string type = 1;
+  string chat_id = 2;
+  string user_id = 3;
+}
+
+// CommandMenuEntry 保存单个语言的命令与说明。
+message CommandMenuEntry {
+  string name = 1;
+  string description = 2;
+}
+
+// CommandMenu 定位账号内一份 scope 与 language_code 的完整菜单。
+message CommandMenu {
+  CommandMenuScope scope = 1;
+  string language_code = 2;
+  repeated CommandMenuEntry commands = 3;
+}
+
+// CommandMenuRequest 执行 set、get、delete、status 或 sync。
+message CommandMenuRequest {
+  string instance_id = 1;
+  string operation = 2;
+  CommandMenu menu = 3;
+}
+
+// CommandMenuPosition 返回最后一次成功写入的位置、模式与插件所有者。
+message CommandMenuPosition {
+  CommandMenuScope scope = 1;
+  string language_code = 2;
+  string mode = 3;
+  string owner_plugin_id = 4;
+}
+
+// CommandMenuResponse 保留远端菜单或 Core 模式状态及最后同步错误。
+message CommandMenuResponse {
+  repeated CommandMenuEntry commands = 1;
+  CommandMenuConfig config = 2;
+  bool ready = 3;
+  string last_error = 4;
+  repeated CommandMenuPosition positions = 5;
+}
+
+// AdapterReadNodesRequest 将查询绑定到实例账号及当前会话。
+message AdapterReadNodesRequest {
+  string instance_id = 1;
+  Target target = 2;
+  ForwardSegment segment = 3;
 }

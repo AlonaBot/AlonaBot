@@ -9,7 +9,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
-// StopTiming 规定停止的时间预算（CONTRACTS §4.2）；测试可注入更短的值。
+// StopTiming 规定停止的时间预算；测试可注入更短的值。
 type StopTiming struct {
 	Drain    time.Duration // 冻结后最多排空的时间
 	Total    time.Duration // 从 t0 起到终止进程树的总截止
@@ -33,6 +33,7 @@ type Tree interface {
 
 // StopResult 记录一次停止的经过，便于诊断与测试。
 type StopResult struct {
+	Cancelled      bool      // STOPPING 前被已接纳工作撤销，实例继续使用原 Session。
 	Drained        bool      // 在排空期限内完成了所有在途调用
 	StoppingSentAt time.Time // 发出 STOPPING 的时刻（零值表示 Session 已关闭、未发送）
 	StopDeadline   time.Time // STOPPING 携带的绝对截止
@@ -41,25 +42,44 @@ type StopResult struct {
 	Err error
 }
 
+// StopHooks 把其他业务入口接入同一次冻结与停止，回调共用本次停止预算。
+type StopHooks struct {
+	Frozen         func(drainDeadline time.Time) // 可选；冻结新派发并在绝对排空截止前等待在途业务
+	BeforeStopping func() bool                   // 可选；与活动接纳共用门禁，false 撤销本次空闲停止。
+	Stopping       func()                        // 可选；进入 STOPPING 时撤销映射与注册
+}
+
 // Stop 停用一个插件实例：从 t0 起冻结新根调用 → 最多排空 Drain → 取消剩余调用并发送唯一 STOPPING
 // （截止为 min(t0+Total, 发送时刻+OnStopAt)）→ 等待整棵进程树退出，到 t0+Total 仍未清空则终止进程树。
 // 只在确认进程树清空之后返回；无法确认时 StopResult.Err 非 nil。
-func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing StopTiming) StopResult {
+func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing StopTiming, hooks StopHooks) StopResult {
 	var res StopResult
 	// 1. 冻结：从 t0 起拒绝新根调用，已接纳调用链的子调用仍可完成。
 	if !in.state.CompareAndSwap(int32(StateActivated), int32(StateDraining)) {
 		in.state.Store(int32(StateDraining)) // Activating/Degraded 等状态同样不再接单
 	}
+	drainDeadline := t0.Add(timing.Drain)
+	if hooks.Frozen != nil {
+		hooks.Frozen(drainDeadline)
+	}
 
 	// 2. 最多排空 Drain，等待两个方向的在途调用完成。
 	total := t0.Add(timing.Total)
-	drainCtx, cancel := context.WithDeadline(context.Background(), t0.Add(timing.Drain))
+	drainCtx, cancel := context.WithDeadline(context.Background(), drainDeadline)
 	res.Drained = in.Session.WaitIdle(drainCtx) == nil
 	cancel()
+	if hooks.BeforeStopping != nil && !hooks.BeforeStopping() {
+		in.state.CompareAndSwap(int32(StateDraining), int32(StateActivated))
+		res.Cancelled = true
+		return res
+	}
 
 	// 3. 取消剩余调用，发送唯一 STOPPING，截止为 min(t0+Total, 发送时刻+OnStopAt)。
 	in.Session.CancelOutbound(pb.CancelReason_CANCEL_REASON_SESSION_STOPPING)
 	in.state.Store(int32(StateStopping))
+	if hooks.Stopping != nil {
+		hooks.Stopping()
+	}
 	now := time.Now()
 	deadline := now.Add(timing.OnStopAt)
 	if total.Before(deadline) {
@@ -71,7 +91,7 @@ func (in *Instance) Stop(t0 time.Time, reason pb.StopReason, tree Tree, timing S
 	}
 
 	// 4. 领头进程与它留在树内的其他进程共用同一个总截止；到期仍未清空则终止整棵树并确认消失，
-	// 不能用 sleep 或猜测代替（CONTRACTS §4.2、§12.2）。
+	// 不能用 sleep 或猜测代替。
 	timer := time.NewTimer(time.Until(total))
 	defer timer.Stop()
 	select {
@@ -100,7 +120,7 @@ func StopAll(t0 time.Time, reason pb.StopReason, targets map[*Instance]Tree, tim
 		wg.Add(1)
 		go func(in *Instance, tree Tree) {
 			defer wg.Done()
-			r := in.Stop(t0, reason, tree, timing)
+			r := in.Stop(t0, reason, tree, timing, StopHooks{})
 			mu.Lock()
 			out[in] = r
 			mu.Unlock()
@@ -110,7 +130,7 @@ func StopAll(t0 time.Time, reason pb.StopReason, targets map[*Instance]Tree, tim
 	return out
 }
 
-// RestartPolicy 实现有限恢复（CONTRACTS §4.2）：窗口内第 Limit 次异常退出自动禁用；
+// RestartPolicy 实现有限恢复：窗口内第 Limit 次异常退出自动禁用；
 // 正常退出与用户主动停用不重启；手动启用重置窗口。失败窗口只保存在内存中，禁用状态由调用方持久化。
 type RestartPolicy struct {
 	Window time.Duration // 计数异常退出的滑动窗口

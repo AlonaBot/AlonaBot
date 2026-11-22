@@ -1,4 +1,4 @@
-// Event、MessageChain/Segment、Send 与回执（MESSAGE-MODEL §1/§2/§4、CONTRACTS §8）。
+// Event、MessageChain/Segment、Send 与回执。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -18,9 +18,17 @@ enum EventSourceKind {
   EVENT_SOURCE_KIND_SCHEDULER = 2;
 }
 
+// ChatType 列出事件所在会话的类型。
+enum ChatType {
+  CHAT_TYPE_UNSPECIFIED = 0;
+  CHAT_TYPE_PRIVATE = 1;
+  CHAT_TYPE_GROUP = 2;
+  CHAT_TYPE_CHANNEL = 3;
+}
+
 // Event 描述 Core 标准化后的入站事件。
 // event_type 取值：message.created、message.edited、message.deleted、button.clicked、
-// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline，或 Adapter 声明的完整扩展事件名。
+// member.joined、member.left、reaction.added、scheduled、bot.online、bot.offline、command.invoked，或 Adapter 声明的完整扩展事件名。
 // 标准类型与 event_payload 的分支一一对应，扩展类型使用 adapter_event 分支。
 message Event {
   // Core 入站标准化时产生。
@@ -51,6 +59,10 @@ message Event {
   bytes platform_payload = 13;
   // 原平台事件标识。
   optional string source_event_id = 14;
+  // 会话类型；没有 target 时必须为 UNSPECIFIED。
+  ChatType chat_type = 15;
+  // 会话显示名；没有 target 时必须 absent。
+  optional string chat_title = 16;
 }
 
 // PlatformMessage 描述一条已存在的平台消息。
@@ -89,7 +101,32 @@ message EventPayload {
     BotOfflinePayload bot_offline = 10;
     // Adapter 声明的扩展事件。
     AdapterEventPayload adapter_event = 11;
+    // Core 在命令调用结束或权限拒绝后生成。
+    CommandInvokedPayload command_invoked = 12;
+    // Core 完成手动菜单模式就绪后向相关插件发送。
+    CommandMenuReadyPayload command_menu_ready = 13;
   }
+}
+
+// CommandMenuReadyPayload 通知插件可以接管实例或指定聊天的菜单。
+message CommandMenuReadyPayload {
+  string adapter_id = 1;
+  string adapter_instance_id = 2;
+  string account_id = 3;
+  // 空值表示实例就绪；非空表示已知聊天首次可用或重新获准。
+  string chat_id = 4;
+}
+
+// CommandInvokedPayload 记录命令调用结果，不携带参数与聊天内容。
+message CommandInvokedPayload {
+  string plugin_id = 1;
+  string route_id = 2;
+  // 路径命令的生效规范名；文本匹配与 Raw 使用 route_id。
+  string command_name = 3;
+  // ok、error 或 denied。
+  string result = 4;
+  // Handler 调用耗时，单位为毫秒；权限拒绝时为 0。
+  uint64 duration_ms = 5;
 }
 
 // AdapterEventPayload 承载与 Adapter 注册声明一致的版本和 JSON 对象。
@@ -160,6 +197,12 @@ message ScheduledPayload {
   string run_id = 2;
   // 计划触发时刻，UTC 毫秒。
   int64 scheduled_at_unix_ms = 3;
+  // 动态任务名；静态任务为空。
+  string task_name = 4;
+  // 动态实例键。
+  string task_key = 5;
+  // 创建时原样保存的 JSON 对象。
+  string task_payload_json = 6;
 }
 
 // ---------- MessageChain ----------
@@ -190,7 +233,18 @@ message Segment {
     ButtonsSegment buttons = 7;
     // 合并转发。
     ForwardSegment forward = 8;
+    // 由目标 Adapter 声明 Schema 的扩展片段。
+    ExtensionSegment extension = 9;
+    // 语音。
+    VoiceSegment voice = 10;
+    // 通用 CommonMark 与删除线。
+    MarkdownSegment markdown = 11;
   }
+}
+
+// MarkdownSegment 承载通用 Markdown 正文。
+message MarkdownSegment {
+  string content = 1;
 }
 
 // TextFormat 列出文本的标记格式。
@@ -240,16 +294,22 @@ message TextEntity {
   optional string external_user_id = 6;
 }
 
-// MediaSource 描述媒体来源，三选一。
+// MediaSource 描述媒体来源；platform_file 只由 Core 发往 Adapter。
 message MediaSource {
+  // Core 根据受管媒体元数据填写；插件提交的 MIME 不作为可信来源。
+  string mime = 6;
   // 媒体来源，恰有一个分支。
   oneof source {
     // 已提交 MediaRef 的 token。
     string media_ref = 1;
-    // 入站媒体描述符，发送时由 Core 取件。
+    // 入站媒体描述符，发送时由 Core 准备来源。
     IncomingMedia incoming_ref = 2;
     // 公网 HTTPS 地址，发送前验证。
     string https_url = 3;
+    // 标准 base64，解码后为 1 B～1 MiB。
+    string inline_base64 = 4;
+    // Core 填写的来源实例平台文件标识，插件填写时拒绝。
+    string platform_file = 5;
   }
 }
 
@@ -266,6 +326,16 @@ message ImageSegment {
 // VideoSegment 描述一段视频。
 message VideoSegment {
   // 视频来源。
+  MediaSource source = 1;
+  // 时长（毫秒）；未知时 absent。
+  optional uint64 duration_ms = 2;
+  // 附带说明。
+  optional string caption = 3;
+}
+
+// VoiceSegment 描述一段语音。
+message VoiceSegment {
+  // 语音来源。
   MediaSource source = 1;
   // 时长（毫秒）；未知时 absent。
   optional uint64 duration_ms = 2;
@@ -313,7 +383,7 @@ message ButtonRow {
   repeated Button buttons = 1;
 }
 
-// Button 描述一个回调按钮。
+// Button 描述一个回调或链接按钮。
 message Button {
   // 指向当前插件已注册的 button.clicked 路由。
   string action_id = 1;
@@ -321,12 +391,18 @@ message Button {
   string label = 2;
   // 按该 action Schema 校验的 JSON 文本。
   optional string value = 3;
+  // Core 填写的回调令牌；插件填写的值由 Core 清除。
+  optional string core_token = 4;
+  // 与 action_id 恰有一个，https 或 tg 绝对链接。
+  optional string url = 5;
 }
 
 // ForwardSegment 描述合并转发；仅平台明确支持合并转发时发送。
 message ForwardSegment {
   // 被转发的条目。
   repeated ForwardItem items = 1;
+  // 只在入站出现的平台合并转发标识。
+  optional string platform_forward_id = 2;
 }
 
 // ForwardItem 描述合并转发中的一条。
@@ -335,6 +411,10 @@ message ForwardItem {
   ForwardSource source = 1;
   // 条目内容。
   MessageChain chain = 2;
+  // 引用同一会话的已有消息，与 chain 恰有一个。
+  optional string platform_message_id = 3;
+  // UTC 毫秒，0 表示未知。
+  int64 occurred_at_unix_ms = 4;
 }
 
 // ForwardSource 描述转发条目的来源展示信息。
@@ -431,4 +511,53 @@ message BotOfflinePayload {
   string account_id = 3;
   BotOfflineReason reason = 4;
   ErrorInfo safe_error = 5;
+}
+
+// EditRequest 修改一条平台消息；to 缺省时使用调用链的默认 Target，响应为 SendResult。
+message EditRequest {
+  Target to = 1;
+  string platform_message_id = 2;
+  // 恰好一个 text 片段和至多一个 buttons 片段。
+  MessageChain chain = 3;
+}
+
+// ExtensionSegment 承载目标 Adapter 已声明的版本化片段及其 JSON 载荷。
+message ExtensionSegment {
+  // 目标 Adapter 的平台类型。
+  string adapter_id = 1;
+  // Adapter 注册声明中的扩展名称。
+  string name = 2;
+  // 注册声明中的扩展版本。
+  uint32 version = 3;
+  // 按该声明的 Schema 校验的 JSON 文本。
+  string payload_json = 4;
+}
+
+// DeleteRequest 按输入顺序撤回同一目标的 1～100 个消息 ID。
+message DeleteRequest {
+  Target to = 1;
+  repeated string platform_message_ids = 2;
+}
+
+// DeleteItemResult 保留单个输入 ID 的撤回状态与安全错误。
+message DeleteItemResult {
+  string platform_message_id = 1;
+  PartStatus status = 2;
+  ErrorInfo error = 3;
+}
+
+// DeleteResult 按输入顺序保留全部逐项结果，包括重复 ID 与未尝试项。
+message DeleteResult {
+  Target target = 1;
+  repeated DeleteItemResult items = 2;
+}
+
+// ReadNodesRequest 查询指定目标中的合并转发资源。
+message ReadNodesRequest {
+  Target to = 1;
+  ForwardSegment segment = 2;
+}
+// ReadNodesResponse 保留完整递归节点及部分结果。
+message ReadNodesResponse {
+  repeated ForwardItem items = 1;
 }

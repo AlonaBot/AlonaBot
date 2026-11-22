@@ -11,9 +11,111 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-// 以下期望值逐字取自 spec/WIRE-FORMAT.md §1/§2；改动这里等于改动线上协议。
+// TestCommandMenuFieldTypes 固定菜单事件分支与配置、MIME 的类型及 presence。
+func TestCommandMenuFieldTypes(t *testing.T) {
+	field := (&pb.EventPayload{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if field == nil || field.Name() != "command_menu_ready" || field.Kind() != protoreflect.MessageKind || field.IsList() || !field.HasPresence() || field.Message().FullName() != "alonabot.v1.CommandMenuReadyPayload" || field.ContainingOneof() == nil || field.ContainingOneof().Name() != "kind" {
+		t.Fatalf("EventPayload field 13 = %v", field)
+	}
+	for _, check := range []struct {
+		message  proto.Message
+		number   protoreflect.FieldNumber
+		kind     protoreflect.Kind
+		presence bool
+	}{
+		{&pb.MediaSource{}, 6, protoreflect.StringKind, false},
+		{&pb.CommandSpec{}, 14, protoreflect.BoolKind, false},
+		{&pb.AdapterInstanceStartResponse{}, 5, protoreflect.MessageKind, true},
+		{&pb.CommandMenuConfig{}, 1, protoreflect.BoolKind, false},
+		{&pb.CommandMenuConfig{}, 2, protoreflect.BoolKind, false},
+		{&pb.CommandMenuResponse{}, 3, protoreflect.BoolKind, false},
+	} {
+		field := check.message.ProtoReflect().Descriptor().Fields().ByNumber(check.number)
+		if field == nil || field.Kind() != check.kind || field.HasPresence() != check.presence || field.IsList() || field.ContainingOneof() != nil {
+			t.Errorf("%T field %d = %v", check.message, check.number, field)
+		}
+	}
+}
 
-// Envelope 字段 1～16 的编号与名称和 WIRE §1 一致，且没有多余字段。
+// TestCommandInvokedFieldNumbers 固定命令结果载荷及事件分支的编号与类型。
+func TestCommandInvokedFieldNumbers(t *testing.T) {
+	fields := (&pb.CommandInvokedPayload{}).ProtoReflect().Descriptor().Fields()
+	names := []protoreflect.Name{"plugin_id", "route_id", "command_name", "result", "duration_ms"}
+	if fields.Len() != len(names) {
+		t.Fatalf("CommandInvokedPayload fields = %d, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		kind := protoreflect.StringKind
+		if name == "duration_ms" {
+			kind = protoreflect.Uint64Kind
+		}
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != name || field.Kind() != kind || field.HasPresence() || field.IsList() || field.ContainingOneof() != nil {
+			t.Fatalf("CommandInvokedPayload field %d = %v", i+1, field)
+		}
+	}
+	field := (&pb.EventPayload{}).ProtoReflect().Descriptor().Fields().ByNumber(12)
+	if field == nil || field.Name() != "command_invoked" || field.Kind() != protoreflect.MessageKind || field.IsList() || !field.HasPresence() || field.Message().FullName() != "alonabot.v1.CommandInvokedPayload" || field.ContainingOneof() == nil || field.ContainingOneof().Name() != "kind" {
+		t.Fatalf("EventPayload field 12 = %v", field)
+	}
+}
+
+// TestLogSetLevelFieldNumbers 固定日志级别请求和响应的协议布局。
+func TestLogSetLevelFieldNumbers(t *testing.T) {
+	fields := (&pb.LogSetLevelRequest{}).ProtoReflect().Descriptor().Fields()
+	f := fields.ByNumber(1)
+	if fields.Len() != 1 || f == nil || f.Name() != "level" || f.Kind() != protoreflect.EnumKind || f.Enum().FullName() != "alonabot.v1.LogLevel" || f.HasPresence() || f.IsList() || f.ContainingOneof() != nil {
+		t.Fatalf("LogSetLevelRequest field 1 should be singular LogLevel level, got %v", f)
+	}
+	if (&pb.LogSetLevelResponse{}).ProtoReflect().Descriptor().Fields().Len() != 0 {
+		t.Fatal("LogSetLevelResponse should be empty")
+	}
+}
+
+// TestCommandConsumedFieldNumber 固定可信命令消费标记的字段编号与类型。
+func TestCommandConsumedFieldNumber(t *testing.T) {
+	field := (&pb.InvocationContext{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "command_consumed" || field.Kind() != protoreflect.BoolKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("InvocationContext field 6 should be bool command_consumed, got %v", field)
+	}
+}
+
+// TestContinuationFieldNumbers 固定延续调用与等待载荷的编号、类型及 presence。
+func TestContinuationFieldNumbers(t *testing.T) {
+	field := (&pb.HandlerRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(5)
+	if field == nil || field.Name() != "continuation_of" || field.Kind() != protoreflect.Uint64Kind || !field.HasOptionalKeyword() || !field.HasPresence() || field.IsList() {
+		t.Fatalf("HandlerRequest field 5 should be optional uint64 continuation_of, got %v", field)
+	}
+	for _, c := range []struct {
+		message proto.Message
+		name    protoreflect.Name
+		kind    protoreflect.Kind
+	}{
+		{&pb.ContinuationStartRequest{}, "", 0},
+		{&pb.ContinuationStartResponse{}, "", 0},
+		{&pb.WaitRequest{}, "timeout_ms", protoreflect.Uint32Kind},
+		{&pb.WaitResponse{}, "event", protoreflect.MessageKind},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if c.name == "" {
+			if fields.Len() != 0 {
+				t.Errorf("%T should be empty", c.message)
+			}
+			continue
+		}
+		f := fields.ByNumber(1)
+		if fields.Len() != 1 || f == nil || f.Name() != c.name || f.Kind() != c.kind || f.IsList() || f.HasPresence() != (c.kind == protoreflect.MessageKind) {
+			t.Fatalf("%T field 1 should be %s %s, got %v", c.message, c.kind, c.name, f)
+		}
+		if c.name == "event" && f.Message().FullName() != "alonabot.v1.Event" {
+			t.Errorf("WaitResponse.event type = %s", f.Message().FullName())
+		}
+	}
+}
+
+// 以下期望值锁定已发布协议的字段号和枚举值；修改 .proto 后仍须保留这些编号。
+
+// Envelope 固定字段 1～16 的名称与编号，且没有多余字段；定义见 proto/alonabot/v1/envelope.proto。
 func TestEnvelopeFieldNumbers(t *testing.T) {
 	want := []string{
 		1: "protocol_major", 2: "protocol_minor", 3: "session_id", 4: "initiator_side",
@@ -42,7 +144,7 @@ func TestEnvelopeFieldNumbers(t *testing.T) {
 	}
 }
 
-// ErrorInfo 字段 1～3 的编号与名称和 WIRE §2 一致。
+// ErrorInfo 固定字段 1～3 的名称与编号；定义见 proto/alonabot/v1/errors.proto。
 func TestErrorInfoFieldNumbers(t *testing.T) {
 	fields := (&pb.ErrorInfo{}).ProtoReflect().Descriptor().Fields()
 	for num, name := range map[int]string{1: "code", 2: "safe_message", 3: "trace_id"} {
@@ -55,6 +157,111 @@ func TestErrorInfoFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestOptionsSourceFieldNumber 固定 Service 选项来源标记的字段编号和类型。
+func TestOptionsSourceFieldNumber(t *testing.T) {
+	field := (&pb.ServiceSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "options_source" || field.Kind() != protoreflect.BoolKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("ServiceSpec field 6 should be bool options_source, got %v", field)
+	}
+}
+
+// TestMessageFilterFieldNumbers 固定事件过滤声明及其条件的协议编号。
+func TestMessageFilterFieldNumbers(t *testing.T) {
+	f := (&pb.EventSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if f == nil || f.Name() != "message_filter" || f.Kind() != protoreflect.MessageKind || !f.HasPresence() || f.IsList() || f.Message().FullName() != "alonabot.v1.MessageFilter" {
+		t.Fatalf("EventSpec field 6 should be MessageFilter message_filter, got %v", f)
+	}
+	fields := f.Message().Fields()
+	for i, want := range []struct {
+		name protoreflect.Name
+		kind protoreflect.Kind
+	}{
+		{"to_me", protoreflect.BoolKind}, {"chat_types", protoreflect.EnumKind},
+		{"wake_words_config", protoreflect.StringKind}, {"triggers_config", protoreflect.StringKind},
+	} {
+		field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != want.name || field.Kind() != want.kind || field.IsList() != (i == 1) || field.HasPresence() {
+			t.Fatalf("MessageFilter field %d = %v, want %s %s", i+1, field, want.kind, want.name)
+		}
+		if i == 1 && field.Enum().FullName() != "alonabot.v1.ChatType" {
+			t.Errorf("chat_types enum = %s, want ChatType", field.Enum().FullName())
+		}
+	}
+}
+
+// TestButtonCoreTokenFieldNumber 固定 Core 回调令牌的字段编号、类型与 optional presence。
+func TestButtonCoreTokenFieldNumber(t *testing.T) {
+	field := (&pb.Button{}).ProtoReflect().Descriptor().Fields().ByNumber(4)
+	if field == nil || field.Name() != "core_token" || field.Kind() != protoreflect.StringKind || !field.HasOptionalKeyword() || !field.HasPresence() || field.IsList() {
+		t.Errorf("Button field 4 should be optional string core_token, got %v", field)
+	}
+}
+
+// TestHookFilterFieldNumber 固定 PreEvent 事件过滤器的编号与 repeated string 类型。
+func TestHookFilterFieldNumber(t *testing.T) {
+	fields := (&pb.HookSpec{}).ProtoReflect().Descriptor().Fields()
+	field := fields.ByNumber(2)
+	if fields.Len() != 2 || field == nil || field.Name() != "event_type_filter" || field.Kind() != protoreflect.StringKind || !field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("HookSpec field 2 should be repeated string event_type_filter, got %v", field)
+	}
+}
+
+// TestOutboundHookFieldNumbers 固定出站操作字段的编号、类型和编辑消息 ID 的 presence。
+func TestOutboundHookFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+	}{
+		{&pb.BeforeSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "operation", "edited_platform_message_id"}},
+		{&pb.AfterSendRequest{}, []protoreflect.Name{"route_id", "context", "target", "chain", "result", "error", "operation", "edited_platform_message_id"}},
+	} {
+		d := c.message.ProtoReflect().Descriptor()
+		fields := d.Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%s field count = %d, want %d", d.Name(), fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || f.Name() != name || f.IsList() {
+				t.Fatalf("%s field %d = %v, want singular %s", d.Name(), i+1, f, name)
+			}
+			switch name {
+			case "operation":
+				if f.Kind() != protoreflect.EnumKind || f.Enum().FullName() != "alonabot.v1.SendOperation" || f.HasPresence() || f.ContainingOneof() != nil {
+					t.Errorf("%s.operation = %v, want SendOperation without presence", d.Name(), f)
+				}
+			case "edited_platform_message_id":
+				if f.Kind() != protoreflect.StringKind || !f.HasOptionalKeyword() || !f.HasPresence() || f.ContainingOneof() == nil || !f.ContainingOneof().IsSynthetic() {
+					t.Errorf("%s.edited_platform_message_id = %v, want optional string", d.Name(), f)
+				}
+			}
+		}
+	}
+}
+
+// TestExtensionFieldNumbers 固定 extension 分支与载荷的编号、类型和 oneof 归属。
+func TestExtensionFieldNumbers(t *testing.T) {
+	field := (&pb.Segment{}).ProtoReflect().Descriptor().Fields().ByNumber(9)
+	if field == nil || field.Name() != "extension" || field.Kind() != protoreflect.MessageKind || field.IsList() || field.Message().FullName() != "alonabot.v1.ExtensionSegment" {
+		t.Fatalf("Segment field 9 should be ExtensionSegment extension, got %v", field)
+	}
+	if oneof := field.ContainingOneof(); oneof == nil || oneof.Name() != "data" {
+		t.Errorf("extension oneof = %v, want data", oneof)
+	}
+	names := []protoreflect.Name{"adapter_id", "name", "version", "payload_json"}
+	kinds := []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}
+	fields := (&pb.ExtensionSegment{}).ProtoReflect().Descriptor().Fields()
+	if fields.Len() != len(names) {
+		t.Fatalf("ExtensionSegment has %d fields, want %d", fields.Len(), len(names))
+	}
+	for i, name := range names {
+		f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+		if f == nil || f.Name() != name || f.Kind() != kinds[i] || f.IsList() || f.HasPresence() || f.ContainingOneof() != nil {
+			t.Errorf("ExtensionSegment field %d should be singular %s %s, got %v", i+1, kinds[i], name, f)
+		}
+	}
+}
+
 // 规格列出取值的枚举逐项一致；全部已注册枚举的零值都是 *_UNSPECIFIED。
 func TestEnumValues(t *testing.T) {
 	cases := []struct {
@@ -64,6 +271,7 @@ func TestEnumValues(t *testing.T) {
 		values []string
 	}{
 		{pb.InitiatorSide(0).Descriptor(), "INITIATOR_SIDE_", []string{"UNSPECIFIED", "CORE", "PLUGIN"}},
+		{pb.StopReason(0).Descriptor(), "STOP_REASON_", []string{"UNSPECIFIED", "DISABLE", "RESTART", "RELOAD", "UPDATE", "CORE_SHUTDOWN", "IDLE"}},
 		{pb.FrameKind(0).Descriptor(), "FRAME_KIND_", []string{
 			"UNSPECIFIED", "HELLO", "HELLO_ACK", "REGISTER", "PREPARED", "ACTIVATE", "ACTIVATED",
 			"REQUEST", "RESPONSE", "CANCEL", "EVENT", "STOPPING", "HEARTBEAT", "SESSION_ERROR"}},
@@ -73,23 +281,28 @@ func TestEnumValues(t *testing.T) {
 			"ALREADY_EXISTS", "FAILED_PRECONDITION", "UNSUPPORTED", "RESOURCE_EXHAUSTED",
 			"DEADLINE_EXCEEDED", "CANCELLED", "UNAVAILABLE", "INTERNAL", "PROTOCOL_ERROR",
 			"CALL_CYCLE", "PLUGIN_NOT_READY", "NO_DEFAULT_TARGET", "NEEDS_MANUAL_MIGRATION"}},
-		// MESSAGE-MODEL §4。
+		// 已发布枚举的名称与编号保持不变。
 		{pb.AdapterInstanceState(0).Descriptor(), "ADAPTER_INSTANCE_STATE_", []string{"UNSPECIFIED", "FAILED"}},
+		{pb.ActionScope(0).Descriptor(), "ACTION_SCOPE_", []string{"UNSPECIFIED", "CHAT", "ACCOUNT"}},
 		{pb.BotOfflineReason(0).Descriptor(), "BOT_OFFLINE_REASON_", []string{"UNSPECIFIED", "STOPPED", "ADAPTER_EXITED", "INSTANCE_FAILED"}},
+		{pb.TextUnit(0).Descriptor(), "TEXT_UNIT_", []string{"UNSPECIFIED", "UTF16_CODE_UNITS", "UNICODE_CODE_POINTS", "BYTES"}},
 		{pb.SendStatus(0).Descriptor(), "SEND_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "PARTIAL", "REJECTED", "UNKNOWN"}},
+		{pb.SendOperation(0).Descriptor(), "SEND_OPERATION_", []string{"UNSPECIFIED", "SEND", "EDIT"}},
+		{pb.ChatType(0).Descriptor(), "CHAT_TYPE_", []string{"UNSPECIFIED", "PRIVATE", "GROUP", "CHANNEL"}},
 		{pb.PartStatus(0).Descriptor(), "PART_STATUS_", []string{"UNSPECIFIED", "ACCEPTED", "REJECTED", "UNKNOWN", "NOT_ATTEMPTED"}},
-		// MESSAGE-MODEL §3。
+		// 已发布枚举的名称与编号保持不变。
 		{pb.Propagation(0).Descriptor(), "PROPAGATION_", []string{"UNSPECIFIED", "CONTINUE", "STOP"}},
-		// WIRE §3.3 的 kind 与 CONTRACTS §2.3 的 Hook phase。
+		// 路由类别与 Hook 阶段的编号分别保持不变。
 		{pb.RouteKind(0).Descriptor(), "ROUTE_KIND_", []string{
-			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION"}},
+			"UNSPECIFIED", "COMMAND", "EVENT", "HOOK", "SERVICE", "SCHEDULE", "HTTP", "BUS_SUBSCRIPTION", "TASK"}},
 		{pb.HookPhase(0).Descriptor(), "HOOK_PHASE_", []string{"UNSPECIFIED", "PRE_EVENT", "BEFORE_SEND", "AFTER_SEND"}},
 		{pb.ParamType(0).Descriptor(), "PARAM_TYPE_", []string{"UNSPECIFIED", "STRING", "INT", "FLOAT", "BOOL", "USER", "IMAGE", "MESSAGE"}},
 		{pb.CommandMatch(0).Descriptor(), "COMMAND_MATCH_", []string{"UNSPECIFIED", "PATH", "REGEX", "RAW", "KEYWORD", "STARTSWITH", "ENDSWITH", "FULLMATCH"}},
-		// WIRE §3.2 的 log_level。
-		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF"}},
-		// CONTRACTS §13.1、WIRE §3.5 的工具策略。
+		// 日志级别保留已发布编号。
+		{pb.LogLevel(0).Descriptor(), "LOG_LEVEL_", []string{"UNSPECIFIED", "DEBUG", "INFO", "WARN", "ERROR", "OFF", "CRITICAL"}},
+		// 工具策略与作用类别各自保留已发布编号。
 		{pb.ToolPolicy(0).Descriptor(), "TOOL_POLICY_", []string{"UNSPECIFIED", "ALLOW", "CONFIRM", "DENY"}},
+		{pb.ToolEffect(0).Descriptor(), "TOOL_EFFECT_", []string{"UNSPECIFIED", "READ_ONLY", "WRITE", "DESTRUCTIVE"}},
 	}
 	for _, c := range cases {
 		vals := c.enum.Values()
@@ -107,8 +320,8 @@ func TestEnumValues(t *testing.T) {
 
 // TestCommandSpecFieldNumbers 固定命令描述及追加文本匹配字段的编号、类型与重复性。
 func TestCommandSpecFieldNumbers(t *testing.T) {
-	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key"}
-	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind}
+	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key", "description", "menu"}
+	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind}
 	fields := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields()
 	if fields.Len() != len(names)-1 {
 		t.Fatalf("CommandSpec has %d fields, want %d", fields.Len(), len(names)-1)
@@ -124,6 +337,9 @@ func TestCommandSpecFieldNumbers(t *testing.T) {
 		if f == nil || f.Name() != name || f.Kind() != kinds[i] {
 			t.Errorf("CommandSpec field %d should be %s %s, got %v", i+1, kinds[i], name, f)
 			continue
+		}
+		if name == "description" && !f.HasOptionalKeyword() {
+			t.Error("CommandSpec.description must be optional")
 		}
 		repeated := name == "path" || name == "aliases" || name == "params" || name == "patterns"
 		if f.IsList() != repeated {
@@ -163,7 +379,7 @@ func checkEnum(t *testing.T, e protoreflect.EnumDescriptor) {
 	}
 }
 
-// Service 调用必须同时携带可信上下文与业务载荷（WIRE §4）。
+// Service 调用必须同时携带可信上下文与业务载荷。
 func TestServiceInvocationCarriesContext(t *testing.T) {
 	fields := (&pb.ServiceInvocation{}).ProtoReflect().Descriptor().Fields()
 	ctx := fields.ByName("context")
@@ -177,7 +393,7 @@ func TestServiceInvocationCarriesContext(t *testing.T) {
 	}
 }
 
-// HandlerOutcome 的字段与 MESSAGE-MODEL §3 对应；error 放在 Envelope，不在此消息内。
+// HandlerOutcome 锁定 invocation.proto 中的业务字段；error 放在 Envelope，不在此消息内。
 func TestHandlerOutcomeFields(t *testing.T) {
 	fields := (&pb.HandlerOutcome{}).ProtoReflect().Descriptor().Fields()
 	for _, name := range []protoreflect.Name{"matched", "propagation", "chain"} {
@@ -202,7 +418,7 @@ func screamingSnake(s string) string {
 	return strings.ToUpper(b.String())
 }
 
-// SessionLimits 的字段名称、类型与编号遵循 WIRE §3.2。
+// SessionLimits 锁定 control.proto 中已发布的字段名称、类型与编号。
 func TestSessionLimitsFieldNumbers(t *testing.T) {
 	fields := (&pb.SessionLimits{}).ProtoReflect().Descriptor().Fields()
 	names := []string{"max_inflight", "max_payload_bytes", "request_timeout_ms"}
@@ -217,7 +433,7 @@ func TestSessionLimitsFieldNumbers(t *testing.T) {
 	}
 }
 
-// Bootstrap.session_limits 固定为字段 11，并引用 SessionLimits（WIRE §3.2）。
+// Bootstrap.session_limits 固定为字段 11，并引用 SessionLimits。
 func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(11)
 	if field == nil || field.Name() != "session_limits" || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "alonabot.v1.SessionLimits" {
@@ -228,16 +444,38 @@ func TestBootstrapSessionLimitsFieldNumber(t *testing.T) {
 // TestAdapterFieldNumbers 固定 Adapter 载荷与追加字段的线上编号。
 func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
-		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events"},
+		"Capability":                   {"name", "version", "supported", "text_limit"},
+		"TextLimit":                    {"max", "unit"},
+		"MediaSource":                  {"media_ref", "incoming_ref", "https_url", "inline_base64", "platform_file", "mime"},
+		"MediaURLRequest":              {"token", "base_url"},
+		"MediaURLResponse":             {"url", "expires_at_unix_ms"},
+		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events", "actions"},
 		"PermissionDeclaration":        {"name", "implies", "label_key"},
 		"EventDeclaration":             {"name", "version", "schema_json"},
 		"AdapterEventPayload":          {"version", "payload_json"},
 		"ExtensionDeclaration":         {"name", "version", "schema_json"},
 		"AdapterInstanceStartRequest":  {"instance_id", "config_json", "cursor"},
-		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username"},
+		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username", "command_menu"},
 		"AdapterInstanceStopRequest":   {"instance_id"},
 		"AdapterInstanceStopResponse":  {},
 		"AdapterSendRequest":           {"instance_id", "target", "chain"},
+		"EditRequest":                  {"to", "platform_message_id", "chain"},
+		"CommandMenuItem":              {"name", "descriptions"},
+		"AdapterCommandsSyncRequest":   {"instance_id", "commands"},
+		"AdapterCommandsSyncResponse":  {},
+		"CommandMenuConfig":            {"auto_sync_commands", "clear_commands_on_disable"},
+		"CommandMenuScope":             {"type", "chat_id", "user_id"},
+		"CommandMenuEntry":             {"name", "description"},
+		"CommandMenu":                  {"scope", "language_code", "commands"},
+		"CommandMenuRequest":           {"instance_id", "operation", "menu"},
+		"CommandMenuResponse":          {"commands", "config", "ready", "last_error", "positions"},
+		"CommandMenuPosition":          {"scope", "language_code", "mode", "owner_plugin_id"},
+		"CommandMenuReadyPayload":      {"adapter_id", "adapter_instance_id", "account_id", "chat_id"},
+		"AdapterEditRequest":           {"instance_id", "target", "platform_message_id", "chain"},
+		"DeleteRequest":                {"to", "platform_message_ids"},
+		"DeleteItemResult":             {"platform_message_id", "status", "error"},
+		"DeleteResult":                 {"target", "items"},
+		"AdapterDeleteRequest":         {"instance_id", "target", "platform_message_ids"},
 		"AdapterDeliverRequest":        {"instance_id", "event", "cursor"},
 		"AdapterDeliverResponse":       {"accepted"},
 		"AdapterCursorRequest":         {"instance_id", "cursor"},
@@ -345,7 +583,7 @@ func TestConversationFieldNumbers(t *testing.T) {
 	}
 }
 
-// TestEnvelopeSchemaVersions 区分业务版本和固定控制帧版本（WIRE §1）。
+// TestEnvelopeSchemaVersions 区分业务版本和固定控制帧版本。
 func TestEnvelopeSchemaVersions(t *testing.T) {
 	for _, kind := range []pb.FrameKind{pb.FrameKind_FRAME_KIND_REQUEST, pb.FrameKind_FRAME_KIND_RESPONSE, pb.FrameKind_FRAME_KIND_HEARTBEAT} {
 		for _, version := range []uint32{0, 1, 2} {
@@ -442,6 +680,22 @@ func TestRemovedPermissionFieldsReserved(t *testing.T) {
 	}
 }
 
+// TestBootstrapDefaultLocaleFieldNumber 固定默认语言字段的线上编号与类型。
+func TestBootstrapDefaultLocaleFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(12)
+	if field == nil || field.Name() != "default_locale" || field.Kind() != protoreflect.StringKind {
+		t.Errorf("Bootstrap field 12 should be string default_locale, got %v", field)
+	}
+}
+
+// TestBootstrapPluginDataDirFieldNumber 固定插件数据目录字段的线上编号与类型。
+func TestBootstrapPluginDataDirFieldNumber(t *testing.T) {
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if field == nil || field.Name() != "plugin_data_dir" || field.Kind() != protoreflect.StringKind {
+		t.Errorf("Bootstrap field 13 should be string plugin_data_dir, got %v", field)
+	}
+}
+
 // TestToolFieldNumbers 固定 Service 工具描述与目录载荷的编号、类型和重复性。
 func TestToolFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
@@ -449,11 +703,15 @@ func TestToolFieldNumbers(t *testing.T) {
 		names   []protoreflect.Name
 		kinds   []protoreflect.Kind
 	}{
-		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind}},
-		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind}},
-		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind}},
+		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},
 		{&pb.ToolListResponse{}, []protoreflect.Name{"tools"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ToolInvokeRequest{}, []protoreflect.Name{"name", "arguments_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ToolInvokeResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ToolConfirmRequest{}, []protoreflect.Name{"operation", "summary", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind}},
+		{&pb.ToolConfirmResponse{}, nil, nil},
 	} {
 		t.Run(string(c.message.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
 			fields := c.message.ProtoReflect().Descriptor().Fields()
@@ -467,6 +725,10 @@ func TestToolFieldNumbers(t *testing.T) {
 					t.Fatalf("field %d = %v, want %s (%s, repeated=%v)", i+1, f, name, c.kinds[i], repeated)
 				}
 				switch name {
+				case "effect":
+					if f.Enum().FullName() != "alonabot.v1.ToolEffect" || f.HasPresence() || f.ContainingOneof() != nil {
+						t.Errorf("%s should be singular ToolEffect without presence, got %v", name, f)
+					}
 				case "tool", "tools":
 					want := protoreflect.FullName("alonabot.v1.ToolSpec")
 					if name == "tools" {
@@ -482,5 +744,291 @@ func TestToolFieldNumbers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestHTTPAuthModeNumbers 固定 HTTP 认证模式的线上编号。
+func TestHTTPAuthModeNumbers(t *testing.T) {
+	values := pb.HttpAuthMode(0).Descriptor().Values()
+	names := []protoreflect.Name{"HTTP_AUTH_MODE_UNSPECIFIED", "HTTP_AUTH_MODE_CORE_SESSION", "HTTP_AUTH_MODE_CALLBACK_STATE", "HTTP_AUTH_MODE_CALLBACK_SIGNATURE", "HTTP_AUTH_MODE_CALLBACK_NONCE", "HTTP_AUTH_MODE_PLATFORM_TOKEN", "HTTP_AUTH_MODE_STATIC"}
+	if values.Len() != len(names) {
+		t.Fatalf("HttpAuthMode has %d values, want %d", values.Len(), len(names))
+	}
+	for i, name := range names {
+		value := values.ByNumber(protoreflect.EnumNumber(i))
+		if value == nil || value.Name() != name {
+			t.Errorf("HttpAuthMode value %d should be %s, got %v", i, name, value)
+		}
+	}
+}
+
+// TestActionFieldNumbers 固定动作声明与两段服务载荷的编号、类型和重复性。
+func TestActionFieldNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+		kinds   []protoreflect.Kind
+	}{
+		{&pb.ActionDeclaration{}, []protoreflect.Name{"name", "version", "scope", "params_schema_json", "result_schema_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ActionRequest{}, []protoreflect.Name{"to", "adapter_instance_id", "name", "version", "params_json", "use_default_target"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind, protoreflect.BoolKind}},
+		{&pb.AdapterActionRequest{}, []protoreflect.Name{"instance_id", "target", "name", "version", "params_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.Uint32Kind, protoreflect.StringKind}},
+		{&pb.ActionResponse{}, []protoreflect.Name{"result_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+	} {
+		descriptor := tc.message.ProtoReflect().Descriptor()
+		fields := descriptor.Fields()
+		if fields.Len() != len(tc.names) {
+			t.Errorf("%s field count = %d", descriptor.Name(), fields.Len())
+		}
+		for i, name := range tc.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || f.Name() != name || f.Kind() != tc.kinds[i] || f.IsList() || f.HasPresence() != (tc.kinds[i] == protoreflect.MessageKind) || f.ContainingOneof() != nil {
+				t.Errorf("%s field %d should be singular %s %s, got %v", descriptor.Name(), i+1, tc.kinds[i], name, f)
+			}
+			if f != nil && f.Kind() == protoreflect.MessageKind && f.Message().FullName() != "alonabot.v1.Target" {
+				t.Errorf("%s.%s target type = %v", descriptor.Name(), name, f.Message().FullName())
+			}
+			if f != nil && f.Kind() == protoreflect.EnumKind && f.Enum().FullName() != "alonabot.v1.ActionScope" {
+				t.Errorf("%s.%s scope type = %v", descriptor.Name(), name, f.Enum().FullName())
+			}
+		}
+	}
+	field := (&pb.AdapterDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(6)
+	if field == nil || field.Name() != "actions" || field.Kind() != protoreflect.MessageKind || !field.IsList() || field.Message().FullName() != "alonabot.v1.ActionDeclaration" {
+		t.Errorf("AdapterDescriptor field 6 should be repeated ActionDeclaration actions, got %v", field)
+	}
+}
+
+// TestMessageSegmentFieldNumbers 固定消息片段、节点查询和会话字段的追加编号。
+func TestMessageSegmentFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message  proto.Message
+		number   protoreflect.FieldNumber
+		name     protoreflect.Name
+		kind     protoreflect.Kind
+		optional bool
+		typeName protoreflect.FullName
+	}{
+		{&pb.Segment{}, 10, "voice", protoreflect.MessageKind, false, "alonabot.v1.VoiceSegment"},
+		{&pb.Segment{}, 11, "markdown", protoreflect.MessageKind, false, "alonabot.v1.MarkdownSegment"},
+		{&pb.MarkdownSegment{}, 1, "content", protoreflect.StringKind, false, ""},
+		{&pb.ForwardItem{}, 4, "occurred_at_unix_ms", protoreflect.Int64Kind, false, ""},
+		{&pb.ReadNodesRequest{}, 1, "to", protoreflect.MessageKind, false, "alonabot.v1.Target"},
+		{&pb.ReadNodesRequest{}, 2, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
+		{&pb.AdapterReadNodesRequest{}, 1, "instance_id", protoreflect.StringKind, false, ""},
+		{&pb.AdapterReadNodesRequest{}, 2, "target", protoreflect.MessageKind, false, "alonabot.v1.Target"},
+		{&pb.AdapterReadNodesRequest{}, 3, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
+		{&pb.VoiceSegment{}, 1, "source", protoreflect.MessageKind, false, "alonabot.v1.MediaSource"},
+		{&pb.VoiceSegment{}, 2, "duration_ms", protoreflect.Uint64Kind, true, ""},
+		{&pb.VoiceSegment{}, 3, "caption", protoreflect.StringKind, true, ""},
+		{&pb.ForwardItem{}, 3, "platform_message_id", protoreflect.StringKind, true, ""},
+		{&pb.ForwardSegment{}, 2, "platform_forward_id", protoreflect.StringKind, true, ""},
+		{&pb.Button{}, 5, "url", protoreflect.StringKind, true, ""},
+		{&pb.Event{}, 15, "chat_type", protoreflect.EnumKind, false, "alonabot.v1.ChatType"},
+		{&pb.Event{}, 16, "chat_title", protoreflect.StringKind, true, ""},
+	} {
+		f := c.message.ProtoReflect().Descriptor().Fields().ByNumber(c.number)
+		if f == nil || f.Name() != c.name || f.Kind() != c.kind || f.HasOptionalKeyword() != c.optional || f.IsList() {
+			t.Errorf("%T field %d = %v", c.message, c.number, f)
+			continue
+		}
+		if c.kind == protoreflect.MessageKind && f.Message().FullName() != c.typeName || c.kind == protoreflect.EnumKind && f.Enum().FullName() != c.typeName {
+			t.Errorf("field type = %v", f)
+		}
+		if c.name == "voice" || c.name == "markdown" {
+			if f.ContainingOneof() == nil || f.ContainingOneof().Name() != "data" {
+				t.Errorf("%s oneof = %v", c.name, f.ContainingOneof())
+			}
+		} else if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
+			t.Errorf("unexpected oneof = %v", f)
+		}
+		if f.HasPresence() != (c.kind == protoreflect.MessageKind || c.optional) {
+			t.Errorf("presence = %v", f)
+		}
+	}
+}
+
+// TestTaskFieldNumbers 固定动态任务的编号、分支、类型和 optional presence。
+func TestTaskFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message  proto.Message
+		names    []string
+		kinds    []protoreflect.Kind
+		optional map[int]bool
+	}{
+		{&pb.TaskSpec{}, []string{"name"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.TaskTrigger{}, []string{"at_unix_ms", "interval_ms", "cron", "timezone"}, []protoreflect.Kind{protoreflect.Int64Kind, protoreflect.Uint64Kind, protoreflect.StringKind, protoreflect.StringKind}, nil},
+		{&pb.TaskSetRequest{}, []string{"task_name", "key", "trigger", "payload_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, nil},
+		{&pb.TaskSetResponse{}, []string{"next_at_unix_ms"}, []protoreflect.Kind{protoreflect.Int64Kind}, nil},
+		{&pb.TaskCancelRequest{}, []string{"task_name", "key"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}, nil},
+		{&pb.TaskCancelResponse{}, nil, nil, nil},
+		{&pb.TaskListRequest{}, []string{"task_name", "after_key"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}, map[int]bool{2: true}},
+		{&pb.TaskInstance{}, []string{"key", "trigger", "payload_json", "next_at_unix_ms"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.Int64Kind}, map[int]bool{4: true}},
+		{&pb.TaskListResponse{}, []string{"instances", "next_after_key"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind}, map[int]bool{2: true}},
+		{&pb.JobPauseRequest{}, []string{"job_id"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.JobPauseResponse{}, nil, nil, nil},
+		{&pb.JobResumeRequest{}, []string{"job_id"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.JobResumeResponse{}, nil, nil, nil},
+		{&pb.JobStatusRequest{}, []string{"job_id"}, []protoreflect.Kind{protoreflect.StringKind}, nil},
+		{&pb.JobStatusResponse{}, []string{"paused", "last_at_unix_ms", "next_at_unix_ms"}, []protoreflect.Kind{protoreflect.BoolKind, protoreflect.Int64Kind, protoreflect.Int64Kind}, map[int]bool{2: true, 3: true}},
+		{&pb.ScheduledPayload{}, []string{"job_id", "run_id", "scheduled_at_unix_ms", "task_name", "task_key", "task_payload_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Int64Kind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind}, nil},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%T fields = %d, want %d", c.message, fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if f == nil || string(f.Name()) != name || f.Kind() != c.kinds[i] || f.HasOptionalKeyword() != c.optional[i+1] {
+				t.Fatalf("%T field %d = %v", c.message, i+1, f)
+			}
+			list := false
+			if _, ok := c.message.(*pb.TaskListResponse); ok && i == 0 {
+				list = true
+			}
+			oneof := false
+			if _, ok := c.message.(*pb.TaskTrigger); ok && i < 3 {
+				oneof = true
+				if f.ContainingOneof() == nil || f.ContainingOneof().Name() != "trigger" {
+					t.Fatalf("TaskTrigger oneof = %v", f)
+				}
+			}
+			if f.IsList() != list || f.HasPresence() != (c.optional[i+1] || oneof || (c.kinds[i] == protoreflect.MessageKind && !list)) {
+				t.Errorf("%T field %s presence/cardinality = %v", c.message, name, f)
+			}
+		}
+	}
+	f := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(18)
+	if f == nil || f.Name() != "task" || f.Message().FullName() != "alonabot.v1.TaskSpec" || f.ContainingOneof().Name() != "spec" {
+		t.Fatalf("RouteDescriptor task = %v", f)
+	}
+}
+
+// TestPageTitleFieldNumber 固定 HTTP 页面标题的字段编号与类型。
+func TestPageTitleFieldNumber(t *testing.T) {
+	field := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(19)
+	if field == nil || field.Name() != "page_title" || field.Kind() != protoreflect.StringKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("RouteDescriptor field 19 should be string page_title, got %v", field)
+	}
+}
+
+// TestCommandListFieldNumbers 固定命令列表及其复用字段的编号、类型、列表与 presence。
+func TestCommandListFieldNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		message  proto.Message
+		names    []protoreflect.Name
+		kinds    []protoreflect.Kind
+		lists    map[int]bool
+		optional map[int]bool
+		messages map[int]protoreflect.FullName
+	}{
+		{message: &pb.CommandListRequest{}},
+		{message: &pb.CommandListResponse{}, names: []protoreflect.Name{"commands"}, kinds: []protoreflect.Kind{protoreflect.MessageKind}, lists: map[int]bool{1: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.CommandInfo"}},
+		{message: &pb.CommandInfo{}, names: []protoreflect.Name{"plugin_id", "route_id", "path", "aliases", "description"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, lists: map[int]bool{3: true, 4: true}, optional: map[int]bool{5: true}, messages: map[int]protoreflect.FullName{4: "alonabot.v1.CommandAlias"}},
+		{message: &pb.CommandAlias{}, names: []protoreflect.Name{"path"}, kinds: []protoreflect.Kind{protoreflect.StringKind}, lists: map[int]bool{1: true}},
+	} {
+		fields := tc.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(tc.names) {
+			t.Fatalf("%T field count = %d, want %d", tc.message, fields.Len(), len(tc.names))
+		}
+		for i, name := range tc.names {
+			number := i + 1
+			f := fields.ByNumber(protoreflect.FieldNumber(number))
+			cardinality := protoreflect.Optional
+			if tc.lists[number] {
+				cardinality = protoreflect.Repeated
+			}
+			if f == nil || f.Name() != name || f.Kind() != tc.kinds[i] || f.Cardinality() != cardinality || f.HasOptionalKeyword() != tc.optional[number] || f.HasPresence() != tc.optional[number] {
+				t.Fatalf("%T field %d = %v", tc.message, number, f)
+			}
+			if want := tc.messages[number]; want != "" && f.Message().FullName() != want {
+				t.Errorf("%T.%s message = %s, want %s", tc.message, name, f.Message().FullName(), want)
+			}
+			if f.ContainingOneof() != nil && !f.ContainingOneof().IsSynthetic() {
+				t.Errorf("%T.%s unexpected oneof = %v", tc.message, name, f)
+			}
+		}
+	}
+	f := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if f == nil || f.Name() != "description" || f.Kind() != protoreflect.StringKind || f.Cardinality() != protoreflect.Optional || !f.HasOptionalKeyword() || !f.HasPresence() {
+		t.Fatalf("CommandSpec field 13 should be optional string description, got %v", f)
+	}
+}
+
+// TestProfileFieldNumbers 固定配置文件服务载荷和可信上下文的追加编号。
+func TestProfileFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+		kinds   []protoreflect.Kind
+	}{
+		{&pb.InvocationContext{}, []protoreflect.Name{"actor", "default_target", "scopes", "plugin_chain", "send_forbidden", "command_consumed", "profile_id"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.BoolKind, protoreflect.StringKind}},
+		{&pb.ProfileSummary{}, []protoreflect.Name{"id", "name", "sessions"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint64Kind}},
+		{&pb.ProfileListRequest{}, nil, nil},
+		{&pb.ProfileListResponse{}, []protoreflect.Name{"profiles"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ProfileCurrentRequest{}, nil, nil},
+		{&pb.ProfileCurrentResponse{}, []protoreflect.Name{"profile"}, []protoreflect.Kind{protoreflect.MessageKind}},
+		{&pb.ProfileAssignRequest{}, []protoreflect.Name{"profile_id"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ProfileAssignResponse{}, nil, nil},
+		{&pb.ProfileSetRequest{}, []protoreflect.Name{"path", "value_json"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind}},
+		{&pb.ProfileSetResponse{}, []protoreflect.Name{"profile", "reloading"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.BoolKind}},
+		{&pb.ProfileSetOverridesRequest{}, []protoreflect.Name{"profile_overrides_json"}, []protoreflect.Kind{protoreflect.StringKind}},
+		{&pb.ProfileSetOverridesResponse{}, nil, nil},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%T fields = %d, want %d", c.message, fields.Len(), len(c.names))
+		}
+		for i, name := range c.names {
+			field := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			if field == nil || field.Name() != name || field.Kind() != c.kinds[i] {
+				t.Fatalf("%T field %d = %v", c.message, i+1, field)
+			}
+		}
+	}
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(14)
+	if field == nil || field.Name() != "profile_overrides_json" || field.Kind() != protoreflect.StringKind || field.HasPresence() || field.IsList() {
+		t.Fatalf("Bootstrap field 14 = %v", field)
+	}
+	field = (&pb.ProfileListResponse{}).ProtoReflect().Descriptor().Fields().ByNumber(1)
+	if !field.IsList() || field.Message().FullName() != "alonabot.v1.ProfileSummary" {
+		t.Fatalf("profiles = %v", field)
+	}
+}
+
+// TestConfigCorrectionFieldNumbers 固定校正记录编号并保留已删除配置版本的编号和名称。
+func TestConfigCorrectionFieldNumbers(t *testing.T) {
+	bootstrap := (&pb.Bootstrap{}).ProtoReflect().Descriptor()
+	register := (&pb.Register{}).ProtoReflect().Descriptor()
+	for _, check := range []struct {
+		descriptor protoreflect.MessageDescriptor
+		number     protoreflect.FieldNumber
+		name       protoreflect.Name
+	}{
+		{bootstrap, 4, "previous_config_version"},
+		{bootstrap, 5, "target_config_version"},
+		{register, 4, "candidate_config_version"},
+	} {
+		if !check.descriptor.ReservedRanges().Has(check.number) || !check.descriptor.ReservedNames().Has(check.name) {
+			t.Errorf("%s must reserve %d and %s", check.descriptor.Name(), check.number, check.name)
+		}
+	}
+	field := register.Fields().ByNumber(8)
+	if field == nil || field.Name() != "config_corrections" || !field.IsList() || field.Message().Name() != "ConfigCorrection" {
+		t.Fatalf("Register field 8 should be repeated ConfigCorrection config_corrections, got %v", field)
+	}
+	for i, name := range []protoreflect.Name{"path", "reason", "original_json"} {
+		field := (&pb.ConfigCorrection{}).ProtoReflect().Descriptor().Fields().ByNumber(protoreflect.FieldNumber(i + 1))
+		if field == nil || field.Name() != name || field.Kind() != protoreflect.StringKind {
+			t.Errorf("ConfigCorrection field %d should be string %s, got %v", i+1, name, field)
+		}
+	}
+}
+
+// TestReadNodesResponseFieldNumbers 固定节点响应的字段编号、类型和 repeated 语义。
+func TestReadNodesResponseFieldNumbers(t *testing.T) {
+	fields := (&pb.ReadNodesResponse{}).ProtoReflect().Descriptor().Fields()
+	field := fields.ByNumber(1)
+	if fields.Len() != 1 || field == nil || field.Name() != "items" || field.Kind() != protoreflect.MessageKind || !field.IsList() || field.Message().FullName() != "alonabot.v1.ForwardItem" {
+		t.Fatalf("ReadNodesResponse.items = %v", field)
 	}
 }

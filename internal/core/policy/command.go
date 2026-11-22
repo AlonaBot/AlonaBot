@@ -49,7 +49,7 @@ type ScopedOverride struct {
 	Override Override
 }
 
-// SetOverride 保存一项覆盖，成功返回前已完成持久化；两项都为 nil 时删除。
+// SetOverride 保存权限与启用覆盖，成功返回前已完成持久化；两项都为 nil 时恢复继承。
 // 重复或非法权限名返回 INVALID_ARGUMENT；有效列表按字典序保存。
 func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Override) error {
 	// 1. 在管理入口校验作用域与权限，失败时不触及状态库。
@@ -66,12 +66,13 @@ func (p *Policy) SetOverride(ctx context.Context, pluginID string, s Scope, o Ov
 			return invalidArgument("duplicate permission name: " + permission)
 		}
 	}
-	// 2. 删除或整体覆盖当前项，保留 nil 与显式空集合的区别。
+	// 2. 只保存权限与启用，保留命令名以及 nil 与显式空集合的区别。
 	key := scopeKey(s)
-	if o.Permissions == nil && o.Enabled == nil {
-		return p.store.DeleteCommandPolicy(ctx, pluginID, key)
+	err := p.store.PutCommandPolicy(ctx, state.CommandPolicy{PluginID: pluginID, Scope: key, Permissions: permissions, Enabled: o.Enabled})
+	if err == nil && p.commandsChanged != nil {
+		p.commandsChanged()
 	}
-	return p.store.PutCommandPolicy(ctx, state.CommandPolicy{PluginID: pluginID, Scope: key, Permissions: permissions, Enabled: o.Enabled})
+	return err
 }
 
 // Overrides 按插件、组路径、路由 ID 的顺序读取覆盖，每一类内按字典序排列。
@@ -153,10 +154,10 @@ func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.Ro
 	// 1. 全局禁止优先，管理员身份与空权限集合都不能绕过。
 	var subjects []state.GlobalDeny
 	if actor != nil {
-		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyUser), InstanceID: actor.GetAdapterInstanceId(), SubjectID: actor.GetExternalUserId()})
+		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyUser), AdapterID: target.GetAdapterId(), SubjectID: actor.GetExternalUserId()})
 	}
 	if target != nil {
-		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyChat), InstanceID: target.GetAdapterInstanceId(), SubjectID: target.GetChatId()})
+		subjects = append(subjects, state.GlobalDeny{Kind: string(DenyChat), AdapterID: target.GetAdapterId(), SubjectID: target.GetChatId()})
 	}
 	rows, denied, err := p.store.CommandPolicySnapshot(ctx, pluginID, subjects)
 	if err != nil {
@@ -166,7 +167,38 @@ func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.Ro
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "command is globally denied"}
 	}
 
-	// 2. 从插件到规范路径祖先再到路由逐层处理；子层只能覆盖权限，不能抵消父层禁用。
+	// 2. 与菜单共用同一份继承计算，命令派发保留全局禁止快照。
+	enabled, permissions := commandState(rows, route)
+	if !enabled {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "command is disabled"}
+	}
+
+	// 3. 最近的显式权限集合按交集判定；空集合也允许无 Actor 的命令。
+	if len(permissions) == 0 {
+		return nil
+	}
+	for _, permission := range permissions {
+		if slices.Contains(actor.GetPermissions(), permission) {
+			return nil
+		}
+	}
+	return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "command permission is required"}
+}
+
+// SetCommandsChanged 在开始处理命令策略前装配持久化成功后的变化通知。
+func (p *Policy) SetCommandsChanged(fn func()) { p.commandsChanged = fn }
+
+// CommandState 返回逐层启用状态与最近显式权限，读取失败保留原错误。
+func (p *Policy) CommandState(ctx context.Context, pluginID string, route *pb.RouteDescriptor) (enabled bool, permissions []string, err error) {
+	rows, _, err := p.store.CommandPolicySnapshot(ctx, pluginID, nil)
+	if err != nil {
+		return false, nil, err
+	}
+	enabled, permissions = commandState(rows, route)
+	return enabled, slices.Clone(permissions), nil
+}
+
+func commandState(rows []state.CommandPolicy, route *pb.RouteDescriptor) (bool, []string) {
 	overrides := make(map[string]state.CommandPolicy, len(rows))
 	for _, row := range rows {
 		overrides[row.Scope] = row
@@ -181,27 +213,19 @@ func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.Ro
 	routeKey := scopeKey(Scope{Kind: ScopeRoute, RouteID: route.GetRouteId()})
 	keys = append(keys, routeKey)
 	permissions := route.GetRequiredPermissions()
+	enabled := true
 	for _, key := range keys {
 		override := overrides[key]
 		if override.Enabled != nil && !*override.Enabled {
-			return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "command is disabled"}
+			enabled = false
 		}
 		if override.Permissions != nil {
 			permissions = override.Permissions
 		}
 	}
 	if overrides[routeKey].Enabled == nil && !route.GetDefaultEnabled() {
-		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "command is disabled"}
+		enabled = false
 	}
 
-	// 3. 最近的显式权限集合按交集判定；空集合也允许无 Actor 的命令。
-	if len(permissions) == 0 {
-		return nil
-	}
-	for _, permission := range permissions {
-		if slices.Contains(actor.GetPermissions(), permission) {
-			return nil
-		}
-	}
-	return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "command permission is required"}
+	return enabled, permissions
 }

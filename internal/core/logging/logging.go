@@ -1,4 +1,4 @@
-// Package logging 汇集 Core 进程的全部日志：Core 自己的记录与插件进程输出的记录（CONTRACTS §14）。
+// Package logging 汇集 Core 进程的全部日志：Core 自己的记录与插件进程输出的记录。
 //
 // 每条记录写到 Core 的 stderr（控制台格式或 JSON），启用日志文件后同时以不着色的控制台格式写入
 // 按日期轮转的文件。记录的来源由 component 字段区分：core、plugin 或 adapter；插件与 Adapter 的记录
@@ -6,7 +6,8 @@
 // [Source] 逐行解析后转成同样的记录，插件给出的同名字段被丢弃，不能覆盖 Core 补充的来源字段。
 //
 // Core 自己的记录按全局级别过滤；插件的记录按该来源的生效级别过滤（[Levels]）。
-// 按来源的级别目前只保存在内存中。
+// stderr 可追加独立阈值，日志文件与最近记录仍按原有来源级别收集。
+// 输出后的记录按来源缓存在内存中，并可订阅；级别设置由管理服务写回配置文件。
 //
 // 包的组成：
 //   - [Open] 按 [Options] 建立 [Output]；[Output.Logger] 是 Core 自己的 Logger，[Output.EnableFile] 开始写日志文件。
@@ -27,7 +28,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 )
 
-// 记录中表示来源的字段名（CONTRACTS §14.1）。
+// 记录中表示来源的字段名。
 const (
 	KeyComponent    = "component" // 来源类别：ComponentCore、ComponentPlugin 或 ComponentAdapter
 	KeyPluginID     = "plugin_id"
@@ -51,10 +52,13 @@ var sourceKeys = map[string]bool{
 	KeySessionID: true, KeyGenerationID: true,
 }
 
+// LevelCritical 标记 Core 或数据面临损坏、需要立即处理的严重故障。
+const LevelCritical = slog.Level(12)
+
 // LevelOff 高于任何记录的级别，用作来源级别 off：该来源的记录全部不输出。
 const LevelOff = slog.Level(math.MaxInt)
 
-// Format 选择 stderr 上的输出格式（CONTRACTS §14.2）。
+// Format 选择 stderr 上的输出格式。
 type Format string
 
 // stderr 的输出格式。
@@ -65,35 +69,50 @@ const (
 
 // Options 描述 Core 日志的启动设置。
 type Options struct {
-	Format Format
-	Level  slog.Level // 全局级别
+	Format      Format
+	Level       slog.Level  // 全局级别
+	StderrLevel *slog.Level // stderr 的额外阈值；nil 时只按全局与来源级别过滤。
 	// Stderr 是 Core 的 stderr。它是终端且未设置 NO_COLOR 时，控制台格式才着色。
-	Stderr io.Writer
+	ConsoleOutput io.Writer // 可选文本输出协调器；颜色仍由 Stderr 决定。
+	Stderr        io.Writer
+	BufferRecords int // 每个来源的记录与每个订阅的后续发送队列上限，必须为正。
 }
 
 // Output 把 Core 与插件的记录写到 stderr 与日志文件；方法可以并发调用。
 type Output struct {
+	buffer  *recordBuffer
 	levels  *Levels
-	stderr  slog.Handler // 只写 stderr，不按级别过滤
+	stderr  slog.Handler // 只写 stderr，带独立阈值
 	file    *fileWriter  // EnableFile 之前丢弃写入
-	handler slog.Handler // stderr 与日志文件，不按级别过滤
+	handler slog.Handler // 共用来源过滤、stderr 与日志文件、最近记录
 }
 
 // Open 按 opt 建立日志输出；opt.Format 不是 text 或 json 时返回错误。
 func Open(opt Options) (*Output, error) {
+	if opt.BufferRecords <= 0 {
+		return nil, fmt.Errorf("log buffer records must be positive")
+	}
 	var stderr slog.Handler
 	switch opt.Format {
 	case FormatText:
-		stderr = newConsoleHandler(opt.Stderr, colorEnabled(opt.Stderr))
+		writer := opt.Stderr
+		if opt.ConsoleOutput != nil {
+			writer = opt.ConsoleOutput
+		}
+		stderr = newConsoleHandler(writer, colorEnabled(opt.Stderr))
 	case FormatJSON:
-		stderr = slog.NewJSONHandler(opt.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.Level(math.MinInt)})
+		stderr = slog.NewJSONHandler(opt.Stderr, &slog.HandlerOptions{AddSource: true, Level: slog.Level(math.MinInt), ReplaceAttr: logLevelAttr})
 	default:
 		return nil, fmt.Errorf("unknown log format %q (want %s or %s)", opt.Format, FormatText, FormatJSON)
 	}
-	o := &Output{levels: &Levels{sources: map[string]slog.Level{}}, stderr: stderr}
+	if opt.StderrLevel != nil {
+		// 文件故障直接调用 Handle，仍由 MultiHandler 复核 stderr 阈值。
+		stderr = slog.NewMultiHandler(&leveled{h: stderr, level: *opt.StderrLevel})
+	}
+	o := &Output{levels: &Levels{sources: map[string]slog.Level{}}, stderr: stderr, buffer: &recordBuffer{limit: opt.BufferRecords, sources: map[string]*recordRing{}, subscribers: map[*subscription]struct{}{}}}
 	o.levels.global.Set(opt.Level)
 	o.file = &fileWriter{report: o.reportFileError}
-	o.handler = slog.NewMultiHandler(stderr, newConsoleHandler(o.file, false))
+	o.handler = &bufferedHandler{output: o, next: slog.NewMultiHandler(stderr, newConsoleHandler(o.file, false))}
 	return o, nil
 }
 
@@ -126,15 +145,19 @@ func (o *Output) Close() error { return o.file.close() }
 
 // reportFileError 把日志文件的错误只写到 stderr，避免再次写入出错的文件。
 func (o *Output) reportFileError(err error) {
-	slog.New(o.stderr).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
+	slog.New(&bufferedHandler{output: o, next: o.stderr}).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
 }
 
-// Plugin 为插件进程的一次启动建立 [Source]，记录带 component=plugin、plugin_id 与 generation_id。
-func (o *Output) Plugin(pluginID, generationID string) *Source {
-	h := o.handler.WithAttrs([]slog.Attr{
+// Plugin 为一次组件启动建立 [Source]；attrs 由 Core 按可信安装记录补充 Adapter 的来源类别与 ID。
+func (o *Output) Plugin(pluginID, generationID string, attrs ...slog.Attr) *Source {
+	return &Source{levels: o.levels, id: pluginID, h: o.Component(pluginID, generationID, attrs...)}
+}
+
+// Component 返回同进程日志目标；attrs 由 Core 绑定可信安装身份，输出时复核当前来源级别。
+func (o *Output) Component(pluginID, generationID string, attrs ...slog.Attr) slog.Handler {
+	return o.handler.WithAttrs(append([]slog.Attr{
 		slog.String(KeyComponent, ComponentPlugin), slog.String(KeyPluginID, pluginID), slog.String(KeyGenerationID, generationID),
-	})
-	return &Source{levels: o.levels, id: pluginID, h: h}
+	}, attrs...))
 }
 
 // Levels 保存全局级别与按来源单独设置的级别；方法可以并发调用。
@@ -178,6 +201,8 @@ func ProtoLevel(lv slog.Level) pb.LogLevel {
 	switch {
 	case lv >= LevelOff:
 		return pb.LogLevel_LOG_LEVEL_OFF
+	case lv >= LevelCritical:
+		return pb.LogLevel_LOG_LEVEL_CRITICAL
 	case lv >= slog.LevelError:
 		return pb.LogLevel_LOG_LEVEL_ERROR
 	case lv >= slog.LevelWarn:
@@ -206,4 +231,12 @@ func (l *leveled) WithAttrs(as []slog.Attr) slog.Handler {
 
 func (l *leveled) WithGroup(name string) slog.Handler {
 	return &leveled{h: l.h.WithGroup(name), level: l.level}
+}
+
+// logLevelAttr 将自定义级别写成协议约定的文本。
+func logLevelAttr(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.LevelKey && a.Value.Any() == LevelCritical {
+		return slog.String(slog.LevelKey, "CRITICAL")
+	}
+	return a
 }

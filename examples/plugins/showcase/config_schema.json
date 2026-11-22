@@ -1,0 +1,17 @@
+{
+  "greeting": {
+    "type": "string",
+    "description": "Greeting",
+    "example": {
+      "input": "demo hello",
+      "reply": [
+        {"text": "{greeting}"},
+        {"image": "examples/greeting.png", "alt": "Greeting illustration"}
+      ]
+    }
+  },
+  "interval_seconds": {
+    "type": "int",
+    "description": "Interval in seconds"
+  }
+}

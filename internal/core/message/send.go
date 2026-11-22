@@ -1,12 +1,15 @@
-// Package message 实现 Core 消息发送服务的目标准入与回执转发。
+// Package message 实现 Core 消息发送与编辑服务的目标准入和回执转发。
 //
 // [Service] 根据可信父调用的原目标或持久化的实例许可准入，先校验载荷、目标和消息链，
-// 再准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留（CONTRACTS §8）。
+// 再执行出站 Hook、准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留。
+// 编辑仅接受文本及可选按钮，实例须声明能力并实现 adapter.Editor；
+// 撤回逐项返回结果，实例须声明能力并实现 adapter.Deleter。
 package message
 
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -14,25 +17,42 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
+	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
 
 const schemaVersion = 1
 
-// Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送。
-type Service struct {
-	requestTimeout time.Duration
-	adapters       *adapter.Registry
-	policy         *policy.Policy
-	lease          func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (string, func(), error)
+// Hooks 在每次 Send/Edit 的预检后改写或拒绝消息，并在平台操作后观察完整结果。
+type Hooks interface {
+	// BeforeSend 每次改写后立即调用 check；nil 表示保留原 Chain，检查失败即终止。
+	BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation, check func(*pb.MessageChain) *pb.ErrorInfo) (*pb.MessageChain, *pb.ErrorInfo)
+	// AfterSend 只观察本次平台操作的回执与错误。
+	AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
 }
 
-// New 创建消息发送服务；装配处将 Send 注册为 wire.ServiceSend。
-// lease 由媒体 Store 提供，签发绑定目标 Adapter Session 的只读令牌；
+// Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
+type Service struct {
+	prepareIncoming func(*pb.MessageChain, router.Caller, *pb.Target) (*pb.MessageChain, error)
+	replyMu         sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
+	resolveReply    func(context.Context, *pb.Target) (settings.Reply, error)
+	replyRoots      map[*router.Invocation]struct{}
+	replySessions   map[router.Caller]*replySession
+	requestTimeout  time.Duration
+	adapters        *adapter.Registry
+	policy          *policy.Policy
+	hooks           Hooks // nil 时跳过出站 Hook
+	issue           func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error
+	lease           func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error)
+}
+
+// New 创建消息服务；装配处登记 Send、Edit 与 ReadNodes，并通过 SetIncomingChain 绑定查询媒体授权。
+// lease 由媒体 Store 提供，准备平台文件标识或绑定目标 Adapter Session 的只读令牌；
+// issue 在媒体租约前签发按钮；nil 仅供无按钮的测试。
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
-func New(adapters *adapter.Registry, p *policy.Policy, lease func(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (string, func(), error), requestTimeout time.Duration) *Service {
-	return &Service{adapters: adapters, policy: p, lease: lease, requestTimeout: requestTimeout}
+func New(adapters *adapter.Registry, p *policy.Policy, lease func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error), issue func(context.Context, router.Caller, *pb.Target, *pb.MessageChain) error, requestTimeout time.Duration, hooks Hooks) *Service {
+	return &Service{adapters: adapters, policy: p, lease: lease, issue: issue, requestTimeout: requestTimeout, hooks: hooks}
 }
 
 // Send 按载荷、可信目标、消息链和实例绑定依次准入，不自动重试平台发送。
@@ -43,6 +63,9 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	var defaultTarget *pb.Target
 	if invocation != nil {
 		defaultTarget = invocation.DefaultTarget
+		if invocation.SendForbidden {
+			return reject(defaultTarget, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "sending is forbidden in outbound hooks")
+		}
 	}
 	request := &pb.SendRequest{}
 	if in.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || in.Payload.SchemaID != validate.SchemaID(request) || in.Payload.SchemaVersion != schemaVersion {
@@ -51,20 +74,31 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
 		return reject(defaultTarget, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid SendRequest protobuf: "+err.Error())
 	}
-	// 2. 显式目标优先，否则使用可信父调用的默认目标，再检查发送许可。
+	// 2. 显式目标先补齐实例与账号，否则沿用可信父调用的默认目标，再检查发送许可。
 	target := request.To
 	if target == nil {
 		target = defaultTarget
+	} else {
+		completed, completionError := s.adapters.Complete(target, defaultTarget)
+		if completionError != nil {
+			return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, completionError)
+		}
+		target = completed
 	}
 	if target == nil {
 		return reject(nil, pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET, "no default target")
 	}
 	if sendError := s.policy.CheckSend(ctx, caller.PluginID, invocation, target); sendError != nil {
-		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, sendError)
+		// 准入拒绝只回传调用方已知的目标，避免带出补齐的实例身份。
+		rejectedTarget := request.To
+		if rejectedTarget == nil {
+			rejectedTarget = defaultTarget
+		}
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: rejectedTarget}, sendError)
 	}
 	// 3. 复用结构校验，空链和仅元数据均在产生副作用前拒绝。
-	if err := validate.Chain(request.Chain); err != nil {
-		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+	if safe := s.checkChain(request.Chain, target); safe != nil {
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 	}
 	// 4. 校验最终实例绑定，媒体来源准备也使用这一实例的 Session。
 	instance, ok := s.adapters.Get(target.GetAdapterInstanceId())
@@ -74,7 +108,40 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if target.GetAdapterId() != instance.AdapterID() || target.GetAccountId() != instance.AccountID() {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
 	}
-	// 5. 全部来源先取得只读租约；任一失败或发送结束均释放本次已得租约。
+	chain, decoration, session, err := s.prepareReply(ctx, caller, invocation, target, instance, request.Chain)
+	if err != nil {
+		return rejectError(target, err)
+	}
+	request.Chain = chain
+	if safe := s.checkChain(request.Chain, target); safe != nil {
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
+	}
+	// 5. 整链能力与扩展校验先于按钮签发、媒体租约和平台副作用。
+	if safe := checkExtensions(instance, request.Chain); safe != nil {
+		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
+	}
+	// 6. Hook 只能改写消息链；复检通过后才允许按钮签发和媒体租约。
+	if s.hooks != nil {
+		check := func(chain *pb.MessageChain) *pb.ErrorInfo {
+			if safe := s.checkChain(chain, target); safe != nil {
+				return safe
+			}
+			return checkExtensions(instance, chain)
+		}
+		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation, check)
+		if safe != nil {
+			return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
+		}
+		if chain != nil {
+			request.Chain = chain
+		}
+	}
+	if s.issue != nil {
+		if err := s.issue(ctx, caller, target, request.Chain); err != nil {
+			return rejectError(target, err)
+		}
+	}
+	// 7. 准备引用来源；任一失败或发送结束均释放本次已得租约。
 	sources := mediaSources(request.Chain)
 	if len(sources) > 0 {
 		reader, ok := instance.(adapter.MediaSession)
@@ -93,23 +160,63 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		ctx, cancel = context.WithDeadline(ctx, deadline)
 		defer cancel()
 		for _, source := range sources {
-			token, release, err := s.lease(ctx, caller, reader.MediaSessionKey(), target, source, deadline)
+			prepared, release, err := s.lease(ctx, caller, reader.MediaSessionKey(), target, source, deadline)
 			if err != nil {
 				return rejectError(target, err)
 			}
 			defer release()
-			source.Source = &pb.MediaSource_MediaRef{MediaRef: token}
+			source.Source = prepared.Source
+			source.Mime = prepared.Mime
 		}
 		if err := ctx.Err(); err != nil {
 			return rejectError(target, err)
 		}
 	}
-	// 6. 所有媒体已就绪后执行唯一一次发送，完整转发回执与错误。
+	// 8. 所有媒体已就绪后执行唯一一次发送，Hook 观察结果后完整转发回执与错误。
 	result, sendError := instance.Send(ctx, target, request.Chain)
+	s.rememberReply(caller, session, target, request.Chain, result, decoration)
+	if s.hooks != nil {
+		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, result, sendError, invocation)
+	}
 	return response(result, sendError)
 }
 
-// mediaSources 按消息顺序收集所有需租约的来源，HTTPS 保留给 Adapter 处理。
+func (s *Service) checkChain(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {
+	if safe := s.normalizeMarkdown(chain, target); safe != nil {
+		return safe
+	}
+	if safe := s.completeReferences(chain, target); safe != nil {
+		return safe
+	}
+	if err := validate.Chain(chain); err != nil {
+		var validation *validate.Error
+		if errors.As(err, &validation) {
+			return &pb.ErrorInfo{Code: validation.Code, SafeMessage: validation.Message}
+		}
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: err.Error()}
+	}
+	return nil
+}
+
+func (s *Service) completeReferences(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {
+	for _, segment := range chain.GetSegments() {
+		if reference := segment.GetReference(); reference.GetTarget() != nil {
+			completed, completionError := s.adapters.Complete(reference.Target, target)
+			if completionError != nil {
+				return completionError
+			}
+			reference.Target = completed
+		}
+		for _, item := range segment.GetForward().GetItems() {
+			if completionError := s.completeReferences(item.GetChain(), target); completionError != nil {
+				return completionError
+			}
+		}
+	}
+	return nil
+}
+
+// mediaSources 按消息顺序收集所有需租约的来源，HTTPS 与内联数据原样交给 Adapter。
 func mediaSources(chain *pb.MessageChain) []*pb.MediaSource {
 	var sources []*pb.MediaSource
 	for _, segment := range chain.GetSegments() {
@@ -119,6 +226,8 @@ func mediaSources(chain *pb.MessageChain) []*pb.MediaSource {
 			source = value.Image.GetSource()
 		case *pb.Segment_Video:
 			source = value.Video.GetSource()
+		case *pb.Segment_Voice:
+			source = value.Voice.GetSource()
 		case *pb.Segment_File:
 			source = value.File.GetSource()
 		}

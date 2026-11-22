@@ -2,7 +2,7 @@
 //
 // [Bus.Register] 将发布入口接入 router.Mux，身份取自认证 Session 的 Caller。
 // 装配处在插件激活和停止时调用 [Bus.Attach]、[Bus.Detach]；离线事件不缓存、不补发。
-// 每个订阅插件有独立的发送 goroutine，写出结果仅供计数，无业务回执（CONTRACTS §3、WIRE §5）。
+// 每个订阅插件有独立的发送 goroutine，写出结果仅供计数，无业务回执。
 package bus
 
 import (
@@ -19,6 +19,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -28,8 +29,10 @@ const eventIDBytes = 16
 
 // Options 配置逐订阅插件的等待队列；装配处传入 tune.Values 的生效值。
 type Options struct {
-	QueueEvents int   // BUS_QUEUE_EVENTS：等待发送的条数上限
-	QueueBytes  int64 // BUS_QUEUE_BYTES：等待发送的 BusEvent protobuf 载荷字节上限
+	QueueEvents     int                                               // BUS_QUEUE_EVENTS：等待发送的条数上限
+	QueueBytes      int64                                             // BUS_QUEUE_BYTES：等待发送的 BusEvent protobuf 载荷字节上限
+	Metrics         *metrics.Counters                                 // nil 时关闭原因计数。
+	AcquireActivity func(c router.Caller) (release func(), err error) // 为绑定的订阅者 Session 持有排队工作。
 }
 
 // Stats 汇总当前 Core 运行期间的发布、写出与丢弃数。
@@ -50,6 +53,7 @@ type Bus struct {
 
 type subscriber struct {
 	plugin router.Plugin
+	caller *router.Caller // 正式组件装配时固定；仅观察事件的库内订阅者无需生命周期身份。
 	id     string
 	routes []*pb.BusSubscriptionSpec // 已由 REGISTER 校验的不可变订阅描述
 	ctx    context.Context
@@ -61,9 +65,10 @@ type subscriber struct {
 }
 
 type queuedEvent struct {
-	target string
-	event  *pb.BusEvent
-	bytes  int64
+	target  string
+	event   *pb.BusEvent
+	bytes   int64
+	release func()
 }
 
 type droppedEvent struct {
@@ -82,7 +87,8 @@ func (b *Bus) Register(m *router.Mux) { m.Handle(wire.ServiceBusPublish, b.publi
 
 // Attach 为插件的 BUS_SUBSCRIPTION 路由建立共享队列和一个 sender。
 // 同插件重新接入时撤销原队列及发送 context，事件不转交给新 Session。
-func (b *Bus) Attach(p router.Plugin) {
+// caller 可选；正式组件传入订阅者自身的可信 Session，库内观察者沿用单参数入口。
+func (b *Bus) Attach(p router.Plugin, caller ...router.Caller) {
 	var routes []*pb.BusSubscriptionSpec
 	for _, route := range p.Routes() {
 		if route.GetKind() == pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION {
@@ -96,6 +102,10 @@ func (b *Bus) Attach(p router.Plugin) {
 	if len(routes) > 0 {
 		ctx, cancel := context.WithCancel(context.Background())
 		sub = &subscriber{plugin: p, id: id, routes: routes, ctx: ctx, cancel: cancel, signal: make(chan struct{}, 1), stats: b.counterLocked(id)}
+		if len(caller) != 0 {
+			identity := caller[0]
+			sub.caller = &identity
+		}
 		b.subscribers[id] = sub
 	}
 	b.mu.Unlock()
@@ -128,7 +138,10 @@ func (b *Bus) detachLocked(id string) []droppedEvent {
 	sub.cancel()
 	dropped := make([]droppedEvent, 0, len(sub.queue))
 	for _, q := range sub.queue {
-		dropped = append(dropped, b.dropLocked(sub, q.event))
+		if q.release != nil {
+			q.release()
+		}
+		dropped = append(dropped, b.dropLocked(sub, q.event, "offline"))
 	}
 	sub.queue, sub.bytes = nil, 0
 	return dropped
@@ -154,7 +167,11 @@ func (b *Bus) counterLocked(id string) *Stats {
 	return stats
 }
 
-func (b *Bus) publish(_ context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+func (b *Bus) publish(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	if ctx.Err() != nil {
+		b.opt.Metrics.Add(caller.PluginID, "bus", "cancelled")
+		return failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "publish cancelled before admission")
+	}
 	// 1. 认证身份只取自 Caller；先完成所有准入检查，再分发。
 	req := &pb.PublishRequest{}
 	payload := in.Payload
@@ -166,6 +183,7 @@ func (b *Bus) publish(_ context.Context, caller router.Caller, in *wire.Inbound)
 	}
 	name, owned := strings.CutPrefix(req.GetEventName(), caller.PluginID+"/")
 	if !owned || !validate.IsServiceName(name) {
+		b.opt.Metrics.Add(caller.PluginID, "bus", "denied")
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "event name must belong to the caller namespace and use a valid service name")
 	}
 	if req.GetSchemaId() == "" || req.GetSchemaVersion() == 0 {
@@ -197,18 +215,32 @@ func (b *Bus) publish(_ context.Context, caller router.Caller, in *wire.Inbound)
 	b.mu.Lock()
 	b.counterLocked(caller.PluginID).Published++
 	for _, sub := range b.subscribers {
-		if !sub.plugin.Activated() {
-			continue
-		}
 		for _, route := range sub.routes {
 			if route.GetEventName() != ev.GetEventName() || route.GetSchemaId() != ev.GetSchemaId() || route.GetSchemaVersion() != ev.GetSchemaVersion() {
 				continue
 			}
-			if len(sub.queue) >= b.opt.QueueEvents || sub.bytes+n > b.opt.QueueBytes {
-				dropped = append(dropped, b.dropLocked(sub, ev))
+			if !sub.plugin.Activated() {
+				dropped = append(dropped, b.dropLocked(sub, ev, "offline"))
 				continue
 			}
-			sub.queue = append(sub.queue, queuedEvent{target: route.GetCallbackRouteId(), event: ev, bytes: n})
+			if len(sub.queue) >= b.opt.QueueEvents {
+				dropped = append(dropped, b.dropLocked(sub, ev, "dropped_queue"))
+				continue
+			}
+			if sub.bytes+n > b.opt.QueueBytes {
+				dropped = append(dropped, b.dropLocked(sub, ev, "dropped_budget"))
+				continue
+			}
+			var release func()
+			if b.opt.AcquireActivity != nil && sub.caller != nil {
+				var err error
+				release, err = b.opt.AcquireActivity(*sub.caller)
+				if err != nil {
+					dropped = append(dropped, b.dropLocked(sub, ev, "offline"))
+					continue
+				}
+			}
+			sub.queue = append(sub.queue, queuedEvent{target: route.GetCallbackRouteId(), event: ev, bytes: n, release: release})
 			sub.bytes += n
 			// 已有唤醒信号时不等待 sender。
 			select {
@@ -250,16 +282,35 @@ func (b *Bus) send(sub *subscriber) {
 		// 2. 单个 Session 的写出可以阻塞，只占用该订阅者的 sender。
 		var err error
 		if active {
-			err = sub.plugin.SendEvent(sub.ctx, q.target, q.event)
+			ctx := sub.ctx
+			returned := func() {}
+			if q.release != nil {
+				ctx, returned = wire.TrackEvent(ctx, q.release)
+			}
+			err = sub.plugin.SendEvent(ctx, q.target, q.event)
+			returned()
 		} else {
 			err = errors.New("subscriber is not active")
+			if q.release != nil {
+				q.release()
+			}
 		}
 		b.mu.Lock()
 		var dropped droppedEvent
 		if err == nil {
 			sub.stats.Delivered++
 		} else {
-			dropped = b.dropLocked(sub, q.event)
+			reason := metrics.Reason("offline")
+			switch wire.CodeOf(err) {
+			case pb.ErrorCode_ERROR_CODE_CANCELLED, pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED:
+				reason = "cancelled"
+			case pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED:
+				reason = "dropped_budget"
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				reason = "cancelled"
+			}
+			dropped = b.dropLocked(sub, q.event, reason)
 		}
 		b.mu.Unlock()
 		if err != nil {
@@ -269,8 +320,9 @@ func (b *Bus) send(sub *subscriber) {
 }
 
 // dropLocked 记录丢弃并捕获日志字段；调用方持有 b.mu，日志在锁外写入。
-func (b *Bus) dropLocked(sub *subscriber, ev *pb.BusEvent) droppedEvent {
+func (b *Bus) dropLocked(sub *subscriber, ev *pb.BusEvent, reason metrics.Reason) droppedEvent {
 	sub.stats.Dropped++
+	b.opt.Metrics.Add(sub.id, "bus", reason)
 	return droppedEvent{pluginID: sub.id, eventName: ev.GetEventName(), count: sub.stats.Dropped}
 }
 

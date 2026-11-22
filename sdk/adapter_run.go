@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,9 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
+	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -23,12 +27,11 @@ const adapterMediaReadCapability = "media.read"
 // Session 生命周期沿用 activation；每个实例 Core 客户端独立关闭交付入口。
 type adapterRuntime struct {
 	activation *activation // Session.Start 前发布，提供出站停止门禁
-	Base
-	adapter   adapter.Adapter
-	mu        sync.Mutex // 保护实例登记、状态与配置
-	stopping  bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
-	instances map[string]*adapterEntry
-	session   *wire.Session // Session.Start 前赋值，此后保持不变
+	adapter    adapter.Adapter
+	mu         sync.Mutex // 保护实例登记、状态与配置
+	stopping   bool       // 与停止快照一起在 mu 下发布，阻止已准入但尚未执行的 Start
+	instances  map[string]*adapterEntry
+	session    *wire.Session // Session.Start 前赋值，此后保持不变
 }
 
 // adapterEntry 保留实例状态与脱敏配置，生命周期操作由本实例锁串行化。
@@ -42,24 +45,56 @@ type adapterEntry struct {
 }
 
 type adapterCore struct {
-	runtime    *adapterRuntime
-	instanceID string
-	stopped    atomic.Bool // 停止或报告失败后锁存，阻止新的交付
+	runtime     *adapterRuntime
+	instanceID  string
+	stopped     atomic.Bool // 停止或报告失败后锁存，阻止新的交付
+	commandSync sync.Mutex  // 覆盖本次运行的实际菜单回调，RPC 到期后仍持有。
 }
 
 // RunAdapter 作为 Adapter 进程的 main 入口，复用插件的锁、握手、激活与停止状态机。
 func RunAdapter(a adapter.Adapter) error {
-	setupLogging()
-	// 1. 先取得进程锁，再执行 Adapter 描述与启动流程。
-	lock, err := acquireRuntimeLock()
-	if err != nil {
+	if err := requireResources(a); err != nil {
 		return err
 	}
-	defer lock.Unlock()
+	setupLogging()
 	l, err := readLaunch()
 	if err != nil {
 		return err
 	}
+	return runAdapter(a, l)
+}
+
+func runAdapter(a adapter.Adapter, l launch) (err error) {
+	descriptor := a.Descriptor()
+	// 1. 先取得运行锁，再执行 Adapter 描述与启动流程。
+	lock, err := acquireRuntimeLock(l.runtimeLockPath)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, lock.Unlock()) }()
+	l.runtime = newComponentSession(l.inProcess)
+	defer func() { err = errors.Join(err, l.runtime.close()) }()
+	// Adapter 没有插件对象；借一个只收集 HTTP 路由的对象复用同一套声明校验。
+	routes := NewPlugin()
+	for _, route := range descriptor.HTTP {
+		builder := routes.http.Route(route.Method, route.Path)
+		switch route.Auth {
+		case 0:
+		case adapter.AuthPlatformToken:
+			builder.Public(AuthPlatformToken)
+		case adapter.AuthStatic:
+			builder.Public(AuthStatic)
+		default:
+			return fmt.Errorf("invalid adapter HTTP authentication: %d", route.Auth)
+		}
+		builder.Handle(route.Handler)
+	}
+	routes.http.collect()
+	if err := errors.Join(routes.http.errs...); err != nil {
+		return fmt.Errorf("invalid adapter HTTP registration: %w", err)
+	}
+	l.http = newHTTPListener(routes.http.routes, l.runtime)
+	defer func() { l.closeHTTP(time.Now().Add(onStopBudget)) }()
 	conn, err := dial(l)
 	if err != nil {
 		return err
@@ -69,20 +104,23 @@ func RunAdapter(a adapter.Adapter) error {
 	if err != nil {
 		return err
 	}
-	setLogLevel(ack.GetBootstrap().GetLogLevel())
-	if err := prepareAdapter(conn, l, ack, a); err != nil {
+	l.runtime.configure(l, ack, "adapter")
+	if err := prepareAdapter(conn, l, ack, descriptor); err != nil {
 		return err
 	}
 	// 2. 复用激活与停止回调，仅将业务处理器替换成实例服务。
 	runtime := &adapterRuntime{adapter: a, instances: make(map[string]*adapterEntry)}
-	active := &activation{l: l, ack: ack, root: runtime, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
-	active.lifetime, active.stopLifetime = context.WithCancel(context.Background())
+	active := &activation{l: l, ack: ack, onStop: runtime.OnStop, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
+	active.lifetime, active.stopLifetime = context.WithCancel(l.runtime.ctx)
 	limits := ack.GetBootstrap().GetSessionLimits()
 	active.sess = wire.New(conn, wire.Options{Local: pb.InitiatorSide_INITIATOR_SIDE_PLUGIN, SessionID: ack.GetSessionId(), ProtocolMinor: ack.GetChosenMinor(), SourcePluginID: l.pluginID,
-		Handler: runtime.handle, Admit: active.admit, Control: active.control, MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond})
+		Handler: l.runtime.handler(runtime.handle), Admit: active.admit, Control: active.control, MaxInflight: int(limits.GetMaxInflight()), MaxBytes: int64(limits.GetMaxPayloadBytes()), DefaultDeadline: time.Duration(limits.GetRequestTimeoutMs()) * time.Millisecond})
 	runtime.activation = active
 	runtime.session = active.sess
-	activeSession.Store(active)
+	if l.http != nil {
+		l.http.activate(active)
+	}
+	l.runtime.active.Store(active)
 	active.sess.Start() // 回调使用的 Session 指针先发布，再启动读循环。
 	if err := active.waitReady(); err != nil {
 		return err
@@ -90,7 +128,7 @@ func RunAdapter(a adapter.Adapter) error {
 	return serve(active.sess, active)
 }
 
-func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapter) error {
+func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, d *adapter.Descriptor) error {
 	boot := ack.GetBootstrap()
 	limits := boot.GetSessionLimits()
 	// 1. 在信任边界检查 Core 提供的预算，Adapter 没有包级配置或用户 OnStart。
@@ -99,7 +137,19 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 	}
 	stop := withWatchdog(conn, time.Until(time.UnixMilli(boot.GetPreparationDeadlineUnixMs())))
 	defer stop()
-	reg := &pb.Register{Adapter: a.Descriptor(), CandidateConfigJson: boot.GetCandidateConfigJson(), CandidateConfigVersion: boot.GetTargetConfigVersion(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	descriptor, err := convert.DescriptorToProto(&convert.Descriptor{AdapterID: d.AdapterID, Capabilities: d.Capabilities, Extensions: d.Extensions, Permissions: d.Permissions, Events: d.Events, Actions: d.Actions})
+	if err != nil {
+		return err
+	}
+	l.runtime.source = append(l.runtime.source, slog.String("adapter_id", descriptor.GetAdapterId()))
+	reg := &pb.Register{Adapter: descriptor, CandidateConfigJson: boot.GetCandidateConfigJson(), Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+	if err := l.startHTTP(boot); err != nil {
+		return sessionFailure(conn, ack.SessionId, ack.ChosenMinor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
+	}
+	if l.http != nil {
+		appendHTTPRoutes(reg, l.http.registrations())
+		l.reportHTTP(reg)
+	}
 	frame, err := wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, reg)
 	if err != nil {
 		return err
@@ -126,7 +176,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, a adapter.Adapt
 	case *pb.Prepared:
 		return nil
 	case *pb.SessionError:
-		return &Error{Code: validate.PublicCode(frame.GetError().GetCode()), Message: frame.GetError().GetSafeMessage()}
+		return &Error{Code: errcode.Code(validate.PublicCode(frame.GetError().GetCode())), Message: frame.GetError().GetSafeMessage()}
 	default:
 		return fmt.Errorf("unexpected %s during adapter preparation", frame.GetKind())
 	}
@@ -165,8 +215,12 @@ func (r *adapterRuntime) stopEntry(ctx context.Context, entry *adapterEntry) err
 	}
 	entry.busy = true
 	entry.core.stopped.Store(true)
+	core := entry.core
 	config := entry.config
 	r.mu.Unlock()
+	// 菜单写入排空后才能停止并重建实例，防止旧回调覆盖新模式的菜单。
+	core.commandSync.Lock()
+	defer core.commandSync.Unlock()
 	err := instance.Stop(ctx)
 	r.mu.Lock()
 	entry.busy = false
@@ -238,7 +292,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			code := pb.ErrorCode_ERROR_CODE_INTERNAL
 			var public *Error
 			if errors.As(err, &public) {
-				code = public.Code
+				code = pb.ErrorCode(public.Code)
 			}
 			return dispatchError(code, adapterSafeError(err, []byte(request.ConfigJson)))
 		}
@@ -247,7 +301,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		account := instance.Account()
 		// 读取能力由实例接口决定，避免平台自报能力与实际 RPC 入口不一致。
 		var capabilities []*pb.Capability
-		for _, capability := range instance.Capabilities() {
+		for _, capability := range convert.CapabilitiesToProto(instance.Capabilities()) {
 			if capability.GetName() != adapterMediaReadCapability {
 				capabilities = append(capabilities, capability)
 			}
@@ -256,6 +310,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			capabilities = append(capabilities, &pb.Capability{Name: adapterMediaReadCapability, Version: 1, Supported: true})
 		}
 		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: capabilities}
+		if controller, ok := instance.(adapter.CommandMenuController); ok {
+			config := controller.CommandMenuConfig()
+			response.CommandMenu = &pb.CommandMenuConfig{AutoSyncCommands: config.AutoSyncCommands, ClearCommandsOnDisable: config.ClearCommandsOnDisable}
+		}
 		if account.DisplayName != "" {
 			response.AccountDisplayName = &account.DisplayName
 		}
@@ -309,12 +367,177 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			message := err.Error()
 			var public *Error
 			if errors.As(err, &public) {
-				code = validate.PublicCode(public.Code)
+				code = validate.PublicCode(pb.ErrorCode(public.Code))
 				message = public.Message
 			}
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterCommandMenu:
+		return r.commandMenu(ctx, in)
+	case wire.ServiceAdapterCommandsSync:
+		request := &pb.AdapterCommandsSyncRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		core := entry.core
+		r.mu.Unlock()
+		// RPC 取消后平台操作可能仍在执行，等待实际回调返回再处理下一份菜单。
+		core.commandSync.Lock()
+		defer core.commandSync.Unlock()
+		if err := ctx.Err(); err != nil {
+			code := pb.ErrorCode_ERROR_CODE_CANCELLED
+			if errors.Is(err, context.DeadlineExceeded) {
+				code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+			}
+			return dispatchError(code, err.Error())
+		}
+		r.mu.Lock()
+		if entry.core != core || entry.busy || entry.instance == nil || core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		synchronizer, supported := entry.instance.(adapter.CommandSynchronizer)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support command synchronization")
+		}
+		// 与其他固定服务共用请求 context，平台调用在状态锁外执行。
+		safe := synchronizer.SyncCommands(ctx, convert.CommandMenuFromProto(request.Commands))
+		return adapterResponse(&pb.AdapterCommandsSyncResponse{}, convert.ErrorToProto(safe))
+
+	case wire.ServiceAdapterReadNodes:
+		request := &pb.AdapterReadNodesRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		instance := entry.instance
+		reader, supported := instance.(adapter.NodesReader)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support node reads")
+		}
+		target := request.Target
+		if target.GetAdapterInstanceId() != request.InstanceId || target.GetAccountId() != instance.Account().ID || target.GetAdapterId() != r.adapter.Descriptor().AdapterID || target.GetChatId() == "" {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "node target does not match instance")
+		}
+		if err := validate.ReadNodes(request.Segment); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		decoded := convert.ChainFromProto(&pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Forward{Forward: request.Segment}}}}, target)[0].(message.ForwardSegment)
+		nodes, safe := reader.ReadNodes(ctx, convert.SessionFromProto(target), decoded)
+		chain, err := convert.ChainToProto(message.Chain{message.ForwardSegment{Items: nodes}}, target)
+		if err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		return adapterResponse(&pb.ReadNodesResponse{Items: chain.Segments[0].GetForward().Items}, convert.ErrorToProto(safe))
+	case wire.ServiceAdapterAction:
+		request := &pb.AdapterActionRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		executor, supported := entry.instance.(adapter.ActionExecutor)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support platform actions")
+		}
+		// 平台调用在锁外执行，账号动作的空目标保留为空会话。
+		result, safe := executor.Action(ctx, convert.SessionFromProto(request.Target), request.Name, request.Version, json.RawMessage(request.ParamsJson))
+		if len(result) == 0 && safe != nil {
+			return wire.Response{Err: convert.ErrorToProto(safe)}
+		}
+		return adapterResponse(&pb.ActionResponse{ResultJson: string(result)}, convert.ErrorToProto(safe))
+	case wire.ServiceAdapterEdit:
+		request := &pb.AdapterEditRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		editor, supported := entry.instance.(adapter.Editor)
+		r.mu.Unlock()
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message editing")
+		}
+		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
+		result, safe := editor.Edit(ctx, convert.SessionFromProto(request.Target), request.PlatformMessageId, convert.ChainFromProto(request.Chain, request.Target))
+		if result == nil {
+			return wire.Response{Err: convert.ErrorToProto(safe)}
+		}
+		encoded, err := convert.SendResultToProto(result, request.Target)
+		if err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		return adapterResponse(encoded, convert.ErrorToProto(safe))
+	case wire.ServiceAdapterDelete:
+		request := &pb.AdapterDeleteRequest{}
+		if err := decodeInvocation(in.Payload, request); err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		r.mu.Lock()
+		entry, ok := r.instances[request.InstanceId]
+		if !ok {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
+		}
+		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+			r.mu.Unlock()
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		}
+		instance := entry.instance
+		r.mu.Unlock()
+		// 核对账号与执行撤回使用同一实例，避免同名实例重启后串用账号。
+		if instance.Account().ID != request.Target.GetAccountId() {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
+		}
+		deleter, supported := instance.(adapter.Deleter)
+		if !supported {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "adapter instance does not support message deletion")
+		}
+		// 平台请求在锁外执行，停止和其他实例的操作可继续推进。
+		result, safe := deleter.Delete(ctx, convert.SessionFromProto(request.Target), request.PlatformMessageIds)
+		if result == nil {
+			return wire.Response{Err: convert.ErrorToProto(safe)}
+		}
+		return adapterResponse(convert.DeleteResultToProto(result, request.Target), convert.ErrorToProto(safe))
 	case wire.ServiceAdapterSend:
 		request := &pb.AdapterSendRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
@@ -332,11 +555,15 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 		}
 		instance := entry.instance
 		r.mu.Unlock()
-		result, safe := instance.Send(ctx, request.Target, request.Chain)
+		result, safe := instance.Send(ctx, convert.SessionFromProto(request.Target), convert.ChainFromProto(request.Chain, request.Target))
 		if result == nil {
-			return wire.Response{Err: safe}
+			return wire.Response{Err: convert.ErrorToProto(safe)}
 		}
-		return adapterResponse(result, safe)
+		encoded, err := convert.SendResultToProto(result, request.Target)
+		if err != nil {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		return adapterResponse(encoded, convert.ErrorToProto(safe))
 	default:
 		return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter service not found")
 	}
@@ -345,7 +572,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 func (c *adapterCore) call(ctx context.Context, target string, request, response proto.Message) error {
 	a := c.runtime.activation
 	if !a.ready.Load() || a.stopping.Load() {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter session is not active"}
+		return &Error{Code: errcode.FailedPrecondition, Message: "adapter session is not active"}
 	}
 
 	payload, err := adapterPayload(request)
@@ -354,7 +581,7 @@ func (c *adapterCore) call(ctx context.Context, target string, request, response
 	}
 	result, err := c.runtime.session.Call(ctx, wire.Request{Target: target, Payload: payload})
 	if result.Err != nil {
-		return &Error{Code: validate.PublicCode(result.Err.GetCode()), Message: result.Err.GetSafeMessage()}
+		return &Error{Code: errcode.Code(validate.PublicCode(result.Err.GetCode())), Message: result.Err.GetSafeMessage()}
 	}
 	if err != nil {
 		return err
@@ -362,25 +589,29 @@ func (c *adapterCore) call(ctx context.Context, target string, request, response
 	return decodeInvocation(result.Payload, response)
 }
 
-func (c *adapterCore) Deliver(ctx context.Context, ev *pb.Event, cursor []byte) (bool, error) {
+func (c *adapterCore) Deliver(ctx context.Context, ev *message.Event, cursor []byte) (bool, error) {
 	if c.stopped.Load() {
-		return false, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+		return false, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
+	}
+	event, err := convert.EventToProto(ev)
+	if err != nil {
+		return false, err
 	}
 	response := &pb.AdapterDeliverResponse{}
-	err := c.call(ctx, wire.ServiceCoreAdapterDeliver, &pb.AdapterDeliverRequest{InstanceId: c.instanceID, Event: ev, Cursor: cursor}, response)
+	err = c.call(ctx, wire.ServiceCoreAdapterDeliver, &pb.AdapterDeliverRequest{InstanceId: c.instanceID, Event: event, Cursor: cursor}, response)
 	return response.Accepted, err
 }
 
 func (c *adapterCore) SaveCursor(ctx context.Context, cursor []byte) error {
 	if c.stopped.Load() {
-		return &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+		return &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
 	}
 	return c.call(ctx, wire.ServiceCoreAdapterCursor, &pb.AdapterCursorRequest{InstanceId: c.instanceID, Cursor: cursor}, &pb.AdapterCursorResponse{})
 }
 
 func (c *adapterCore) ReadMedia(ctx context.Context, token string, offset uint64, length uint32) ([]byte, uint64, bool, error) {
 	if c.stopped.Load() {
-		return nil, 0, false, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "adapter instance has stopped"}
+		return nil, 0, false, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
 	}
 	response := &pb.ReadResponse{}
 	if err := c.call(ctx, wire.ServiceMediaRead, &pb.ReadRequest{Token: token, Offset: offset, Length: length}, response); err != nil {
@@ -389,9 +620,20 @@ func (c *adapterCore) ReadMedia(ctx context.Context, token string, offset uint64
 	return response.Data, response.NextOffset, response.Eof, nil
 }
 
-func (c *adapterCore) ReportFailure(ctx context.Context, safe *pb.ErrorInfo) error {
+func (c *adapterCore) ReportFailure(ctx context.Context, safe *errcode.Error) error {
 	c.stopped.Store(true)
-	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: safe}, &pb.AdapterStatusResponse{})
+	return c.call(ctx, wire.ServiceCoreAdapterStatus, &pb.AdapterStatusRequest{InstanceId: c.instanceID, State: pb.AdapterInstanceState_ADAPTER_INSTANCE_STATE_FAILED, SafeError: convert.ErrorToProto(safe)}, &pb.AdapterStatusResponse{})
+}
+
+func (c *adapterCore) MediaURL(ctx context.Context, token, baseURL string) (string, time.Time, error) {
+	if c.stopped.Load() {
+		return "", time.Time{}, &Error{Code: errcode.FailedPrecondition, Message: "adapter instance has stopped"}
+	}
+	response := &pb.MediaURLResponse{}
+	if err := c.call(ctx, wire.ServiceMediaURL, &pb.MediaURLRequest{Token: token, BaseUrl: baseURL}, response); err != nil {
+		return "", time.Time{}, err
+	}
+	return response.Url, time.UnixMilli(response.ExpiresAtUnixMs), nil
 }
 
 // adapterSafeError 保留错误上下文，移除实例配置全文与其中的字符串值。

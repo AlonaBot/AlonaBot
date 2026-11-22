@@ -1,0 +1,8 @@
+# showcase 示例的开发工程身份。
+id: showcase
+name: Showcase
+version: 0.1.0
+author: AlonaBot
+source: github.com/AlonaBot/AlonaBot
+role: plugin
+icon: examples/greeting.png

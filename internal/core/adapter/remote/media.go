@@ -20,6 +20,11 @@ var (
 
 // registerIncoming 将事件消息链中的平台文件标识改写为 Core 对象 ID。
 func (p *Process) registerIncoming(instanceID string, ev *pb.Event) {
+	payload := ev.GetEventPayload()
+	p.registerIncomingChains(instanceID, ev.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain())
+}
+
+func (p *Process) registerIncomingChains(instanceID string, chains ...*pb.MessageChain) {
 	seen := make(map[*pb.IncomingMedia]bool)
 	var rewrite func(*pb.MessageChain)
 	rewrite = func(chain *pb.MessageChain) {
@@ -30,6 +35,8 @@ func (p *Process) registerIncoming(instanceID string, ev *pb.Event) {
 				source = value.Image.GetSource()
 			case *pb.Segment_Video:
 				source = value.Video.GetSource()
+			case *pb.Segment_Voice:
+				source = value.Voice.GetSource()
 			case *pb.Segment_File:
 				source = value.File.GetSource()
 			}
@@ -43,11 +50,9 @@ func (p *Process) registerIncoming(instanceID string, ev *pb.Event) {
 			}
 		}
 	}
-	rewrite(ev.GetMessage().GetChain())
-	payload := ev.GetEventPayload()
-	rewrite(payload.GetMessageCreated().GetChain())
-	rewrite(payload.GetMessageEdited().GetChain())
-	rewrite(payload.GetMessageEdited().GetOldChain())
+	for _, chain := range chains {
+		rewrite(chain)
+	}
 }
 
 // MediaSessionKey 返回实例创建时绑定的 Adapter Session 身份。

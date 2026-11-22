@@ -1,4 +1,4 @@
-// REGISTER 载荷与 RouteDescriptor（WIRE §3.3、CONTRACTS §2.2/§3/§4.3/§7.2）。
+// REGISTER 载荷与 RouteDescriptor。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -6,6 +6,7 @@ package alonabot.v1;
 import "alonabot/v1/control.proto";
 import "alonabot/v1/adapter.proto";
 import "alonabot/v1/envelope.proto";
+import "alonabot/v1/message.proto";
 import "alonabot/v1/tool.proto";
 
 option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
@@ -18,14 +19,26 @@ message Register {
   bytes config_schema_hash = 2;
   // 规范化后的完整候选 JSON（含已解析 secret，仅经私有 IPC 传输）。
   string candidate_config_json = 3;
-  // 候选配置的版本。
-  uint32 candidate_config_version = 4;
+  reserved 4;
+  reserved "candidate_config_version";
   // 仅在声明 HTTP 路由时设置。
   HttpListener http_listener = 5;
   // 本次准备阶段的迁移结果。
   MigrationState migration = 6;
   // 仅 Adapter 角色设置。
   AdapterDescriptor adapter = 7;
+  // 配置载入时的校正记录；secret 字段省略原值。
+  repeated ConfigCorrection config_corrections = 8;
+}
+
+// ConfigCorrection 描述配置的转换、恢复或模板元素移除。
+message ConfigCorrection {
+  // 配置的 JSON 路径。
+  string path = 1;
+  // converted、reset 或 removed。
+  string reason = 2;
+  // 原值的 JSON；涉及 secret 时为空。
+  string original_json = 3;
 }
 
 // MigrationState 描述本次准备阶段的迁移完成信息。
@@ -48,6 +61,7 @@ enum RouteKind {
   ROUTE_KIND_SCHEDULE = 5;
   ROUTE_KIND_HTTP = 6;
   ROUTE_KIND_BUS_SUBSCRIPTION = 7;
+  ROUTE_KIND_TASK = 8;
 }
 
 // RouteDescriptor 描述一条路由的公共描述；target 为 plugin_id/route_id，kind 必须与 spec 分支一致。
@@ -86,9 +100,13 @@ message RouteDescriptor {
     HttpRouteSpec http = 15;
     // BUS_SUBSCRIPTION。
     BusSubscriptionSpec bus_subscription = 16;
+    // TASK。
+    TaskSpec task = 18;
   }
   // 触发者满足其中任一权限即可；空集合不要求 Actor。
   repeated string required_permissions = 17;
+  // HTTP 路由的英文页面标题；非空表示插件页面。
+  string page_title = 19;
 }
 
 // HandlerMode 列出 Handler 的签名形态。
@@ -164,6 +182,10 @@ message CommandSpec {
   bool ignore_case = 11;
   // USAGE_MODE_CUSTOM：插件 i18/ 中 messages 的文案键。
   string usage_key = 12;
+  // 英文说明原文；其他语言按完整规范路径覆盖。
+  optional string description = 13;
+  // 显式展示根命令；缺省只登记处理器。
+  bool menu = 14;
 }
 
 // CommandAlias 描述命令的一条别名路径。
@@ -216,6 +238,20 @@ message EventSpec {
   string action_id = 4;
   // button.clicked 路由：action 载荷的 Schema 版本。
   uint32 action_schema_version = 5;
+  // Core 在交付标准消息事件前匹配的条件；缺省时按事件类型交付。
+  MessageFilter message_filter = 6;
+}
+
+// MessageFilter 声明按 OR 匹配的消息条件；配置引用只携带字段路径。
+message MessageFilter {
+  // 匹配发给本机器人的消息。
+  bool to_me = 1;
+  // 匹配任一列出的会话类型。
+  repeated ChatType chat_types = 2;
+  // 字符串列表字段的点分路径。
+  string wake_words_config = 3;
+  // 触发方式多选字段的点分路径；设置时替代静态条件。
+  string triggers_config = 4;
 }
 
 // HookPhase 列出 Hook 的执行阶段。
@@ -230,6 +266,8 @@ enum HookPhase {
 message HookSpec {
   // 执行阶段。
   HookPhase phase = 1;
+  // PreEvent 恰好指定一种事件；出站 Hook 留空。
+  repeated string event_type_filter = 2;
 }
 
 // ServiceAccess 列出服务的访问范围。
@@ -255,6 +293,8 @@ message ServiceSpec {
   PayloadEncoding encoding = 4;
   // JSON 服务可选的工具声明。
   ToolSpec tool = 5;
+  // 固定 Schema、仅 Core 与本组件可调用的配置选项来源。
+  bool options_source = 6;
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。
@@ -285,6 +325,10 @@ enum HttpAuthMode {
   HTTP_AUTH_MODE_CALLBACK_SIGNATURE = 3;
   // 公开回调，由插件验证 nonce。
   HTTP_AUTH_MODE_CALLBACK_NONCE = 4;
+  // Adapter 校验平台传入的凭证。
+  HTTP_AUTH_MODE_PLATFORM_TOKEN = 5;
+  // 公开静态资源：只限 GET 与 HEAD，Core 不校验会话，插件不做额外验证。
+  HTTP_AUTH_MODE_STATIC = 6;
 }
 
 // HttpRouteSpec 描述 HTTP 路由的专属描述。
@@ -309,4 +353,10 @@ message BusSubscriptionSpec {
   uint32 schema_version = 3;
   // 收到事件时调用的本插件路由。
   string callback_route_id = 4;
+}
+
+// TaskSpec 声明动态任务的处理函数；实例规则由 Core 保存。
+message TaskSpec {
+  // 稳定的任务名。
+  string name = 1;
 }

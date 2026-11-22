@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -10,36 +11,44 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/page"
+	"google.golang.org/protobuf/proto"
 )
 
 // UserID 携带命令 user 参数所指向的 external_user_id。
 type UserID string
 
-// Command 记录一条已收集的命令注册。
-type Command struct {
-	Path     []string       // 完整命令路径（含分组前缀），大小写敏感
-	Aliases  [][]string     // 完整别名路径，不附加分组前缀
-	Priority int32          // 数值越小越先，缺省为 0
-	Handler  any            // 已通过签名检查的处理函数
-	Mode     pb.HandlerMode // 由签名推出的 Handler 形态
-	Params   []pb.ParamType // Context 之后各参数的类型
+// command 记录一条已收集的命令注册。
+type command struct {
+	Path      []string       // 完整命令路径（含分组前缀），大小写敏感
+	Aliases   [][]string     // 完整别名路径，不附加分组前缀
+	Priority  int32          // 数值越小越先，缺省为 0
+	Handler   any            // 已通过签名检查的处理函数
+	mode      pb.HandlerMode // 由签名推出的 Handler 形态
+	structure reflect.Type   // 结构体参数的值类型；位置参数形式为 nil。
 
-	permission Permission
-	routeID    string          // 文本匹配与 Raw 的显式路由 ID
-	spec       *pb.CommandSpec // 已通过注册边界校验的命令描述
+	permission   Permission
+	subID        string
+	rules        []Rule          // collect 固定的调用顺序，全部通过后执行 Handler。
+	routeID      string          // 文本匹配与 Raw 的路由 ID，收集时补齐缺省值。
+	spec         *pb.CommandSpec // 已通过注册边界校验的命令描述
+	continuation bool
 }
 
-// CommandRegistry 收集命令；实例方法以方法值显式传入，不做自动 DI。
-// 子组共享根注册器的构建链和冲突索引；Collect 在全部声明结束后解析继承权限。
-type CommandRegistry struct {
-	parent     *CommandRegistry
-	groups     map[string]*CommandRegistry
+// CommandGroup 收集命令；实例方法以方法值显式传入，不做自动 DI。
+// 子组共享根注册器的构建链和冲突索引；Run 在全部声明结束后收集注册时解析继承权限。
+type CommandGroup struct {
+	plugin     *Plugin
+	subID      string
+	parent     *CommandGroup
+	groups     map[string]*CommandGroup
 	permission *Permission
 	builders   []*CommandBuilder
 	prefix     []string          // 本分组的公共路径前缀
-	commands   []Command         // 已收集的命令，按注册顺序排列
-	errs       []error           // 收集过程中发现的错误，由 Collect 一并返回
+	commands   []command         // 已收集的命令，按注册顺序排列
+	errs       []error           // 收集过程中发现的错误，由 collect 一并返回
 	seen       map[string]string // 路径或别名对应的 route_id；惰性创建
 	routeIDs   map[string]bool   // 命令路径生成的 route_id，跨分组检查重复
 }
@@ -48,6 +57,7 @@ type routeOptions struct {
 	aliases    [][]string
 	priority   int32
 	names      []string
+	argsSet    bool // 区分未调用 Args 与显式 Args()，结构体参数禁止后者。
 	optional   []optionalArgument
 	raw        bool
 	usageMode  pb.UsageMode
@@ -61,86 +71,107 @@ type optionalArgument struct {
 }
 
 // Group 返回共享注册状态的子组；同名调用返回同一组。
-func (r *CommandRegistry) Group(name string) *CommandRegistry {
+func (r *CommandGroup) Group(name string) *CommandGroup {
+	r.plugin.checkRegistration()
 	if r.groups == nil {
-		r.groups = make(map[string]*CommandRegistry)
+		r.groups = make(map[string]*CommandGroup)
 	}
 	if r.groups[name] == nil {
-		r.groups[name] = &CommandRegistry{parent: r, prefix: append(slices.Clone(r.prefix), name)}
+		r.groups[name] = &CommandGroup{plugin: r.plugin, subID: r.subID, parent: r, prefix: append(slices.Clone(r.prefix), name)}
 	}
 	return r.groups[name]
 }
 
 // Permission 设置本组及未显式覆盖的后代路由权限。
-func (r *CommandRegistry) Permission(p Permission) *CommandRegistry { r.permission = &p; return r }
-
-func (r *CommandRegistry) owner() *CommandRegistry {
-	for r.parent != nil {
-		r = r.parent
-	}
+func (r *CommandGroup) Permission(p Permission) *CommandGroup {
+	r.plugin.checkRegistration()
+	r.permission = &p
 	return r
 }
 
+func (r *CommandGroup) owner() *CommandGroup {
+	return &r.plugin.commands
+}
+
 // Command 开始构建相对于本组路径的命令。
-func (r *CommandRegistry) Command(path ...string) *CommandBuilder {
-	return r.start(Command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
+func (r *CommandGroup) Command(path ...string) *CommandBuilder {
+	return r.start(command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
 }
 
 // Regex 开始构建 Go regexp 文本匹配。
-func (r *CommandRegistry) Regex(routeID, expr string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
+func (r *CommandGroup) Regex(expr string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
 }
 
 // Keyword 开始构建包含文本匹配。
-func (r *CommandRegistry) Keyword(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) Keyword(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
 }
 
 // StartsWith 开始构建开头文本匹配。
-func (r *CommandRegistry) StartsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) StartsWith(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
 }
 
 // EndsWith 开始构建结尾文本匹配。
-func (r *CommandRegistry) EndsWith(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) EndsWith(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
 }
 
 // FullMatch 开始构建完整文本匹配。
-func (r *CommandRegistry) FullMatch(routeID string, patterns ...string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) FullMatch(patterns ...string) *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
 }
 
 // Raw 开始构建最后执行的原始消息路由。
-func (r *CommandRegistry) Raw(routeID string) *CommandBuilder {
-	return r.text(routeID, &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
+func (r *CommandGroup) Raw() *CommandBuilder {
+	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
 }
 
-func (r *CommandRegistry) text(routeID string, spec *pb.CommandSpec) *CommandBuilder {
-	return r.start(Command{routeID: routeID, spec: spec}, routeID == "" || strings.HasPrefix(routeID, commandRoutePrefix))
+// On 开始登记本命令组所属作用域的事件路由。
+func (r *CommandGroup) On(eventType EventType) *EventBuilder {
+	b := r.plugin.events.On("", eventType)
+	b.route.subID = r.subID
+	return b
 }
 
-func (r *CommandRegistry) start(c Command, invalid bool) *CommandBuilder {
+func (r *CommandGroup) text(spec *pb.CommandSpec) *CommandBuilder {
+	return r.start(command{spec: spec}, false)
+}
+
+func (r *CommandGroup) start(c command, invalid bool) *CommandBuilder {
+	r.plugin.checkRegistration()
+	c.subID = r.subID
 	b := &CommandBuilder{registry: r, command: c, invalid: invalid, options: routeOptions{usageMode: pb.UsageMode_USAGE_MODE_DEFAULT}}
 	r.owner().builders = append(r.owner().builders, b)
 	return b
 }
 
-// CommandBuilder 收集一条路由；Handle 结束构建，Collect 统一验证。
+// CommandBuilder 收集一条路由；Handle 结束构建，Run 收集注册时统一验证。
 type CommandBuilder struct {
-	registry    *CommandRegistry
-	command     Command
+	registry    *CommandGroup
+	command     command
 	options     routeOptions
 	permission  *Permission
 	handles     int
 	afterHandle bool
 	invalid     bool
+	idSet       bool // 显式空 ID 仍交给注册校验拒绝。
 }
 
 func (b *CommandBuilder) touch() {
+	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
 	}
+}
+
+// ID 设置文本匹配或 Raw 路由的稳定身份。
+func (b *CommandBuilder) ID(routeID string) *CommandBuilder {
+	b.touch()
+	b.command.routeID = routeID
+	b.idSet = true
+	return b
 }
 
 // Alias 追加完整别名路径。
@@ -154,6 +185,7 @@ func (b *CommandBuilder) Alias(path ...string) *CommandBuilder {
 func (b *CommandBuilder) Args(names ...string) *CommandBuilder {
 	b.touch()
 	b.options.names = slices.Clone(names)
+	b.options.argsSet = true
 	return b
 }
 
@@ -166,6 +198,23 @@ func (b *CommandBuilder) Optional(name string, def ...string) *CommandBuilder {
 
 // RawTail 保留末位参数原文。
 func (b *CommandBuilder) RawTail() *CommandBuilder { b.touch(); b.options.raw = true; return b }
+
+// Description 登记英文说明；空串表示未提供，其他语言按规范路径覆盖。
+func (b *CommandBuilder) Description(text string) *CommandBuilder {
+	b.touch()
+	b.command.spec.Description = nil
+	if text != "" {
+		b.command.spec.Description = &text
+	}
+	return b
+}
+
+// Menu 将根路径命令显式加入平台菜单，处理器仍按原权限执行。
+func (b *CommandBuilder) Menu() *CommandBuilder {
+	b.touch()
+	b.command.spec.Menu = true
+	return b
+}
 
 // UsageKey 设置 usage 文案键。
 func (b *CommandBuilder) UsageKey(key string) *CommandBuilder {
@@ -204,14 +253,40 @@ func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
 	return b
 }
 
-// Handle 结束路由构建，签名规则由 Collect 检查。
-func (b *CommandBuilder) Handle(handler any) { b.handles++; b.command.Handler = handler }
+// Handle 结束路由构建，签名规则在 Run 收集注册时检查。
+func (b *CommandBuilder) Handle(handler any) {
+	b.registry.plugin.checkRegistration()
+	b.handles++
+	b.command.Handler = handler
+}
 
-func (r *CommandRegistry) collect() {
+// Rule 按调用与参数顺序追加条件，全部匹配后执行 Handler。
+func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
+	b.touch()
+	b.command.rules = append(b.command.rules, rules...)
+	return b
+}
+
+// Continue 让 Handler 整体在独立的延续调用中执行，原调用保持继续传播。
+func (b *CommandBuilder) Continue() *CommandBuilder {
+	b.touch()
+	b.command.continuation = true
+	return b
+}
+
+func (r *CommandGroup) collect() {
+	r.commands = nil
+	r.errs = nil
+	r.seen = nil
+	r.routeIDs = nil
 	for _, b := range r.builders {
 		c := b.command
+		if c.spec.GetMatch() != pb.CommandMatch_COMMAND_MATCH_PATH && !b.idSet {
+			c.routeID = defaultCommandRouteID(c.spec)
+		}
+		invalidID := b.idSet && (c.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH || c.routeID == "" || strings.HasPrefix(c.routeID, commandRoutePrefix) || strings.HasPrefix(c.routeID, buttonRoutePrefix))
 		id := commandRouteID(c)
-		if b.invalid || b.handles != 1 || b.afterHandle {
+		if b.invalid || invalidID || b.handles != 1 || b.afterHandle {
 			r.errs = append(r.errs, invalidCommand("route %q (path %q) has invalid path/route_id or Handle sequence", id, strings.Join(c.Path, " ")))
 			continue
 		}
@@ -227,32 +302,48 @@ func (r *CommandRegistry) collect() {
 			continue
 		}
 		c.permission = *p
+		if err := checkRules(c.rules); err != nil {
+			r.errs = append(r.errs, invalidCommand("route %q: %v", id, err))
+			continue
+		}
+		c.rules = slices.Clone(c.rules)
 		r.register(c, b.options)
 	}
 }
 
-func (r *CommandRegistry) register(c Command, options routeOptions) {
+func (r *CommandGroup) register(c command, options routeOptions) {
 	// 1. 从真实函数签名取得参数类型，选项仅描述名称与缺失时的行为。
-	mode, params, err := checkHandler(c.Handler)
+	mode, structure, params, err := checkHandler(c.Handler)
 	if err != nil {
 		r.errs = append(r.errs, invalidCommand("command %q: %v", commandRouteID(c), err))
 		return
 	}
-	c.Mode, c.Params = mode, params
+	c.mode, c.structure = mode, structure
 	c.Aliases, c.Priority = options.aliases, options.priority
-	spec := c.spec
+	spec := proto.Clone(c.spec).(*pb.CommandSpec)
+	c.spec = spec
+	if structure != nil && (options.argsSet || len(options.optional) != 0 || options.raw) {
+		r.errs = append(r.errs, invalidCommand("command %q uses struct parameters with Args, Optional or RawTail", commandRouteID(c)))
+		return
+	}
 	spec.Path, spec.HandlerMode = c.Path, mode
 	spec.UsageMode, spec.UsageKey, spec.IgnoreCase = options.usageMode, options.usageKey, options.ignoreCase
+	spec.Params = params
+	if !options.argsSet && structure == nil {
+		options.names = handlerParamNames(generatedFor(r.plugin), c.Handler)
+	}
+	if options.argsSet && len(options.names) != len(params) {
+		r.errs = append(r.errs, invalidCommand("command %q has %d argument names for %d parameters", commandRouteID(c), len(options.names), len(params)))
+		return
+	}
 	if len(options.names) > len(params) {
 		r.errs = append(r.errs, invalidCommand("command %q has more argument names than parameters", commandRouteID(c)))
 		return
 	}
-	for i, param := range params {
-		name := fmt.Sprintf("arg%d", i+1)
-		if i < len(options.names) {
-			name = options.names[i]
+	for i, name := range options.names {
+		if options.argsSet || name != "" {
+			spec.Params[i].Name = name
 		}
-		spec.Params = append(spec.Params, &pb.CommandParam{Name: name, Type: param, Required: true})
 	}
 	for _, optional := range options.optional {
 		if len(optional.defaults) > 1 {
@@ -295,18 +386,37 @@ func (r *CommandRegistry) register(c Command, options routeOptions) {
 	if err := validate.Register(&pb.Register{CandidateConfigJson: "{}", Routes: []*pb.RouteDescriptor{{
 		RouteId: commandRouteID(c), Kind: pb.RouteKind_ROUTE_KIND_COMMAND, Spec: &pb.RouteDescriptor_Command{Command: spec},
 	}}}); err != nil {
+		if structure != nil {
+			fields := make([]string, len(params))
+			for i, param := range params {
+				fields[i] = fmt.Sprintf("%s (arg %q)", structure.Field(i).Name, param.Name)
+			}
+			err = fmt.Errorf("struct fields [%s]: %w", strings.Join(fields, ", "), err)
+		}
 		r.errs = append(r.errs, err)
 		return
 	}
 	r.add(c)
 }
 
+func defaultCommandRouteID(spec *pb.CommandSpec) string {
+	switch spec.GetMatch() {
+	case pb.CommandMatch_COMMAND_MATCH_REGEX:
+		return "regex:" + spec.GetRegex()
+	case pb.CommandMatch_COMMAND_MATCH_RAW:
+		return "raw"
+	default:
+		category := strings.TrimPrefix(strings.ToLower(spec.GetMatch().String()), "command_match_")
+		return category + ":" + strings.Join(spec.GetPatterns(), "|")
+	}
+}
+
 func invalidCommand(format string, args ...any) *Error {
-	return &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf(format, args...)}
+	return &Error{Code: errcode.InvalidArgument, Message: fmt.Sprintf(format, args...)}
 }
 
 // add 对已校验的命令检查跨注册项冲突；问题记入 errs。
-func (r *CommandRegistry) add(c Command) {
+func (r *CommandGroup) add(c command) {
 	// 1. 全部路径与别名检查跨注册项冲突，失败时不登记部分路径。
 	var paths [][]string
 	if c.spec.GetMatch() == pb.CommandMatch_COMMAND_MATCH_PATH {
@@ -323,7 +433,7 @@ func (r *CommandRegistry) add(c Command) {
 		pending[key] = true
 	}
 	if r.routeIDs[id] {
-		r.errs = append(r.errs, invalidCommand("route %q registered twice", id))
+		r.errs = append(r.errs, invalidCommand("route %q registered twice; use .ID to distinguish routes", id))
 		return
 	}
 	// 2. 全部通过后统一登记，所有分组共用根注册器的冲突索引。
@@ -340,89 +450,131 @@ func (r *CommandRegistry) add(c Command) {
 	r.commands = append(r.commands, c)
 }
 
-// Handler 签名检查使用的反射类型，以及参数类型到协议参数类型的映射。
+// Handler 签名检查使用的公共入口与返回值类型。
 var (
 	contextType = reflect.TypeOf((*Context)(nil))
 	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-	chainType   = reflect.TypeOf(message.Chain(nil))
-	paramTypes  = map[reflect.Type]pb.ParamType{
-		reflect.TypeOf(""):                      pb.ParamType_PARAM_TYPE_STRING,
-		reflect.TypeOf(int64(0)):                pb.ParamType_PARAM_TYPE_INT,
-		reflect.TypeOf(float64(0)):              pb.ParamType_PARAM_TYPE_FLOAT,
-		reflect.TypeOf(false):                   pb.ParamType_PARAM_TYPE_BOOL,
-		reflect.TypeOf(UserID("")):              pb.ParamType_PARAM_TYPE_USER,
-		reflect.TypeOf((*pb.ImageSegment)(nil)): pb.ParamType_PARAM_TYPE_IMAGE,
-		reflect.TypeOf((*pb.MessageChain)(nil)): pb.ParamType_PARAM_TYPE_MESSAGE,
-	}
+	contentType = reflect.TypeFor[message.Content]()
 )
 
-// checkHandler 校验两种 Handler 签名并返回模式与参数类型。
-func checkHandler(h any) (pb.HandlerMode, []pb.ParamType, error) {
-	t := reflect.TypeOf(h)
-	if t == nil || t.Kind() != reflect.Func || reflect.ValueOf(h).IsNil() {
-		return 0, nil, fmt.Errorf("handler must be a non-nil function, got %T", h)
-	}
-	if t.IsVariadic() || t.NumIn() == 0 || t.In(0) != contextType {
-		return 0, nil, fmt.Errorf("handler's first parameter must be *sdk.Context and it must not be variadic: %s", t)
-	}
-	var params []pb.ParamType
-	for i := 1; i < t.NumIn(); i++ {
-		p, ok := paramTypes[t.In(i)]
-		if !ok {
-			return 0, nil, fmt.Errorf("type %[2]s of parameter %[1]d is not supported (expected string, int64, float64, bool, sdk.UserID, *pb.ImageSegment or *pb.MessageChain)", i, t.In(i))
-		}
-		params = append(params, p)
-	}
-	switch {
-	case t.NumOut() == 1 && t.Out(0) == errorType:
-		return pb.HandlerMode_HANDLER_MODE_MANUAL, params, nil
-	case t.NumOut() == 2 && t.Out(0) == chainType && t.Out(1) == errorType:
-		return pb.HandlerMode_HANDLER_MODE_AUTO_REPLY, params, nil
-	}
-	return 0, nil, fmt.Errorf("handler may only return error or (message.Chain, error): %s", t)
-}
-
-// HTTPRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
-type HTTPRoute struct {
-	Method string // 大写的 HTTP 方法
-	Path   string // 插件相对路径，以 / 开头且为规范形式
+// httpRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
+type httpRoute struct {
+	Method    string // 大写的 HTTP 方法
+	Path      string // 插件相对路径，以 / 开头且为规范形式
+	PageTitle string // 非空时声明页面的英文标题。
 	// Handler 处理请求。
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
 	Public   bool
-	AuthMode pb.HttpAuthMode // 认证方式；公开路由必须是回调验证方式之一
+	AuthMode HTTPAuth // 认证方式；AuthStatic 公开提供静态资源，其他公开模式校验对应凭证。
 }
 
-// HTTPOption 调整 HTTP 路由声明。
-type HTTPOption func(*HTTPRoute)
-
-// Public 声明公开回调路由；插件必须自行验证 state、签名或 nonce。
-func Public(mode pb.HttpAuthMode) HTTPOption {
-	return func(r *HTTPRoute) { r.Public, r.AuthMode = true, mode }
+// RouteBuilder 收集 HTTP 路由；Handle 或 HandleFunc 结束构建。
+type RouteBuilder struct {
+	registry    *httpRegistry
+	route       httpRoute
+	method      string // 保留输入，沿用大写方法名的校验错误。
+	handles     int
+	afterHandle bool
 }
 
-// HTTPRegistry 收集 HTTP 路由；默认需要 Core 授权会话。
-type HTTPRegistry struct {
-	routes []HTTPRoute
-	errs   []error
-}
-
-// Handle 注册 method+path 的 Handler；同插件内重复的 method+path 报错。
-func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPOption) {
-	route := HTTPRoute{Method: strings.ToUpper(method), Path: path, Handler: h, AuthMode: pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION}
-	for _, o := range opts {
-		o(&route)
+// Page 声明页面及同目录的套件资源；title 提供翻译缺失时的英文标题。
+func (b *RouteBuilder) Page(title string) *RouteBuilder {
+	b.registry.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
 	}
+	b.route.PageTitle = title
+	return b
+}
+
+// Public 声明公开路由；AuthStatic 公开提供静态资源，其他模式由组件验证对应凭证。
+func (b *RouteBuilder) Public(mode HTTPAuth) *RouteBuilder {
+	b.registry.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
+	}
+	b.route.Public, b.route.AuthMode = true, mode
+	return b
+}
+
+// Handle 结束 HTTP 路由构建。
+func (b *RouteBuilder) Handle(h http.Handler) {
+	b.registry.plugin.checkRegistration()
+	b.handles++
+	b.route.Handler = h
+}
+
+// HandleFunc 以函数结束 HTTP 路由构建。
+func (b *RouteBuilder) HandleFunc(f func(http.ResponseWriter, *http.Request)) {
+	if f == nil {
+		b.Handle(nil)
+		return
+	}
+	b.Handle(http.HandlerFunc(f))
+}
+
+// httpRegistry 收集 HTTP 路由；默认需要 Core 授权会话。
+type httpRegistry struct {
+	create     func([]httpRoute, *componentSession) httpRuntime // Route 登记后才保留 Listener 实现。
+	collectNow func()                                           // 同步按需保留页面资源收集路径。
+	plugin     *Plugin
+	builders   []*RouteBuilder
+	routes     []httpRoute
+	errs       []error
+}
+
+func (r *httpRegistry) Route(method, path string) *RouteBuilder {
+	r.plugin.checkRegistration()
+	r.create = newHTTPListener
+	r.collectNow = r.collectRoutesNow
+	b := &RouteBuilder{registry: r, method: method, route: httpRoute{Method: strings.ToUpper(method), Path: path, AuthMode: AuthCoreSession}}
+	r.builders = append(r.builders, b)
+	return b
+}
+
+func (r *httpRegistry) collectRoutesNow() {
+	r.routes, r.errs = nil, nil
+	for _, b := range r.builders {
+		if b.handles != 1 || b.afterHandle {
+			id := "http." + b.route.Method + "." + hex.EncodeToString([]byte(b.route.Path))
+			r.errs = append(r.errs, fmt.Errorf("route %q has invalid Handle sequence", id))
+			continue
+		}
+		r.add(b.method, b.route)
+	}
+	// 作者路由先全部收集，自动资源只补齐尚未登记的方法与路径。
+	for _, route := range slices.Clone(r.routes) {
+		if route.PageTitle == "" {
+			continue
+		}
+		directory := route.Path[:strings.LastIndexByte(route.Path, '/')+1]
+		for _, filename := range []string{"kit.css", "kit.js"} {
+			resourcePath := directory + filename
+			if slices.ContainsFunc(r.routes, func(existing httpRoute) bool {
+				return existing.Method == http.MethodGet && existing.Path == resourcePath
+			}) {
+				continue
+			}
+			r.add(http.MethodGet, httpRoute{Method: http.MethodGet, Path: resourcePath, Handler: page.Handler(), Public: true, AuthMode: AuthStatic})
+		}
+	}
+}
+
+func (r *httpRegistry) add(method string, route httpRoute) {
+	path := route.Path
 	switch {
-	case h == nil:
+	case route.Handler == nil:
 		r.errs = append(r.errs, fmt.Errorf("handler for HTTP %s %s is nil", method, path))
 	case !validHTTPMethod(method) || !validHTTPMethod(route.Method):
 		r.errs = append(r.errs, fmt.Errorf("HTTP method must be standard and uppercase: input %q, registered %q", method, route.Method))
 	case !canonicalHTTPPath(route.Path):
 		r.errs = append(r.errs, fmt.Errorf("HTTP path %q must start with / and be canonical", route.Path))
-	case route.Public && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE:
-		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s must declare state or signature verification", method, path))
-	case !route.Public && route.AuthMode != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION:
+	case route.Public && route.AuthMode == AuthStatic && method != http.MethodGet && method != http.MethodHead:
+		r.errs = append(r.errs, fmt.Errorf("static HTTP route %s %s only allows GET and HEAD", method, path))
+	case route.Public && route.AuthMode != AuthCallbackState && route.AuthMode != AuthCallbackSignature && route.AuthMode != AuthCallbackNonce && route.AuthMode != AuthPlatformToken && route.AuthMode != AuthStatic:
+		r.errs = append(r.errs, fmt.Errorf("public HTTP route %s %s has invalid authentication mode", method, path))
+	case !route.Public && route.AuthMode != AuthCoreSession:
 		r.errs = append(r.errs, fmt.Errorf("private HTTP route %s %s must use Core session authentication", method, path))
 	default:
 		for _, e := range r.routes {
@@ -435,8 +587,8 @@ func (r *HTTPRegistry) Handle(method, path string, h http.Handler, opts ...HTTPO
 	}
 }
 
-// Schedule 记录一个定时任务声明；interval 与 cron 互斥，触发由 Core 负责。
-type Schedule struct {
+// schedule 记录一个定时任务声明；interval 与 cron 互斥，触发由 Core 负责。
+type schedule struct {
 	JobID    string               // 插件内稳定的任务 ID
 	Interval time.Duration        // 固定间隔；为零表示使用 Cron
 	Cron     string               // 五字段 cron 表达式；为空表示使用 Interval
@@ -444,32 +596,77 @@ type Schedule struct {
 	Handler  func(*Context) error // 每次触发时调用的函数
 }
 
-// ScheduleRegistry 收集定时任务。
-type ScheduleRegistry struct {
-	jobs []Schedule
-	errs []error
+// ScheduleBuilder 收集固定间隔或 cron 任务；Handle 结束构建。
+type ScheduleBuilder struct {
+	registry    *scheduleRegistry
+	schedule    schedule
+	every       bool
+	timezoneSet bool // Every 上显式设置空时区也应报错。
+	handles     int
+	afterHandle bool
 }
 
-// Every 声明固定间隔任务（至少 1s）。
-func (r *ScheduleRegistry) Every(jobID string, d time.Duration, fn func(*Context) error) {
-	if d < time.Second {
-		r.errs = append(r.errs, fmt.Errorf("interval %[2]s of job %[1]s is less than 1s", jobID, d))
-		return
+// Timezone 设置 cron 的 IANA 时区；缺省为 UTC，Every 上调用在 Run 收集注册时报错。
+func (b *ScheduleBuilder) Timezone(name string) *ScheduleBuilder {
+	b.registry.plugin.checkRegistration()
+	if b.handles != 0 {
+		b.afterHandle = true
 	}
-	r.add(Schedule{JobID: jobID, Interval: d, Handler: fn})
+	b.timezoneSet = true
+	b.schedule.Timezone = name
+	return b
 }
 
-// Cron 声明五字段 cron 任务；timezone 为 IANA 名称，空串表示 UTC。表达式在 REGISTER 时由 Core 校验。
-func (r *ScheduleRegistry) Cron(jobID, expr, timezone string, fn func(*Context) error) {
-	if len(strings.Fields(expr)) != 5 {
-		r.errs = append(r.errs, fmt.Errorf("cron expression %[2]q of job %[1]s does not have five fields", jobID, expr))
-		return
+// Handle 结束定时任务构建。
+func (b *ScheduleBuilder) Handle(fn func(*Context) error) {
+	b.registry.plugin.checkRegistration()
+	b.handles++
+	b.schedule.Handler = fn
+}
+
+// scheduleRegistry 收集定时任务。
+type scheduleRegistry struct {
+	plugin   *Plugin
+	builders []*ScheduleBuilder
+	jobs     []schedule
+	errs     []error
+}
+
+func (r *scheduleRegistry) Every(jobID string, d time.Duration) *ScheduleBuilder {
+	r.plugin.checkRegistration()
+	b := &ScheduleBuilder{registry: r, every: true, schedule: schedule{JobID: jobID, Interval: d}}
+	r.builders = append(r.builders, b)
+	return b
+}
+
+func (r *scheduleRegistry) Cron(jobID, expr string) *ScheduleBuilder {
+	r.plugin.checkRegistration()
+	b := &ScheduleBuilder{registry: r, schedule: schedule{JobID: jobID, Cron: expr}}
+	r.builders = append(r.builders, b)
+	return b
+}
+
+func (r *scheduleRegistry) collect() {
+	r.jobs, r.errs = nil, nil
+	for _, b := range r.builders {
+		s := b.schedule
+		switch {
+		case b.handles != 1 || b.afterHandle:
+			r.errs = append(r.errs, fmt.Errorf("route %q has invalid Handle sequence", scheduleRoutePrefix+s.JobID))
+		case b.every && b.timezoneSet:
+			r.errs = append(r.errs, fmt.Errorf("route %q cannot set Timezone on Every", scheduleRoutePrefix+s.JobID))
+		case b.every && s.Interval < time.Second:
+			r.errs = append(r.errs, fmt.Errorf("interval %[2]s of job %[1]s is less than 1s", s.JobID, s.Interval))
+		case !b.every && len(strings.Fields(s.Cron)) != 5:
+			r.errs = append(r.errs, fmt.Errorf("cron expression %[2]q of job %[1]s does not have five fields", s.JobID, s.Cron))
+		default:
+			r.add(s)
+		}
 	}
-	r.add(Schedule{JobID: jobID, Cron: expr, Timezone: timezone, Handler: fn})
 }
 
 // add 检查 job_id、Handler 并去重后登记任务；问题记入 errs。
-func (r *ScheduleRegistry) add(s Schedule) {
+func (r *scheduleRegistry) add(s schedule) {
 	switch {
 	case s.JobID == "":
 		r.errs = append(r.errs, fmt.Errorf("scheduled job is missing job_id"))

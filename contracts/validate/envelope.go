@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// 本实现支持的传输协议版本（WIRE §1）。
+// 本实现支持的传输协议版本。
 const (
 	ProtocolMajor uint32 = 1 // 传输协议主版本
 	ProtocolMinor uint32 = 0 // 本实现支持的最高次版本
@@ -97,7 +97,7 @@ func isCall(k pb.FrameKind) bool {
 	return k == pb.FrameKind_FRAME_KIND_REQUEST || k == pb.FrameKind_FRAME_KIND_RESPONSE || k == pb.FrameKind_FRAME_KIND_CANCEL
 }
 
-// Envelope 按帧种类检查结构合法性（WIRE §1～§3.1）。失败返回 *Error，code 为 PROTOCOL_ERROR，
+// Envelope 按帧种类检查结构合法性。失败返回 *Error，code 为 PROTOCOL_ERROR，
 // 只有 JSON 载荷语法错误返回 INVALID_ARGUMENT。
 func Envelope(env *pb.Envelope) error {
 	// 1. 帧种类与主版本。

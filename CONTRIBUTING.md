@@ -1,56 +1,257 @@
-# 参与 AlonaBot 开发
+# Contributing to AlonaBot
 
-本文件负责贡献流程、Git 授权与 PR 交付；代码和注释规则见 [编码规范](docs/coding-standards.md)，环境和检查命令见 [开发指南](docs/development.md)。流程或自动化变化时同步维护本文件。
+[简体中文](CONTRIBUTING.zh-CN.md)
 
-## 从一个明确的问题开始
+Contribute fixes, documentation, platform support and community components. This guide covers the process from reporting an issue to submitting a PR. See [development](docs/development.md) for tools and commands and the coding rules below.
 
-使用求助与方案交流前往 [讨论区](https://github.com/AlonaBot/AlonaBot/discussions)。安全漏洞按 [安全政策](SECURITY.md) 通过私密报告提交。按任务查找文档可从 [Wiki](https://github.com/AlonaBot/AlonaBot/wiki) 进入。
+Submit component changes to the corresponding [official repository](README.md#official-components). This repository maintains Core, SDK, protocols, examples and bundled releases.
 
-Bug Issue 写清发生了什么和复现步骤，能提供版本、系统和日志更好。功能 Issue 说明要解决的问题，期望的效果可选。日志与配置先脱敏，不提交 Bot Token、Session Secret、数据库凭证或真实用户数据。
+## Start with a concrete problem
 
-行为以 [spec](spec/README.md) 为准，结构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。实现前读取对应 T 工作包及失败停止条件；契约有冲突时先按 spec 的维护流程解决，再实现。
+Use [Discussions](https://github.com/AlonaBot/AlonaBot/discussions) for usage questions and design discussions. Report vulnerabilities privately following the [security policy](SECURITY.md). The [Wiki](https://github.com/AlonaBot/AlonaBot/wiki) provides task navigation.
 
-## 在独立 worktree 中修改
+Search existing Issues and open or merged PRs, and check current source. If a fix already exists, help reproduce or review it. For larger features, protocol changes or data changes, open an Issue describing the problem, expected behavior and approach, and wait for maintainer agreement.
 
-- 先检查分支、基线和已有修改，保留其他人的工作。Git 写操作在独立 worktree 中完成。
-- 普通任务使用 `codex/<主题>` 分支；切片使用 `goal-N` 和 `.worktrees/goal-N`，每个 task 一个 commit。
-- 普通任务中 Agent 默认不 commit、不 push；用户明确要求时才执行。要求创建 PR 授权该 PR 必需的 commit、push 和创建操作，不授权 merge、发布、改 tag 或仓库保护规则。切片中的提交、推送和合并授权见下文「角色与合并」。
-- commit message 用简体中文，说明改了什么以及必要原因，不要求固定类型前缀。
-- 一个 PR 解决一个连贯问题。规范/工具建设与产品修复分开；不把本地临时测试、个人配置或验收草稿放进 PR。
+- **Bugs**: provide version, operating system and architecture, reproduction steps, expected and actual results, and complete errors. Reduce the issue to a repeatable example where possible.
+- **Features**: describe the actual use case, missing capability and expected result. Prefer separate components for platform integrations.
+- **Documentation**: identify the step that caused difficulty and its command or behavior. Small corrections can go directly into a PR.
 
-## 角色与合并
+Before sharing logs, configuration or diagnostics, redact Bot Tokens, management tokens, database credentials and real user data. Report suspected credential leaks or security vulnerabilities privately following the [security policy](SECURITY.md). Avoid publishing exploitable details in public Issues.
 
-实施按 [PLAN §3.1](spec/PLAN.md#31-执行切片) 划分的章节与各章节实施计划中的切片推进，一个切片对应一个 `goal-N` 分支和一个 PR。
+## Prepare the environment
 
-| 角色 | 负责 | Git 授权 |
-| --- | --- | --- |
-| 维护者 | 范围与契约取舍、启动执行者、合并审查者自己的改动 | 全部 |
-| 审查者 | 维护 [docs/goals/](docs/goals/README.md) 的 goal 语句与 [执行顺序](docs/execution-order.md)；审查执行者的 PR；修订计划与流程 | 向执行者的 PR 分支推送普通 commit（切片状态、文档同步）；审查通过后 squash 合并执行者的切片 PR；合并后在 main 上直接更新 docs/goals/ 中的状态与接口段。其他改动走普通 PR，由维护者合并 |
-| 执行者 | 按 goal 语句和 [执行技能](.agents/skills/alonabot-execute/SKILL.md) 完成 task、推送并开 PR、处理审查意见 | 在自己的 `goal-N` 分支上 commit 和推送，创建和更新该 PR；不合并、不推送 `main`、不 force-push |
+Follow [environment setup](docs/development.md#prepare-the-environment). Go changes usually need only Go. Protocol generation also needs protoc; WebUI changes need Node and npm.
 
-审查者合并切片 PR 前，必须同时满足以下条件：
+Create a focused branch from the latest main. Fork contributors should first synchronize upstream main. Suggested names include `fix/problem`, `feat/feature` and `docs/topic`. Each PR should address one coherent problem. Keep unrelated refactoring, personal settings and temporary acceptance artifacts out of it. Worktrees support parallel independent tasks.
 
-- 按 [审查技能](.agents/skills/alonabot-review/SKILL.md) 完成契约与规范两条轴的审查，并按 goal 语句和 PLAN 失败停止条件自己写临时测试实际运行过，没有未解决的 P0/P1。
-- PR 正文列全了每个 task 的结果与证据；阻塞项要么已解决，要么经维护者同意延后。
-- 所属章节实施计划的切片表中该切片的状态已在本 PR 内更新为「已完成」，PR 正文「文档同步」列出的内容已补上。
-- `Quality gate` 与 `PR metadata` 在当前 head 上通过，合并时用 `gh pr merge --squash --match-head-commit <完整 SHA>` 锁定审查过的 commit。
+## Keep changes in sync
 
-仓库目前没有启用分支保护，以上条件靠审查者执行，不是平台强制的规则。合并后确认 `main` 上的 `Quality gate` 通过。
+- Update generator sources and regenerate their outputs.
+- Update affected callers, examples and guides with behavior changes. For database, process lifecycle and public protocol changes, describe failure handling and recovery.
+- Public dependency scope and linking costs are documented in [dependency management](docs/development.md#dependency-management).
 
-## 用证据交付
+## Submit a PR
 
-先选择能覆盖实际风险的最小检查。小而可撤销的改动不添加照搬实现的测试；已有测试通过后，没有相关新改动、失败或未解决问题就不重跑或扩大范围。仓库只提交集成测试与协议编号检查，一个切片默认只提交一个覆盖主路径的集成测试；单元测试和临时复现写在被忽略的 `*_local_test.go`、`*.local.test.ts` 或 `tmp/test/`，规则见 [编码规范「测试提交规则」](docs/coding-standards.md#测试提交规则)。
+1. Write a Simplified Chinese commit message explaining the change and its reason. No fixed type prefix is required.
+2. Use `type/scope: 中文摘要` for PR titles, for example `fix/scheduler: 修复休眠唤醒后的任务交付`. Types are `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `build`, `chore`, `perf` and `revert`. Use the affected module's lowercase English name for scope; hyphens are allowed. Describe the technical change without task numbers, model names or tool attribution in the title.
+3. Target main and complete the [PR template](.github/PULL_REQUEST_TEMPLATE.md): reason, verification, compatibility, risks and checklist. Link an Issue with `Closes #number`.
+4. Review the diff for scope and necessary adjacent changes. Exclude credentials, personal task records, runtime data and temporary tests.
+5. Wait for checks on the current head and maintainer review. Make requested corrections and run affected verification.
 
-新增的非平凡逻辑至少用一项测试验证，但只有集成测试进入仓库；信任边界、数据持久化和公开协议兼容性靠集成测试覆盖，`sdk/` 与 `internal/core/supervisor/` 的例外见编码规范（D-86）。跨模块大改动须进行独立代码审查：使用可用的 `code-review-expert`，没有该技能时按仓库 [审查技能](.agents/skills/alonabot-review/SKILL.md) 完成同等检查并说明工具差异。
+After confirming scope, implementation, verification and deferred items, the maintainer squash-merges and checks main. Contributors deliver through PRs; maintainers control official versions, signatures and releases.
 
-PR 按 [模板](.github/PULL_REQUEST_TEMPLATE.md) 写清变更原因、实际命令及结果、兼容性与风险。未运行的检查说明原因，不把交叉编译、fixture 或跳过的测试写成真实环境验证；V 编号证据遵循 [TEST-MATRIX §3](spec/TEST-MATRIX.md#3-证据和失败门槛)。交付说明写在 PR 或回复，不另建报告文件。
+## CI and review
 
-## GitHub 自动化的范围
+- [Quality gate](.github/workflows/ci.yml) checks whitespace and allowed main paths. Go, protocol or dependency changes additionally run formatting, generation consistency, vet, race tests and five-target pure-Go builds. Authors verify frontend changes following the development guide.
+- [PR metadata](.github/workflows/pr-metadata.yml) checks the title, required description and checklist of open non-draft PRs. Maintainers review their actual contents.
+- GitHub automation handles path labels, assignment and review requests. Metadata workflows keep code separate from secrets.
+- main contains the product, current conventions and public engineering documentation. CI rejects personal Agent configuration, coordination records and historical implementation or acceptance artifacts.
 
-- Issue 表单将问题指派给维护者；PR 自动指派维护者、同步路径标签，非维护者提交的非草稿 PR 自动请求审阅。
-- `Quality gate` 运行 `git diff --check`，并在存在产品 Go 源码时执行格式、生成一致性、vet、race 测试和五平台构建；依赖允许清单由审查核对。具体触发与命令以 [工作流](.github/workflows/ci.yml) 为准。
-- `PR metadata` 检查非草稿 PR 的说明段落及必填确认项；这些声明仍需要人工审查，不代表自动证明了代码质量。
-- 带写权限的 triage 只操作 GitHub 元数据，不 checkout 或执行 PR 代码；代码验证使用只读权限且不接触生产 secret。
-- 工作流文件不等于已启用合并保护；维护者确认远端保护配置后才可称为强制合并门禁。
+Maintainers manage branch protection; workflows define actual CI commands and permissions.
 
-这些流程参考 [pixiv-cli 的仓库配置](https://github.com/FlanChanXwO/pixiv-cli/tree/ef4accb9853dc422d8670613e9112401465788cd/.github)，仅保留 AlonaBot 当前使用的部分。发布、容器、Homebrew、外部服务 `/test` 和自动关闭 PR 不在本仓库的基础流程中。
+## Contribution license
+
+AlonaBot and official components use the [MIT License](LICENSE). Ensure you can contribute your code and documentation under this license. Preserve third-party copyright and license notices.
+
+## Style baseline
+
+- Follow [Google Go Style Guide](https://google.github.io/styleguide/go/), including [Style Decisions](https://google.github.io/styleguide/go/decisions) and [Best Practices](https://google.github.io/styleguide/go/best-practices). Load go-google-style-guide/go-google-style-decisions/go-google-best-practices when available.
+- Follow code-commenting: explain what names/structure cannot, and use step comments for stages. This document takes priority, chiefly requiring Simplified Chinese code comments.
+- Write for engineers with basic Go: clarity before brevity, no clever tricks or abstractions for hypothetical needs.
+- Use the Go version in go.mod and gofmt.
+
+## Names and terms
+
+Use the domain terms in the guides/protocol so readers can map code to the same concepts.
+
+| Term | Meaning |
+| --- | --- |
+| Core / Plugin | Host / component, normally a separate process; library mode shares the host |
+| Adapter / Instance | Platform adapter / one configured platform account |
+| Session | One authenticated connection between Core and a component |
+| Generation | One committed combination of component program, configuration and data |
+| Target / Actor | Send destination / event initiator; see sdk/message |
+| Route / Handler / Hook | Registered route / callback / interception before or after events/sends |
+| MessageChain / Segment | One logical send / its constituent segment |
+| MediaRef / IncomingMedia / Grant | Uploaded media reference / inbound media description / read permission issued to another Session |
+| Pending / Active | Configuration or generation awaiting activation / current generation |
+| Budget / Deadline | Admission byte budget / absolute cutoff |
+
+- Name new concepts in the relevant guide/protocol before implementing them. Use one name per concept throughout the project.
+- Avoid vague generic names/suffixes: Kind, Type (universal discriminators), Info, Data, Item, Object, Manager, Helper, Util, Common, Misc, Impl. Prefer actual roles, e.g. Phase, Mode, Source, Status, Registry, Store.
+- Spell out Deps/Cfg/Mgr/Svc/Msg/Req/Resp/Tmp/Val. Conventional Go short locals (ctx, err, ok, i, n, msg, req, env) used within a few lines and one/two-letter receivers are allowed. Fields/exported names/wider scopes use full words. Keep ID/URL/HTTP initialisms uppercase.
+- Package names are short lowercase nouns; avoid util/common/base/types.
+- Generated protocol names (pb.FrameKind/pb.RouteKind) follow .proto without Go aliases. New Go types avoid generic Kind suffixes.
+
+## Organize files by responsibility
+
+- Establish semantic ownership before packages/files. Keep types/methods/validation/specific constants together; split large types by real inbound/outbound/storage operations.
+- Group protocol payloads by complete subjects such as calls/registration/messages. Structures owning mutexes/channels/connections/lifecycle state belong to implementation.
+- Avoid cross-domain dto.go/types.go/constants.go/utils.go; one type per file is unnecessary.
+- Split by responsibility, considering navigation per operation, unique state ownership and ease of correct use, rather than line counts.
+
+## Validate at boundaries
+
+- Validate protocol/plugin/user/filesystem/external-platform inputs at trust boundaries. Internal calls trust types/preconditions without repeated nil checks or impossible-case fallbacks.
+- Prefer concrete types, standard libraries and existing implementations. Small interfaces belong at real consuming boundaries, without per-implementation/test/hypothetical wrappers/options.
+- Cancellable functions take context.Context first and propagate it. Every goroutine/connection/lock/temporary file needs an owner and exit path.
+- Preserve chains with %w, logging only at the handling layer. Return partial results with errors instead of empty fabricated success.
+- Limits/timeouts/retries/truncation/fallbacks require contractual or reproducible-failure evidence. Explain new dependencies/alternatives and obtain maintainer approval first.
+- cmd/alonabot parses/assembles; protocol/database/process logic stays in responsible packages.
+
+## Default logger and explicit dependencies
+
+Core has one log output through standard log/slog; fields/formats/levels follow internal/core/logging.
+
+- Immediately after logging.Open, cmd/alonabot calls slog.SetDefault(out.Logger()) before constructing Core. internal/core packages call slog.Info/Warn/Error/With at logging sites, without storing slog.Default/With results in constructors/fields/package variables.
+- Add no logging constructor parameters/Options/fields/context values. Component processes use SDK's default logger.
+- Keep these dependencies explicit:
+  - Stateful data_dir-specific *state.Store/*adapter.Registry/*router.Router/*policy.Policy and package Limits: state/limits belong to the assembled Core instance.
+  - *wire.Budget: Core/SDK share internal/wire, plugin side nil. Explicit arguments distinguish budgets even within library mode.
+  - Clocks advanced by tests (now/Options.Now) control the same tested instance's time.
+  - supervisor.Spec.Log receives one process's output, preserving source/Session and a separate callback.
+- To capture Core logs, set slog.SetDefault to the capture Handler before constructing objects, restore through t.Cleanup and avoid t.Parallel.
+
+<a id="pre-release-compatibility"></a>
+
+## Versioning and compatibility
+
+v0.1.0 is the first released interface/state baseline. Maintain later migrations/public changes as follows:
+
+- Keep published Core state migrations unchanged, including internal/core/state/schema.sql. New tables/columns/constraints use new SQL migrations appended to migrations. Verify previous-release upgrades preserve data and fresh databases reach the final schema.
+- Update all callers together for internal signatures/fields/meaning. Explain SDK/protocol/component version effects and upgrade procedures in changelog.
+- Compatibility measures target released callers/formats, preserving error handling/data meaning without zero-value reinterpretations.
+- Maintain managed SQLite migration APIs; configuration has no version/migrations. Sources/generators own generated files.
+
+## Core state uses GORM
+
+Core state (internal/core/state) uses GORM rather than business SQL strings or string predicates such as Where("plugin_id = ?", id).
+
+- Singular snake_case tables represent one object: install/pending_config/conversation_entry. Join tables combine names, e.g. plugin_adapter_permission. Model TableName selects tables; column tags select columns.
+- Equality uses typed conditions. Single primary key: Where(clause.Eq{Column:clause.PrimaryColumn,Value:id}), including empty strings. Composite deletes carry keys, e.g. Delete(&adapterPermission{PluginID:p,AdapterInstanceID:i}). Partial-column matches use structs, e.g. Where(&conversationEntry{PluginID:p,ConversationKey:k}), without appended field-name strings.
+- Struct conditions ignore zero values. GORM rejects wholly zero conditions; partial zeros broaden matches and can overdelete. Take with only an empty primary key adds no predicate and may return any row. Validate potentially empty required conditions at entry; use another representation for intentional zero matches.
+- Primary-key overwrite: clause.OnConflict{UpdateAll:true}; duplicate no-op: clause.OnConflict{DoNothing:true}, without listing conflict/update columns.
+- In transactions read by primary key, check conditions in Go (e.g. uncommitted), mutate then Save. Avoid struct Updates for false/0. Whole-table writes use Session(&gorm.Session{AllowGlobalUpdate:true}), not Where("1 = 1").
+- Ranges/order/max use clause.Gte/clause.OrderByColumn and package constants for columns. Max reads one descending row instead of max()/coalesce(). Perform feasible sorting/aggregation in Go; add no GORM CLI/query generators.
+- DDL lives in package *.sql files loaded by go:embed; initial migration is internal/core/state/schema.sql. Temporary abnormal-file test tables are exempt.
+- PRAGMA reads/read-only pre-open checks are connection management and may use Go SQL strings.
+- This applies to Core. Plugins' sdk/sqlitedb database/sql access is a product feature; official plugins choose through [plugin guide](docs/plugin-guide.md).
+
+## Program output uses English
+
+- Logs/errors/CLI/panics/test failures/protocol safe_message use English. Error strings start lowercase without periods; %w context states the operation, e.g. open SQLite: %w.
+- End-user UI/bot text uses i18n dictionaries with English source and Simplified Chinese translations.
+- Code comments and internal maintenance instructions use Simplified Chinese. User and developer guides provide English and Simplified Chinese content; short pages may carry both languages together.
+
+## Name meaningful values
+
+- Name meaningful numbers/strings: lengths/caps/timeouts/exit codes/filenames/addresses/service names. Contract values belong in enforcing packages with comments pointing to their documented behavior.
+- Define once; reference/derive elsewhere, e.g. fmt.Sprintf for regex bounds, strconv.Itoa for string forms.
+- Bare 0/1 without business meaning, standard-library parameters (net.Dial("tcp",...)) and expected contractual test values need no names.
+
+## Package documentation
+
+Write package documentation once, usually doc.go/main package file directly above package. Follow standard Go: begin “Package x” explaining responsibility, then blank // paragraphs for scope/exclusions/relevant behavior. Git owns author/date metadata.
+
+```go
+// Package wire 实现 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
+//
+// 每帧由 4 字节 big-endian 载荷长度和 Protobuf Envelope 组成，长度范围为 1～4,194,304 字节；
+// TCP 与 stdio 使用相同的编码。帧格式见 protocol definitions。
+package wire
+```
+
+- Other file headers omit comments: package-adjacent comments merge into godoc, and isolated file descriptions drift. File names should explain contents; unclear names usually need renaming/reorganization.
+- Multi-file/type packages add a composition paragraph linking main types/entries, e.g. [Session]/[Conn], for godoc navigation/gopls rename diagnostics.
+- main documentation starts with the command, e.g. “alonabot starts AlonaBot Core.”
+- go:build goes first, blank line then package docs/package. Preserve cgo/go:generate directive placement.
+- .proto begins with a comment before syntax describing its payloads/relevant behavior.
+- Generated headers stay generator-owned; edit .proto/generator for additions.
+- Workflows/scripts/configuration allowing comments get a one-line purpose header.
+
+## Comments
+
+### Documentation comments
+
+Document exported types/functions/methods/constants/variables. Begin with the identifier, then behavior/guarantees and needed side effects/errors/cancellation/concurrency/zero semantics.
+
+```go
+// Budget 限制所有 Session 合计的在途载荷字节数。
+type Budget struct { ... }
+
+// Reserve 占用 n 字节；余量不足时立即返回 false，不等待。
+func (b *Budget) Reserve(n int64) bool
+```
+
+Avoid definitional “X is…” and generic “this function/method/used to” openings:
+
+```go
+// Budget 是 Core 全局载荷预算。   ← 不这样写
+// Reserve 是占用预算的函数。      ← 不这样写
+```
+
+Private names/signatures need no redundant comments; explain preconditions/order/nonobvious tradeoffs when present.
+
+### Types and fields
+
+Type comments state meaning/invariants. Field comments add hidden units/zero/default/optional/lock/ownership/lifetime meaning only; short explanations may be inline.
+
+```go
+// StopTiming 规定一次插件停用的时间预算。
+type StopTiming struct {
+	Drain time.Duration // 冻结新调用后，留给已有调用结束的最长时间
+	Total time.Duration // 从开始停用到进程树必须结束的总时间
+}
+
+type Budget struct {
+	mu   sync.Mutex
+	used int64 // 已占用字节，由 mu 保护
+	max  int64
+}
+```
+
+### Step comments
+
+For distinct stages, put // 1., // 2. immediately before the relevant stage to explain purpose/order. Number stages rather than statements; skip simple functions/getters/forwarders. Avoid opening tables of contents; update numbering with logic.
+
+```go
+func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
+	// 1. 计算有效期限：取请求期限与 ctx 期限中较早者。
+	...
+	// 2. 先占准入预算，不足时立即失败，不排队等待。
+	...
+	// 3. 等待响应；ctx 结束时先返回，再尽力通知对端取消。
+	select { // 两个分支谁先到就用谁
+	...
+}
+```
+
+### Write for engineers with basic Go
+
+- Briefly explain nonobvious select/channel closure/atomic/lock order/goroutine handover choices beside the code.
+- Complex state machines/call engines/recovery get a multiline package/type overview: states, ownership and order. Avoid repeating it locally.
+- Omit line-by-line restatements and comments on every assignment/if err/return.
+- Promise only implemented concurrency/atomicity/idempotence/retry guarantees.
+
+### Describe behavior rather than progress
+
+Comments/errors explain current behavior/limits/reasons, without PLAN slices/goals/task numbers or implementation milestones. Say “X is not yet supported” directly. Temporary choices use shortcut: <limitation>, <replacement condition>, e.g. replace when a stable route_id generator exists. Link current guides/protocol source where relevant.
+
+## Test submission rules
+
+Commit only **integration tests** and **protocol-number checks**. Other tests stay local. Committed tests impose lasting maintenance costs and should guard main paths/cross-process/component failures rather than coverage breadth.
+
+- **Integration tests** drive real collaborators through public entry points: actual plugin processes, real Session peers, SQLite/filesystems/OS locks. Repository simulators may replace external platforms (memory Adapter/local Bot API), while repository components remain real.
+- **Protocol-number checks** are limited to contracts/wirespec_test.go, protecting field/enum numbers.
+- **SDK-bound tests stay local**: sdk/ has no committed tests; internal/core/supervisor retains only SDK-independent supervisor_test.go. Add no testdata plugins. Use *_local_test.go and record results in PR.
+- **Count**: default one main-path integration test per PR, covering required behavior/cross-process failures. Explain multiple tests in PR. Use local checks for other cases; record inputs/commands/platform/results per [development](docs/development.md#verify-changes).
+- Unit/boundary/regression/temporary tests use ignored *_local_test.go within packages. One-off scripts outside packages go in tmp/test/.
+- **Frontend**: Core CI does not run frontend tests, so committed frontend tests provide no gate. Pure Schema/patch/API-format checks use ignored .local.test.ts/.local.test.tsx, matched by vitest. npm run test uses vitest run --passWithNoTests, allowing checkouts without local tests.
+- Integration tests map to required behavior or V identifiers. Table-drive equivalent cases; avoid getter/constructor/obvious-branch tests.
+- PRs state added committed test lines, other local checks and results. Local tests remain uncommitted, with reproducible conclusions.
+
+## Apply and review
+
+- New files follow all rules. Existing edits complete touched comments; repository-wide cleanup is separate from feature work.
+- Tools check gofmt/build/generation. Reviewers check names/comments/test scope using these rules; passing CI alone does not establish them.
+- Comment-only edits need content/format/reference checks. Verify consumers when touching tool-readable go:generate/build tags.

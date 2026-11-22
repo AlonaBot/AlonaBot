@@ -2,7 +2,7 @@
 //
 // [Policy] 每次命令判定读取全局禁止与作用域覆盖；每次发送先检查会话禁止，
 // 通过后按原始完整 Target 豁免或状态库中的实例许可准入。
-// 管理员由装配处设置内存列表；其文件持久化由设置服务负责（D-82）。
+// 配置管理员由设置服务发布，运行期管理员由装配处登记；有效身份合并两份内存列表（D-82）。
 package policy
 
 import (
@@ -17,9 +17,13 @@ import (
 
 // Policy 持有内存中的管理员列表，并逐次读取状态库中的命令策略与发信许可。
 type Policy struct {
-	store    *state.Store
-	adminsMu sync.RWMutex // 保护管理员列表的整体替换与读取
-	admins   []Admin
+	store           *state.Store
+	adminsMu        sync.RWMutex // 保护管理员列表的整体替换与读取
+	admins          []Admin
+	runtimeAdmins   []Admin                          // 随本次 Core 运行保留，配置发布只替换 admins。
+	commandsChanged func()                           // 开始处理命令策略前装配一次，此后只读。
+	namesMu         sync.RWMutex                     // 串行化命令名写入并保护快照；通知 Router 前释放。
+	names           map[string]map[string][][]string // plugin_id → route_id → 命令名列表
 }
 
 // New 创建使用指定状态库的策略，初始管理员列表为空。
@@ -29,7 +33,7 @@ func New(store *state.Store) *Policy { return &Policy{store: store} }
 // target 由发送服务选定；查询失败返回 INTERNAL，缺少许可返回 PERMISSION_DENIED。
 func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Invocation, target *pb.Target) *pb.ErrorInfo {
 	// 1. 会话禁止先于所有实例许可与原目标回复豁免。
-	denied, err := p.store.HasGlobalDeny(ctx, state.GlobalDeny{Kind: string(DenyChat), InstanceID: target.GetAdapterInstanceId(), SubjectID: target.GetChatId()})
+	denied, err := p.store.HasGlobalDeny(ctx, state.GlobalDeny{Kind: string(DenyChat), AdapterID: target.GetAdapterId(), SubjectID: target.GetChatId()})
 	if err != nil {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read chat deny: " + err.Error()}
 	}
@@ -41,7 +45,26 @@ func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Inv
 		return nil
 	}
 	// 3. 每次准入重新读库，使撤销在下一次发送时生效。
-	allowed, err := p.store.AdapterInstanceAllowed(ctx, pluginID, target.GetAdapterInstanceId())
+	return p.checkInstance(ctx, pluginID, target.GetAdapterInstanceId())
+}
+
+// CheckInstance 按同插件可信在途事件的原实例豁免或当前实例许可准入账号动作。
+func (p *Policy) CheckInstance(ctx context.Context, pluginID string, inv *router.Invocation, instanceID string) *pb.ErrorInfo {
+	if inv != nil && inv.PluginID == pluginID {
+		// bot.online 等事件没有 Target，原实例身份仍保存在可信事件上。
+		originalInstanceID := inv.Event.GetAdapterInstanceId()
+		if originalInstanceID == "" {
+			originalInstanceID = inv.DefaultTarget.GetAdapterInstanceId()
+		}
+		if originalInstanceID != "" && originalInstanceID == instanceID {
+			return nil
+		}
+	}
+	return p.checkInstance(ctx, pluginID, instanceID)
+}
+
+func (p *Policy) checkInstance(ctx context.Context, pluginID, instanceID string) *pb.ErrorInfo {
+	allowed, err := p.store.AdapterInstanceAllowed(ctx, pluginID, instanceID)
 	if err != nil {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read allowed adapter instances: " + err.Error()}
 	}

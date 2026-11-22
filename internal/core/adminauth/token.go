@@ -1,9 +1,4 @@
-// Package adminauth 管理 Core 的管理凭证与认证。
-//
-// InitToken 和 ResetToken 通过已持有 core.lock 的 state.Store 离线更新凭证；
-// 返回的随机 token 由命令层只向本机终端显示一次，状态库只保存摘要和认证代次。
-// [Auth] 提供登录、会话校验与 CSRF 中间件，并实现 webhost 的管理会话检查。
-// 规则见 CONTRACTS §7.3、§7.4。
+// Package adminauth 管理 Core 的凭据、首次领取与管理会话。
 package adminauth
 
 import (
@@ -12,38 +7,109 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"time"
-
+	"fmt"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
 )
 
-// tokenBytes 采用 CONTRACTS §7.4 规定的 32 字节随机凭证长度。
 const tokenBytes = 32
 
-// ErrNotInitialized 表示管理凭证尚未初始化。
+// FirstTokenFile 指定本机 CLI 共用的持久凭据文件。
+const FirstTokenFile = "admin_token"
+
+// ErrNotInitialized 表示管理凭据尚未初始化。
 var ErrNotInitialized = errors.New("admin token is not initialized")
 
-// InitToken 生成无 padding 的 base64url 管理 token，并在事务内保存摘要。
-// 已有凭证时失败；调用方负责只向本机终端显示一次返回值。
-func InitToken(ctx context.Context, st *state.Store) (token string, err error) {
-	token = randomToken()
-	digest := sha256.Sum256([]byte(token))
-	if err := st.InitAdminToken(ctx, digest[:], time.Now().UnixMilli()); err != nil {
-		return "", err
-	}
-	return token, nil
+// InitToken 初始化并持久保存管理 token；已有凭据时保留原值。
+func InitToken(ctx context.Context, st *state.Store, dataDir string) (string, error) {
+	return persistToken(dataDir, func(token string) error {
+		digest := sha256.Sum256([]byte(token))
+		return st.InitAdminToken(ctx, digest[:], time.Now().UnixMilli())
+	})
 }
 
-// ResetToken 替换管理 token、递增认证代次，并撤销全部管理会话。
-// 尚未初始化时返回 ErrNotInitialized；调用方负责只向本机终端显示一次返回值。
-func ResetToken(ctx context.Context, st *state.Store) (token string, err error) {
-	token = randomToken()
-	digest := sha256.Sum256([]byte(token))
-	if err := st.ResetAdminToken(ctx, digest[:], time.Now().UnixMilli()); err != nil {
-		if errors.Is(err, state.ErrNotFound) {
-			return "", ErrNotInitialized
+// FirstToken 在首次启动时保存凭据；已有摘要而文件缺失时保留摘要并提示显式 reset。
+func FirstToken(ctx context.Context, st *state.Store, dataDir string) error {
+	if _, err := st.AdminCredential(ctx); err == nil {
+		if _, err := os.Stat(filepath.Join(dataDir, FirstTokenFile)); errors.Is(err, os.ErrNotExist) {
+			slog.Warn("admin token file is missing; run admin-token reset explicitly", "data_dir", dataDir)
+		} else if err != nil {
+			return err
 		}
-		return "", err
+		return nil
+	} else if !errors.Is(err, state.ErrNotFound) {
+		return err
+	}
+	_, err := InitToken(ctx, st, dataDir)
+	return err
+}
+
+// ResetToken 保存新凭据、递增代次并撤销旧会话；失败时恢复旧文件。
+func ResetToken(ctx context.Context, st *state.Store, dataDir string) (string, error) {
+	return persistToken(dataDir, func(token string) error {
+		digest := sha256.Sum256([]byte(token))
+		err := st.ResetAdminToken(ctx, digest[:], time.Now().UnixMilli())
+		if errors.Is(err, state.ErrNotFound) {
+			return ErrNotInitialized
+		}
+		return err
+	})
+}
+
+// persistToken 先准备可恢复的文件，再提交数据库；失败时原子恢复旧文件。
+// 调用方持有实例锁，在线更新还持有 credentials 锁。
+func persistToken(dataDir string, save func(string) error) (result string, err error) {
+	token := randomToken()
+	name := filepath.Join(dataDir, FirstTokenFile)
+	if info, err := os.Lstat(name); err == nil {
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("admin token path must be a regular file: %s", name)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("inspect admin token file: %w", err)
+	}
+	file, err := os.CreateTemp(dataDir, ".admin-token-*")
+	if err != nil {
+		return "", fmt.Errorf("prepare admin token: %w", err)
+	}
+	temp := file.Name()
+	defer func() { err = errors.Join(err, removeTemporary(temp)) }()
+	_, writeErr := file.WriteString(token + "\n")
+	syncErr := file.Sync()
+	if err := errors.Join(writeErr, syncErr, file.Close()); err != nil {
+		return "", fmt.Errorf("write admin token: %w", err)
+	}
+	// 保留旧 inode，以便数据库拒绝更新时恢复，文件缺失的旧实例也可显式 reset。
+	backup := temp + ".previous"
+	hadPrevious := true
+	if err := os.Rename(name, backup); errors.Is(err, os.ErrNotExist) {
+		hadPrevious = false
+	} else if err != nil {
+		return "", fmt.Errorf("preserve admin token: %w", err)
+	}
+	restore := func() error {
+		if hadPrevious {
+			return os.Rename(backup, name)
+		}
+		err := os.Remove(name)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if err := os.Rename(temp, name); err != nil {
+		return "", errors.Join(err, restore())
+	}
+	if err := save(token); err != nil {
+		return "", errors.Join(err, restore())
+	}
+	if hadPrevious {
+		if err := os.Remove(backup); err != nil {
+			return token, fmt.Errorf("remove previous admin token: %w", err)
+		}
 	}
 	return token, nil
 }

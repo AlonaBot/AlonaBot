@@ -1,8 +1,7 @@
 // showcase 演示 SDK 全部公共签名的组合方式；可以真实运行的最小插件见 examples/plugins/lifecycle。
 //
-// 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与一个定时任务。
-// 根插件的 Hook 都由 sdk.Base 提供默认实现，这里只覆盖用到的。
-// SDK 尚不支持 HTTP 路由与定时任务，直接运行时 Run 返回 UNSUPPORTED。
+// 示例包括一个根插件、两类 Handler、StopPropagation、配置回调、HTTP Handler 与静态及动态任务。
+// New 登记路由与生命周期回调。
 package main
 
 import (
@@ -15,36 +14,16 @@ import (
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/sdk"
-	"github.com/AlonaBot/AlonaBot/sdk/config"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
+	"github.com/AlonaBot/AlonaBot/sdk/task"
 )
 
-// Config 声明本插件唯一的配置类型；config.Base 提供默认的 OnLoad。
-type Config struct {
-	config.Base
-	Greeting string `json:"greeting"`         // /demo hello 回复的文本
-	Interval int64  `json:"interval_seconds"` // 间隔秒数，不能为负
-}
-
-// OnLoad 把版本 1 的 {"hello": "..."} 迁移为当前格式，并拒绝负数的 interval_seconds。
-func (*Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessage) (json.RawMessage, error) {
-	// 1. 版本 1 的 hello 改名为 greeting；值保持原始 JSON，不经 float64 转换。
-	if fromVersion == 1 {
-		var doc map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			return nil, fmt.Errorf("decode config: %w", err)
-		}
-		if v, ok := doc["hello"]; ok {
-			doc["greeting"] = v
-			delete(doc, "hello")
-		}
-		var err error
-		if raw, err = json.Marshal(doc); err != nil {
-			return nil, fmt.Errorf("encode config: %w", err)
-		}
+// OnConfigLoad 检查 interval_seconds 非负，原样返回完整配置。
+func (*Demo) OnConfigLoad(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	var c struct {
+		Interval int64 `json:"interval_seconds"`
 	}
-	// 2. 解码到局部变量检查取值，raw 原样返回，保留未知键。
-	var c Config
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
@@ -56,27 +35,205 @@ func (*Config) OnLoad(_ context.Context, fromVersion uint32, raw json.RawMessage
 
 // Demo 作为根插件注册命令、HTTP 路由与定时任务；插件 ID 来自 plugin.yaml。
 type Demo struct {
-	// Base 提供根插件的默认实现。
-	sdk.Base
-	config Config // SDK 解码后的配置
+	plugin   *sdk.Plugin
+	reminder task.Type[ReminderArgs]
 }
 
-// Config 返回供 SDK 解码配置的目标。
-func (p *Demo) Config() config.Config { return &p.config }
+// ReminderArgs 保存提醒发送所需的会话与完整文本。
+type ReminderArgs struct {
+	Session string `json:"session"`
+	Text    string `json:"text"`
+}
 
-// Commands 在 demo 分组下注册两个命令，行尾注释是各自的触发路径。
-func (p *Demo) Commands(r *sdk.CommandRegistry) {
-	{
-		g := r.Group("demo")
-		g.Command("hello").Handle(p.Hello) // /demo hello
-		g.Command("echo").Handle(p.Echo)   // /demo echo <text> <times>，例如 /demo echo hi 3
+// New 每次创建独立的插件和示例状态。
+func New() *sdk.Plugin {
+	p := sdk.NewPlugin()
+
+	demo := &Demo{plugin: p, reminder: task.Define[ReminderArgs]("remind")}
+	task.On(p, demo.reminder).Handle(demo.Remind)
+	p.OnConfigLoad(demo.OnConfigLoad)
+	p.OnStart(demo.OnStart)
+	g := p.Group("demo")
+	g.Command("hello").Handle(demo.Hello)
+	g.Command("echo").Handle(demo.Echo)
+	g.Command("remind").Handle(demo.CreateReminder)
+	g.Command("cancel").Handle(demo.CancelReminder)
+	p.Route(http.MethodGet, "/status").HandleFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
+	p.Route(http.MethodGet, "/page").Page("Showcase").HandleFunc(demo.Page)
+	p.Every("tick", time.Minute).Handle(func(*sdk.Context) error { return nil })
+	return p
+}
+
+// Page 提供使用 sdk/page 套件的示例插件页面。
+func (*Demo) Page(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(showcaseHTML))
+}
+
+const showcaseHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Showcase Page</title>
+  <link rel="stylesheet" href="kit.css">
+  <script src="kit.js"></script>
+</head>
+<body>
+  <div class="ab-card">
+    <div class="ab-card-header">AlonaBot Showcase 插件页面</div>
+    <div class="ab-card-body">
+      <p>状态：<span class="ab-badge ab-badge-success" id="theme-badge">theme: light</span> <span class="ab-badge" id="locale-badge">locale: en-US</span></p>
+      <p id="greeting"></p>
+
+      <h3>控件样式示例</h3>
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <button class="ab-btn ab-btn-primary" id="btn-request">请求 /status</button>
+        <button class="ab-btn" id="btn-t">测试文案 t()</button>
+        <button class="ab-btn ab-btn-danger">危险按钮</button>
+        <button class="ab-btn ab-btn-soft">柔和按钮</button>
+        <button class="ab-btn" disabled>禁用按钮</button>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label for="demo-input">输入框：</label>
+        <input type="text" id="demo-input" class="ab-input" placeholder="请输入内容..." value="测试输入">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label for="demo-select">选择框：</label>
+        <select id="demo-select" class="ab-select">
+          <option value="1">选项一</option>
+          <option value="2">选项二</option>
+          <option value="3">选项三</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <table class="ab-table">
+          <thead>
+            <tr><th>项目</th><th>状态</th><th>备注</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>路由服务</td><td><span class="ab-badge ab-badge-success">正常</span></td><td>/status 响应正常</td></tr>
+            <tr><td>桥通信</td><td><span class="ab-badge ab-badge-warning" id="bridge-status">等待</span></td><td>postMessage 通道</td></tr>
+            <tr><td>快捷键</td><td><span class="ab-badge ab-badge-critical">mod+k</span></td><td>捕获 ⌘K/Ctrl+K</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ab-card" style="margin-bottom: 0;">
+        <div class="ab-card-header">运行日志与桥反馈</div>
+        <pre id="log" style="margin: 0; white-space: pre-wrap; word-break: break-all;">就绪</pre>
+      </div>
+    </div>
+    <div class="ab-card-footer">
+      提示：在页面内按 ⌘K 或 Ctrl+K 将触发快捷键转发给 WebUI。
+    </div>
+  </div>
+
+  <script>
+    var logEl = document.getElementById('log');
+    function log(msg) {
+      if (logEl) {
+        logEl.textContent = new Date().toLocaleTimeString() + ' ' + msg + '\n' + logEl.textContent;
+      }
+    }
+
+    async function renderGreeting() {
+      try {
+        var text = await window.AlonaBot.t('hello_message', { name: 'Alona' });
+        document.getElementById('greeting').textContent = text;
+        log('文案 t(): ' + text);
+      } catch (err) {
+        log('文案请求失败: ' + err.message);
+      }
+    }
+
+    if (window.AlonaBot) {
+      window.AlonaBot.onTheme(function(theme, tokens) {
+        var badge = document.getElementById('theme-badge');
+        if (badge) badge.textContent = 'theme: ' + theme;
+        log('收到主题变更: ' + theme);
+      });
+
+      window.AlonaBot.onLocale(async function(locale) {
+        var badge = document.getElementById('locale-badge');
+        if (badge) badge.textContent = 'locale: ' + locale;
+        log('收到语言变更: ' + locale);
+        await renderGreeting();
+      });
+
+      var bridgeStatus = document.getElementById('bridge-status');
+      if (bridgeStatus) {
+        bridgeStatus.textContent = window.parent !== window ? 'iframe 桥' : '独立模式';
+      }
+
+      var btnRequest = document.getElementById('btn-request');
+      if (btnRequest) {
+        btnRequest.addEventListener('click', function() {
+          window.AlonaBot.request('GET', '/status').then(function(res) {
+            log('请求 /status 成功: status=' + res.status + ' body=' + res.body);
+          }).catch(function(err) {
+            log('请求 /status 失败: ' + err.message);
+          });
+        });
+      }
+
+      var btnT = document.getElementById('btn-t');
+      if (btnT) {
+        btnT.addEventListener('click', renderGreeting);
+      }
+    }
+  </script>
+</body>
+</html>`
+
+// CreateReminder 在当前用户与会话内创建提醒，回复用户输入的 key。
+func (p *Demo) CreateReminder(c *sdk.Context, key string, seconds int64, text string) (message.Content, error) {
+	internalKey, err := reminderKey(c, key)
+	if err != nil {
+		return nil, err
 	}
+	_, err = p.reminder.At(c, time.Now().Add(time.Duration(seconds)*time.Second),
+		ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
+	if err != nil {
+		return nil, err
+	}
+	return message.Text(key), nil
+}
+
+// CancelReminder 取消当前用户在当前会话的提醒，成功后回显用户输入的 key。
+func (p *Demo) CancelReminder(c *sdk.Context, key string) (message.Content, error) {
+	internalKey, err := reminderKey(c, key)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.reminder.Cancel(c, internalKey); err != nil {
+		return nil, err
+	}
+	return message.Text(key), nil
+}
+
+func reminderKey(c *sdk.Context, key string) (string, error) {
+	user, session := c.User(), c.Session()
+	// 长度前缀保留各段边界，用户 key 中的分隔符也无法改变身份作用域。
+	internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+	if len(internalKey) > 128 { // 按 UTF-8 字节限制完整内部 key。
+		return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+	}
+	return internalKey, nil
+}
+
+// Remind 使用参数保存的会话显式发送提醒。
+func (*Demo) Remind(c *sdk.Context, args ReminderArgs) error {
+	_, err := c.SendTo(args.Session, message.Text(args.Text))
+	return err
 }
 
 // Hello 响应 /demo hello，返回要自动回复的 Chain；成功且非空时由 Core 发送一次。
-func (p *Demo) Hello(c *sdk.Context) (message.Chain, error) {
+func (p *Demo) Hello(c *sdk.Context) (message.Content, error) {
 	c.StopPropagation()
-	return message.Chain{message.Text(p.config.Greeting)}, nil
+	return message.Chain{message.Text(p.plugin.Config().String("greeting"))}, nil
 }
 
 // Echo 响应 /demo echo <text> <times>，在 Handler 内主动发送 times 次 text。
@@ -89,24 +246,12 @@ func (p *Demo) Echo(c *sdk.Context, text string, times int64) error {
 	return nil
 }
 
-// HTTP 注册一个返回 ok 的 GET /status。
-func (p *Demo) HTTP(r *sdk.HTTPRegistry) {
-	r.Handle(http.MethodGet, "/status", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok"))
-	}))
-}
-
-// Schedules 注册每分钟运行一次的 tick 任务。
-func (p *Demo) Schedules(r *sdk.ScheduleRegistry) {
-	r.Every("tick", time.Minute, func(*sdk.Context) error { return nil })
-}
-
 // OnStart 演示生命周期 Hook 的签名，不做任何事。
 func (p *Demo) OnStart(context.Context) error { return nil }
 
 // main 把根插件交给 SDK 运行，失败时打印原因并退出。
 func main() {
-	if err := sdk.Run(&Demo{}); err != nil {
+	if err := sdk.Run(New()); err != nil {
 		log.Fatal(err)
 	}
 }

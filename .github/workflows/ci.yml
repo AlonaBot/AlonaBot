@@ -19,33 +19,66 @@ concurrency:
 jobs:
   repository:
     name: Repository
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       has_go: ${{ steps.sources.outputs.has_go }}
+      has_release: ${{ steps.sources.outputs.has_release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: 检查空白错误
-        run: git diff --check
-      - name: 检查是否已有产品 Go 源码
-        id: sources
+          fetch-depth: 0
+      - name: 检查 main 文件范围
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
         shell: bash
         run: |
           set -euo pipefail
-          sources=$(git ls-files -- '*.go')
-          if [ -n "$sources" ]; then
+          git ls-files -z > "$RUNNER_TEMP/main-paths"
+          rejected=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              .agents/*|.claude/*|.codex/*|.serena/*|.playwright-cli/*|docs/goals/*|docs/execution-order.md|docs/benchmarks.md|spec/*|goal-[0-9]*/*|delegation-skills-workspace/*|experiments/*)
+                printf 'main 包含个人维护资料：%q\n' "$path"
+                rejected=1
+                ;;
+            esac
+          done < "$RUNNER_TEMP/main-paths"
+          exit "$rejected"
+      - name: 检查空白错误
+        run: git diff --check
+      - name: 按改动范围选择 Go 检查
+        id: sources
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
             echo 'has_go=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'has_go=false' >> "$GITHUB_OUTPUT"
-            echo '当前提交没有产品 Go 源码，Go 检查未运行。' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git diff --name-only -z "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths"
+          has_go=false
+          has_release=false
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              internal/pluginkit/*|scripts/dist/*|scripts/release-check/*|scripts/release-smoke.py|Dockerfile|.github/workflows/release.yml) has_release=true ;;
+              *_test.go|tests/*|scripts/*) ;;
+              go.mod|go.sum|*.go|*.proto) has_go=true ;;
+            esac
+          done < "$RUNNER_TEMP/changed-paths"
+          echo "has_go=$has_go" >> "$GITHUB_OUTPUT"
+          echo "has_release=$has_release" >> "$GITHUB_OUTPUT"
+          if [ "$has_go" = false ]; then
+            echo '本次采用受影响范围检查，跳过 Go 全仓检查。' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   go:
     name: Go quality
     needs: repository
     if: needs.repository.outputs.has_go == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -53,6 +86,12 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '26.5.1'
+      - name: 准备整合测试工具
+        run: pipx install uv==0.11.11
       - name: 检查产品 Go 格式
         shell: bash
         run: |
@@ -82,7 +121,12 @@ jobs:
       - name: 测试并检查数据竞争
         env:
           CGO_ENABLED: '1'
-        run: go test -race ./...
+        # 串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
+        run: GOMAXPROCS=2 go test -p 1 -race ./...
+      - name: 跨组件整合测试
+        env:
+          CGO_ENABLED: '1'
+        run: GOMAXPROCS=2 uv run --no-project python scripts/integration.py --race
       - name: 五目标平台 pure-Go 构建
         shell: bash
         run: |
@@ -91,3 +135,23 @@ jobs:
             echo "构建 $target"
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build ./...
           done
+
+  release-tools:
+    name: Release tools
+    needs: repository
+    if: needs.repository.outputs.has_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go test ./internal/pluginkit ./scripts/dist ./scripts/release-check
+      - run: python3 -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/release-smoke.py').read_text())"
+      - working-directory: tests
+        run: go test ./agent
+      - working-directory: tests
+        run: go test -c -o /tmp/release-e2e.test ./e2e

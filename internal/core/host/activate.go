@@ -9,12 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
-// State 表示 Core 侧插件实例的可见状态（CONTRACTS §12.1），这里覆盖 Activating 之后的部分。
+// State 表示 Core 侧插件实例的可见状态，这里覆盖 Activating 之后的部分。
 type State int32
 
 // 实例状态，按生命周期顺序排列。
@@ -42,7 +43,10 @@ type ActivateOptions struct {
 	Commit func(ctx context.Context) error
 	// Handler 处理 Activated 之后插件发起的业务调用。
 	Handler wire.Handler
-	Global  *wire.Budget // Core 全局载荷预算
+	// RequestActivity 在同步准入时登记活动；拒绝或处理结束时归还。
+	RequestActivity func(*wire.Inbound) (func(), *pb.ErrorInfo)
+	Global          *wire.Budget  // Core 全局载荷预算
+	Messages        *i18n.Catalog // 当前包的文案目录；无资源时为 nil，激活后只读。
 	// Limits 提供 OnReady 预算与 Core 侧 Session 限额；与 Prepare 使用同一组值。
 	Limits Limits
 }
@@ -56,6 +60,8 @@ type Instance struct {
 	Adapter        *pb.AdapterDescriptor // 准备阶段已校验的 Adapter 描述，激活后只读
 	HTTPListener   *pb.HttpListener      // 当前 Session 已校验的 HTTP 端点；无 HTTP 路由时为 nil
 	HTTPProxyToken []byte                // 当前 Session 的敏感代理凭证，只供代理装配，禁止日志输出
+	Messages       *i18n.Catalog         // 当前包的文案目录；无资源时为 nil，激活后只读
+	DefaultLocale  string                // 本 Session 的 Bootstrap 默认语言快照，激活后只读
 
 	state atomic.Int32 // State，读循环与停止流程并发访问
 	// activated 在读循环应用 ACTIVATED 时关闭。
@@ -76,8 +82,8 @@ func (in *Instance) Err() error {
 	return in.failErr
 }
 
-// degrade 记录第一个失败原因并进入 Degraded。
-func (in *Instance) degrade(err error) {
+// Degrade 记录提交后第一个失败原因并进入 Degraded；调用方负责撤销入口与关闭 Session。
+func (in *Instance) Degrade(err error) {
 	in.failOnce.Do(func() {
 		in.failErr = err
 		in.state.Store(int32(StateDegraded))
@@ -114,7 +120,7 @@ func (in *Instance) control(env *pb.Envelope) error {
 		close(in.activated)
 		return nil
 	case *pb.SessionError:
-		in.degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()})
+		in.Degrade(&PhaseError{Phase: m.GetFailedPhase(), Code: validate.PublicCode(env.GetError().GetCode()), Message: env.GetError().GetSafeMessage()})
 		return errors.New("plugin reported SESSION_ERROR")
 	case *pb.Heartbeat:
 		return nil
@@ -123,7 +129,7 @@ func (in *Instance) control(env *pb.Envelope) error {
 }
 
 // Activate 完成「提交 → ACTIVATE → OnReady → ACTIVATED」。提交失败时不发送 ACTIVATE，旧代次保持权威；
-// 提交之后 OnReady 失败、超时或断链进入 Degraded，状态库中仍是新代次（CONTRACTS §4.1、§12.3）。
+// 提交之后 OnReady 失败、超时或断链进入 Degraded，状态库中仍是新代次。
 // 返回的 Instance 在 Degraded 时也非 nil，便于调用方记录与清理。
 func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt ActivateOptions) (*Instance, error) {
 	// 1. 新候选先提交；失败时通知插件并关闭，不发送 ACTIVATE。
@@ -140,19 +146,20 @@ func Activate(ctx context.Context, conn *wire.Conn, prep *Prepared, opt Activate
 	}
 
 	// 2. 在 Activating 状态下启动 Session，并发出带 OnReady 截止时间的 ACTIVATE。
-	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, Routes: prep.Register.GetRoutes(), Adapter: prep.Register.GetAdapter(), HTTPListener: prep.Register.GetHttpListener(), HTTPProxyToken: prep.httpProxyToken, activated: make(chan struct{})}
+	in := &Instance{PluginID: opt.PluginID, GenerationID: opt.GenerationID, Routes: prep.Register.GetRoutes(), Adapter: prep.Register.GetAdapter(), HTTPListener: prep.Register.GetHttpListener(), HTTPProxyToken: prep.httpProxyToken, Messages: opt.Messages, DefaultLocale: prep.defaultLocale, activated: make(chan struct{})}
 	in.state.Store(int32(StateActivating))
 	in.Session = wire.NewSession(conn, wire.Options{
 		Local: pb.InitiatorSide_INITIATOR_SIDE_CORE, SessionID: prep.SessionID, ProtocolMinor: prep.Minor,
 		SourcePluginID: opt.PluginID, Handler: opt.Handler, Admit: in.admit, Control: in.control, Global: opt.Global,
-		MaxInflight: opt.Limits.SessionMaxInflight, MaxBytes: opt.Limits.SessionMaxPayload, DefaultDeadline: opt.Limits.RequestTimeout,
+		RequestActivity: opt.RequestActivity,
+		MaxInflight:     opt.Limits.SessionMaxInflight, MaxBytes: opt.Limits.SessionMaxPayload, DefaultDeadline: opt.Limits.RequestTimeout,
 	})
 
 	deadline := time.Now().Add(opt.Limits.OnReady)
 	marker := sha256.Sum256(append(append([]byte(opt.GenerationID), prep.RouteHash...), prep.ConfigDigest...))
 	if err := in.Session.SendControl(pb.FrameKind_FRAME_KIND_ACTIVATE,
 		&pb.Activate{GenerationId: opt.GenerationID, CommitMarker: marker[:], OnReadyDeadlineUnixMs: deadline.UnixMilli()}); err != nil {
-		in.degrade(err)
+		in.Degrade(err)
 		_ = in.Session.Close()
 		return in, err
 	}

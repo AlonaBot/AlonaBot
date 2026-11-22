@@ -112,10 +112,23 @@ func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Ta
 func (s *Store) PrepareIncoming(ev *pb.Event, c router.Caller) (prepared *pb.Event, err error) {
 	// 1. 保存独立事件与原事件标识，失败时撤销本次未派发的令牌。
 	prepared = proto.CloneOf(ev)
-	event := &pb.Event{EventId: ev.GetEventId()}
+	payload := prepared.GetEventPayload()
+	chains := []*pb.MessageChain{prepared.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain()}
+	err = s.prepareIncomingChains(chains, c, ev.Target, &pb.Event{EventId: ev.GetEventId()})
+	return prepared, err
+}
+
+// PrepareIncomingChain 克隆查询结果并为接收 Session 签发目标受限令牌。
+func (s *Store) PrepareIncomingChain(chain *pb.MessageChain, c router.Caller, target *pb.Target) (*pb.MessageChain, error) {
+	prepared := proto.CloneOf(chain)
+	err := s.prepareIncomingChains([]*pb.MessageChain{prepared}, c, target, nil)
+	return prepared, err
+}
+
+func (s *Store) prepareIncomingChains(chains []*pb.MessageChain, c router.Caller, target *pb.Target, event *pb.Event) (err error) {
 	var targets []*pb.Target
-	if ev.Target != nil {
-		targets = []*pb.Target{ev.Target}
+	if target != nil {
+		targets = []*pb.Target{target}
 	}
 	var issued []string
 	defer func() {
@@ -140,6 +153,8 @@ func (s *Store) PrepareIncoming(ev *pb.Event, c router.Caller) (prepared *pb.Eve
 				source = value.Image.GetSource()
 			case *pb.Segment_Video:
 				source = value.Video.GetSource()
+			case *pb.Segment_Voice:
+				source = value.Voice.GetSource()
 			case *pb.Segment_File:
 				source = value.File.GetSource()
 			}
@@ -174,13 +189,12 @@ func (s *Store) PrepareIncoming(ev *pb.Event, c router.Caller) (prepared *pb.Eve
 		}
 		return nil
 	}
-	payload := prepared.GetEventPayload()
-	for _, chain := range []*pb.MessageChain{prepared.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain()} {
+	for _, chain := range chains {
 		if err := rewrite(chain); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return prepared, nil
+	return nil
 }
 
 func mediaCallError(code pb.ErrorCode, message string) error {

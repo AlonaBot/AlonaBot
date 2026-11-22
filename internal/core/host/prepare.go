@@ -2,7 +2,7 @@
 //
 // 一个插件进程连上 Core 后，依次经过握手认证、Bootstrap 下发、REGISTER 校验与 PREPARED（Prepare），
 // 提交 ActiveGeneration、ACTIVATE 与 ACTIVATED（Activate），以及冻结、排空、STOPPING 与结束进程树（Stop）。
-// 有限重启策略也在这里。状态与可见性规则见 spec/CONTRACTS-v0.1.md §4 与 §12.1。
+// 有限重启策略也在这里。
 //
 // 本包不启动进程，也不持久化状态；这些由 internal/core/process、internal/core/state 和
 // internal/core/supervisor 负责。
@@ -14,6 +14,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -23,6 +24,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -31,9 +33,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Limits 规定阶段预算与双方共用的 Session 限额（CONTRACTS §4.2、§16）。
+// Limits 规定阶段预算与双方共用的 Session 限额。
 type Limits struct {
-	// 从连接建立到 HELLO_ACK 发出的预算（CONTRACTS §4.2 的 Hello/HelloAck）。
+	// 从连接建立到 HELLO_ACK 发出的预算。
 	Handshake          time.Duration
 	Config             time.Duration // 配置转换与校验的预算
 	Migration          time.Duration // 数据库迁移的预算
@@ -62,7 +64,7 @@ func (l Limits) proto() *pb.PhaseLimits {
 // failNotifyTimeout 限制失败路径上发送 SESSION_ERROR 的时间：会话已经判定失败，只是尽力通知。
 const failNotifyTimeout = time.Second
 
-// HTTP 代理材料与 WIRE §3.1 的 http_listener v1 协议一致。
+// HTTP 代理材料遵循 http_listener v1 协议。
 const (
 	httpListenerVersion = 1
 	httpProxyTokenBytes = 32
@@ -70,15 +72,17 @@ const (
 
 // Expect 携带本次进程的可信身份及配置快照回调。
 type Expect struct {
-	Role        state.Role     // 必填，由安装记录指定
-	AdapterID   string         // Adapter 角色要求的平台注册身份
-	PluginID    string         // Core 启动该进程时的插件 ID
-	Secret      []byte         // 本次启动的 32 字节 Session Secret
-	BuildDigest []byte         // 安装时已验证的归档摘要
-	Offer       validate.Offer // Core 一侧支持/要求的协议版本与能力
+	Role         state.Role           // 必填，由安装记录指定
+	AdapterID    string               // Adapter 角色要求的平台注册身份
+	PluginID     string               // Core 启动该进程时的插件 ID
+	Secret       []byte               // 本次启动的 32 字节 Session Secret
+	BuildDigest  []byte               // 安装时已验证的归档摘要
+	Offer        validate.Offer       // Core 一侧支持/要求的协议版本与能力
+	ConfigSchema *configschema.Schema // 来自可信资源；无配置时为 nil。
 	// Snapshot 在 REGISTER 校验后生成持久化快照；nil 时使用原候选配置。
 	// 回调的错误消息须省略配置值。
-	Snapshot func(candidate []byte) (snapshot []byte, err error)
+	Snapshot    func(candidate []byte, corrections []configschema.Correction) (snapshot []byte, err error)
+	SecretPaths [][]string // 当前声明与旧代次保留的秘密路径；校正原值也按这些路径脱敏。
 }
 
 // PhaseError 记录准备阶段在哪个阶段、以什么错误码失败；消息不含 Secret 或配置内容。
@@ -102,11 +106,13 @@ type Prepared struct {
 	Minor          uint32                   // 协商出的协议次版本
 	Capabilities   []*pb.ProtocolCapability // 双方都支持的协议能力
 	Register       *pb.Register             // 已通过校验的注册载荷
-	RouteHash      []byte                   // PREPARED 中的 route_descriptor_hash
-	ConfigSnapshot []byte                   // 准备持久化的配置，secret 字段只包含引用
+	Corrections    []configschema.Correction
+	RouteHash      []byte // PREPARED 中的 route_descriptor_hash
+	ConfigSnapshot []byte // 准备持久化的配置，secret 字段只包含引用
 	// PREPARED 中的 candidate_config_digest，对 ConfigSnapshot 计算。
 	ConfigDigest   []byte
 	httpProxyToken []byte // 本 Session 的内部代理凭证；仅交给 Instance，不进入日志
+	defaultLocale  string // 本 Session 下发的 Bootstrap 默认语言快照
 }
 
 // Prepare 在一条刚建立的连接上完成 HELLO → HELLO_ACK(Bootstrap) → REGISTER → PREPARED。
@@ -154,6 +160,9 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		if errors.As(err, &pe) {
 			return pe
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return phaseErr(phase, pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "%v", err)
 	}
 
@@ -179,7 +188,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 		return nil, err
 	}
-	// minor 在协商成功后更新为协商值，之后的 SESSION_ERROR 都使用它（WIRE §1）。
+	// minor 在协商成功后更新为协商值，之后的 SESSION_ERROR 都使用它。
 	var minor uint32
 	// sendErr 认证之后的失败路径：限时尽力发出 SESSION_ERROR 后关闭连接。
 	sendErr := func(phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string) {
@@ -261,13 +270,31 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		var registerErr error
 		if exp.Role == state.RoleAdapter {
 			registerErr = validate.AdapterRegister(m, exp.AdapterID)
-		} else if exp.Role == state.RolePlugin {
+			if registerErr == nil && boot.GetDatabaseDescriptor().GetBackend() != pb.DatabaseBackend_DATABASE_BACKEND_NONE {
+				registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "adapter registration contains a business database"}
+			}
+		} else if exp.Role == state.RolePlugin || exp.Role == state.RoleAgent || exp.Role == state.RoleWebUI {
 			registerErr = validate.Register(m)
 		} else {
 			registerErr = fmt.Errorf("invalid expected role %q", exp.Role)
 		}
+		if registerErr == nil && len(boot.GetConfigSchemaHash()) != 0 && !bytes.Equal(m.GetConfigSchemaHash(), boot.GetConfigSchemaHash()) {
+			registerErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "registered config schema hash differs from Bootstrap"}
+		}
 		if registerErr == nil {
 			registerErr = checkMigration(m.GetMigration(), boot.GetDatabaseDescriptor())
+		}
+		corrections, correctionErr := configCorrections(m.GetConfigCorrections(), exp.SecretPaths)
+		if registerErr == nil {
+			registerErr = correctionErr
+		}
+		if registerErr == nil {
+			for _, route := range m.GetRoutes() {
+				if err := exp.ConfigSchema.CheckMessageFilter(route.GetEvent().GetMessageFilter()); err != nil {
+					registerErr = fmt.Errorf("event route %q: %w", route.GetRouteId(), err)
+					break
+				}
+			}
 		}
 		if err := registerErr; err != nil {
 			var ve *validate.Error
@@ -285,7 +312,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		// 4. 注册校验通过后形成持久化快照，PREPARED 只确认该快照的摘要。
 		snapshot := []byte(m.GetCandidateConfigJson())
 		if exp.Snapshot != nil {
-			snapshot, err = exp.Snapshot(snapshot)
+			snapshot, err = exp.Snapshot(snapshot, corrections)
 			if err != nil {
 				code := pb.ErrorCode_ERROR_CODE_INTERNAL
 				safe := "create config snapshot failed"
@@ -297,8 +324,8 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 				return nil, phaseErr(pb.SessionPhase_SESSION_PHASE_REGISTER, code, "%v", err)
 			}
 		}
-		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m,
-			RouteHash: routeHash(m), ConfigSnapshot: snapshot, ConfigDigest: digest(snapshot), httpProxyToken: boot.GetHttpProxyAuth().GetToken()}
+		p := &Prepared{SessionID: sid, Minor: agree.Minor, Capabilities: agree.Intersection, Register: m, Corrections: corrections,
+			RouteHash: routeHash(m), ConfigSnapshot: snapshot, ConfigDigest: digest(snapshot), httpProxyToken: boot.GetHttpProxyAuth().GetToken(), defaultLocale: boot.GetDefaultLocale()}
 		prep, err := wire.ControlEnvelope(sid, agree.Minor, "", pb.FrameKind_FRAME_KIND_PREPARED, &pb.Prepared{RouteDescriptorHash: p.RouteHash, CandidateConfigDigest: p.ConfigDigest})
 		if err == nil {
 			err = conn.WriteFrame(prep)
@@ -315,10 +342,15 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 }
 
 func checkMigration(migration *pb.MigrationState, database *pb.DatabaseDescriptor) error {
-	if migration.GetMode() != database.GetMigrationMode() {
+	switch migration.GetMode() {
+	case pb.MigrationMode_MIGRATION_MODE_NONE, pb.MigrationMode_MIGRATION_MODE_VERSIONED, pb.MigrationMode_MIGRATION_MODE_SELF:
+	default:
+		return fmt.Errorf("invalid registered migration mode %s", migration.GetMode())
+	}
+	if database.GetMigrationMode() != pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED && migration.GetMode() != database.GetMigrationMode() {
 		return fmt.Errorf("registered migration mode %s does not match Bootstrap mode %s", migration.GetMode(), database.GetMigrationMode())
 	}
-	if database.GetMigrationMode() == pb.MigrationMode_MIGRATION_MODE_VERSIONED {
+	if migration.GetMode() == pb.MigrationMode_MIGRATION_MODE_VERSIONED {
 		completed := make(map[uint32]bool, len(migration.GetCompletedMigrationIds()))
 		for _, id := range migration.GetCompletedMigrationIds() {
 			completed[id] = true

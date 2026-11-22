@@ -17,21 +17,25 @@ type mediaLease struct {
 	released    bool
 	timer       *time.Timer
 	stopContext func() bool
+	urls        []string // 与此消费租约一起撤销的临时 URL，由 Store.mu 保护
+	activity    func()
+	caller      router.Caller // 媒体来源 Session，临时 URL 读者继续为它保留引用。
 }
 
-// LeaseForSend 为目标 Adapter Session 签发只读令牌，保护对象到发送结束或 deadline。
-// 入站对象先检查原令牌的目标范围再取件；release 可重复调用，取消 ctx 也会释放租约。
-func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (readToken string, release func(), err error) {
+// LeaseForSend 为目标 Adapter Session 准备媒体来源，保护对象到发送结束或 deadline。
+// 入站对象先检查完整目标范围；同实例复用平台标识，跨实例按需取件。
+// release 可重复调用，取消 ctx 也会释放租约。
+func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSessionKey string, target *pb.Target, source *pb.MediaSource, deadline time.Time) (prepared *pb.MediaSource, release func(), err error) {
 	if err := ctx.Err(); err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	if parent, ok := ctx.Deadline(); ok && parent.Before(deadline) {
 		deadline = parent
 	}
 	if !deadline.After(s.now()) {
-		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
+		return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
 	}
-	// 1. 区分来源，入站对象先核对完整目标范围，再按原读取者的预算取件。
+	// 1. 区分来源，入站对象先核对完整目标范围，再决定是否取件。
 	var original string
 	incoming := false
 	switch value := source.GetSource().(type) {
@@ -40,45 +44,67 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	case *pb.MediaSource_IncomingRef:
 		original = value.IncomingRef.GetToken()
 		incoming = true
+	case *pb.MediaSource_HttpsUrl, *pb.MediaSource_InlineBase64:
+		return source, func() {}, nil
 	default:
-		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "expected media_ref or incoming_ref source")
+		return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid media source")
 	}
+	activity, err := s.acquire(c)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			activity()
+		}
+	}()
 	if incoming {
 		s.mu.Lock()
 		s.sweep()
 		access, err := s.incomingAccess(original, c.SessionKey)
 		if err != nil {
 			s.mu.Unlock()
-			return "", nil, err
+			return nil, nil, err
 		}
-		allowed := allowsTarget(access.targets, target)
+		if !allowsTarget(access.targets, target) {
+			s.mu.Unlock()
+			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
+		}
+		if access.object.source.instanceID == target.GetAdapterInstanceId() {
+			lease := &mediaLease{token: token(), incoming: access.object, activity: activity, caller: c}
+			access.object.leases++
+			release := s.bindLease(ctx, lease, readerSessionKey, File{ExpiresAt: deadline})
+			prepared := &pb.MediaSource{Source: &pb.MediaSource_PlatformFile{PlatformFile: access.object.source.fileID}}
+			if access.object.mime != nil {
+				prepared.Mime = *access.object.mime
+			}
+			s.mu.Unlock()
+			return prepared, release, nil
+		}
 		s.mu.Unlock()
-		if !allowed {
-			return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
-		}
 		fetchCtx, cancel := context.WithTimeout(ctx, deadline.Sub(s.now()))
 		err = s.loadIncoming(fetchCtx, c, original)
 		cancel()
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	if !deadline.After(s.now()) {
-		return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
+		return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "media send deadline has expired")
 	}
 	// 2. 在同一回收锁下重新核对原 token，并向目标 Session 绑定新的只读引用。
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweep()
-	lease := &mediaLease{token: token()}
+	lease := &mediaLease{token: token(), activity: activity, caller: c}
 	var file File
 	if incoming {
 		access, err := s.incomingAccess(original, c.SessionKey)
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 		lease.incoming = access.object
 		lease.incoming.leases++
@@ -86,14 +112,14 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	} else {
 		upload := s.refs[original]
 		if upload == nil || upload.owner != c.SessionKey {
-			return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "media reference not found")
+			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "media reference not found")
 		}
 		if upload.lease != nil {
-			return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "read-only media token cannot be delegated")
+			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "read-only media token cannot be delegated")
 		}
 		if upload.grant != nil {
 			if !allowsTarget(upload.targets, target) {
-				return "", nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
+				return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
 			}
 			upload = upload.grant
 		}
@@ -102,12 +128,18 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 		file = upload.file
 	}
 	file.ExpiresAt = deadline
+	release = s.bindLease(ctx, lease, readerSessionKey, file)
+	return &pb.MediaSource{Mime: file.MIME, Source: &pb.MediaSource_MediaRef{MediaRef: lease.token}}, release, nil
+}
+
+// bindLease 要求持有 Store.mu；先发布 Session 索引，再安装结束回调。
+func (s *Store) bindLease(ctx context.Context, lease *mediaLease, readerSessionKey string, file File) func() {
 	s.refs[lease.token] = &entry{file: file, owner: readerSessionKey, lease: lease}
-	// 3. 回调只持有此租约；结束路径停止另一个回调，避免回收后的长期引用。
-	release = func() { s.mu.Lock(); defer s.mu.Unlock(); s.releaseLease(lease) }
-	lease.timer = time.AfterFunc(deadline.Sub(s.now()), release)
+	// 回调争用同一回收锁，确保发布完成后才释放对象。
+	release := func() { s.mu.Lock(); defer s.mu.Unlock(); s.releaseLease(lease) }
+	lease.timer = time.AfterFunc(file.ExpiresAt.Sub(s.now()), release)
 	lease.stopContext = context.AfterFunc(ctx, release)
-	return lease.token, release, nil
+	return release
 }
 
 // releaseLease 要求持有 Store.mu；只读引用不再占一份磁盘或 Session 预算。
@@ -117,8 +149,19 @@ func (s *Store) releaseLease(lease *mediaLease) {
 	}
 	lease.released = true
 	delete(s.refs, lease.token)
+	for _, id := range lease.urls {
+		delete(s.urls, id)
+	}
 	lease.timer.Stop()
 	lease.stopContext()
+	if lease.activity != nil {
+		lease.activity()
+	}
+	s.releaseObject(lease)
+}
+
+// releaseObject 要求持有 Store.mu；HTTP 读者和发送租约共用对象回收计数。
+func (s *Store) releaseObject(lease *mediaLease) {
 	if lease.upload != nil {
 		lease.upload.leases--
 		if lease.upload.retired && lease.upload.leases == 0 && lease.upload.grants == 0 {

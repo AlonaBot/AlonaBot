@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// unstructuredMessage 是非结构化输出行的记录消息（CONTRACTS §14.1）。
+// unstructuredMessage 是非结构化输出行的记录消息。
 const unstructuredMessage = "unstructured output"
 
 // streamStderr 是插件进程中写 JSON 记录的流；stdout 上的文本一律是非结构化输出。
@@ -92,7 +92,12 @@ func parseRecord(line []byte) (slog.Record, bool) {
 			hasT = true
 		case slog.LevelKey:
 			var s string
-			if json.Unmarshal(raw, &s) != nil || lv.UnmarshalText([]byte(s)) != nil {
+			if json.Unmarshal(raw, &s) != nil {
+				return slog.Record{}, false
+			}
+			if s == "CRITICAL" {
+				lv = LevelCritical
+			} else if lv.UnmarshalText([]byte(s)) != nil {
 				return slog.Record{}, false
 			}
 			hasLv = true
@@ -107,7 +112,7 @@ func parseRecord(line []byte) (slog.Record, bool) {
 				return slog.Record{}, false
 			}
 		default:
-			if !sourceKeys[key] {
+			if !sourceKeys[key] || key == KeyInstanceID {
 				attrs = append(attrs, jsonAttr(key, raw))
 			}
 		}

@@ -1,4 +1,4 @@
-// Agent 会话条目存储（CONTRACTS §13.3、WIRE-FORMAT §3.5）。
+// Agent 会话条目存储。
 syntax = "proto3";
 
 package alonabot.v1;

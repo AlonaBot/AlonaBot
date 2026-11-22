@@ -1,0 +1,16 @@
+# 官方整合包；从对应发行 tag 下载此文件，镜像版本与该 tag 一致。
+services:
+  alonabot:
+    image: ghcr.io/alonabot/alonabot:0.1.1
+    init: true
+    volumes:
+      - alonabot-data:/data
+    ports:
+      - "127.0.0.1:7650:7650"
+
+volumes:
+  alonabot-data:
+
+# 首次启动：docker compose up -d
+# 读取一次性 token：docker compose exec alonabot alonabot admin-token show --data-dir /data
+# 打开 http://127.0.0.1:7650 登录；首次登录成功后 /data/admin_token 被删除。

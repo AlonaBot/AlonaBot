@@ -84,23 +84,6 @@ func displayPath(path []string) string {
 	return strings.Join(parts, ".")
 }
 
-func schemaPaths(value any, path []string, patterns map[string][]string) {
-	schema, ok := value.(map[string]any)
-	if !ok {
-		return
-	}
-	if marked, _ := schema[keywordSecret].(bool); marked {
-		pattern := strings.Join(path, ".")
-		patterns[pattern] = strings.Split(pattern, ".")
-	}
-	properties, _ := schema["properties"].(map[string]any)
-	for key, child := range properties {
-		schemaPaths(child, append(path, escape(key)), patterns)
-	}
-	schemaPaths(schema["items"], append(path, "*"), patterns)
-	schemaPaths(schema["additionalProperties"], append(path, "*"), patterns)
-}
-
 func matches(pattern, path []string) bool {
 	if len(pattern) != len(path) {
 		return false

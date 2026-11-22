@@ -1,0 +1,3 @@
+{
+  "output": {"type": "string", "description": "Absolute path for the last sent text", "default": ""}
+}

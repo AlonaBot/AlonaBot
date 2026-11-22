@@ -3,44 +3,59 @@ package sdk
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/config"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/dbhook"
 )
 
-// handshakeTimeout 与 CONTRACTS §4.2 的 Hello/HelloAck 预算一致。
+// handshakeTimeout 限制 HELLO 与 HELLO_ACK 握手的等待时间。
 var handshakeTimeout = 10 * time.Second
 
-// launch 保存 Core 通过环境变量下发的启动参数（见 internal/wire/env.go）。
+const sessionSecretBytes = 32
+
+const scheduleRoutePrefix = "job."
+
+// launch 保存 Core 显式传入或通过环境变量下发的启动参数。
 type launch struct {
-	pluginID  string
-	transport string        // tcp 或 stdio
-	addr      string        // TCP 传输时 Core 的 loopback 地址
-	secret    []byte        // 32 字节 Session Secret
-	digest    []byte        // 安装时已验证的归档摘要，在 HELLO 中原样回显
-	http      *httpListener // 有HTTP路由时持有本Run的Listener，传给prepare与activation
+	runtimeLockPath string
+	inProcess       bool
+	log             slog.Handler
+	runtime         *componentSession
+	pluginID        string
+	serviceSchemas  map[string][]byte // 当前组件的生成资源，Session 内只读。
+	entryPackage    string            // 插件入口包路径，Session 内只读。
+	transport       string            // tcp 或 stdio
+	addr            string            // TCP 传输时 Core 的 loopback 地址
+	secret          []byte            // 32 字节 Session Secret
+	digest          []byte            // 安装时已验证的归档摘要，在 HELLO 中原样回显
+	http            httpRuntime       // 有HTTP路由时持有本Run的Listener，传给prepare与activation
 }
 
 // readLaunch 读取并校验 Core 下发的启动环境变量。
 func readLaunch() (launch, error) {
-	l := launch{pluginID: os.Getenv(wire.EnvPluginID), transport: os.Getenv(wire.EnvTransport), addr: os.Getenv(wire.EnvCoreAddr)}
+	l := launch{pluginID: os.Getenv(wire.EnvPluginID), transport: os.Getenv(wire.EnvTransport), addr: os.Getenv(wire.EnvCoreAddr), runtimeLockPath: os.Getenv(wire.EnvRuntimeLock)}
 	var err1, err2 error
 	l.secret, err1 = hex.DecodeString(os.Getenv(wire.EnvSecret))
 	l.digest, err2 = hex.DecodeString(os.Getenv(wire.EnvBuildDigest))
 	switch {
 	case l.pluginID == "":
 		return l, fmt.Errorf("missing %s (the plugin must be started by Core)", wire.EnvPluginID)
-	case err1 != nil || len(l.secret) != 32:
+	case err1 != nil || len(l.secret) != sessionSecretBytes:
 		return l, fmt.Errorf("%s is not 32 bytes of hex", wire.EnvSecret)
 	case err2 != nil:
 		return l, fmt.Errorf("%s is not hex", wire.EnvBuildDigest)
@@ -89,6 +104,9 @@ func withWatchdog(conn *wire.Conn, d time.Duration) (stop func()) {
 
 // clientHandshake 发送 HELLO 并等待 HELLO_ACK。
 func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
+	if l.log != nil {
+		l.runtime.log = l.log
+	}
 	stop := withWatchdog(conn, handshakeTimeout)
 	defer stop()
 	supported, required := httpOffer(l)
@@ -119,7 +137,7 @@ func clientHandshake(conn *wire.Conn, l launch) (*pb.HelloAck, error) {
 		}
 		return m, nil
 	case *pb.SessionError:
-		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the handshake: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: errcode.Code(validate.PublicCode(env.GetError().GetCode())), Message: "Core rejected the handshake: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("unexpected %s during handshake", env.GetKind())
 }
@@ -140,32 +158,48 @@ func sessionFailure(conn *wire.Conn, sid []byte, minor uint32, pluginID string, 
 
 // buildRegister 把收集到的注册项转成 REGISTER。
 // shortcut: route_id 暂用 "cmd.<路径以 . 连接>"，有稳定 route_id 生成器后替换。
-func buildRegister(reg *Registration, configJSON string, configVersion uint32, configSchema []byte) *pb.Register {
-	r := &pb.Register{CandidateConfigJson: configJSON, CandidateConfigVersion: configVersion,
-		Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
+func buildRegister(reg *registration, configJSON string, configSchema []byte) *pb.Register {
+	r := &pb.Register{CandidateConfigJson: configJSON, Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 	if len(configSchema) != 0 {
-		r.ConfigSchemaHash = config.SchemaHash(configSchema)
+		schema, _ := configschema.Parse(configSchema) // 配置准备已检查生成项，收集注册项时此参数为 nil。
+		r.ConfigSchemaHash = schema.Hash()
 	}
 	for _, c := range reg.Commands {
 		spec := c.spec
+		spec.Rule = &pb.RuleDescriptor{HasCustomRule: len(c.rules) != 0}
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: commandRouteID(c), Priority: c.Priority, Kind: pb.RouteKind_ROUTE_KIND_COMMAND,
 			DefaultEnabled: true, RequiredPermissions: c.permission.Names(), Spec: &pb.RouteDescriptor_Command{Command: spec}})
 	}
 	for _, event := range reg.Events {
 		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: event.RouteID, Priority: event.Priority, Kind: pb.RouteKind_ROUTE_KIND_EVENT,
 			DefaultEnabled: true, RequiredPermissions: event.permission.Names(),
-			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType}, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL}}})
+			Spec: &pb.RouteDescriptor_Event{Event: &pb.EventSpec{EventTypeFilter: []string{event.EventType.name}, ActionId: event.actionID, ActionSchemaVersion: event.actionVersion, HandlerMode: pb.HandlerMode_HANDLER_MODE_MANUAL, Rule: &pb.RuleDescriptor{HasCustomRule: len(event.rules) != 0}, MessageFilter: event.filter.proto()}}})
+	}
+	for _, job := range reg.Schedules {
+		spec := &pb.ScheduleSpec{JobId: job.JobID, Timezone: job.Timezone}
+		if job.Interval != 0 {
+			spec.Trigger = &pb.ScheduleSpec_IntervalMs{IntervalMs: uint64(job.Interval / time.Millisecond)}
+		} else {
+			spec.Trigger = &pb.ScheduleSpec_Cron{Cron: job.Cron}
+		}
+		r.Routes = append(r.Routes, &pb.RouteDescriptor{RouteId: scheduleRoutePrefix + job.JobID, Kind: pb.RouteKind_ROUTE_KIND_SCHEDULE,
+			DefaultEnabled: true, Spec: &pb.RouteDescriptor_Schedule{Schedule: spec}})
 	}
 	appendHTTPRoutes(r, reg.HTTP)
 	appendServiceRoutes(reg, r)
 	appendSubscriptionRoutes(reg, r)
+	appendHookRoutes(reg, r)
+	for _, task := range reg.tasks {
+		r.Routes = append(r.Routes, task.Descriptor())
+	}
 	return r
 }
 
 // prepare 执行准备阶段：配置准备 → 迁移 → OnStart（各有独立预算）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
-func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Registration) (prepared *pb.Prepared, err error) {
+func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *registration) (prepared *pb.Prepared, err error) {
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
+	l.runtime.translations.Store(&translationSession{messages: reg.messages, defaultLocale: boot.GetDefaultLocale()})
 	limits := boot.GetPhaseLimits()
 	// 1. Core 必须下发阶段预算与准备截止时间；缺失时报协议错误，而不是把预算当作 0 误报超时。
 	if limits == nil || limits.GetConfigMs() == 0 || limits.GetMigrationMs() == 0 || limits.GetOnStartMs() == 0 || boot.GetPreparationDeadlineUnixMs() == 0 {
@@ -179,26 +213,70 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "Bootstrap is missing valid session limits", nil)
 	}
 
-	// 2. 在 OnStart 之前完成配置迁移、默认值与校验；restart 与恢复均使用 RESUME。
-	configContext, cancelConfig := context.WithTimeout(context.Background(), time.Duration(limits.GetConfigMs())*time.Millisecond)
-	preparedConfig, err := config.Prepare(configContext, root.Config(), generatedFor(root).ConfigSchema,
-		[]byte(boot.GetCandidateConfigJson()), boot.PreviousConfigVersion, boot.GetTargetConfigVersion(),
-		boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME)
+	// Preparing 只读取一个准备结果；收到 PREPARED 后结束读取，把后续 ACTIVATE 留给激活读循环。
+	var received *pb.Prepared
+	var readErr error
+	readDone := make(chan struct{})
+	go func() {
+		received, readErr = readPrepared(conn, l, ack)
+		if readErr != nil {
+			readErr = &preparationInterrupted{cause: readErr}
+			l.runtime.cancel()
+			_ = conn.Close()
+		}
+		close(readDone)
+	}()
+	defer func() {
+		if err != nil {
+			l.runtime.cancel()
+			_ = conn.Close()
+		}
+		// 等待读取者退出后再清理资源或交接连接，同时保留断链与阶段失败的原因。
+		<-readDone
+		err = errors.Join(err, readErr)
+	}()
+
+	// 2. 在 OnStart 之前完成配置回调、校正与 required 校验。
+	configContext, cancelConfig := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetConfigMs())*time.Millisecond)
+	var loader config.Loader
+	if root.onConfigLoad != nil {
+		loader = func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			if !l.runtime.beginCallback() {
+				return nil, errcode.FailedPrecondition.New("plugin session has stopped")
+			}
+			defer l.runtime.callbacks.Done()
+			loaded, err := root.onConfigLoad(ctx, raw)
+			if err != nil {
+				componentLogger(ctx).ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", err)
+			}
+			return loaded, err
+		}
+	}
+	// 开发代次每次从 config.json 重新准备，恢复数据库时也允许 OnConfigLoad 变换配置。
+	restart := boot.GetDatabaseDescriptor().GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME && !strings.HasPrefix(boot.GetGenerationId(), "dev:")
+	preparedConfig, err := config.Prepare(configContext, loader, generatedFor(root).ConfigSchema,
+		[]byte(boot.GetCandidateConfigJson()), restart)
 	cancelConfig()
 	if err != nil {
 		failure := err.(*validate.Error) // Prepare 的失败均携带协议错误码和安全消息。
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			failure.Code, failure.Message, err)
 	}
+	root.setConfig(preparedConfig.Values)
+	l.runtime.plugin = root
+	if err := root.setProfileOverrides(boot.GetProfileOverridesJson()); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_CONFIG, pb.FrameKind_FRAME_KIND_HELLO_ACK,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid profile overrides", err)
+	}
 
 	// 3. 数据库从迁移阶段开始可用；后续任何准备失败都由这里关闭连接。
-	dbhook.Begin(boot.GetDatabaseDescriptor())
+	l.runtime.database.Begin(boot.GetDatabaseDescriptor())
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, dbhook.Close())
+			err = errors.Join(err, l.runtime.database.Close())
 		}
 	}()
-	migrationContext, cancelMigration := context.WithTimeout(context.Background(), time.Duration(limits.GetMigrationMs())*time.Millisecond)
+	migrationContext, cancelMigration := context.WithTimeout(l.runtime.ctx, time.Duration(limits.GetMigrationMs())*time.Millisecond)
 	migration, migrationError := prepareMigrations(migrationContext, root, boot.GetDatabaseDescriptor())
 	cancelMigration()
 	if migrationError != nil {
@@ -210,27 +288,25 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		if errors.Is(migrationError, context.DeadlineExceeded) {
 			code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
 		}
-		slog.Error("database migration failed", "err", migrationError)
+		componentLogger(l.runtime.ctx).Error("database migration failed", "err", migrationError)
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_MIGRATION, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			code, "database migration failed", migrationError)
 	}
 
-	if err := l.http.start(boot); err != nil {
+	if err := l.startHTTP(boot); err != nil {
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER, pb.ErrorCode_ERROR_CODE_INTERNAL, "prepare HTTP listener failed", err)
 	}
 
 	// 4. OnStart：用户函数不响应 context 时，由 watchdog 判定失败（Run 随后退出进程）。
+	const phase = "OnStart"
+	observedAt := time.Now()
 	budget := time.Duration(limits.GetOnStartMs()) * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ctx, cancel := context.WithTimeout(l.runtime.ctx, budget)
 	errc := make(chan error, 1)
+	l.runtime.callbacks.Add(1)
 	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				logPanic("OnStart", p)
-				errc <- fmt.Errorf("OnStart panic: %v", p)
-			}
-		}()
-		errc <- root.OnStart(ctx)
+		defer l.runtime.callbacks.Done()
+		errc <- runLifecycleCallback(ctx, phase, sid, root.onStart)
 	}()
 	timer := time.NewTimer(budget)
 	select {
@@ -239,20 +315,32 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		cancel()
 		if err != nil {
 			// 用户错误原文可能含敏感信息：只写日志，SESSION_ERROR 中只放安全消息。
-			slog.Error("OnStart failed", "err", err)
+			componentLogger(l.runtime.ctx).Error("OnStart failed", "err", err)
 			return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 				pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 		}
 	case <-timer.C:
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback deadline observed", "phase", phase, "outcome", "timeout",
+			"observed_ns", time.Since(observedAt).Nanoseconds(), "lifecycle_session_id", hex.EncodeToString(sid))
 		cancel()
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 			pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnStart exceeded its budget", nil)
 	}
 
 	// 5. 发送完整 REGISTER；超过 4 MiB 时报告 RESOURCE_EXHAUSTED。
-	registration := buildRegister(reg, string(preparedConfig.JSON), preparedConfig.Version, generatedFor(root).ConfigSchema)
+	if err := checkServiceTargets(root, l.pluginID); err != nil {
+		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_REGISTER, pb.FrameKind_FRAME_KIND_REGISTER,
+			pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error(), err)
+	}
+	registration := buildRegister(reg, string(preparedConfig.JSON), generatedFor(root).ConfigSchema)
+	for _, correction := range preparedConfig.Corrections {
+		registration.ConfigCorrections = append(registration.ConfigCorrections, &pb.ConfigCorrection{
+			Path: correction.Path, Reason: correction.Reason, OriginalJson: string(correction.Old),
+		})
+	}
+
 	registration.Migration = migration
-	l.http.report(registration)
+	l.reportHTTP(registration)
 	regEnv, err := wire.ControlEnvelope(sid, minor, l.pluginID, pb.FrameKind_FRAME_KIND_REGISTER, registration)
 	if err != nil {
 		return nil, err
@@ -269,11 +357,51 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 	deadline := time.UnixMilli(boot.GetPreparationDeadlineUnixMs())
 	stop := withWatchdog(conn, time.Until(deadline))
 	defer stop()
+	<-readDone
+	return received, nil
+}
+
+// runLifecycleCallback 只计实际用户回调的执行时间，返回及 panic 均在执行它的 goroutine 中记录。
+func runLifecycleCallback(ctx context.Context, phase string, sid []byte, callback func(context.Context) error) (err error) {
+	if callback == nil {
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback completed", "phase", phase, "executed", false,
+			"outcome", "not_executed", "lifecycle_session_id", hex.EncodeToString(sid))
+		return nil
+	}
+	startedAt := time.Now()
+	defer func() {
+		elapsed := time.Since(startedAt)
+		outcome := "success"
+		if p := recover(); p != nil {
+			logPanic(ctx, phase, p)
+			err = fmt.Errorf("%s panic: %v", phase, p)
+			outcome = "panic"
+		} else if err != nil {
+			outcome = "error"
+		}
+		attrs := []any{"phase", phase, "executed", true, "duration_ns", elapsed.Nanoseconds(), "outcome", outcome,
+			"lifecycle_session_id", hex.EncodeToString(sid)}
+		if err != nil {
+			attrs = append(attrs, "err", err)
+		}
+		componentLogger(ctx).DebugContext(ctx, "lifecycle callback completed", attrs...)
+	}()
+	return callback(ctx)
+}
+
+// preparationInterrupted 保留断链原因，同时标识它已取消准备期 lifetime。
+type preparationInterrupted struct{ cause error }
+
+func (e *preparationInterrupted) Error() string        { return e.cause.Error() }
+func (e *preparationInterrupted) Unwrap() error        { return e.cause }
+func (e *preparationInterrupted) Is(target error) bool { return target == context.Canceled }
+
+func readPrepared(conn *wire.Conn, l launch, ack *pb.HelloAck) (*pb.Prepared, error) {
 	env, err := conn.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("wait for PREPARED: %w", err)
 	}
-	if err := wire.CheckPeer(env, sid, minor, ""); err != nil {
+	if err := wire.CheckPeer(env, ack.GetSessionId(), ack.GetChosenMinor(), ""); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("invalid frame during preparation: %w", err)
 	}
@@ -286,30 +414,52 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root Root, reg *Regist
 		return m, nil
 	case *pb.SessionError:
 		_ = conn.Close()
-		return nil, &Error{Code: validate.PublicCode(env.GetError().GetCode()), Message: "Core rejected the registration: " + env.GetError().GetSafeMessage()}
+		return nil, &Error{Code: errcode.Code(validate.PublicCode(env.GetError().GetCode())), Message: "Core rejected the registration: " + env.GetError().GetSafeMessage()}
 	}
 	return nil, fmt.Errorf("unexpected %s during preparation", env.GetKind())
 }
 
-func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
+func prepareMigrations(ctx context.Context, root *Plugin, descriptor *pb.DatabaseDescriptor) (*pb.MigrationState, error) {
 	type result struct {
 		state *pb.MigrationState
 		err   error
 	}
 	completed := make(chan result, 1) // 超时后用户回调仍可返回，避免结果发送阻塞。
+	runtime := componentFor(ctx)
+	runtime.callbacks.Add(1)
 	go func() {
+		defer runtime.callbacks.Done()
 		defer func() {
 			if p := recover(); p != nil {
-				logPanic("migration", p)
+				logPanic(ctx, "migration", p)
 				completed <- result{err: fmt.Errorf("migration panic: %v", p)}
 			}
 		}()
-		migrators := dbhook.Recognize(root)
+		migrators := dbhook.Migrators(root)
 		if len(migrators) > 1 {
-			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "root plugin implements multiple migration interfaces"}}
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "plugin has multiple migration registrations"}}
 			return
 		}
-		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE || len(migrators) == 0 {
+		mode := pb.MigrationMode_MIGRATION_MODE_NONE
+		if len(migrators) != 0 {
+			mode = migrators[0].Mode
+		}
+		// 同进程开发组件跳过构建步骤，由实际登记决定迁移方式。
+		discover := runtime.inProcess && descriptor.GetMigrationMode() == pb.MigrationMode_MIGRATION_MODE_UNSPECIFIED
+		if !discover && mode != descriptor.GetMigrationMode() {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("registered migration mode %s does not match manifest mode %s", mode, descriptor.GetMigrationMode())}}
+			return
+		}
+		if descriptor.GetBackend() == pb.DatabaseBackend_DATABASE_BACKEND_NONE && mode != pb.MigrationMode_MIGRATION_MODE_NONE {
+			completed <- result{err: &validate.Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "database migrations require a database backend"}}
+			return
+		}
+		// 同代次恢复沿用原 schema 与账本，SELF 和辅助迁移回调都不重新执行。
+		if descriptor.GetActivationReason() == pb.ActivationReason_ACTIVATION_REASON_RESUME {
+			completed <- result{state: &pb.MigrationState{Mode: mode, CompletedMigrationIds: append([]uint32(nil), descriptor.GetAppliedMigrationIds()...)}}
+			return
+		}
+		if len(migrators) == 0 {
 			completed <- result{state: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
 			return
 		}
@@ -325,4 +475,100 @@ func prepareMigrations(ctx context.Context, root Root, descriptor *pb.DatabaseDe
 		}
 		return result.state, result.err
 	}
+}
+
+// streamTarget 保留完整 Target，话题缺省与显式值分别计入节流键。
+type streamTarget struct {
+	adapter, instance, account, chat, thread string
+	hasThread                                bool
+}
+
+// streamThrottle 用令牌串行化同目标的编辑；令牌持有者独占 last，无需跨 RPC 持锁。
+type streamThrottle struct {
+	token chan struct{}
+	last  time.Time
+}
+
+var streamSessions = struct {
+	sync.Mutex
+	targets map[*wire.Session]map[streamTarget]*streamThrottle
+}{targets: make(map[*wire.Session]map[streamTarget]*streamThrottle)}
+
+func sessionStreamThrottle(session *wire.Session, target *pb.Target) *streamThrottle {
+	key := streamTarget{target.AdapterId, target.AdapterInstanceId, target.AccountId, target.ChatId, target.GetThreadId(), target.ThreadId != nil}
+	streamSessions.Lock()
+	defer streamSessions.Unlock()
+	targets := streamSessions.targets[session]
+	if targets == nil {
+		targets = make(map[streamTarget]*streamThrottle)
+		streamSessions.targets[session] = targets
+		// 每个使用流的 Session 只有一个清理者，连接结束后释放全部目标状态。
+		go func() {
+			<-session.Done()
+			streamSessions.Lock()
+			delete(streamSessions.targets, session)
+			streamSessions.Unlock()
+		}()
+	}
+	throttle := targets[key]
+	if throttle == nil {
+		throttle = &streamThrottle{token: make(chan struct{}, 1)}
+		throttle.token <- struct{}{}
+		targets[key] = throttle
+	}
+	return throttle
+}
+
+func (s *streamThrottle) acquire(ctx context.Context, done <-chan struct{}, wait bool) (bool, error) {
+	// 排队与间隔等待都监听取消；未到刷新时机的增量留在调用者缓存中。
+	if wait {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-done:
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-s.token:
+		}
+	} else {
+		select {
+		case <-s.token:
+		default:
+			return false, nil
+		}
+	}
+	release := func() { s.token <- struct{}{} }
+	if err := ctx.Err(); err != nil {
+		release()
+		return false, err
+	}
+	select {
+	case <-done:
+		release()
+		return false, errcode.FailedPrecondition.New("plugin session has stopped")
+	default:
+	}
+	if remaining := time.Until(s.last.Add(streamEditInterval)); remaining > 0 {
+		if !wait {
+			release()
+			return false, nil
+		}
+		timer := time.NewTimer(remaining)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			release()
+			return false, ctx.Err()
+		case <-done:
+			release()
+			return false, errcode.FailedPrecondition.New("plugin session has stopped")
+		case <-timer.C:
+		}
+	}
+	return true, nil
+}
+
+func (s *streamThrottle) release() {
+	// 从 RPC 完成时计时，确保阻塞或调度延迟也不会缩短实际 Edit 发起间隔。
+	s.last = time.Now()
+	s.token <- struct{}{}
 }

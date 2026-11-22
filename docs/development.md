@@ -1,116 +1,517 @@
-# 开发与验证
+# Source development
 
-负责范围：环境准备、日常命令、外部测试环境、规则与检查的对照。
-更新时机：工具链或依赖版本变化、新增或调整检查入口、测试环境变化时。
+[简体中文](development.zh-CN.md)
 
-## 环境
+Run a plugin from source, then work in Core, SDK, Adapter, Agent or WebUI as needed. See [contributing](../CONTRIBUTING.md) for workflow and [architecture](../ARCHITECTURE.md) for modules/data ownership. This guide maintains environments, commands and verification; operations are in [deployment](deployment.md).
 
-| 工具 | 版本与来源 | 备注 |
+## Prepare the environment
+
+| Tool | Version | Needed for |
 | --- | --- | --- |
-| Go | 1.27.1（asdf，`~/.tool-versions`） | `go.mod` 的 go 指令固定为该版本 |
-| protoc | 36.0（`protoc --version` 输出 `libprotoc 36.0`；生成文件头记为 v7.36.0） | 版本不符时 `contracts/internal/protocgen` 拒绝生成 |
-| protoc-gen-go | v1.36.12（`go.mod` 的 `tool` 指令，与 `google.golang.org/protobuf` 同版本） | 通过 `go tool -n protoc-gen-go` 定位，不全局安装 |
-| Node（前端） | 26.5.1（asdf） | 供 web/admin 使用（尚未创建） |
+| Go | 1.27.1; see `go.mod` | Go development/component builds |
+| protoc | 36.0, printing `libprotoc 36.0` | Regeneration after `.proto` changes |
+| protoc-gen-go | v1.36.12, managed by `go.mod`'s `tool` directive | Protocol generation; no global installation |
+| Node | 26.5.1; see WebUI `package.json` | Official WebUI frontend development |
+| npm | Bundled with Node | Installing dependencies from the frontend lockfile |
 
-已锁定并经测试验证的版本：protobuf v1.36.12、go.yaml.in/yaml/v3 v3.0.5、gorm v1.31.2、libtnb/sqlite v1.2.2、modernc.org/sqlite v1.61.0（已验证 CRUD/Tx/WAL Backup/迁移账本）；golang.org/x/sys v0.49.0 为直接依赖，用于 internal/oslock 的 flock/LockFileEx；Cobra v1.10.2、pflag v1.0.9、仅 Windows 链接的 mousetrap v1.1.0。
+macOS development uses asdf for Go/Node; other platforms also need matching versions. Documentation-only changes need no complete runtime setup.
 
-已批准的 Go 依赖（2026-10-21）：`google.golang.org/protobuf`、`gorm.io/gorm`、`github.com/libtnb/sqlite`、`modernc.org/sqlite`、`golang.org/x/sys`、`go.yaml.in/yaml/v3`（`gorm.io/driver/postgres` 的批准于 2026-10-27 随 D-48 撤销）；2026-10-25 批准 `github.com/modelcontextprotocol/go-sdk`，只用于官方 Agent 组件（`agent/`）的 MCP 客户端，版本在 T-12.3 验证后锁定；2026-10-26 批准 `github.com/spf13/cobra`（随之引入 `github.com/spf13/pflag`），只用于 `cmd/alonabot` 的命令树与全局参数，T-02.2 已锁定 Cobra v1.10.2、pflag v1.0.9 与仅 Windows 链接的 mousetrap v1.1.0；2026-10-26 批准 `github.com/google/jsonschema-go`（MCP go-sdk 也直接依赖它），用于 JSON Schema 的表示、序列化、`Resolve`、`ApplyDefaults` 与 `Validate`：配置 Schema（`sdk/config`、构建期生成器、Core 的配置与表单 Schema）、Service 与工具的输入 Schema、`agent/`。配置 Schema 由生成器构造，不用 `For`/`ForType` 推导（D-43）；版本在首个使用它的切片引入时锁定。2026-10-27 批准 `github.com/coder/websocket`，只用于官方 OneBot 11 Adapter（`adapters/onebot11/`）的 WebSocket 连接，版本在 T-15.1 引入时锁定（D-46）。前端已批准：Vite、TypeScript、React 19、vitest。新增清单外依赖需要先征得维护者同意。
+```fish
+git clone https://github.com/AlonaBot/AlonaBot.git
+cd AlonaBot
+go mod download
+go build -o bin/alonabot ./cmd/alonabot
+```
 
-Core 可执行文件（`./cmd/alonabot`）与 SDK 根包（`./sdk`）只能链接上述清单的一个子集（D-52，D-68 修订），由审查时用下方的 `go list -deps` 命令核对：Core 允许 protobuf、modernc SQLite 及其依赖、GORM 与 libtnb/sqlite 及其依赖（jinzhu/inflection、jinzhu/now、golang.org/x/text）、yaml、x/sys、cobra 与 pflag、仅 Windows 链接的 mousetrap、jsonschema-go；SDK 根包只允许 protobuf、x/sys 与 jsonschema-go。MCP go-sdk、coder/websocket 只出现在官方插件、Agent 或 Adapter 中；插件只在导入 `sdk/gormdb` 时链接 GORM。修改子集与修改已批准清单一样，需要维护者同意。
+Existing examples reuse the repository's module/resources without an external project or model credentials:
 
-## 日常命令（仓库根目录）
+```fish
+bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
+```
 
-```sh
-go generate ./...   # 重新生成 contracts/pb（入口：contracts/doc.go → contracts/internal/protocgen）
-go test ./...
+Enter `/ping` in the same terminal for `pong`; Ctrl-C stops normally. Parallel Core instances need separate data directories/listener ports. See [deployment](deployment.md#core-settings-and-http-entry-point) for first authentication/listener settings.
+
+The example marks `/ping` with `.Menu()` for automatic chat menus on supported Adapters; unmarked commands remain callable. See [command menus](plugin-guide.md#command-menus) for manual control.
+
+## Dependency management
+
+Core uses versions locked in `go.mod`/`go.sum`; official components maintain their own modules/locks, and WebUI also has `package-lock.json`. Before adding dependencies or expanding linkage, explain necessity/alternatives and await maintainer approval. Approved uses of direct dependencies:
+
+| Module | Approved use |
+| --- | --- |
+| protobuf, x/sys, google/jsonschema-go | Protocol, OS facilities, Schema; SDK root also links Goldmark through the message model |
+| github.com/yuin/goldmark v1.7.16 | Approved CommonMark/strikethrough parsing in `contracts/markdown`, shared by Core send/edit and SDK `MarkdownSegment.PlainText()` |
+| modernc.org/sqlite, libtnb/sqlite, GORM | Core state database and optionally imported SQLite/GORM SDK packages |
+| go.yaml.in/yaml/v3 | Manifests, skill metadata and other YAML |
+| Cobra, pflag, go-isatty; mousetrap on Windows | CLI/terminal detection |
+| modelcontextprotocol/go-sdk | Official Agent MCP client |
+| openai-go/v3, anthropic-sdk-go/v2 | Agent Providers; no vendor subpackages such as Azure/Bedrock/Vertex |
+| coder/websocket | OneBot 11 Adapter; Agent's transitive usage remains under the current lockfile |
+
+Core executables may link modules needed for protocol, Goldmark, SQLite/GORM, yaml, x/sys, Schema and CLI. Model SDKs, MCP and platform clients belong to their components. Plugins link GORM only when importing `sdk/gormdb`. Inspect actual linkage during review:
+
+```fish
+go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u
+```
+
+Frontend locks React, Vite, TypeScript, vitest, Lucide, dnd-kit and Radix. Recharts is approved but absent from the current lockfile. DOM testing environments/Testing Library require separate approval. JetBrains Mono static fonts are distributed under SIL OFL 1.1.
+
+### GORM source
+
+GORM uses upstream `gorm.io/gorm v1.31.2`, locked by each module's `go.mod`.
+
+Separate-component build/pack/development builds use the author's main module go.mod/go.sum; library mode uses the author module directly. Release GORM components' build-info lists actual module versions.
+
+## Official component development
+
+Component source and Go/npm locks live in their own repositories:
+
+| Component | Development entry point |
+| --- | --- |
+| WebUI | [Source development](https://github.com/AlonaBot/alonabot-webui/blob/main/docs/development.md) |
+| Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) |
+| Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) |
+| OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) |
+| Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) |
+
+Run `alonabot check .`, `alonabot run .` or `alonabot pack .` in a component project. Core/SDK retain an independent module; `components.lock.json` pins component source for bundled builds. Cross-component tests use separate `tests/go.mod`, keeping model SDK/Adapter implementation dependencies there.
+
+```fish
+uv run --no-project python scripts/integration.py
+# 按改动选择测试，例如 Agent 服务：
+uv run --no-project python scripts/integration.py --run '^TestAgentServices$' --race
+```
+
+The integration entry point first runs `tests/agent`/`tests/e2e`. Agent service tests needing private Core assembly run via temporary modfiles/overlays without writing dependencies/tests back into Core's module. CLI end-to-end tests live in `tests/e2e`; `cmd/alonabot` contains production commands only.
+
+## Code generation
+
+Edit only `.proto`, generator or changelog sources, then regenerate:
+
+```fish
+go generate ./...
+```
+
+Protocol sources are in `contracts/proto/alonabot/v1/`, all using `go_package` `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`. Generation checks protoc version, regenerates `contracts/pb/`, and locates protoc-gen-go through `go tool`.
+
+Record daily changes in `changelog/unreleased/{en,zh-CN}.md`; during release preparation, organize them into `changelog/v<SemVer>/{en,zh-CN}.md` using the [changelog format](../changelog/README.md). The generator concatenates released files unchanged per language into `internal/core/manage/changelog_core.go`; the API reads versions and dates from their headings. After editing released notes, run `go generate ./internal/core/manage` and deliver both source notes and generated content.
+
+## Verify changes
+
+Choose checks by impact; reuse valid results without repeating unrelated checks:
+
+```fish
+git diff --check
+# 例如修改 Router 时：
+go vet ./internal/core/router
+go test -race ./internal/core/router
+```
+
+Premerge Go CI runs `go vet ./...`, race tests and five-target pure-Go builds. GitHub-hosted runners serialize test packages; [workflow](../.github/workflows/ci.yml) commands are authoritative. WebUI's separate CI also type-checks/builds frontend. For a full manual check:
+
+```fish
 go build ./...
 go vet ./...
-go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}' ./cmd/alonabot ./sdk | sort -u   # Core 与 SDK 根包链接的模块，对照允许清单（D-52）
+go test -race ./...
 ```
 
-生成器会先删除 `contracts/pb/` 下的 `*.pb.go` 再重新生成；新增 `.proto` 放在 `contracts/proto/alonabot/v1/`，`go_package` 统一为 `github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1`。
+For page-kit changes run `go test -race -v ./sdk/page ./examples/plugins/showcase` and `node --check sdk/page/kit.js`, then check key interactions/language/theme in WebUI's iframe. For documentation, check links, anchors, code blocks and actual commands.
 
-交叉编译矩阵（只证明能构建，不能代替目标平台的运行证据）：
+Cross-platform changes need actual runtime checks as well as cross-builds. Five targets: linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64. Record builds separately from real runs; current results are in [release notes](../changelog/v0.1.0/en.md#added). Use authorized test credentials for real Telegram/paid Provider checks; identify simulators in results.
 
-```sh
-for p in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
-  GOOS=${p%/*} GOARCH=${p#*/} CGO_ENABLED=0 go build ./... && echo "OK $p" || echo "FAIL $p"
-done
-GOARCH=amd64 CGO_ENABLED=0 go test ./...   # Apple Silicon 上经 Rosetta 运行 darwin/amd64 测试
-```
-
-## 本地运行一个插件（B1 开发入口）
-
-```sh
-go build -o bin/alonabot ./cmd/alonabot
-go build -o bin/lifecycle ./examples/plugins/lifecycle
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle          # TCP loopback（默认）
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --stdio  # stdio 传输
-# Ctrl-C / SIGTERM：排空 → STOPPING/OnStop → 退出；同一 data_dir 只能运行一个 Core
-```
-
-首次运行会登记开发用安装记录并提交新代次（`mode=new`），之后复用已提交代次（`mode=restart`）。尚无正式的安装、来源校验与管理 CLI。
-
-`run` 取得 core.lock 后读取 `<data_dir>/alonabot.yaml`；文件不存在时以 0600 权限写入缺省值（键与缺省值见 CONTRACTS §15.1），未知键、类型或取值错误时以 usage 退出码报告键名与行号。修改设置文件后重启生效。`--listen`、`--log-level`、`--log-format` 只在命令行显式给出时覆盖设置，只对本次运行有效，不改文件：
-
-```sh
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/httpplugin --listen 127.0.0.1:8080
-```
-
-Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口，只按请求的 Host 分派：`admin_base_url` 的主机名进入管理入口，`plugin_base_url` 的主机名提供 `/plugins/{id}/...`，转发给该插件当前 Session 的路由；其他 Host 返回 421。本地调试时请求要带对应的 Host，例如缺省设置下用 `http://localhost:7650/plugins/demo/...` 访问插件。两个 Base URL 必须同 scheme、同有效端口、主机名不同（CONTRACTS §7.3）。listen 不是 loopback 地址时，`admin_base_url` 必须是 https，或者配置非空的 `trusted_proxies`（由可信反代终止 TLS），设置文件与 `--listen` 都按此校验。管理 API 先要初始化管理 token：停止 Core 后在本机终端运行 `bin/alonabot admin-token init --data-dir ./data`，token 只显示一次；遗失时用 `admin-token reset` 重新生成，旧 token 与全部管理会话随之失效。两个命令都要求 stdin 与 stderr 是终端，Core 运行中执行会因 core.lock 失败。登录接口为 admin host 上的 `POST /api/auth/login`，CLI 可用 `Authorization: Bearer <token>`。签发插件兑换票据的管理 API 尚未提供，私有插件路由目前仍无法从浏览器进入。设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
-
-调优参数在启动时解析；修改后重启生效。查看全部 37 项参数及当前生效值：
-
-```sh
-bin/alonabot tune list
-bin/alonabot --args REQUEST_TIMEOUT=2s tune list
-bin/alonabot run --data-dir ./data --plugin-id demo --entry bin/lifecycle --args REQUEST_TIMEOUT=2s --args ./tuning.txt
-```
-
-`--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
-
-插件注册代码由构建期生成器从标记生成，标记语法见 `sdk/generate` 的包文档。在插件构建入口目录生成或检查 `alonabot_gen.go`：
-
-```sh
-bin/alonabot plugin generate --dir ./myplugin   # 内容不变时不改文件
-bin/alonabot plugin check --dir ./myplugin --goos linux --goarch amd64 --tags a,b
-```
-
-两者按 `--goos`、`--goarch`、`--tags` 筛选源码（缺省取当前环境），只扫描入口及其依赖的本 module 包，不受现有生成文件的 import 影响。源码问题逐行输出为 `文件:行:列: 说明`，此时不写文件；`check` 在生成内容与现有文件不同时报告过期。两种情况都以退出码 1 结束。
-
-真实进程验收（Unix；会在测试中构建上述两个二进制）：
-
-```sh
-go test -count=3 ./cmd/alonabot/ ./internal/core/supervisor/
-go test -race -count=3 ./internal/core/supervisor/
-```
-
-文档改动用 `git diff --check` 检查空白错误，链接与技能元数据由审查核对。包文档、命名、注释与测试提交范围由 [编码规范](coding-standards.md) 与 [注释技能](../.agents/skills/alonabot-code-commenting/SKILL.md) 指导审查。
-
-## 外部测试环境
-
-- **Telegram：** 真实测试需要授权的测试 Bot，目前没有，相关项记为「未运行」；Adapter 测试改用本地 Bot API 模拟服务。
-- **目标平台：** 本机只能运行 darwin/arm64；其余四个组合只做 `CGO_ENABLED=0` 交叉编译，尚无运行证据。
-
-## 规则与检查
-
-| 规则 | 依据 | 检查 | 状态 |
-| --- | --- | --- | --- |
-| 生成代码可重复生成，结果稳定 | AGENTS「项目约定」 | 执行 `go generate ./...` 后检查 `git diff --exit-code` | 已观测（手动执行） |
-| Envelope 字段号/枚举值与 WIRE-FORMAT 一致 | spec/WIRE-FORMAT.md §1/§2/§5A | `contracts/wirespec_test.go`（`go test ./contracts/`） | 已观测 |
-| Core 与 SDK 根包只链接允许的模块 | CONTRACTS §10、D-52 | 审查时运行上方的 `go list -deps` 命令（需要时按目标平台设 GOOS/GOARCH） | 人工/agent 审查规则，不由 CI 自动证明 |
-| 五目标平台 `CGO_ENABLED=0` 可构建 | CONTRACTS §6.1/§7.1 | 下方交叉编译命令（手动执行） | 已观测（只验证了构建；运行见 V-32） |
-| 包文档、命名、注释与测试提交范围 | coding-standards.md | 代码审查与 PR 清单 | 人工/agent 审查规则，不由 CI 自动证明 |
-| V-01～V-84 证据 | spec/TEST-MATRIX.md | 按编号记录测试位置、命令、平台和结果 | §3.1 所列分项已观测（darwin/arm64）；其余未运行 |
-
-状态说明：**已定义** 表示规则和检查方式已写下；**已实现** 表示检查代码已存在；**已观测** 表示检查真实运行过并有结果。工作流本身不代表目标提交已经验证。
 
 ## GitHub Actions
 
-[Quality gate](../.github/workflows/ci.yml) 在 PR 到 main、main push 和手动触发时运行 `git diff --check`。存在产品 Go 文件时，才运行 Go 格式、Protobuf 生成一致性、vet、race 测试和五目标平台 `CGO_ENABLED=0` 构建；无产品代码时明确标注 Go 检查未运行。
+[Quality gate](../.github/workflows/ci.yml) runs on main pushes, PRs targeting main and manual dispatch. Repository checks whitespace/main file scope; Go checks formatting, generation, vet, race and five-platform builds. Main path checks exclude personal maintenance records while retaining product skills and test tools.
 
-生成检查从官方 Protobuf release 下载当前约定的 protoc 36.0；工具链变更时同时更新生成器、开发指南和工作流。代码 job 使用只读 token，不使用生产凭据。
+[PR metadata](../.github/workflows/pr-metadata.yml) validates nondraft PR descriptions. Triage/auto-assign only change GitHub metadata and never execute PR code. Code checks have read-only permissions without production secrets; maintainers configure branch protection separately.
 
-[PR metadata](../.github/workflows/pr-metadata.yml) 校验非草稿 PR 的实际说明和清单；[triage](../.github/workflows/pr-triage.yml) 同步标签与 assignee，[auto-assign](../.github/workflows/auto-assign.yml) 请求非作者维护者审阅。这些 `pull_request_target` 流程不 checkout/执行 PR 代码，新工作流合入默认分支后才开始处理后续事件。Issue 表单自带 assignee，不依赖工作流执行。
+## Development runs and hot reload
 
-远端合并保护由维护者单独管理，不能因存在这些 YAML 就声称检查不可绕过。本次建设不添加发布、真实 Telegram 调用或自动关闭 PR 的流程。
+Build CLI first: `go build -o bin/alonabot ./cmd/alonabot`. From the repository root, get a reply in three steps (fish):
+
+1. Create project: `bin/alonabot init ./alonabot-plugin-hello`.
+2. Run: `bin/alonabot run ./alonabot-plugin-hello`.
+3. Enter `/hello` in the same terminal for `Hello AlonaBot`; Ctrl-C stops Core.
+
+With an installed CLI, run `alonabot run` in the project directory. Console chat enables automatically when stdin is a terminal and settings contain no Adapter instances; `--console` forces it on with pipe support, `--console=false` disables it. User `console:local` has Core Admin for this run; instance/admin remain in memory. Media appear as `[image]`, `[file: name]` placeholders. Enter `#1` for the first callback button on the most recent button message; edits appear as new `(edited)` segments. Core runs after stdin ends until a stop signal.
+
+Development directories enable reload by default. Change source and send `/hello` again to observe new replies; `--reload=false` disables it.
+
+See the [devbot tutorial](../examples/devbot/README.md) for loopback injection, configuration, hot reload and same-process debugging.
+
+### Project creation and SDK selection
+
+Marketplace IDs use hyphenated prefixes such as `alonabot-plugin-hello`; local IDs still allow underscores. See [publishing](plugin-guide.md#9-publishing) for rules.
+
+To check official help, first check out `alonabot-plugin-help` separately and run `bin/alonabot check <help project directory>`. For loopback trials, append its project to `run` directories and set injection `text` to `%2Fhelp` or `%2Fwhoami`.
+
+Build CLI (`go build -o bin/alonabot ./cmd/alonabot`), then create/check components:
+
+```fish
+bin/alonabot init ./alonabot-plugin-hello
+bin/alonabot build ./alonabot-plugin-hello
+bin/alonabot check ./alonabot-plugin-hello
+bin/alonabot test ./alonabot-plugin-hello
+bin/alonabot pack ./alonabot-plugin-hello
+```
+
+`init`, `build`, `check`, `test`, `pack` accept at most one positional directory, defaulting to current; old `--dir` reports unknown option. `init` requires an empty directory, failing before writes otherwise. `--id` defaults to the absolute target basename: `alonabot-plugin-hello` is a marketplace ID; `my_plugin` stays a local ID with a missing-prefix warning. Invalid directory names preserve original characters in the error and request explicit `--id`. Default role is plugin; `--role agent|adapter|webui` creates others. Adapter `--adapter-id` defaults to final component ID and can be overridden. Plugin/Agent export `New()` with a schema and an English example command directly replying `Hello AlonaBot`; add i18n yourself when needed. Adapter provides an instance schema; WebUI provides `assets/index.html`. Generated Go/plugin.yaml have no comments. Templates ignore `data/`/`bin/`; overlays supply production thin entry points. See [devbot](../examples/devbot/README.md) for library hosts.
+
+Inside an existing Go module, reuse its go.mod. External empty directories default the module to the directory name; override with `--module example.com/myplugin`. A release CLI requires SDK at its own module version and runs `go mod tidy` in the project, allowing immediate `run`. Dependency resolution failure keeps the project, exits unsuccessfully and prints manual recovery commands. Development `(devel)` builds (including local `+dirty` and automatic checkout pseudoversions) prompt `go get github.com/AlonaBot/AlonaBot@<version>` for the author to select. Change the example source in `plugin.yaml` before publishing.
+
+### Run, transport and reload
+
+Run `alonabot run` in a component project with `plugin.yaml`, or provide one/more directories explicitly:
+
+```sh
+bin/alonabot run ./alonabot-plugin-hello ./myadapter --data-dir ./data --reload
+bin/alonabot run ./alonabot-plugin-hello ./mywebui --data-dir ./data --reload
+bin/alonabot run ./examples/plugins/lifecycle --stdio
+```
+
+Without directories, current `plugin.yaml` runs that project; otherwise installed records start Core. Manifest defines identity/role; project validation/process builds finish before starting components. Duplicate directories/IDs fail, as do process-component ID/`adapter_id` conflicts with installed packages.
+
+Builds reuse internal generation and `go build`, writing executables to `<data_dir>/dev/bin/`. Overlays supply resources/thin entry points without changing author source/module files. Plugin/Agent build their entry package; importable Adapter projects export `New()`, with generated entry point calling `sdk.RunAdapter(New())`.
+
+Supervisor runs development components separately, using TCP loopback by default. `--stdio` switches all Native separate processes for this run: development/installed components, candidates, restarts, reloads, recovery and wakes. `alonabot run --stdio` also starts installed components. Transport selection is run-local; static WebUI/in-process mechanisms remain. Generations are `dev:<component ID>`; configuration loads each time from `<data_dir>/plugins/<id>/config.json`, treating absence as an empty object, and prepared configuration is saved in the generation snapshot. Managed SQLite `dev.sqlite` persists there across restarts. Adapter instances come from `core_config.json`'s `adapters`. Development logging defaults to debug; explicit `log.sources` wins.
+
+Every `DEV_RELOAD_POLL`, `--reload` checks source, `//go:embed` resources, `go.mod`, `go.sum`, `plugin.yaml`, both configuration Schemas and `i18n/`, excluding data/vendor/testdata and dot/underscore-prefixed directories. Default 500ms; override with e.g. `--args DEV_RELOAD_POLL=1s`.
+
+Source/resource changes rebuild and restart only changed components after success. Compile failures keep diagnostics and old components running. Only `config.json` changes directly restart that component; one Adapter-instance change restarts only it, preserving binary bytes. `--reload=false` builds/runs once; no development directories means ordinary Core operation without polling.
+
+`--reload` also watches other `core_config.json` settings: `admins` immediately changes Core Admin, prefixes read shared current settings, `default_locale` affects new Sessions. Adapter `default_instance` changes immediately redirect sends without explicit instance; `log.level` immediately changes global logging, with explicit run `--log-level`/library `LogLevel` still taking priority. These preserve processes/instances. Combined settings/instance edits refresh settings first, then restart affected instances. Read failure logs errors and keeps old settings. CLI serializes refresh with management operations via `internal/app.Core.ReloadSettings(ctx)`.
+
+`role: webui` serves the manifest's `assets` directory directly as static root, overriding installed WebUI like `alonabot.WebUI(os.DirFS(<assets directory>))`. Only one WebUI directory is accepted; duplicates fail before starting any component. Development WebUI skips Admin API major-version checks. Static files are read per request, so edits appear immediately without builds/restarts/`--reload`.
+
+Attach debuggers to component PIDs for separate processes; use library mode below to debug Core/components together.
+
+## Author tools
+
+Plugin packages export `func New() *sdk.Plugin`, registering commands/lifecycle/business behavior on `sdk.NewPlugin()`. Build tools scan manifest, configuration/Service Schemas, i18n and argument names into overlays. Author projects have no `alonabot_gen.go` or generation-related author code. Build or check read-only:
+
+```fish
+bin/alonabot build ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,b
+bin/alonabot check ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,b
+```
+
+`build/check` use `--goos`/`--goarch`, defaulting to Go environment; `pack` repeats `--target <os>/<arch>`, defaulting to host. All use `--tags`, and scan/dependency analysis/release compilation use `CGO_ENABLED=0`. Development BuildDev inherits development cgo. `build` outputs to `<project>/bin`, overridable with `--out DIR`. Process output includes `component` (`component.exe` on Windows), resource sidecars and packaged `plugin.yaml`, preserving author manifest. Static WebUI build publishes assets/manifest; Go-entry WebUI also builds a platform process, as official WebUI does. `check` scans entry/resources read-only, retaining all diagnostics/locations.
+
+`test` builds a host component in a fresh temporary data directory, performs real handshake/preparation/registration/activation/shutdown, and reports commands/cleanup. Adapter has zero platform instances; WebUI checks static resource loading. Process Bootstrap supplies absolute `plugin_data/<id>/` under the temporary state root, removed at test end. Preparation/registration/stop/cleanup failure exits nonzero.
+
+`pack` scans/checks/builds per `--target`, creating `<id>-<version>-<os>-<arch>.tar.gz`; static WebUI creates one `<id>-<version>-any.tar.gz`, Go-entry WebUI builds per platform. Archives share one `release.json` listing all assets; `--out` defaults as for build. URLs join `--asset-base` and archive name. Omitted base derives `https://github.com/<owner>/<repo>/releases/download/v<version>` from `source: github.com/<owner>/<repo>`; other sources need explicit absolute https prefix retaining path with no query/fragment. Process `build-info` is `debug.BuildInfo.String()` text. Generated code/sidecars/archives share the validated scan snapshot and normalized schema; resources saved after scanning wait until the next build.
+
+When configuration `example` fields reference images, `check`/`build`/`pack` validate both schemas' references/image signatures; referenced images enter build output/archive with the snapshot. See [reply examples](plugin-guide.md#reply-examples-for-configuration-fields).
+
+```fish
+bin/alonabot pack ./alonabot-plugin-hello --target linux/amd64 --target linux/arm64 \
+  --asset-base https://example.com/releases/v0.1.0 --key ./release.key --out ./dist
+```
+
+Optional `--key` reads a standard base64 64-byte Ed25519 private key, allowing surrounding whitespace. It signs exact final merged-manifest bytes once and writes standard-base64 `release.json.sig`/`release.pub`. Omission creates unsigned releases and removes stale output signatures/keys. Key/signing failures return directly. Keep private keys, runtime configuration and data outside packaged resources.
+
+## Library mode: one process
+
+Root `alonabot` provides `Run`, `Start`, `*Core`, `Wait`, and options `Plugin`, `Adapter`, `WebUI`, `DataDir`, `Args`, `Listen`, `LogLevel`, `LogFormat`, forwarding to `internal/app` to run Core/development components together. See `examples/devbot`:
+
+```go
+core, err := alonabot.Start(ctx, alonabot.DataDir(dir), alonabot.Plugin(plugin.New()), alonabot.Adapter(adapter.New()))
+if err != nil {
+	return err
+}
+return core.Wait() // ctx 取消（例如 SIGTERM）后在 STOP_TOTAL 内停止全部组件
+```
+
+```fish
+bin/alonabot build ./examples/devbot
+examples/devbot/bin/devbot -data-dir ./data
+```
+
+Components register source=dev and generation `dev:<component ID>`. `alonabot build <main directory>` scans component entries in main dependencies (including third-party module cache), embedding resources through main's overlay. Default output is only `<main directory>/bin/<directory name>` (`.exe` on Windows), adjustable with `--out`. Component/module-cache source stays read-only; multiple New calls from one package share resources, and main package variables may call New. Plain `go build` outputs return an English prompt to use `alonabot build`/`alonabot run` before starting resource-missing components.
+
+After library source/resource edits, rebuild with `alonabot build` and restart. Unhandled background panics exit the whole process nonzero without bounded restarts; caught SDK Handler panics log stacks/return `INTERNAL`. `Wait` errors if components exceed the stop budget. Supervisor isolates/separately recovers processes. Both modes default SIGINT/SIGTERM total shutdown to `STOP_TOTAL=10s`. Dev-source update/rollback/uninstall return `FAILED_PRECONDITION`; WebUI/CLI save development configuration and restart. See [development runs](#development-runs-and-hot-reload) for manual configuration polling.
+
+Root `alonabot_test.go`'s `TestLibraryLifecycle` checks public library entry points; nine `internal/app/` integration-test files cover assembly/internal services/candidates/WebUI. Development CLI/hot-deployment tests cover separate-process components through `internal/app` and individual restarts; CLI end-to-end tests are in `tests/e2e/`.
+
+## Adapter HTTP routes
+
+Adapters declare `[]adapter.HTTPRoute` in `adapter.Descriptor.HTTP` under `/plugins/<Adapter package ID>/...` on the shared port, such as OneBot 11 reverse WebSocket. Private routes need Core sessions; non-GET/HEAD Cookie requests need CSRF/Origin. Zero `Auth` requires Core session. Public `Auth: adapter.AuthPlatformToken` preserves incoming `Authorization` for Adapter platform-credential validation/platform error responses. Plugin routes always strip `Authorization`. Both strip incoming Cookie/CSRF/Forwarded/X-Forwarded-* and inject an internal proxy credential, constant-time checked/removed by SDK before user Handler. WebSocket Upgrade forwards bidirectionally without normal request deadlines; Core closes it on route withdrawal/Session invalidation.
+
+## Dynamic reminders and static task pause/resume
+
+To remind the current chat in ten minutes, register task/handler in `New()` and create its instance from the command. Full [showcase](../examples/plugins/showcase/main.go): `/demo remind meeting 600 开会` creates the current user's `meeting` reminder in this chat, `/demo cancel meeting` cancels. Same user/chat/key replaces it; different users/chats are independent. Replies preserve the user key.
+
+```go
+type ReminderArgs struct {
+    Session string `json:"session"`
+    Text    string `json:"text"`
+}
+
+// 创建与取消共用编码，将可信身份与用户 key 一起放入内部 key。
+func reminderKey(c *sdk.Context, key string) (string, error) {
+    user, session := c.User(), c.Session()
+    internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
+    if len(internalKey) > 128 {
+        return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
+    }
+    return internalKey, nil
+}
+
+// New 中创建并登记一次，命令闭包持有同一个声明值。
+reminder := task.Define[ReminderArgs]("remind")
+task.On(p, reminder).Handle(func(c *sdk.Context, args ReminderArgs) error {
+    _, err := c.SendTo(args.Session, message.Text(args.Text))
+    return err
+})
+p.Command("remind").Handle(func(c *sdk.Context, key, text string) (message.Content, error) {
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return nil, err
+    }
+    _, err = reminder.At(c, time.Now().Add(10*time.Minute),
+        ReminderArgs{Session: c.Session(), Text: text}, task.Key(internalKey))
+    if err != nil {
+        return nil, err
+    }
+    return message.Text(key), nil
+})
+p.Command("cancel").Handle(func(c *sdk.Context, key string) error {
+    internalKey, err := reminderKey(c, key)
+    if err != nil {
+        return err
+    }
+    return reminder.Cancel(c, internalKey)
+})
+```
+
+`reminderKey` uses trusted `c.User()`/`c.Session()` with length prefixes separating full fields. The 128-byte cap includes identity scope/user key; overflow explicitly returns `INVALID_ARGUMENT`, preserving original input. Import standard `fmt`, `sdk/errcode`, `sdk/task`.
+
+Task callbacks have no Actor/default chat; encode needed chat/user/cancellation key in arguments and send with `c.SendTo(sid, content)`. Proactive sends follow Core `allowed_adapter_instances`. Argument types follow JSON Service rules: package-level named, nongeneric value types encoding top-level JSON objects. Generation checks nested fields/custom-encoding restrictions. Run tests directly or `alonabot build` after new declarations.
+
+`reminder.Every(ctx, time.Hour, args, task.Key(internalKey))` creates intervals; `reminder.Cron(ctx, "0 9 * * *", args, task.Key(internalKey), task.Timezone("Asia/Shanghai"))` uses IANA timezones. `internalKey` retains the identity encoding above. `Timezone` on `At`/`Every` returns `INVALID_ARGUMENT`. Without `Key`, SDK generates/returns a random key. Recreating the same task/key replaces its full rule/arguments while an old in-flight run continues. `Cancel` deletes/cooperatively cancels; slots release when handlers return. Unknown instances preserve Core `NOT_FOUND`.
+
+`reminder.List(ctx)` reads every page and returns complete `task.Instance[ReminderArgs]`. Only the relevant `At`, `Interval` or `Cron` is populated, with Cron `Timezone`; `NextAt == nil` means no next trigger in protocol. Any page/decode failure returns error.
+
+Task clients work after Activated; `OnStart`, `OnReady`, after stop and expired Handler Contexts return `FAILED_PRECONDITION`. Pass `c` within Handlers to retain parent association; independent background contexts carry only component identity. Core persists definitions/interval origins, scheduling the next future trigger after restart. Missed offline/inactive/paused triggers lapse; expired one-shot instances are deleted.
+
+Keep declaring static tasks in `New()`, e.g. `p.Every("tick", time.Minute).Handle(tick)`. Pause/resume/query from activated Handlers/background work:
+
+```go
+if err := task.Pause(ctx, "tick"); err != nil {
+    return err
+}
+state, err := task.Status(ctx, "tick")
+if err != nil {
+    return err
+}
+if state.LastAt != nil {
+    slog.Info("last tick", "at", *state.LastAt)
+}
+return task.Resume(ctx, "tick")
+```
+
+`task.State.LastAt` is the last actual dispatch during this Core run, `nil` before first dispatch/after restart. Paused means `Paused=true`, `NextAt=nil`. Pause lets in-flight handlers continue; resume schedules future triggers from persisted interval origin. Pause survives restart; repeated pause/resume succeeds; unregistered job IDs return `NOT_FOUND`.
+
+## Plugin tests
+
+Call `New()` directly from plugin `main_test.go`, using `plugintest.Start` for real Core/SDK Session/test Adapter. For lifecycle `/ping`:
+
+```go
+package main
+
+import (
+    "testing"
+
+    "github.com/AlonaBot/AlonaBot/plugintest"
+)
+
+func TestPing(t *testing.T) {
+    p := New()
+    h := plugintest.Start(t, plugintest.Plugin(p))
+    alice := plugintest.User{ID: "alice"}
+    result := h.Text(plugintest.Private(alice.ID), alice, "/ping")
+    result.RequireReply(t, "pong")
+}
+```
+
+`RequireReply(t, want)` checks every Handler Outcome error, then requires exactly one send with `Sent.Text()` equal to want, reporting plugin/route identity or actual sends on failure. For image/mixed replies also inspect `result.Sends[0].Chain`.
+
+Run `go test ./...` directly. plugintest scans identity/resources from the plugin entry package, using test-binary GOOS/GOARCH/build tags, once per entry package/process. Each Start creates independent temporary directory/configuration/`dev.sqlite`, stopping components at cleanup. Call injection/reads sequentially within one Harness.
+
+`Message(chat, user, message.Chain{...})` injects mixed segments; `Sent.Text()` extracts ordered text. `Sent.To`, `Chain`, `Result` preserve target/chain/receipt; `Op` distinguishes send/edit, `Edited` holds edit handles. `Event` injects extension events declared through `Adapter`.
+
+**Permissions and configuration.** `Admin("root")` registers Core Admin; `User.Permissions` carries platform permissions declared through `Adapter`. For example:
+
+```go
+moderator := plugintest.User{
+    ID: "mod",
+    Permissions: []sdk.Permission{sdk.PermissionName("plugintest.moderator")},
+}
+h := plugintest.Start(t, plugintest.Plugin(p), plugintest.Admin("root"),
+    plugintest.Adapter(plugintest.AdapterID, adapter.PermissionDeclaration{
+        Name: "plugintest.moderator", Implies: []string{"chat_admin"}, LabelKey: "moderator",
+    }))
+result := h.Text(plugintest.Group("room"), moderator, "/mod")
+```
+
+Here `sdk`/`adapter` come from `sdk`/`sdk/adapter`. Supply configuration matching the tested plugin's Schema:
+
+```go
+h := plugintest.Start(t, plugintest.Plugin(p),
+    plugintest.Config(p, `{"greeting":"Hello"}`),
+    plugintest.AllowedInstances(p, plugintest.InstanceID),
+    plugintest.Capabilities("message.send", "message.edit"))
+```
+
+`AllowedInstances` defaults to all; `AllowedInstances(p)` makes it empty, causing job/background explicit sends to return `PERMISSION_DENIED`, while trusted inbound replies retain their exemption. `Capabilities` replaces defaults entirely, allowing the example to check button/album `UNSUPPORTED` and plugin fallback. Rejected sends preserve errors in Outcome.
+
+**Buttons.** Click an action name from sent output, specifying this click's user. Core restores action/version/business values from tokens and authorizes each click:
+
+```go
+menu := h.Text(plugintest.Group("room"), alice, "/menu")
+clicked := h.Click(plugintest.User{ID: "bob"}, menu.Sends[0], "first")
+```
+
+Missing actions, URL buttons and absent send receipts are invalid test inputs reported through `t.Fatal`. Expired tokens, invalid generations and denied permissions return empty sends/Handler Outcomes.
+
+**Static and dynamic tasks.** `h.Trigger(p, "tick")` runs a registered static task now; `h.TriggerTask(p, "remind", key)` finds an existing instance using Core's saved arguments. Both use normal Scheduler REQUEST/RESPONSE, job scope, slots/deadlines; Handlers target sends with `c.SendTo(sid, content)`. Admission/lookup errors fail tests; dispatched Handler errors remain in `Result.Outcomes`.
+
+Create showcase reminders through commands, then trigger using the full internal user/chat key:
+
+```go
+h.Text(chat, alice, "/demo remind lunch 3600 soup")
+user := message.UID(plugintest.AdapterID, alice.ID)
+session := message.SID(plugintest.AdapterID, "private:alice", "")
+key := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, "lunch")
+reminder := h.TriggerTask(p, "remind", key)
+```
+
+See [showcase/main_test.go](../examples/plugins/showcase/main_test.go). One-shot instances consume on actual dispatch; recurring instances retain origins/future ticks. Explicit triggering of paused/running static tasks or running/queued dynamic instances returns `FAILED_PRECONDITION`; full plugin dynamic concurrency uses the existing due queue.
+
+**Multi-turn waits.** After `core.wait`, injection returns immediately with `Result.Waiting=true` and the waiting route's `Outcome.Waiting=true`; question sends remain in current `Sends`. Inject the next same-user/chat message normally:
+
+```go
+question := h.Text(chat, alice, "/ask")
+if !question.Waiting {
+    t.Fatalf("ask = %+v", question)
+}
+answer := h.Text(chat, alice, "answer")
+```
+
+Sends/final errors after matching the wait belong to the new injection until continuation completes/waits again. Other users/chats dispatch normally. Core's completion/wait notification determines injection return.
+
+**Background sends.** `h.Background()` returns/clears undelivered sends/edits in Adapter acceptance order. Sends between injection start/completion notification arrive in `Result.Sends`; others remain for Background, consumed once. Control background timing through your own channels and read after Send returns:
+
+```go
+send, done := make(chan struct{}), make(chan error, 1)
+var cancel context.CancelFunc
+p.OnReady(func(ready context.Context) error {
+    ctx, stop := context.WithCancel(context.WithoutCancel(ready))
+    cancel = stop
+    go func() {
+        select {
+        case <-send:
+        case <-ctx.Done():
+            return
+        }
+        _, err := sdk.Send(ctx, "plugintest:private:alice", message.Text("background"))
+        done <- err
+    }()
+    return nil
+})
+p.OnStop(func(context.Context) error { cancel(); return nil })
+h := plugintest.Start(t, plugintest.Plugin(p))
+send <- struct{}{}
+if err := <-done; err != nil {
+    t.Fatal(err)
+}
+records := h.Background()
+```
+
+OnReady's callback context cancels on return. This example retains Session ownership while OnStop manages background lifetime. Channels determine send timing; Core notifications determine injection completion.
+
+Complete examples cover echo/lifecycle/showcase/configdb/media. See [plugin guide](plugin-guide.md#store-small-amounts-of-state) for configdb KV/files:
+
+```sh
+go test -race -count=2 ./plugintest/... ./examples/plugins/...
+```
+
+**LLM substitute.** Use `LLM(handler)` to supply generation results. Plugins still invoke the test Agent through `@agent/llm.generate` in the same Core. First register commands before returning from `New()` (import `sdk/llm`, `sdk/message`):
+
+```go
+p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
+    text, err := llm.Ask(c, prompt)
+    if err != nil {
+        return nil, err
+    }
+    return message.Text(text), nil
+})
+```
+
+Add this to same-package `main_test.go`; plugintest automatically scans caller `llm.Request`/`llm.Response` Schemas:
+
+```go
+package main
+
+import (
+    "context"
+    "testing"
+
+    "github.com/AlonaBot/AlonaBot/plugintest"
+    "github.com/AlonaBot/AlonaBot/sdk/errcode"
+    "github.com/AlonaBot/AlonaBot/sdk/llm"
+)
+
+func TestLLMReply(t *testing.T) {
+    p := New()
+    h := plugintest.Start(t, plugintest.Plugin(p),
+        plugintest.LLM(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+            if len(req.Messages) != 1 || req.Messages[0].Role != "user" || req.Messages[0].Text != "hello" {
+                return llm.Response{}, errcode.InvalidArgument.New("unexpected prompt")
+            }
+            return llm.Response{
+                Text: "fixed answer", Provider: "synthetic", Model: "test-model",
+                InputTokens: nil, OutputTokens: nil,
+            }, nil
+        }))
+    alice := plugintest.User{ID: "alice"}
+    result := h.Text(plugintest.Private(alice.ID), alice, "/llm hello")
+    result.RequireReply(t, "fixed answer")
+}
+```
+
+Nil usage above stays nil after Service encoding; known zero usage returns `*int` pointing to `0`. For failure checks replace the handler with:
+
+```go
+plugintest.LLM(func(context.Context, llm.Request) (llm.Response, error) {
+    return llm.Response{}, errcode.Unavailable.New("synthetic generation failure")
+})
+```
+
+The same command yields empty `result.Sends`; `result.Outcomes[0].Err` retains `errcode.Unavailable`/`Message`. Without LLM, `@agent` also returns `UNAVAILABLE`. Last LLM function wins; `LLM(nil)` fails before Start. Handlers receive associated contexts and should honor cancellation/deadlines. Schema validates structure; handlers determine business rules/errors.
+
+See full integration test [plugintest/llm_test.go](../plugintest/llm_test.go). Run:
+
+```sh
+go test -race -count=2 ./plugintest/...
+```
+
+## Protocol and session behavior
+
+Component protocol version **1.0** is independent of product version **0.1.0**. The current message types and field numbers are defined in [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1); the [wire runtime](../internal/wire) implements framing and Session calls. Change `.proto` sources and regenerate Go output. Preserve published field numbers and enum values; reserve removed names/numbers and keep existing field types. [Protocol-number checks](../contracts/wirespec_test.go) protect these identities.
+
+TCP and stdio both encode a four-byte unsigned big-endian length followed by a Protobuf Envelope. The length excludes its prefix and must be 1–4,194,304 bytes. Zero, oversized, truncated or undecodable frames fail the Session; readers do not guess the next boundary. Each connection has one writer. Core holds its loopback TCP listener (`127.0.0.1:0`) until termination. Each component start receives a new Session and 32-byte secret; authentication verifies the secret in constant time plus identity, digest and protocol version. With stdio, stdin/stdout carry protocol frames and stderr carries logs. Keep Bootstrap secrets, configuration, database and HTTP credentials out of logs.
+
+Activation proceeds through HELLO → HELLO_ACK/Bootstrap → REGISTER → PREPARED → ACTIVATE → OnReady → ACTIVATED. Ordinary business calls start only after activation. Protocol majors must agree; the negotiated minor is the smaller supported value. Required capabilities must be supported by both sides; `http_listener` is version 1. See [control.proto](../contracts/proto/alonabot/v1/control.proto) and [route.proto](../contracts/proto/alonabot/v1/route.proto) for registration and lifecycle payloads.
+
+Calls match `(session_id, initiator_side, call_id)`. Call IDs are nonzero, monotonically increasing per direction and never reused in a Session. A parent must identify a still-active Core-initiated call in that same Session. Deadlines are absolute UTC milliseconds; children retain the parent's deadline or shorten it. Cancellation is cooperative and leaves completed side effects intact. Payload and ErrorInfo can coexist for partial results: preserve both. Default request timeout is 30 seconds. A Session failure completes pending calls with their actual errors; invalid authentication closes the connection without exposing credentials.
+
+Use `alonabot tune list` for the full current tuning table, including names, units, defaults, effective values, constraints and sources. `--args NAME=value` applies the same validation. [internal/tune/params.go](../internal/tune/params.go) defines the values; [deployment](deployment.md#plugin-hibernation) explains wake budgets and [plugin development](plugin-guide.md) explains continuations, storage and tasks. Frame size remains fixed at 4 MiB. Phase budgets default to HELLO 10s, configuration 60s, migration 15m, OnStart 60s and OnReady 30s; stopping has 10s total, including 6s drain and 4s OnStop. Crash recovery permits three crashes per five-minute window. Components must honor cancellation in their own handlers and background work.
+
+### Command menu wire additions
+
+The Core→Adapter service `adapter.command.menu` handles set/get/delete; plugin→Core `core.command.menu` handles set/get/delete/status/sync, taking a missing instance from the in-flight parent's trusted instance. Both use schema_version=1. `AdapterInstanceStartResponse.command_menu=5` is optional; absence retains legacy `adapter.commands.sync`. Its CommandMenuConfig has bool auto_sync_commands=1 and clear_commands_on_disable=2. `CommandSpec.menu=14` defaults to false; trusted `MediaSource.mime=6` is a string.
+
+The shared messages are `CommandMenuRequest{instance_id=1, operation=2, menu=3}`, `CommandMenu{scope=1, language_code=2, commands=3}`, `CommandMenuScope{type=1, chat_id=2, user_id=3}`, `CommandMenuEntry{name=1, description=2}`, `CommandMenuResponse{commands=1, config=2, ready=3, last_error=4, positions=5}` and `CommandMenuPosition{scope=1, language_code=2, mode=3, owner_plugin_id=4}`. commands and positions are repeated. Scope types are default/chat/chat_administrators/chat_member; plugins use the last three, without threads.
+
+`EventPayload.kind` adds command_menu_ready=13, with string fields adapter_id=1, adapter_instance_id=2, account_id=3 and chat_id=4. Core targets `bot.command_menu_ready`; an empty chat_id indicates instance manual readiness, otherwise chat availability. Adapter-reported standard events retain the existing allowlist. See the [Adapter protocol](../contracts/proto/alonabot/v1/adapter.proto), [routes](../contracts/proto/alonabot/v1/route.proto) and [messages](../contracts/proto/alonabot/v1/message.proto) for definitions, and [command menus](plugin-guide.md#command-menus) for lifecycle and permission rules.

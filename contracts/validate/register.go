@@ -13,10 +13,11 @@ import (
 	"unicode"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/schedule"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
-// HTTP Listener 只接受这两个 loopback 地址（WIRE-FORMAT §3.3）。
+// HTTP Listener 只接受这两个 loopback 地址。
 const (
 	LoopbackIPv4 = "127.0.0.1"
 	LoopbackIPv6 = "::1"
@@ -27,6 +28,22 @@ const maxServiceNameLength = 64
 
 // maxToolDescriptionBytes 固定工具说明的注册字节上限。
 const maxToolDescriptionBytes = 1024
+
+const scheduleRoutePrefix = "job."
+
+// 动态任务名的字符与长度分开检查，避免编译展开有界重复。
+const maxTaskNameLength = 64
+
+var taskNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
+
+const taskRoutePrefix = "task."
+
+const (
+	// OptionsQuerySchemaID 固定 SDK 选项查询输入的类型标识，版本为 1。
+	OptionsQuerySchemaID = "github.com/AlonaBot/AlonaBot/sdk/options.Query"
+	// OptionsPageSchemaID 固定 SDK 选项查询输出的类型标识，版本为 1。
+	OptionsPageSchemaID = "github.com/AlonaBot/AlonaBot/sdk/options.Page"
+)
 
 // routeKindOf 给出 RouteDescriptor 的 spec 分支对应的 kind。
 func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
@@ -39,6 +56,8 @@ func routeKindOf(r *pb.RouteDescriptor) pb.RouteKind {
 		return pb.RouteKind_ROUTE_KIND_HOOK
 	case *pb.RouteDescriptor_Service:
 		return pb.RouteKind_ROUTE_KIND_SERVICE
+	case *pb.RouteDescriptor_Task:
+		return pb.RouteKind_ROUTE_KIND_TASK
 	case *pb.RouteDescriptor_Schedule:
 		return pb.RouteKind_ROUTE_KIND_SCHEDULE
 	case *pb.RouteDescriptor_Http:
@@ -55,11 +74,15 @@ func IsJSONObject(b []byte) bool {
 	return len(b) > 0 && b[0] == '{' && json.Valid(b)
 }
 
-// Register 原子校验整份注册集（WIRE §3.1/§3.3）：任一项不合法都整体拒绝，调用方不得保留部分注册。
-// 命令路径、别名、事件过滤器、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
+// Register 原子校验整份注册集：任一项不合法都整体拒绝，调用方不得保留部分注册。
+// 命令路径、别名、事件过滤器与按钮 action、定时任务、HTTP 路由与 Listener、Service 与 Bus 订阅随整份描述一起检查。
 func Register(r *pb.Register) error {
+	return register(r, false)
+}
+
+func register(r *pb.Register, isAdapter bool) error {
 	// 1. 先检查描述身份、分支与注册公共字段。
-	if r.GetAdapter() != nil {
+	if !isAdapter && r.GetAdapter() != nil {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "plugin registration contains adapter descriptor")
 	}
 	seen := make(map[string]bool, len(r.GetRoutes()))
@@ -75,6 +98,9 @@ func Register(r *pb.Register) error {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has an invalid kind", id)
 		case routeKindOf(rd) != rd.GetKind():
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has kind %s, which does not match its spec", id, rd.GetKind())
+		}
+		if strings.HasPrefix(id, taskRoutePrefix) && rd.GetKind() != pb.RouteKind_ROUTE_KIND_TASK {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q occupies reserved task prefix", id)
 		}
 		permissions := make(map[string]bool, len(rd.GetRequiredPermissions()))
 		for _, permission := range rd.GetRequiredPermissions() {
@@ -102,6 +128,8 @@ func Register(r *pb.Register) error {
 	// 2. 按路由类型检查描述；共享路径表覆盖全部命令及其别名，HTTP 按 method/path 检查冲突，Bus 回调可引用后面的路由。
 	paths := make(map[string]string)
 	httpRoutes := make(map[[2]string]string)
+	actions := make(map[string]string)
+	tasks := make(map[string]bool)
 	for _, route := range r.GetRoutes() {
 		switch route.GetKind() {
 		case pb.RouteKind_ROUTE_KIND_COMMAND:
@@ -123,12 +151,42 @@ func Register(r *pb.Register) error {
 				}
 			}
 		case pb.RouteKind_ROUTE_KIND_HTTP:
-			if err := registerHTTPRoute(httpRoutes, route); err != nil {
+			if err := registerHTTPRoute(httpRoutes, route, isAdapter); err != nil {
 				return err
 			}
 		case pb.RouteKind_ROUTE_KIND_SERVICE:
 			if err := registerService(route); err != nil {
 				return err
+			}
+		case pb.RouteKind_ROUTE_KIND_TASK:
+			name := route.GetTask().GetName()
+			if len(name) > maxTaskNameLength || !taskNamePattern.MatchString(name) || route.GetRouteId() != taskRoutePrefix+name {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "task route %q has invalid name or route_id", route.GetRouteId())
+			}
+			if tasks[name] {
+				return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "duplicate task name %q", name)
+			}
+			tasks[name] = true
+		case pb.RouteKind_ROUTE_KIND_SCHEDULE:
+			if err := registerSchedule(route); err != nil {
+				return err
+			}
+		case pb.RouteKind_ROUTE_KIND_HOOK:
+			filters := route.GetHook().GetEventTypeFilter()
+			switch route.GetHook().GetPhase() {
+			case pb.HookPhase_HOOK_PHASE_PRE_EVENT:
+				if len(filters) != 1 || (!IsEventType(filters[0]) && !IsAdapterEventType(filters[0])) {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one valid event_type_filter", route.GetRouteId())
+				}
+				if filters[0] == "command.invoked" || filters[0] == "bot.command_menu_ready" {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q cannot subscribe to %s", route.GetRouteId(), filters[0])
+				}
+			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
+				if len(filters) != 0 {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "outbound hook route %q must not contain event_type_filter", route.GetRouteId())
+				}
+			default:
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "hook route %q has an invalid phase", route.GetRouteId())
 			}
 		case pb.RouteKind_ROUTE_KIND_BUS_SUBSCRIPTION:
 			subscription := route.GetBusSubscription()
@@ -143,7 +201,8 @@ func Register(r *pb.Register) error {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "bus route %q refers to unknown callback %q", route.GetRouteId(), subscription.GetCallbackRouteId())
 			}
 		case pb.RouteKind_ROUTE_KIND_EVENT:
-			filters := route.GetEvent().GetEventTypeFilter()
+			event := route.GetEvent()
+			filters := event.GetEventTypeFilter()
 			if len(filters) == 0 {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "event route %q has an empty event_type_filter", route.GetRouteId())
 			}
@@ -157,7 +216,35 @@ func Register(r *pb.Register) error {
 				}
 				seenEvents[eventType] = true
 			}
+			if err := registerMessageFilter(route.GetRouteId(), event); err != nil {
+				return err
+			}
+			if seenEvents["button.clicked"] {
+				action := event.GetActionId()
+				if action == "" || event.GetActionSchemaVersion() == 0 {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "button route %q is missing action_id or action_schema_version", route.GetRouteId())
+				}
+				// 发送只携 action_id，同一插件的一个 action 必须唯一对应一个路由。
+				if previous, exists := actions[action]; exists {
+					return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "button action %q conflicts between routes %q and %q", action, previous, route.GetRouteId())
+				}
+				actions[action] = route.GetRouteId()
+			}
 		}
+	}
+	return nil
+}
+
+func registerSchedule(route *pb.RouteDescriptor) error {
+	spec := route.GetSchedule()
+	if spec.GetJobId() == "" || route.GetRouteId() != scheduleRoutePrefix+spec.GetJobId() {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "schedule route %q has invalid job_id or route_id", route.GetRouteId())
+	}
+	if spec.GetJobDeadlineMs() != 0 {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "schedule route %q must use JOB_TIMEOUT instead of job_deadline_ms", route.GetRouteId())
+	}
+	if _, err := schedule.FromSpec(spec); err != nil {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "schedule route %q has invalid trigger: %v", route.GetRouteId(), err)
 	}
 	return nil
 }
@@ -282,13 +369,13 @@ func IsCommandToken(token string) bool {
 func IsEventType(eventType string) bool {
 	switch eventType {
 	case "message.created", "message.edited", "message.deleted", "button.clicked",
-		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline":
+		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline", "command.invoked", "bot.command_menu_ready":
 		return true
 	}
 	return false
 }
 
-func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) error {
+func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor, isAdapter bool) error {
 	spec := route.GetHttp()
 	method, rawPath := spec.GetMethod(), spec.GetPath()
 	switch method {
@@ -305,8 +392,15 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) e
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "HTTP route %q has invalid path %q", route.GetRouteId(), rawPath)
 	}
 	if spec.GetIsPublic() {
-		if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE && spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE {
-			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q must declare callback verification", route.GetRouteId())
+		switch mode := spec.GetAuthMode(); {
+		case mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_STATE, mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_SIGNATURE, mode == pb.HttpAuthMode_HTTP_AUTH_MODE_CALLBACK_NONCE:
+		case mode == pb.HttpAuthMode_HTTP_AUTH_MODE_STATIC:
+			if method != http.MethodGet && method != http.MethodHead {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "static HTTP route %q only allows GET and HEAD", route.GetRouteId())
+			}
+		case isAdapter && mode == pb.HttpAuthMode_HTTP_AUTH_MODE_PLATFORM_TOKEN:
+		default:
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "public HTTP route %q has invalid authentication mode", route.GetRouteId())
 		}
 	} else if spec.GetAuthMode() != pb.HttpAuthMode_HTTP_AUTH_MODE_CORE_SESSION {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "private HTTP route %q must use Core session authentication", route.GetRouteId())
@@ -322,6 +416,15 @@ func registerHTTPRoute(routes map[[2]string]string, route *pb.RouteDescriptor) e
 func registerService(route *pb.RouteDescriptor) error {
 	service := route.GetService()
 	name := service.GetServiceName()
+	if service.GetOptionsSource() {
+		if service.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON ||
+			route.GetInputSchemaId() != OptionsQuerySchemaID || route.GetInputSchemaVersion() != 1 ||
+			route.GetOutputSchemaId() != OptionsPageSchemaID || route.GetOutputSchemaVersion() != 1 ||
+			service.GetAccess() != pb.ServiceAccess_SERVICE_ACCESS_PRIVATE ||
+			len(service.GetAllowlistPluginIds()) != 0 || service.GetTool() != nil {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid options source declaration", name)
+		}
+	}
 	if !IsServiceName(name) || route.GetRouteId() != "svc."+name {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service route %q has invalid name or route_id", route.GetRouteId())
 	}
@@ -357,6 +460,9 @@ func registerService(route *pb.RouteDescriptor) error {
 		}
 		if tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_ALLOW && tool.GetDefaultPolicy() != pb.ToolPolicy_TOOL_POLICY_CONFIRM {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid default policy", name)
+		}
+		if !knownEnum(tool.GetEffect()) {
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q tool has invalid effect %d", name, tool.GetEffect())
 		}
 		var schema jsonschema.Schema
 		if err := json.Unmarshal([]byte(tool.GetInputSchemaJson()), &schema); err != nil {

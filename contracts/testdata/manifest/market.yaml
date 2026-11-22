@@ -1,6 +1,7 @@
 # 合法的市场插件 manifest 样例：manifest 测试以它为基准，逐处改动构造非法输入。
 manifest_version: 1
-id: alonabot_plugin_rss_feed
+name: Demo
+id: alonabot-plugin-rss-feed
 version: 1.2.0-rc.1+build.5
 protocol_min_major: 1
 protocol_max_major: 1
@@ -10,7 +11,6 @@ required_capabilities:
 os: linux
 arch: amd64
 entrypoint: bin/rss
-config_version: 2
 source: github.com/AlonaBot/rss
 migration_mode: versioned
 prepare_effects: managed_db

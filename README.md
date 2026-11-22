@@ -1,21 +1,63 @@
-# AlonaBot
+English · [简体中文](README.zh-CN.md)
 
-轻量级、跨平台的 Go 聊天机器人框架。
+<p align="center">
+  <img src="docs/assets/mascot.png" alt="AlonaBot" width="200">
+</p>
 
-[Wiki](https://github.com/AlonaBot/AlonaBot/wiki) · [文档](docs/index.md) · [讨论区](https://github.com/AlonaBot/AlonaBot/discussions) · [报告问题](https://github.com/AlonaBot/AlonaBot/issues/new/choose) · [安全报告](SECURITY.md)
+<h1 align="center">AlonaBot</h1>
 
-Module：`github.com/AlonaBot/AlonaBot`。
+<p align="center">
+  <a href="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml"><img src="https://github.com/AlonaBot/AlonaBot/actions/workflows/ci.yml/badge.svg?branch=main" alt="Quality gate"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT"></a>
+  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27.1"></a>
+  <a href="https://github.com/AlonaBot/AlonaBot/releases/latest"><img src="https://img.shields.io/github/v/release/AlonaBot/AlonaBot?style=flat-square&amp;color=22B8CF" alt="Release"></a>
+  <a href="https://hits.sh/github.com/AlonaBot/AlonaBot/"><img src="https://hits.sh/github.com/AlonaBot/AlonaBot.svg?style=flat-square&amp;label=Views&amp;color=22B8CF" alt="Views"></a>
+</p>
 
-**当前进度：** 已实现协议契约、生成工具链、manifest/release 校验、SDK 公共类型、受管 SQLite 验证，以及 Core 状态库与锁、Native 插件进程、TCP/stdio 双 IPC、握手/激活/停止生命周期、有限重启；验收证据与未运行项见 [spec/TEST-MATRIX.md §3.1](spec/TEST-MATRIX.md#31-已运行的分项证据t-01t-02)：只在 darwin/arm64 上运行过，Linux/Windows 只做了交叉构建。已接通命令最长路径/别名选择、文本匹配与 Raw、参数绑定、usage/silent 与自动回复、显式事件注册、原目标手动回复、实例许可准入、后台 `sdk.Send`、媒体分块上传 `sdk.Upload`、入站媒体按需读取与转授（`sdk.ReadMedia`/`sdk.GrantMedia`）及发送期间的只读媒体租约、Core 发送服务、插件 HTTP 路由经 Core 公开入口的代理（私有路由尚未接入授权，一律 401）、启动设置文件 `alonabot.yaml`、经 Core Broker 准入的跨插件 Service 调用、非持久 Event Bus 广播（`sdk.Publish`/`sdk.Subscribe`），以及构建期生成插件注册代码的 `alonabot plugin generate`/`plugin check`；Telegram 接收、标准化与入站媒体取件已实现，发送、出站媒体、按钮、命令策略与 Rule、调度和管理等业务能力继续实施；目前只有开发用入口 `alonabot run` 与 `alonabot plugin generate`/`check`，用法见 [docs/development.md](docs/development.md)。
+<p align="center">A lightweight, cross-platform chatbot framework in Go.<br>Install the components you need to build your bot.</p>
 
-最小事件回复示例见 [echo](examples/plugins/echo/main.go)：注册 `message.created`，在 Handler 中调用 `Context.Send`。真实 TCP/stdio 装配和验证见 [echo 集成测试](internal/core/supervisor/echo_test.go)；原 Target 回复无需额外实例许可；显式其他目标和后台发送按 Core 持久化的实例许可逐次准入，撤销在下一次 Send 时生效。许可读写入口当前供 Core 内部使用，CLI 装配与管理入口留给后继切片。许可分项证据见 [TEST-MATRIX §3.3](spec/TEST-MATRIX.md#33-target-与发信许可分项证据)。
+<p align="center">
+  <a href="https://alonabot.github.io/docs/en/">Documentation</a> ·
+  <a href="docs/plugin-guide.md">Plugin development</a> ·
+  <a href="changelog/README.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/wiki">Wiki</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/discussions">Discussions</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/issues/new/choose">Report an issue</a> ·
+  <a href="SECURITY.md">Security reports</a>
+</p>
 
-Telegram Adapter 接收入口见 [alonabot-adapter-telegram](adapters/telegram/cmd/alonabot-adapter-telegram/main.go)，本地 Bot API 模拟服务见 [telegramtest](adapters/telegram/telegramtest/server.go)。已在 darwin/arm64 验证真实私聊消息接收；完整 Core 装配与其他真实平台场景由后继切片联验。
+## Core features
 
-按 [spec/PLAN.md](spec/PLAN.md) 的工作包继续实施；规格索引见 [spec/README.md](spec/README.md)，决策与历史依据见 [spec/adr/README.md](spec/adr/README.md)。开发环境与命令见 [docs/development.md](docs/development.md)，插件作者的规则见 [docs/plugin-guide.md](docs/plugin-guide.md)，模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，代理工作约定见 [AGENTS.md](AGENTS.md)。
+- **Fault isolation**: With separate-process deployment, plugins, Adapters and Agents each run in their own process. A component crash leaves Core running; Core manages startup, shutdown and automatic restarts.
+- **Decoupled modules**: Platform connectivity (Adapters), AI capabilities (Agents) and the management interface (WebUI) are separate from Core. You can replace official implementations with community or custom components at any time.
+- **Low resource usage**: Disabled components do not start processes. Plugins that support hibernation exit when idle to release memory and wake automatically for messages, HTTP requests, scheduled tasks or calls from other components.
+- **Plugin development**: Chainable command and event registration, hot reload, ready-to-use SQLite storage, configuration declarations rendered automatically as WebUI forms, i18n, and a test suite backed by a real Core.
+- **Centralized operations**: Manage component updates, accounts and permissions, models, session settings and runtime logs through WebUI and CLI, with desktop and mobile support.
 
-参与开发先读 [贡献流程](CONTRIBUTING.md) 和 [编码与注释规范](docs/coding-standards.md)；项目维护技能随仓库提供，不依赖个人配置。
+## Official components
 
-- 首发：可安装的组件分为插件、Adapter、Agent 与 WebUI 四种，各自是独立子进程（WebUI 只是静态文件）；官方 Telegram 与 OneBot 11 Adapter、官方 Agent（含记忆，工具调用需用户确认）与官方 WebUI 都可以换成社区组件；命令/文本匹配/事件、多轮等待、Service/广播、调度、配置/数据库、HTTP、管理 CLI、组件安装更新、英文与简体中文的用户文案；面向用户的官方整合包可用发行归档、`install.sh`（Linux systemd、macOS launchd）或 `docker compose` 安装，开箱即用，开发者也可以在自己的 `main.go` 中把框架当作 Go 库运行并热部署，并用插件测试套件在 `go test` 中以真实 Core 测试插件。
-- 后续：更多正式 Adapter、动态命令 Router、持久化的多轮会话、跨会话记忆检索与额外客户端等，按规格范围推进。
-- 实施约束：保持轻量、良好的开发体验和最小必要配置；以编译、集成和目标平台测试记录完成情况。
+| Component | Repository | Bundled deployment |
+| --- | --- | --- |
+| WebUI | [alonabot-webui](https://github.com/AlonaBot/alonabot-webui) | Preinstalled and enabled |
+| Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | Preinstalled; enable after configuration |
+| Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | Install as needed |
+| OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | Install as needed; currently supports receiving |
+| Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) | Install as needed |
+
+## Documentation and contributing
+
+| What you want to do | Start here |
+| --- | --- |
+| Install, configure, upgrade or back up a bot | [Deployment](docs/deployment.md) |
+| Write a plugin, Adapter or Agent | [Plugin guide](docs/plugin-guide.md) |
+| Change Core, SDK or WebUI | [Development](docs/development.md) · [Architecture](ARCHITECTURE.md) |
+| Report a problem, submit a fix or improve documentation | [Contributing](CONTRIBUTING.md) |
+| Look up management APIs and protocol behavior | [Management API](docs/deployment.md#management-api) · [Protocol and sessions](docs/development.md#protocol-and-session-behavior) |
+| Build and verify release artifacts | [Release maintenance](docs/releasing.md) |
+
+Contributions to fixes, platform support, documentation and community components are welcome. Include the version, operating system and reproduction steps when reporting a problem, and redact logs and configuration before sharing them. Discuss larger changes in an Issue first.
+
+## License
+
+AlonaBot and the official components use the [MIT License](LICENSE).

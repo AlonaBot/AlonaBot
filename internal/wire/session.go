@@ -36,6 +36,10 @@ type Request struct {
 	ParentCallID uint64
 	// Attach 只保存在本端；对端以本调用为父发起子请求时，交给子请求的 Handler（Core 借此派生可信上下文）。
 	Attach any
+	// Late 在本地超时或取消后的首个响应到达时，由读循环在锁外调用；回调须及时返回。
+	// 请求尚在队列中时，撤回后在锁外立即以本地结果调用一次；LocalErrorCode 保留本地结束原因。
+	// 准入前期限已过时同样在锁外立即通知，表示没有实际在途执行。
+	Late func(Response)
 }
 
 // Response 携带一次调用的结果；Payload 与 Err 可以同时存在（例如部分发送成功）。
@@ -44,6 +48,8 @@ type Response struct {
 	Err     *pb.ErrorInfo // 对调用者公开的错误；对端发来的未知错误码已映射为 INTERNAL
 	// 对端发来的原始错误码，只供内部诊断；与 Err.Code 不同说明发生了映射。
 	RawErrorCode pb.ErrorCode
+	// LocalErrorCode 仅在 Late 回调中携带先前本地结束的错误码，不上协议帧。
+	LocalErrorCode pb.ErrorCode
 }
 
 // Inbound 描述对端发来的一次调用。
@@ -106,8 +112,11 @@ type Options struct {
 	Event func(env *pb.Envelope, release func())
 	// Admit 在读循环中同步决定是否接受对端的业务 REQUEST（阶段门禁）；返回非 nil 时直接回该错误，不执行 Handler。
 	// 必须在读循环中同步判断：状态变化（如 ACTIVATED）也在读循环中同步生效，帧顺序因此得到保证。
-	Admit  func(*Inbound) *pb.ErrorInfo
-	Global *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
+	Admit func(*Inbound) *pb.ErrorInfo
+	// RequestActivity 在阶段准入后同步取得请求活动，和调用方的停止门禁互斥。
+	// 返回的释放函数在预算拒绝或 Handler 结束时调用；回调持有 Session 锁，须立即返回且避免回读 Session。
+	RequestActivity func(*Inbound) (release func(), err *pb.ErrorInfo)
+	Global          *Budget // 跨 Session 共享的全局预算；为 nil 时不限额（插件侧）
 
 	// 以下可调值为零时使用 tune.Defaults()；正常运行由 Core 与 SDK 显式设置。
 
@@ -147,10 +156,12 @@ type outCall struct {
 	deadline time.Time // 有效期限，子调用不能超过它
 	// Request.Attach，交给以本调用为父的子请求的 Handler。
 	attach any
+	late   func(Response) // Request.Late，本地超时或取消后保留到首个响应或 Session 关闭
 	// result 容量 1，只写一次。
 	result chan Response
 	// eventResult 非 nil 表示无业务回执的 EVENT；只通知写出结果，不登记到 pending。
 	eventResult chan error
+	eventDone   func() // EVENT 撤回或实际写出结束后调用；始终在 Session.mu 外执行。
 
 	// ctx 在调用存续期间有效，结束时取消（子调用以此派生）。
 	ctx context.Context
@@ -200,13 +211,14 @@ type Session struct {
 	nextID uint64 // 本端最近分配的调用编号
 	lastIn uint64 // 对端最近的调用编号，用于检查单调递增
 	// 等待写出的业务帧，按入队顺序排列，只含 queued 状态的发送。
-	biz      []*outCall
-	events   map[*outCall]struct{} // 尚未写完的 EVENT，由 mu 保护
-	pending  map[uint64]*outCall   // 本端发起、尚未完成的调用
-	inbound  map[uint64]*inCall    // 对端发起、尚未响应的调用
-	outBytes int64                 // 本方向仍计入预算的载荷字节
-	inBytes  int64                 // 对端方向在途的载荷字节
-	err      error                 // 关闭原因；非 nil 表示 Session 已关闭
+	biz           []*outCall
+	events        map[*outCall]struct{}     // 尚未写完的 EVENT，由 mu 保护
+	pending       map[uint64]*outCall       // 本端发起、尚未完成的调用
+	lateCallbacks map[uint64]func(Response) // 本地超时或取消后仍等待实际响应的调用；不占业务准入
+	inbound       map[uint64]*inCall        // 对端发起、尚未响应的调用
+	outBytes      int64                     // 本方向仍计入预算的载荷字节
+	inBytes       int64                     // 对端方向在途的载荷字节
+	err           error                     // 关闭原因；非 nil 表示 Session 已关闭
 	// changed 在在途调用数变化时关闭并替换，唤醒 WaitIdle。
 	changed chan struct{}
 
@@ -356,7 +368,7 @@ func (s *Session) SendEnvelopeSync(env *pb.Envelope) error {
 	}
 }
 
-// enqueuePriority 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session（CONTRACTS §1.2）。
+// enqueuePriority 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session。
 func (s *Session) enqueuePriority(env *pb.Envelope) error {
 	return s.enqueuePriorityFrame(priorityFrame{env: env})
 }
@@ -414,7 +426,11 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 	if !deadline.After(time.Now()) {
 		s.mu.Unlock()
-		return Response{}, callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
+		err := callErr(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "deadline already passed; request not sent")
+		if req.Late != nil {
+			req.Late(Response{Err: err.ErrorInfo, LocalErrorCode: pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED})
+		}
+		return Response{}, err
 	}
 	if !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
@@ -431,7 +447,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 	setPayload(env, req.Payload)
 	cctx, cancel := context.WithCancel(context.Background())
-	c := &outCall{id: id, env: env, bytes: n, deadline: deadline, attach: req.Attach, result: make(chan Response, 1), ctx: cctx, cancel: cancel}
+	c := &outCall{id: id, env: env, bytes: n, deadline: deadline, attach: req.Attach, late: req.Late, result: make(chan Response, 1), ctx: cctx, cancel: cancel}
 	s.pending[id] = c
 	s.outBytes += n
 	s.biz = append(s.biz, c)
@@ -455,9 +471,48 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 	}
 }
 
+type eventCompletionKey struct{}
+
+type eventCompletion struct {
+	parent  *eventCompletion
+	claimed bool // 只由同步调用 SendEvent 的 goroutine 读写。
+	finish  func()
+}
+
+// TrackEvent 在内部调用链上登记帧完成通知；返回函数处理未交接给 Session 的同步实现。
+// Session 接管后，取消只结束调用方等待，通知延后至帧撤回或实际写出结束。
+func TrackEvent(ctx context.Context, done func()) (context.Context, func()) {
+	parent, _ := ctx.Value(eventCompletionKey{}).(*eventCompletion)
+	c := &eventCompletion{parent: parent, finish: sync.OnceFunc(done)}
+	return context.WithValue(ctx, eventCompletionKey{}, c), func() {
+		if !c.claimed {
+			c.finish()
+		}
+	}
+}
+
+func claimEvent(ctx context.Context) func() {
+	c, _ := ctx.Value(eventCompletionKey{}).(*eventCompletion)
+	for next := c; next != nil; next = next.parent {
+		next.claimed = true
+	}
+	return func() {
+		for next := c; next != nil; next = next.parent {
+			next.finish()
+		}
+	}
+}
+
 // SendEvent 在 Core 侧发送 EVENT，等待帧写出；事件与 REQUEST 共用业务 FIFO 和载荷预算。
 // ctx 在写出前结束时撤回帧；写出中结束时先返回，预算保留到 writer 完成。
 func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent) error {
+	complete := claimEvent(ctx)
+	accepted := false
+	defer func() {
+		if !accepted {
+			complete()
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -480,10 +535,11 @@ func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent)
 		s.mu.Unlock()
 		return callErr(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "event payload budget is full")
 	}
-	c := &outCall{env: env, bytes: n, eventResult: make(chan error, 1)}
+	c := &outCall{env: env, bytes: n, eventResult: make(chan error, 1), eventDone: complete}
 	s.events[c] = struct{}{}
 	s.outBytes += n
 	s.biz = append(s.biz, c)
+	accepted = true
 	s.mu.Unlock()
 	s.signalBiz()
 	// 2. 只等唯一 writer 的结果；取消通知不产生 CANCEL 帧。
@@ -498,16 +554,22 @@ func (s *Session) SendEvent(ctx context.Context, target string, ev *pb.BusEvent)
 
 func (s *Session) finishEvent(c *outCall, err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if c.finished {
+		s.mu.Unlock()
 		return
 	}
 	c.finished = true
+	var done func()
 	if c.state == queued {
 		s.unqueueLocked(c)
 		c.state = withdrawn
 		s.releaseLocked(c)
 		delete(s.events, c)
+		done, c.eventDone = c.eventDone, nil
+	}
+	s.mu.Unlock()
+	if done != nil {
+		done()
 	}
 	c.eventResult <- err // 容量为 1，结果仅由第一个结束者交付。
 }
@@ -515,12 +577,18 @@ func (s *Session) finishEvent(c *outCall, err error) {
 func (s *Session) writeEvent(c *outCall, env *pb.Envelope) {
 	err := s.write(env)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	c.state, c.env = written, nil
 	s.releaseLocked(c)
 	delete(s.events, c)
-	if !c.finished {
-		c.finished = true
+	notify := !c.finished
+	c.finished = true
+	done := c.eventDone
+	c.eventDone = nil
+	s.mu.Unlock()
+	if done != nil {
+		done()
+	}
+	if notify {
 		c.eventResult <- err
 	}
 }
@@ -631,6 +699,23 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	}
 	c.finished = true
 	delete(s.pending, c.id)
+	// 本地结束后实际执行仍可能返回；只保留回调，载荷与准入按原流程释放。
+	var late func(Response)
+	if reason != pb.CancelReason_CANCEL_REASON_UNSPECIFIED && c.late != nil && s.err == nil {
+		localCode := r.Err.GetCode()
+		notify := func(response Response) {
+			response.LocalErrorCode = localCode
+			c.late(response)
+		}
+		if c.state == queued {
+			late = notify // 请求将被撤回，实际响应永远不会到达。
+		} else {
+			if s.lateCallbacks == nil {
+				s.lateCallbacks = make(map[uint64]func(Response))
+			}
+			s.lateCallbacks[c.id] = notify
+		}
+	}
 	s.notifyChange()
 	sendCancel := false
 	switch c.state {
@@ -649,6 +734,9 @@ func (s *Session) complete(c *outCall, r Response, reason pb.CancelReason) bool 
 	// 2. 交付结果后再通知对端，调用者不等待 Cancel 入队。
 	c.cancel()
 	c.result <- r
+	if late != nil {
+		late(r)
+	}
 	if sendCancel {
 		s.sendCancel(c.id, reason)
 	}
@@ -860,9 +948,22 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 		s.mu.Unlock()
 		return s.respondErr(id, payloadError.Code, payloadError.Message)
 	}
+	// 活动登记与在途插入共用 s.mu；正常停止的 WaitIdle 覆盖整个准入区间。
+	var release func()
+	if s.opt.RequestActivity != nil {
+		var err *pb.ErrorInfo
+		release, err = s.opt.RequestActivity(in)
+		if err != nil {
+			s.mu.Unlock()
+			return s.respondErr(id, err.GetCode(), err.GetSafeMessage())
+		}
+	}
 	// 4. 对端方向的准入预算；通过后登记在途，另起 goroutine 执行 Handler，读循环不等待它。
 	if len(s.inbound) >= s.opt.MaxInflight || s.inBytes+n > s.opt.MaxBytes || !s.opt.Global.Acquire(n) {
 		s.mu.Unlock()
+		if release != nil {
+			release()
+		}
 		return s.respondErr(id, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "in-flight request count or byte budget for this direction is full")
 	}
 	ctx, cancel := context.WithDeadline(parentCtx, deadline)
@@ -870,12 +971,12 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 	s.inBytes += n
 	s.mu.Unlock()
 
-	go s.serve(ctx, cancel, in, n)
+	go s.serve(ctx, cancel, in, n, release)
 	return nil
 }
 
 // serve 执行一次对端调用并回复：Handler 返回后先移出在途表、归还预算，再经优先通道发出 RESPONSE。
-func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64) {
+func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64, finished func()) {
 	defer cancel()
 	// 1. 执行 Handler；没有结果也没有错误时按 INTERNAL 回复。
 	r := s.handle(ctx, in)
@@ -889,13 +990,16 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	s.notifyChange()
 	s.mu.Unlock()
 	s.opt.Global.Release(n)
+	if finished != nil {
+		finished()
+	}
 	env := s.envelope(pb.FrameKind_FRAME_KIND_RESPONSE)
 	env.InitiatorSide, env.CallId, env.Error = s.peer, in.CallID, r.Err
 	setPayload(env, r.Payload)
 	_ = s.enqueuePriority(env)
 }
 
-// handle 调用 Handler；panic 转为 INTERNAL，不当作空成功（CONTRACTS §2.1）。
+// handle 调用 Handler；panic 转为 INTERNAL，不当作空成功。
 func (s *Session) handle(ctx context.Context, in *Inbound) (r Response) {
 	if s.opt.Handler == nil {
 		return Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "this side does not accept calls"}}
@@ -916,7 +1020,7 @@ func (s *Session) respondErr(id uint64, code pb.ErrorCode, msg string) error {
 	return s.enqueuePriority(env)
 }
 
-// onResponse 用 RESPONSE 完成对应的本端调用；迟到、重复或未知的响应只计数。
+// onResponse 用 RESPONSE 完成对应的本端调用；迟到响应计数并调用一次 Late 回调，重复或未知响应只计数。
 func (s *Session) onResponse(env *pb.Envelope) error {
 	if env.GetInitiatorSide() != s.opt.Local {
 		return errors.New("RESPONSE initiator_side is not this side")
@@ -924,8 +1028,17 @@ func (s *Session) onResponse(env *pb.Envelope) error {
 	s.mu.Lock()
 	c := s.pending[env.GetCallId()]
 	s.mu.Unlock()
-	if c == nil || !s.complete(c, responseOf(env), pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
+	response := responseOf(env)
+	if c == nil || !s.complete(c, response, pb.CancelReason_CANCEL_REASON_UNSPECIFIED) {
 		s.late.Add(1) // 迟到、重复或未知：不第二次完成调用
+		s.mu.Lock()
+		late := s.lateCallbacks[env.GetCallId()]
+		delete(s.lateCallbacks, env.GetCallId())
+		s.mu.Unlock()
+		// 先取走回调再解锁执行，使重复响应和回调读取 Session 状态都安全。
+		if late != nil {
+			late(response)
+		}
 	}
 	return nil
 }
@@ -962,6 +1075,7 @@ func (s *Session) fail(err error) {
 		// 1. 记录原因，并在 s.mu 下取出两个方向的在途调用快照。
 		s.mu.Lock()
 		s.err = err
+		s.lateCallbacks = nil // 断链后收不到实际响应；运行槽由外层等进程退出后释放。
 		pending := make([]*outCall, 0, len(s.pending))
 		for _, c := range s.pending {
 			pending = append(pending, c)

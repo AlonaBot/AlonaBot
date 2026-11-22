@@ -1,6 +1,6 @@
 package wire
 
-// Core 启动插件进程时传递的环境变量（CONTRACTS §1.1、§12.2）。子进程只收到这些变量与少量
+// Core 启动插件进程时传递的环境变量。子进程只收到这些变量与少量
 // 平台必需变量；Core 管理凭证与其他插件的凭证从不进入插件环境。
 const (
 	EnvPluginID     = "ALONABOT_PLUGIN_ID"

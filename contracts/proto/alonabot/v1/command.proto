@@ -1,0 +1,28 @@
+// 命令列表固定服务的请求与响应。
+syntax = "proto3";
+
+package alonabot.v1;
+
+import "alonabot/v1/route.proto";
+
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+
+// CommandListRequest 查询父调用的 Actor 在默认 Target 中可用的命令。
+message CommandListRequest {}
+
+// CommandInfo 保存一个主名胜出的路径命令及仍胜出的别名。
+message CommandInfo {
+  string plugin_id = 1;
+  string route_id = 2;
+  // 覆盖后的生效主名。
+  repeated string path = 3;
+  // 按配置顺序保留的生效别名。
+  repeated CommandAlias aliases = 4;
+  // 按调用者语言选择的说明；未登记说明时 absent。
+  optional string description = 5;
+}
+
+// CommandListResponse 按主名的 token 以空格连接后的字典序返回命令。
+message CommandListResponse {
+  repeated CommandInfo commands = 1;
+}

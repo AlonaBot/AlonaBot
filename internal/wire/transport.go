@@ -61,7 +61,7 @@ func (c *Conn) Close() error {
 	return c.closer.Close()
 }
 
-// ListenLoopback 直接在 IPv4 loopback 的临时端口上监听（CONTRACTS §1.1）。调用方持有 Listener
+// ListenLoopback 直接在 IPv4 loopback 的临时端口上监听。调用方持有 Listener
 // 直到会话结束，不采用先探测空闲端口、关闭后再绑定的做法。
 func ListenLoopback() (net.Listener, error) {
 	ln, err := net.Listen("tcp4", loopbackListenAddr)

@@ -1,4 +1,4 @@
-// 工具描述、调用策略与工具目录载荷（CONTRACTS §13.1、WIRE-FORMAT §3.5）。
+// 工具描述、调用策略与工具目录载荷。
 syntax = "proto3";
 
 package alonabot.v1;
@@ -13,6 +13,14 @@ enum ToolPolicy {
   TOOL_POLICY_DENY = 3;
 }
 
+// ToolEffect 提示工具的副作用类别，不参与策略判断。
+enum ToolEffect {
+  TOOL_EFFECT_UNSPECIFIED = 0;
+  TOOL_EFFECT_READ_ONLY = 1;
+  TOOL_EFFECT_WRITE = 2;
+  TOOL_EFFECT_DESTRUCTIVE = 3;
+}
+
 // ToolSpec 声明 JSON Service 的工具说明、缺省策略与输入 Schema。
 message ToolSpec {
   // 给模型的说明。
@@ -21,6 +29,7 @@ message ToolSpec {
   ToolPolicy default_policy = 2;
   // 与该 Service 输入校验使用的 JSON Schema 原文相同。
   string input_schema_json = 3;
+  ToolEffect effect = 4;
 }
 
 // ToolInfo 返回调用者可见工具的描述与生效策略。
@@ -31,6 +40,7 @@ message ToolInfo {
   string input_schema_json = 3;
   // 目录中仅返回 ALLOW 或 CONFIRM。
   ToolPolicy policy = 4;
+  ToolEffect effect = 5;
 }
 
 // ToolListRequest 请求调用插件可调用的工具目录。
@@ -40,3 +50,26 @@ message ToolListRequest {}
 message ToolListResponse {
   repeated ToolInfo tools = 1;
 }
+
+// ToolInvokeRequest 请求在父调用链中执行工具。
+message ToolInvokeRequest {
+  // plugin_id/service_name。
+  string name = 1;
+  string arguments_json = 2;
+}
+
+// ToolInvokeResponse 保留工具返回的 JSON 原文。
+message ToolInvokeResponse {
+  string result_json = 1;
+}
+
+// ToolConfirmRequest 请求确认调用插件即将执行的操作。
+message ToolConfirmRequest {
+  // 调用插件内稳定的操作名，例如 mcp/<server>/<tool>。
+  string operation = 1;
+  string summary = 2;
+  ToolEffect effect = 3;
+}
+
+// ToolConfirmResponse 表示用户允许本次操作。
+message ToolConfirmResponse {}

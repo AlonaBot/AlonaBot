@@ -2,307 +2,80 @@ package sdk
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"runtime/debug"
-	"slices"
 	"strings"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
-	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/registry"
 	"google.golang.org/protobuf/proto"
 )
 
-const serviceRoutePrefix = "svc."
+type serviceRegistry = registry.Services[*Context, Permission]
+type serviceRoute = registry.Service[*Context]
 
-// Access 指定服务允许的直接调用方。
-type Access int
-
-const (
-	// AccessPrivate 只允许 Core 和本插件调用，作为默认访问规则。
-	AccessPrivate Access = iota
-	// AccessAllowlist 允许 Core、本插件和明确列出的插件调用。
-	AccessAllowlist
-	// AccessPublic 允许已启用插件调用。
-	AccessPublic
-)
-
-// ServiceRegistry 收集静态服务；零值可用，Collect 统一返回描述错误。
-type ServiceRegistry struct {
-	services []serviceRoute
-	builders []*serviceBuilder
-	schemas  map[string][]byte
-	errs     []error
-}
-
-type serviceRoute struct {
-	descriptor *pb.RouteDescriptor
-	invoke     func(*Context, []byte) ([]byte, error)
-}
-
-type serviceBuilder struct {
-	name        string
-	access      Access
-	allowlist   []string
-	handles     int
-	afterHandle bool
-	prepare     func() (serviceRoute, error)
-}
-
-// JSONService 构建具名输入/输出类型的 JSON 服务；Handle 结束声明。
-type JSONService[In, Out any] struct {
-	builder         *serviceBuilder
-	handler         func(*Context, In) (Out, error)
-	toolDescription *string // nil 表示未声明为工具，空说明留给注册校验拒绝
-	toolDefault     ToolDefault
-}
-
-// JSON 开始构建 JSON 服务，Schema 由生成器提供。
-func JSON[In, Out any](r *ServiceRegistry, name string) *JSONService[In, Out] {
-	b := &serviceBuilder{name: name}
-	s := &JSONService[In, Out]{builder: b}
-	b.prepare = func() (serviceRoute, error) {
-		// 1. 解析输入输出 Schema 并冻结 Handler，调用时复用校验器。
-		inputID, inputVersion, err := jsonType[In]()
-		if err != nil {
-			return serviceRoute{}, err
+func collectServices(root *Plugin, reg *registration) error {
+	r := &root.services
+	r.Schemas = generatedFor(root).ServiceSchemas
+	r.Services = nil
+	r.Errs = nil
+	seen := make(map[string]bool)
+	for _, b := range r.Builders {
+		component, name, ok := strings.Cut(b.Target, "/")
+		_, componentError := validate.PluginID(component)
+		invalidDeclaration := !ok || !validate.IsServiceName(name) || component != "@agent" && componentError != nil
+		if b.Target == "" && b.Name != "" { // 本组件自有服务只声明名称，归属在注册时确定。
+			invalidDeclaration = !validate.IsServiceName(b.Name)
 		}
-		outputID, outputVersion, err := jsonType[Out]()
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		inputSchema, err := resolveServiceSchema(r.schemas, inputID)
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		outputSchema, err := resolveServiceSchema(r.schemas, outputID)
-		if err != nil {
-			return serviceRoute{}, err
-		}
-		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
-		if handler == nil {
-			return serviceRoute{}, fmt.Errorf("handler is nil")
-		}
-		route := b.route(inputID, outputID, inputVersion, outputVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, func(c *Context, data []byte) ([]byte, error) {
-			if err := validateServiceJSON(inputSchema, data); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "invalid service input"}
-			}
-			var input In
-			if err := json.Unmarshal(data, &input); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "decode service input: " + err.Error()}
-			}
-			out, err := handler(c, input)
-			if err != nil {
-				return nil, err
-			}
-			encoded, err := json.Marshal(out)
-			if err != nil {
-				return nil, fmt.Errorf("encode service output: %w", err)
-			}
-			if err := validateServiceJSON(outputSchema, encoded); err != nil {
-				c.Logger().Error("service output schema validation failed", "schema_id", outputID)
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "invalid service output"}
-			}
-			return encoded, nil
-		})
-		// 2. 工具描述携带同一输入 Schema 原文，完整注册校验交给 Collect。
-		if s.toolDescription != nil {
-			var policy pb.ToolPolicy
-			switch s.toolDefault {
-			case ToolAllow:
-				policy = pb.ToolPolicy_TOOL_POLICY_ALLOW
-			case ToolConfirm:
-				policy = pb.ToolPolicy_TOOL_POLICY_CONFIRM
-			default:
-				return serviceRoute{}, fmt.Errorf("unknown tool default policy %d", s.toolDefault)
-			}
-			route.descriptor.GetService().Tool = &pb.ToolSpec{Description: *s.toolDescription, DefaultPolicy: policy, InputSchemaJson: string(r.schemas[inputID])}
-		}
-		return route, nil
-	}
-	r.builders = append(r.builders, b)
-	return s
-}
-
-// Access 设置直接调用方规则，重复调用采用最后一次。
-func (s *JSONService[In, Out]) Access(a Access, allowlist ...string) *JSONService[In, Out] {
-	s.builder.setAccess(a, allowlist)
-	return s
-}
-
-// Tool 声明给模型的说明与缺省调用策略，输入 Schema 复用生成的 Service Schema 原文。
-// 重复调用采用最后一次；Handle 之后调用由 Collect 报错。
-func (s *JSONService[In, Out]) Tool(description string, defaultPolicy ToolDefault) *JSONService[In, Out] {
-	if s.builder.handles != 0 {
-		s.builder.afterHandle = true
-	}
-	s.toolDescription, s.toolDefault = &description, defaultPolicy
-	return s
-}
-
-// Handle 结束 JSON 服务声明。
-func (s *JSONService[In, Out]) Handle(h func(*Context, In) (Out, error)) {
-	s.builder.handles++
-	s.handler = h
-}
-
-// ProtoService 构建 Protobuf 服务；消息类型提供 Schema 标识。
-type ProtoService[In, Out proto.Message] struct {
-	builder *serviceBuilder
-	handler func(*Context, In) (Out, error)
-}
-
-// Proto 开始构建 Protobuf 服务，版本保持为 1。
-func Proto[In, Out proto.Message](r *ServiceRegistry, name string) *ProtoService[In, Out] {
-	b := &serviceBuilder{name: name}
-	s := &ProtoService[In, Out]{builder: b}
-	b.prepare = func() (serviceRoute, error) {
-		handler := s.handler // 收集后冻结 Handler，保持 Session 注册固定。
-		if handler == nil {
-			return serviceRoute{}, fmt.Errorf("handler is nil")
-		}
-		input, output := newServiceMessage[In](), newServiceMessage[Out]()
-		return b.route(validate.SchemaID(input), validate.SchemaID(output), invocationSchemaVersion, invocationSchemaVersion, pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, func(c *Context, data []byte) ([]byte, error) {
-			input := newServiceMessage[In]()
-			if err := proto.Unmarshal(data, input); err != nil {
-				return nil, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "decode service input: " + err.Error()}
-			}
-			output, err := handler(c, input)
-			if err != nil {
-				return nil, err
-			}
-			encoded, err := proto.Marshal(output)
-			if err != nil {
-				return nil, fmt.Errorf("encode service output: %w", err)
-			}
-			return encoded, nil
-		}), nil
-	}
-	r.builders = append(r.builders, b)
-	return s
-}
-
-// Access 设置直接调用方规则。
-func (s *ProtoService[In, Out]) Access(a Access, allowlist ...string) *ProtoService[In, Out] {
-	s.builder.setAccess(a, allowlist)
-	return s
-}
-
-// Handle 结束 Protobuf 服务声明。
-func (s *ProtoService[In, Out]) Handle(h func(*Context, In) (Out, error)) {
-	s.builder.handles++
-	s.handler = h
-}
-
-func (b *serviceBuilder) setAccess(a Access, allowlist []string) {
-	if b.handles != 0 {
-		b.afterHandle = true
-	}
-	b.access, b.allowlist = a, slices.Clone(allowlist)
-}
-
-func newServiceMessage[T proto.Message]() T {
-	var message T
-	return message.ProtoReflect().Type().New().Interface().(T)
-}
-
-func (b *serviceBuilder) route(inputID, outputID string, inputVersion, outputVersion uint32, encoding pb.PayloadEncoding, invoke func(*Context, []byte) ([]byte, error)) serviceRoute {
-	access := pb.ServiceAccess_SERVICE_ACCESS_UNSPECIFIED
-	switch b.access {
-	case AccessPrivate:
-		access = pb.ServiceAccess_SERVICE_ACCESS_PRIVATE
-	case AccessAllowlist:
-		access = pb.ServiceAccess_SERVICE_ACCESS_ALLOWLIST
-	case AccessPublic:
-		access = pb.ServiceAccess_SERVICE_ACCESS_PUBLIC
-	}
-	return serviceRoute{descriptor: &pb.RouteDescriptor{
-		RouteId: serviceRoutePrefix + b.name, Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true,
-		InputSchemaId: inputID, InputSchemaVersion: inputVersion, OutputSchemaId: outputID, OutputSchemaVersion: outputVersion,
-		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: b.name, Access: access, AllowlistPluginIds: b.allowlist, Encoding: encoding}},
-	}, invoke: invoke}
-}
-
-func jsonType[T any]() (string, uint32, error) {
-	typ := reflect.TypeFor[T]()
-	if typ.PkgPath() == "" || typ.Name() == "" || strings.Contains(typ.Name(), "[") {
-		return "", 0, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: fmt.Sprintf("JSON type must be a named non-generic value type: %s", typ)}
-	}
-	version := uint32(1)
-	if value, ok := any(*new(T)).(interface{ SchemaVersion() uint32 }); ok {
-		version = value.SchemaVersion()
-	}
-	return typ.PkgPath() + "." + typ.Name(), version, nil
-}
-
-func resolveServiceSchema(schemas map[string][]byte, id string) (*jsonschema.Resolved, error) {
-	raw, ok := schemas[id]
-	if !ok {
-		return nil, fmt.Errorf("service schema for %s is not generated; run alonabot plugin generate", id)
-	}
-	schema := &jsonschema.Schema{}
-	if err := json.Unmarshal(raw, schema); err != nil {
-		return nil, fmt.Errorf("decode service schema for %s: %w", id, err)
-	}
-	resolved, err := schema.Resolve(nil)
-	if err != nil {
-		return nil, fmt.Errorf("resolve service schema for %s: %w", id, err)
-	}
-	return resolved, nil
-}
-
-// validateServiceJSON 解码校验副本；jsonschema-go 将 json.Number 识别为 string。
-func validateServiceJSON(schema *jsonschema.Resolved, data []byte) error {
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		return err
-	}
-	return schema.Validate(value)
-}
-
-func collectServices(root Root, reg *Registration) error {
-	r := &ServiceRegistry{schemas: generatedFor(root).ServiceSchemas}
-	root.Services(r)
-	for _, b := range r.builders {
-		if b.handles != 1 || b.afterHandle {
-			r.errs = append(r.errs, fmt.Errorf("service route %q has invalid Handle sequence", serviceRoutePrefix+b.name))
+		if invalidDeclaration || b.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED {
+			r.Errs = append(r.Errs, fmt.Errorf("service %q has an invalid declaration", b.Target))
 			continue
 		}
-		route, err := b.prepare()
-		if err != nil {
-			r.errs = append(r.errs, fmt.Errorf("service route %q: %w", serviceRoutePrefix+b.name, err))
+		if seen[b.Name] {
+			r.Errs = append(r.Errs, fmt.Errorf("service %q registered twice", b.Name))
 			continue
 		}
-		r.services = append(r.services, route)
+		seen[b.Name] = true
+		if b.Handles != 1 || b.AfterHandle {
+			r.Errs = append(r.Errs, fmt.Errorf("service %q has invalid Handle sequence", b.Target))
+			continue
+		}
+		route, err := b.Prepare()
+		if err != nil {
+			r.Errs = append(r.Errs, fmt.Errorf("service %q: %w", b.Target, err))
+			continue
+		}
+		r.Services = append(r.Services, route)
 	}
-	reg.services = r.services
+	reg.services = r.Services
 	registration := &pb.Register{CandidateConfigJson: "{}"}
 	appendServiceRoutes(reg, registration)
-	// Collect 尚未创建 HTTP Listener，仅校验 Services Hook 的描述。
-	r.errs = append(r.errs, validate.Register(registration))
-	seen := make(map[string]bool)
-	for _, command := range reg.Commands {
-		seen[commandRouteID(command)] = true
-	}
-	for _, event := range reg.Events {
-		seen[event.RouteID] = true
-	}
-	for _, service := range r.services {
-		id := service.descriptor.GetRouteId()
-		if seen[id] {
-			r.errs = append(r.errs, fmt.Errorf("service route %q conflicts with another route", id))
-		}
-	}
-	return errors.Join(r.errs...)
+	r.Errs = append(r.Errs, validate.Register(registration))
+	return errors.Join(r.Errs...)
 }
 
-func appendServiceRoutes(reg *Registration, registration *pb.Register) {
+// checkServiceTargets 使用启动身份检查归属；@agent 的角色解析留给 Broker。
+func checkServiceTargets(root *Plugin, pluginID string) error {
+	var errs []error
+	for _, b := range root.services.Builders {
+		if b.Target == "" && b.Name != "" {
+			continue
+		}
+		component, _, _ := strings.Cut(b.Target, "/")
+		if component != pluginID && component != "@agent" {
+			errs = append(errs, fmt.Errorf("service %q does not belong to plugin %q", b.Target, pluginID))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func appendServiceRoutes(reg *registration, registration *pb.Register) {
 	for _, service := range reg.services {
-		registration.Routes = append(registration.Routes, proto.Clone(service.descriptor).(*pb.RouteDescriptor))
+		registration.Routes = append(registration.Routes, proto.Clone(service.Descriptor).(*pb.RouteDescriptor))
 	}
 }
 
@@ -313,10 +86,10 @@ func bindServiceContext(c *Context) { c.ctx = context.WithValue(c.ctx, serviceCo
 // Caller 返回 Core 下发的服务直接调用方插件 ID；Core 调用时为空。
 func (c *Context) Caller() string { return c.caller }
 
-func serviceHandler(reg *Registration) func(context.Context, *wire.Inbound) (wire.Response, bool) {
+func serviceHandler(reg *registration) func(context.Context, *wire.Inbound) (wire.Response, bool) {
 	routes := make(map[string]serviceRoute, len(reg.services))
 	for _, service := range reg.services {
-		routes[service.descriptor.GetRouteId()] = service
+		routes[service.Descriptor.GetRouteId()] = service
 	}
 	return func(ctx context.Context, in *wire.Inbound) (wire.Response, bool) {
 		service, ok := routes[in.Target]
@@ -333,13 +106,14 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	if err := decodeInvocation(in.Payload, request); err != nil {
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
-	descriptor := service.descriptor
+	descriptor := service.Descriptor
 	if request.GetRouteId() != in.Target || request.GetEncoding() != descriptor.GetService().GetEncoding() || request.GetSchemaId() != descriptor.GetInputSchemaId() || request.GetSchemaVersion() != descriptor.GetInputSchemaVersion() {
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service invocation does not match registered input")
 	}
 	// 2. 将父请求绑定到 Handler 有效期；恢复 panic 时记录完整堆栈。
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Context{ctx: ctx, inbound: in, actor: request.GetContext().GetActor()}
+	c := &Context{plugin: service.Plugin.(*Plugin), subID: service.SubID, ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget()}
+	c.freezeProfile(request.GetContext())
 	chain := request.GetContext().GetPluginChain()
 	if len(chain) > 0 {
 		c.caller = chain[len(chain)-1]
@@ -354,11 +128,11 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 			response = dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, "service panicked")
 		}
 	}()
-	encoded, err := service.invoke(c, request.GetPayload())
+	encoded, err := service.Invoke(c, request.GetPayload())
 	if err != nil {
 		var public *Error
 		if errors.As(err, &public) {
-			return dispatchError(public.Code, public.Message)
+			return dispatchError(pb.ErrorCode(public.Code), public.Message)
 		}
 		c.Logger().Error("service returned an error", "error", err)
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, "service returned an error")
@@ -367,67 +141,11 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	return wire.Response{Payload: wire.Payload{Encoding: descriptor.GetService().GetEncoding(), SchemaID: descriptor.GetOutputSchemaId(), SchemaVersion: descriptor.GetOutputSchemaVersion(), Bytes: encoded}}
 }
 
-// CallJSON 按输入输出 Go 类型推导 Schema 标识及版本并调用服务。
-// Handler 中传入 Context.Context() 以关联父请求；后台工作使用独立 context。
-func CallJSON[In, Out any](ctx context.Context, target string, in In) (Out, error) {
-	var out Out
-	inputID, inputVersion, err := jsonType[In]()
-	if err != nil {
-		return out, err
-	}
-	outputID, outputVersion, err := jsonType[Out]()
-	if err != nil {
-		return out, err
-	}
-	session, err := currentSession()
-	if err != nil {
-		return out, err
-	}
-	encoded, err := json.Marshal(in)
-	if err != nil {
-		return out, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode service input: " + err.Error()}
-	}
-	response, err := callService(ctx, session, target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_JSON, SchemaID: inputID, SchemaVersion: inputVersion, Bytes: encoded})
-	if err != nil {
-		return out, err
-	}
-	if response.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON || response.SchemaID != outputID || response.SchemaVersion != outputVersion {
-		return out, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "expected JSON service output"}
-	}
-	if err := json.Unmarshal(response.Bytes, &out); err != nil {
-		return out, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "decode service output: " + err.Error()}
-	}
-	return out, nil
-}
-
-// CallProto 调用 plugin_id/service_name，按生成的 Out 消息类型解码结果。
-// Handler 中传入 Context.Context() 以关联父请求；后台工作使用独立 context。
-func CallProto[Out proto.Message](ctx context.Context, target string, in proto.Message) (Out, error) {
-	var zero Out
-	session, err := currentSession()
-	if err != nil {
-		return zero, err
-	}
-	encoded, err := proto.Marshal(in)
-	if err != nil {
-		return zero, &Error{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, Message: "encode service input: " + err.Error()}
-	}
-	response, err := callService(ctx, session, target, wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(in), SchemaVersion: invocationSchemaVersion, Bytes: encoded})
-	if err != nil {
-		return zero, err
-	}
-	out := newServiceMessage[Out]()
-	if err := decodeInvocation(response, out); err != nil {
-		return zero, &Error{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, Message: "decode service output: " + err.Error()}
-	}
-	return out, nil
-}
-
 func callService(ctx context.Context, session *wire.Session, target string, payload wire.Payload) (wire.Payload, error) {
 	request := wire.Request{Target: target, Payload: payload}
 	if c, ok := ctx.Value(serviceContextKey{}).(*Context); ok {
 		if !c.active.Load() {
-			return wire.Payload{}, &Error{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, Message: "handler context has expired"}
+			return wire.Payload{}, &Error{Code: errcode.FailedPrecondition, Message: "handler context has expired"}
 		}
 		request.ParentCallID = c.inbound.CallID
 		request.TraceID = c.inbound.TraceID
@@ -435,7 +153,7 @@ func callService(ctx context.Context, session *wire.Session, target string, payl
 	response, err := session.Call(ctx, request)
 	if err != nil {
 		info := err.(*wire.CallError).ErrorInfo
-		return response.Payload, &Error{Code: validate.PublicCode(info.GetCode()), Message: info.GetSafeMessage()}
+		return response.Payload, &Error{Code: errcode.Code(validate.PublicCode(info.GetCode())), Message: info.GetSafeMessage()}
 	}
 	return response.Payload, nil
 }

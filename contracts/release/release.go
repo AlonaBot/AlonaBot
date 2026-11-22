@@ -1,7 +1,7 @@
 // Package release 校验发布在归档之外的 release.json 及其 Ed25519 签名。
 //
 // 验签针对 release.json 文件的原始字节，先验签后解析，不会重新序列化 JSON 再验签。
-// 签名只证明发布来源，不证明插件行为安全。规则见 spec/CONTRACTS-v0.1.md §9.2。
+// 签名只证明发布来源，不证明插件行为安全。
 package release
 
 import (
@@ -60,18 +60,32 @@ func DecodeSignature(sigFile []byte) ([]byte, error) {
 	return sig, nil
 }
 
-// Verify 用已信任的公钥对 release.json 的原始字节验签，通过后才解析并校验内容。
+// DecodePublicKey 解析 release.pub：标准 base64 的 32 字节 Ed25519 公钥，允许末尾空白。
+func DecodePublicKey(raw []byte) (ed25519.PublicKey, error) {
+	key, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("public key file is not valid base64: %w", err)
+	}
+	if len(key) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("public key length %d, want %d", len(key), ed25519.PublicKeySize)
+	}
+	return ed25519.PublicKey(key), nil
+}
+
+// Verify 校验 release.json；有签名时先验证原始字节及发布者指纹，无签名时只检查清单。
 func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 	// 1. 对原始字节验签，签名不对时不解析内容。
-	if len(pub) != ed25519.PublicKeySize {
-		return nil, errors.New("invalid public key length")
-	}
-	sig, err := DecodeSignature(sigFile)
-	if err != nil {
-		return nil, err
-	}
-	if !ed25519.Verify(pub, raw, sig) {
-		return nil, errors.New("release.json signature verification failed")
+	if len(sigFile) != 0 {
+		if len(pub) != ed25519.PublicKeySize {
+			return nil, errors.New("invalid public key length")
+		}
+		sig, err := DecodeSignature(sigFile)
+		if err != nil {
+			return nil, err
+		}
+		if !ed25519.Verify(pub, raw, sig) {
+			return nil, errors.New("release.json signature verification failed")
+		}
 	}
 
 	// 2. 严格解析：未知字段或对象之后的多余内容都拒绝。
@@ -85,7 +99,7 @@ func Verify(raw, sigFile []byte, pub ed25519.PublicKey) (*Release, error) {
 		return nil, errors.New("release.json has trailing content after the JSON object")
 	}
 	// 3. 声明的发布者必须就是验签公钥，再校验各字段。
-	if r.PublisherKeyID != KeyID(pub) {
+	if len(sigFile) != 0 && r.PublisherKeyID != KeyID(pub) {
 		return nil, fmt.Errorf("publisher_key_id %q does not match verification key %s", r.PublisherKeyID, KeyID(pub))
 	}
 	if err := r.validate(); err != nil {
@@ -112,7 +126,7 @@ func (r *Release) validate() error {
 	for _, a := range r.Assets {
 		p := manifest.Platform{OS: a.OS, Arch: a.Arch}
 		switch {
-		case !manifest.SupportedPlatform(a.OS, a.Arch):
+		case !manifest.SupportedPlatform(a.OS, a.Arch) && !(a.OS == "any" && a.Arch == "any"):
 			return fmt.Errorf("unsupported platform %s/%s", a.OS, a.Arch)
 		case seen[p]:
 			return fmt.Errorf("duplicate platform %s/%s", a.OS, a.Arch)

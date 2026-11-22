@@ -1,7 +1,8 @@
-// Package tool 提供工具目录与按插件、服务名持久化的调用策略。
+// Package tool 提供工具目录、调用策略及带父调用链的工具执行与用户确认。
 //
 // [Catalog] 从 Router 的已 Attach 声明取得工具，并在每次查询时读取状态库覆盖。
-// 固定服务只列出已激活且调用者可访问的工具；管理查询同时保留未声明工具的覆盖（CONTRACTS §13.1）。
+// 固定服务只列出已激活且调用者可访问的工具；管理查询同时保留未声明工具的覆盖。
+// [Catalog.RegisterInvoke] 装配 Broker 转发与 Core 直接发送的确认消息，确认随父调用失效。
 package tool
 
 import (
@@ -10,9 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -23,20 +26,30 @@ const schemaVersion = 1
 
 // Catalog 合并插件工具声明与状态库中的策略覆盖。
 type Catalog struct {
-	store  *state.Store
-	router *router.Router
+	store      *state.Store
+	router     *router.Router
+	resolve    func(context.Context, *pb.Target) (*profile.Service, string, error) // 装配时设置，每次策略操作建立独立快照。
+	mu         sync.Mutex                                                          // 保护本次 Core 运行中出现的操作名；持久化覆盖仍归 store
+	operations map[string]ToolPolicyEntry
 }
 
-// ToolPolicyEntry 列出工具声明的缺省策略与已保存的覆盖。
+// ToolPolicyEntry 列出当前目录身份、缺省策略与已保存的覆盖。
 type ToolPolicyEntry struct {
 	PluginID, Service string
-	Default           pb.ToolPolicy // UNSPECIFIED 表示当前没有工具声明
+	Identities        []string      // 按 tool、operation 排列；仅保存覆盖时为空数组。
+	Default           pb.ToolPolicy // UNSPECIFIED 表示当前没有声明与确认记录
 	Override          pb.ToolPolicy // UNSPECIFIED 表示没有覆盖
+	Effect            pb.ToolEffect
 }
 
 // New 创建从 r 读取工具声明、从 store 读取策略的目录。
 func New(store *state.Store, r *router.Router) *Catalog {
-	return &Catalog{store: store, router: r}
+	return &Catalog{store: store, router: r, operations: make(map[string]ToolPolicyEntry)}
+}
+
+// SetProfile 注入按可信默认 Target 选择本次操作配置文件快照的入口；在注册服务前调用。
+func (c *Catalog) SetProfile(resolve func(ctx context.Context, target *pb.Target) (profiles *profile.Service, profileID string, err error)) {
+	c.resolve = resolve
 }
 
 // Register 将 core.tool.list 注册到固定服务分流器。
@@ -62,22 +75,24 @@ func (c *Catalog) Effective(ctx context.Context, pluginID, service string) (pb.T
 	return pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, policyError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, fmt.Sprintf("tool %s/%s not found", pluginID, service))
 }
 
-// SetPolicy 保存 ALLOW、CONFIRM 或 DENY 覆盖；UNSPECIFIED 删除覆盖。
+// SetPolicy 原子保存一组 ALLOW、CONFIRM 或 DENY 覆盖；UNSPECIFIED 删除覆盖。
 // 安装记录缺失返回 NOT_FOUND，未知策略返回 INVALID_ARGUMENT；成功返回前已提交事务。
-func (c *Catalog) SetPolicy(ctx context.Context, pluginID, service string, p pb.ToolPolicy) error {
-	switch p {
-	case pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, pb.ToolPolicy_TOOL_POLICY_ALLOW, pb.ToolPolicy_TOOL_POLICY_CONFIRM, pb.ToolPolicy_TOOL_POLICY_DENY:
-	default:
-		return policyError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("unknown tool policy %d", p))
+func (c *Catalog) SetPolicy(ctx context.Context, rows ...state.ToolPolicy) error {
+	for index, row := range rows {
+		switch row.Policy {
+		case pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED, pb.ToolPolicy_TOOL_POLICY_ALLOW, pb.ToolPolicy_TOOL_POLICY_CONFIRM, pb.ToolPolicy_TOOL_POLICY_DENY:
+		default:
+			return policyError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("items[%d]: unknown tool policy %d", index, row.Policy))
+		}
 	}
-	err := c.store.SetToolPolicy(ctx, state.ToolPolicy{PluginID: pluginID, Service: service, Policy: p})
+	err := c.store.SetToolPolicy(ctx, rows...)
 	if errors.Is(err, state.ErrNotFound) {
 		return policyError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, err.Error())
 	}
 	return err
 }
 
-// Policies 按完整工具名字典序列出全部已 Attach 工具与保存覆盖的并集。
+// Policies 按完整名字典序列出已 Attach 工具、本次运行出现的操作与保存覆盖的并集。
 func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 	// 1. 保存的覆盖先占位，使未 Attach 或已移除的声明仍可被管理。
 	entries, err := c.overrides(ctx)
@@ -93,10 +108,24 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 			}
 			entry := entries[plugin.PluginID()+"/"+spec.GetServiceName()]
 			entry.PluginID, entry.Service = plugin.PluginID(), spec.GetServiceName()
+			entry.Identities = []string{"tool"}
 			entry.Default = spec.GetTool().GetDefaultPolicy()
+			entry.Effect = spec.GetTool().GetEffect()
 			entries[entry.PluginID+"/"+entry.Service] = entry
 		}
 	}
+	// 3. 确认记录提供最新类别，保留声明的缺省策略与保存覆盖。
+	c.mu.Lock()
+	for key, operation := range c.operations {
+		entry := entries[key]
+		if entry.Default != pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+			operation.Default = entry.Default
+		}
+		operation.Override = entry.Override
+		operation.Identities = append(entry.Identities, "operation")
+		entries[key] = operation
+	}
+	c.mu.Unlock()
 	result := make([]ToolPolicyEntry, 0, len(entries))
 	for _, entry := range entries {
 		result = append(result, entry)
@@ -107,6 +136,12 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 	return result, nil
 }
 
+func (c *Catalog) observe(pluginID, operation string, effect pb.ToolEffect) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.operations[pluginID+"/"+operation] = ToolPolicyEntry{PluginID: pluginID, Service: operation, Default: pb.ToolPolicy_TOOL_POLICY_CONFIRM, Effect: effect}
+}
+
 func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, error) {
 	rows, err := c.store.ToolPolicies(ctx)
 	if err != nil {
@@ -114,7 +149,7 @@ func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, er
 	}
 	entries := make(map[string]ToolPolicyEntry, len(rows))
 	for _, row := range rows {
-		entries[row.PluginID+"/"+row.Service] = ToolPolicyEntry{PluginID: row.PluginID, Service: row.Service, Override: row.Policy}
+		entries[row.PluginID+"/"+row.Service] = ToolPolicyEntry{PluginID: row.PluginID, Service: row.Service, Identities: []string{}, Override: row.Policy}
 	}
 	return entries, nil
 }
@@ -127,6 +162,15 @@ func (c *Catalog) list(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	if err := proto.Unmarshal(in.Payload.Bytes, request); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid tool list request protobuf: "+err.Error())
+	}
+	if in.ParentCallID != 0 {
+		if parent, ok := in.ParentAttach.(*router.Invocation); !ok || parent == nil {
+			return failure(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "tool list requires an active parent call")
+		}
+	}
+	view, err := c.profileSnapshot(ctx, in)
+	if err != nil {
+		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read profile policies: "+err.Error())
 	}
 	entries, err := c.overrides(ctx)
 	if err != nil {
@@ -144,14 +188,20 @@ func (c *Catalog) list(ctx context.Context, caller router.Caller, in *wire.Inbou
 				continue
 			}
 			name := plugin.PluginID() + "/" + spec.GetServiceName()
-			p := entries[name].Override
+			p, err := view.policy(plugin.PluginID(), spec.GetServiceName(), false)
+			if err != nil {
+				return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "read profile tool policy: "+err.Error())
+			}
+			if p == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
+				p = entries[name].Override
+			}
 			if p == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
 				p = spec.GetTool().GetDefaultPolicy()
 			}
 			if p == pb.ToolPolicy_TOOL_POLICY_DENY {
 				continue
 			}
-			result.Tools = append(result.Tools, &pb.ToolInfo{Name: name, Description: spec.GetTool().GetDescription(), InputSchemaJson: spec.GetTool().GetInputSchemaJson(), Policy: p})
+			result.Tools = append(result.Tools, &pb.ToolInfo{Name: name, Description: spec.GetTool().GetDescription(), InputSchemaJson: spec.GetTool().GetInputSchemaJson(), Policy: p, Effect: spec.GetTool().GetEffect()})
 		}
 	}
 	slices.SortFunc(result.Tools, func(a, b *pb.ToolInfo) int { return cmp.Compare(a.GetName(), b.GetName()) })
