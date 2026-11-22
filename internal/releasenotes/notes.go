@@ -14,7 +14,7 @@ import (
 
 var comments = regexp.MustCompile(`(?s)<!--.*?-->`)
 
-// Render 按英文、简体中文顺序合并指定版本，去掉仅供编辑者阅读的 HTML 注释。
+// Render 按英文、简体中文分区合并指定版本，去掉版本标题与 HTML 编辑注释。
 func Render(root, version string) ([]byte, error) {
 	if !manifest.ValidVersion(strings.TrimPrefix(version, "v")) {
 		return nil, fmt.Errorf("invalid release version %q", version)
@@ -30,10 +30,18 @@ func Render(root, version string) ([]byte, error) {
 			return nil, fmt.Errorf("release notes must be UTF-8: %s", filename)
 		}
 		text := strings.TrimSpace(comments.ReplaceAllString(string(raw), ""))
+		heading, body, _ := strings.Cut(text, "\n")
+		if strings.HasPrefix(heading, "## ["+strings.TrimPrefix(version, "v")+"] - ") {
+			text = strings.TrimSpace(body)
+		}
 		if text == "" {
 			return nil, fmt.Errorf("release notes are empty: %s", filename)
 		}
-		sections = append(sections, text)
+		language := "English"
+		if locale == "zh-CN" {
+			language = "简体中文"
+		}
+		sections = append(sections, "## "+language+"\n\n"+text)
 	}
 	return []byte(strings.Join(sections, "\n\n---\n\n") + "\n"), nil
 }
