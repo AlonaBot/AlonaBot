@@ -110,6 +110,23 @@ After enabling help, send `/whoami` in chat and pass its returned user string to
 
 See [management API usage](#management-api) for endpoints and configuration reads/writes.
 
+### Source builds
+
+With `Build: true`, Core builds from source instead of downloading a Release asset, for example `POST /api/v1/packages/install` with `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.2.0","Confirm":true}`:
+
+1. The GitHub API resolves `Ref` (branch, tag or commit; empty means the default branch) to a commit. Core downloads `https://github.com/<owner>/<repo>/archive/<commit>.tar.gz` through `github_mirror` and unpacks it under `<data_dir>/staging`. Source tarballs have no published digest, so their content trusts GitHub or the configured mirror.
+2. Core downloads the Go release Core itself was built with into `<data_dir>/toolchain/go` when missing, checking size and SHA-256 against the JSON listing of `go_download_base` (`?mode=json&include=all`, served by both `go.dev/dl/` and `golang.google.cn/dl/`).
+3. The project is packed for Core's platform like `alonabot plugin pack`: `CGO_ENABLED=0`, `GOTOOLCHAIN=auto`, modules come from `goproxy` and are verified by GOSUMDB (default `sum.golang.org`). `GOCACHE`, `GOMODCACHE`, `GOTMPDIR`, `TMPDIR` and `HOME` all live under `<data_dir>/cache` and the host Go environment is ignored (`GOENV=off`, `GOWORK=off`), so the scratch image can build.
+4. The archive then goes through the usual install preflight, source trust and same-kind replacement confirmation, bound to source `github.com/<owner>/<repo>`. When `Ref` is a SemVer tag the version is the tag and must match `plugin.yaml`; any other commit gets the `plugin.yaml` version plus `+<12-character commit>`, for example `0.2.0+4769d92b0a8f`.
+
+Updates use `POST /api/v1/packages/update` with `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`; without `Source` the bound source is built.
+
+Builds run as background tasks: the request returns 202 with `{"task_id":"…"}` immediately. `GET /api/v1/tasks/{id}` returns `{"id","action":"install|update","status":"running|succeeded|failed","created_at","finished_at","log","result"}`; `log` holds each step and the complete standard error of the go command, and on success `result` equals the synchronous endpoint's result. On failure `http_status` and `error` match the synchronous error response, including 409 with `{"affected":[…]}` when confirmation is required; resubmit with `Confirm: true`, the build cache makes the rebuild faster. `GET /api/v1/tasks` lists tasks without `log`, and `DELETE /api/v1/tasks/{id}` cancels a running task or removes a finished record. Only one build runs at a time and queued tasks log that they are waiting. Tasks live only in memory, disappear when Core restarts, and running builds are cancelled on shutdown.
+
+`GET /api/v1/core/build-environment` returns `{"go_version":"go1.27.1","toolchain_bytes":0,"cache_bytes":0}`, with an empty `go_version` before the toolchain is downloaded. `DELETE /api/v1/core/build-environment?part=toolchain|cache` removes the toolchain or the cache, both when `part` is omitted, and returns the new usage; it returns 412 while a build runs. The toolchain takes about 250 MiB and the cache grows with builds.
+
+Source builds support neither cgo nor private repositories and modules: Core sends no credentials to GitHub or module proxies and has no `GOPRIVATE`/`GONOSUMDB` settings. The image has no git, so the `direct` fallback in `goproxy` does not work inside the container and dependencies must be available through a proxy. The module must sit at the repository root and the source must not contain symbolic links. Windows hosts and Core binaries built with a development Go version do not support source builds yet.
+
 ### Export diagnostics
 ```fish
 alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
@@ -210,7 +227,9 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Operation | Endpoint and request |
 | --- | --- |
 | Core identity and components | `GET /api/v1/core`, `GET /api/v1/packages` |
-| Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`); see [management types](../internal/core/manage/install.go) |
+| Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`, `Build`, `Ref`); see [management types](../internal/core/manage/install.go). `Build` returns 202 with a task ID, see [Source builds](#source-builds) |
+| Background tasks | `GET /api/v1/tasks`, `GET`/`DELETE /api/v1/tasks/{id}` |
+| Build environment | `GET`/`DELETE /api/v1/core/build-environment`; DELETE accepts `?part=toolchain\|cache` |
 | Download sources | `GET`/`PUT /api/v1/core/downloads`, `{"github_mirror":"","go_download_base":"https://go.dev/dl/","goproxy":"https://proxy.golang.org,direct"}`; PUT updates only the fields present, invalid values return 400 |
 | Enable, disable, restart, reload | `POST /api/v1/packages/{action}` with `{"id":"demo"}`; disable may require `confirm` |
 | Update | `POST /api/v1/packages/update`, `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |

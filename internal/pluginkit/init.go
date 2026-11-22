@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
+	"github.com/AlonaBot/AlonaBot/internal/generate"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -91,14 +92,14 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 	tidySDK := false
 	if !within {
-		if _, err := goCommand(ctx, staging, "mod", "init", module); err != nil {
+		if _, err := goCommand(ctx, generate.Toolchain{}, staging, "mod", "init", module); err != nil {
 			return false, err
 		}
 		version := sdkVersion(version)
 		if version == "(devel)" {
 			needsSDK = role != "webui"
 		} else if role != "webui" {
-			if _, err := goCommand(ctx, staging, "mod", "edit", "-require="+modulePath+"@"+version); err != nil {
+			if _, err := goCommand(ctx, generate.Toolchain{}, staging, "mod", "edit", "-require="+modulePath+"@"+version); err != nil {
 				return false, err
 			}
 			tidySDK = true
@@ -142,7 +143,7 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	}
 	// 3. 在已发布的工程中解析 SDK 依赖；失败时保留作者可修复的全部文件。
 	if tidySDK {
-		if _, err := goCommand(ctx, dir, "mod", "tidy"); err != nil {
+		if _, err := goCommand(ctx, generate.Toolchain{}, dir, "mod", "tidy"); err != nil {
 			_, outputErr := fmt.Fprintf(os.Stderr, "Project files were kept at %s; run: go -C %q mod tidy\n", dir, dir)
 			return false, errors.Join(err, outputErr)
 		}

@@ -42,6 +42,31 @@ type Options struct {
 	Resources                 map[string][]byte // 可选的工程资源快照，键为相对路径；nil 时读取工程文件。
 	CGOEnabled                string            // 空值沿用 Go 环境；正式构建传 "0"，与编译视图一致。
 	RequireAdapterConstructor bool              // 正式工程要求 New 返回 adapter.Adapter；开发构建保留原入口约定。
+	Toolchain                 Toolchain         // 零值使用 PATH 中的 go 与当前进程环境。
+}
+
+// Toolchain 指定运行 go 命令的可执行文件、追加环境与日志输出。
+type Toolchain struct {
+	Go     string    // go 可执行文件路径；空串从 PATH 查找。
+	Env    []string  // 追加在当前进程环境之后，同名变量以这里为准。
+	Stderr io.Writer // 非空时同时接收 go 命令的标准错误，例如构建日志。
+}
+
+// Command 构造在 dir 中运行的 go 命令，标准错误写入 stderr 并按需复制到 Stderr。
+// 环境连同 PWD 一起匹配 dir，避免继承调用进程的路径别名。
+func (t Toolchain) Command(ctx context.Context, dir string, stderr *bytes.Buffer, args ...string) *exec.Cmd {
+	name := t.Go
+	if name == "" {
+		name = "go"
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(cmd.Environ(), t.Env...)
+	cmd.Stderr = stderr
+	if t.Stderr != nil {
+		cmd.Stderr = io.MultiWriter(stderr, t.Stderr)
+	}
+	return cmd
 }
 
 // Diagnostic 携带一条源码或组件资源问题的位置和说明。
@@ -144,9 +169,8 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		target = "."
 	}
 	args = append(args, target)
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir = dir
-	cmd.Env = cmd.Environ() // 连同 PWD 一起匹配 Dir，避免继承调用进程的路径别名。
+	var stderr bytes.Buffer
+	cmd := opt.Toolchain.Command(ctx, dir, &stderr, args...)
 	if opt.GOOS != "" {
 		cmd.Env = append(cmd.Env, "GOOS="+opt.GOOS)
 	}
@@ -156,8 +180,6 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	if opt.CGOEnabled != "" {
 		cmd.Env = append(cmd.Env, "CGO_ENABLED="+opt.CGOEnabled)
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("go list: %w\n%s", err, stderr.String())

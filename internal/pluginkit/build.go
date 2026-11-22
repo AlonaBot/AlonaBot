@@ -79,7 +79,7 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 		options.CGOEnabled = "0"
 		options.RequireAdapterConstructor = true
 	}
-	targetEnv, err := goCommand(ctx, dir, "env", "GOOS", "GOARCH")
+	targetEnv, err := goCommand(ctx, options.Toolchain, dir, "env", "GOOS", "GOARCH")
 	if err != nil {
 		return build, err
 	}
@@ -165,7 +165,7 @@ func buildComponent(ctx context.Context, options generate.Options, outDir string
 	if err := writeOverlay(); err != nil {
 		return build, err
 	}
-	goModRaw, err := goCommand(ctx, dir, "env", "GOMOD")
+	goModRaw, err := goCommand(ctx, options.Toolchain, dir, "env", "GOMOD")
 	if err != nil {
 		return build, err
 	}
@@ -395,12 +395,9 @@ func migrationMode(ctx context.Context, options generate.Options, overlay, modFi
 	return mode, effects, nil
 }
 
-func goCommand(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, "go", args...)
-	command.Dir = dir
+func goCommand(ctx context.Context, toolchain generate.Toolchain, dir string, args ...string) ([]byte, error) {
 	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	output, err := command.Output()
+	output, err := toolchain.Command(ctx, dir, &stderr, args...).Output()
 	if err != nil {
 		return output, fmt.Errorf("go %s: %w\n%s%s", strings.Join(args, " "), err, output, stderr.String())
 	}
@@ -429,23 +426,19 @@ func targetGoCommand(ctx context.Context, options generate.Options, development 
 	if options.CGOEnabled == "" && !development {
 		options.CGOEnabled = "0"
 	}
-	command := targetGo(ctx, options, args...)
 	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	output, err := command.Output()
+	output, err := targetGo(ctx, options, &stderr, args...).Output()
 	if err != nil {
 		return output, fmt.Errorf("go %s: %w\n%s%s", strings.Join(args, " "), err, output, stderr.String())
 	}
 	return output, nil
 }
 
-func targetGo(ctx context.Context, options generate.Options, args ...string) *exec.Cmd {
+func targetGo(ctx context.Context, options generate.Options, stderr *bytes.Buffer, args ...string) *exec.Cmd {
 	if len(options.Tags) > 0 {
 		args = append([]string{args[0], "-tags", strings.Join(options.Tags, ",")}, args[1:]...)
 	}
-	command := exec.CommandContext(ctx, "go", args...)
-	command.Dir = options.Dir
-	command.Env = command.Environ()
+	command := options.Toolchain.Command(ctx, options.Dir, stderr, args...)
 	if options.GOOS != "" {
 		command.Env = append(command.Env, "GOOS="+options.GOOS)
 	}

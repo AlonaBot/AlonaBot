@@ -1,6 +1,7 @@
 package pluginkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -95,7 +96,8 @@ func scanProject(ctx context.Context, options generate.Options) (*projectScan, e
 
 // webUIHasSource 使用目标工具链选文件；静态工程可以没有 Go module。
 func webUIHasSource(ctx context.Context, options generate.Options) (bool, error) {
-	cmd := targetGo(ctx, options, "list", "-e", "-find", "-json", ".")
+	var stderr bytes.Buffer
+	cmd := targetGo(ctx, options, &stderr, "list", "-e", "-find", "-json", ".")
 	cmd.Env = append(cmd.Env, "GO111MODULE=off")
 	raw, err := cmd.Output()
 	if err != nil {

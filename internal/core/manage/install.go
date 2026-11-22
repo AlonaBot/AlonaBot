@@ -29,6 +29,11 @@ type InstallRequest struct {
 	Source           string // GitHub 的 owner/repo；本地安装时留空。
 	ID               string // 自动预装时指定期望的组件身份。
 	Replace, Confirm bool
+	Build            bool   // 从 Source 的源码构建，而不是下载最新 Release 资产。
+	Ref              string // 构建的分支、标签或提交；空串为默认分支。仅用于 Build。
+
+	built *builtSource // Install 与 Update 在取得目录锁之前完成的构建产物。
+	log   io.Writer    // 源码构建日志；nil 时丢弃。
 }
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -36,6 +41,13 @@ var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 // Install 先完成下载与预检，再确认信任及同类替换，最后登记不可变安装包。
 func (s *Service) Install(ctx context.Context, req InstallRequest) (result Package, err error) {
 	defer finish(&err)
+	// 源码构建耗时较长，在目录锁外完成；安装仍走同一套预检、信任与替换检查。
+	if req.Build {
+		if req.built, err = s.buildSource(ctx, req, req.buildLog()); err != nil {
+			return result, err
+		}
+		defer func() { err = errors.Join(err, req.built.remove()) }()
+	}
 	s.catalog.Lock()
 	defer s.catalog.Unlock()
 	candidate, err := s.prepare(ctx, req)
@@ -181,6 +193,25 @@ func (s *Service) downloadGitHub(ctx context.Context, address string, file io.Wr
 	return n, hash.Sum(nil), nil
 }
 
+func (req InstallRequest) buildLog() io.Writer {
+	if req.log == nil {
+		return io.Discard
+	}
+	return req.log
+}
+
+func checkRepository(source string) error {
+	if !repositoryName.MatchString(source) {
+		return invalid("source must be owner/repo")
+	}
+	for _, part := range strings.Split(source, "/") {
+		if part == "." || part == ".." {
+			return invalid("source must be owner/repo")
+		}
+	}
+	return nil
+}
+
 func exists(message string) error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, Message: message}
 }
@@ -193,20 +224,20 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 	if req.Source == "" && req.Archive == "" {
 		return nil, invalid("local archive or source is required")
 	}
+	if req.Ref != "" && !req.Build {
+		return nil, invalid("ref requires a source build")
+	}
 	staging := filepath.Join(filepath.Dir(s.opt.Packages), "staging")
 	if err := os.MkdirAll(staging, 0o700); err != nil {
 		return nil, err
 	}
 	input := packages.Input{ID: req.ID, OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: req.Archive}
 	var asset release.Download
-	if req.Source != "" {
-		if !repositoryName.MatchString(req.Source) {
-			return nil, invalid("source must be owner/repo")
-		}
-		for _, part := range strings.Split(req.Source, "/") {
-			if part == "." || part == ".." {
-				return nil, invalid("source must be owner/repo")
-			}
+	if req.built != nil {
+		input.ArchivePath, input.Source, input.Version = req.built.archive, "github.com/"+req.Source, req.built.version
+	} else if req.Source != "" {
+		if err := checkRepository(req.Source); err != nil {
+			return nil, err
 		}
 		address := strings.TrimRight(s.opt.ReleaseBaseURL, "/") + "/repos/" + req.Source + "/releases/latest"
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
@@ -266,7 +297,7 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 	if err != nil {
 		return nil, err
 	}
-	if req.Source != "" && release.ArchiveName(candidate.Manifest) != asset.Name {
+	if req.Source != "" && req.built == nil && release.ArchiveName(candidate.Manifest) != asset.Name {
 		return nil, errors.Join(invalid("archive name does not match the package manifest"), candidate.Discard())
 	}
 	if req.ID != "" && trust.Source(req.ID) != "" && !trust.MatchesSource(req.ID, candidate.Manifest.Source) {

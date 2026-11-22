@@ -110,6 +110,23 @@ help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字�
 
 管理端点与配置读写详见 [管理 API](deployment.zh-CN.md#管理-api)。
 
+### 源码构建
+
+安装请求带 `Build: true` 时，Core 不下载 Release 资产，而是从源码构建，例如 `POST /api/v1/packages/install` 的 `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.2.0","Confirm":true}`：
+
+1. 经 GitHub API 把 `Ref`（分支、标签或提交；空串为默认分支）解析为提交，经 `github_mirror` 下载 `https://github.com/<owner>/<repo>/archive/<提交>.tar.gz`，解压到 `<data_dir>/staging`。源码 tarball 没有公开摘要，内容信任 GitHub 或所设镜像。
+2. 按需下载与 Core 构建版本相同的 Go 发行版到 `<data_dir>/toolchain/go`：从 `go_download_base` 的 JSON 列表（`?mode=json&include=all`，`go.dev/dl/` 与 `golang.google.cn/dl/` 都提供）读取大小与 SHA-256 并核对。
+3. 按 `alonabot plugin pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验；`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，不读取宿主的 Go 环境（`GOENV=off`、`GOWORK=off`），因此 scratch 镜像也能构建。
+4. 归档照常经过安装预检、来源信任与同类替换确认，来源绑定为 `github.com/<owner>/<repo>`。`Ref` 是 SemVer 标签时版本取标签，并核对 `plugin.yaml` 的版本；其他提交的版本是 `plugin.yaml` 的版本加 `+<12 位提交>`，例如 `0.2.0+4769d92b0a8f`。
+
+更新使用 `POST /api/v1/packages/update` 的 `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`，省略 `Source` 时构建已绑定的来源。
+
+构建作为后台任务运行，请求立即返回 202 与 `{"task_id":"…"}`。`GET /api/v1/tasks/{id}` 返回 `{"id","action":"install|update","status":"running|succeeded|failed","created_at","finished_at","log","result"}`；`log` 包含各步骤与 go 命令的完整标准错误，成功时 `result` 与同步端点的结果相同。失败时 `http_status` 与 `error` 与同步端点的错误响应一致：需要确认时为 409 与 `{"affected":[…]}`，确认后带 `Confirm: true` 重新提交，构建缓存使重建更快。`GET /api/v1/tasks` 列出任务（不含 `log`），`DELETE /api/v1/tasks/{id}` 取消运行中的任务或删除已结束的记录。同一时间只运行一个构建，其余任务在日志中提示等待；任务只保存在内存中，Core 重启后消失，停机时取消运行中的构建。
+
+`GET /api/v1/core/build-environment` 返回 `{"go_version":"go1.27.1","toolchain_bytes":0,"cache_bytes":0}`，未下载工具链时 `go_version` 为空串。`DELETE /api/v1/core/build-environment?part=toolchain|cache` 删除工具链或缓存，省略 `part` 时两者都删除并返回新的占用；构建运行中返回 412。工具链约占 250 MiB，缓存随构建增长。
+
+源码构建不支持 cgo，也不支持私有仓库与私有模块：Core 不向 GitHub 或模块代理发送凭据，也没有 `GOPRIVATE`/`GONOSUMDB` 设置。镜像不含 git，`goproxy` 中的 `direct` 回退在容器内不可用，依赖须能经代理取得。module 须位于仓库根目录，源码不能含符号链接。Windows 主机与以开发版 Go 构建的 Core 尚不支持源码构建。
+
 ### 导出诊断包
 ```fish
 alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
@@ -210,7 +227,9 @@ alonabot sleep-policy my-plugin auto
 | 操作 | 端点与请求 |
 | --- | --- |
 | Core 身份与组件 | `GET /api/v1/core`、`GET /api/v1/packages` |
-| 安装 | `POST /api/v1/packages/install`，使用导出 `InstallRequest` 字段 `Archive`、`Source`、`ID`、`Confirm`、`Replace`，见[管理类型](../internal/core/manage/install.go) |
+| 安装 | `POST /api/v1/packages/install`，使用导出 `InstallRequest` 字段 `Archive`、`Source`、`ID`、`Confirm`、`Replace`、`Build`、`Ref`，见[管理类型](../internal/core/manage/install.go)；`Build` 返回 202 与任务 ID，见[源码构建](#源码构建) |
+| 后台任务 | `GET /api/v1/tasks`、`GET`/`DELETE /api/v1/tasks/{id}` |
+| 构建环境 | `GET`/`DELETE /api/v1/core/build-environment`，DELETE 可带 `?part=toolchain\|cache` |
 | 下载来源 | `GET`/`PUT /api/v1/core/downloads`，`{"github_mirror":"","go_download_base":"https://go.dev/dl/","goproxy":"https://proxy.golang.org,direct"}`；PUT 只更新给出的字段，非法值返回 400 |
 | 启用、停用、重启、重载 | `POST /api/v1/packages/{action}`，`{"id":"demo"}`；disable 可能要求 `confirm` |
 | 更新 | `POST /api/v1/packages/update`，`{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |

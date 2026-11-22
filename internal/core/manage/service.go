@@ -81,6 +81,9 @@ type Service struct {
 	instances sync.Mutex // 实例名跨包唯一，串行化配置创建与删除。
 	packages  sync.Map   // 包 ID → *sync.Mutex；锁实例在服务生命周期内保持稳定。
 	catalog   sync.Mutex // 安装、同类替换、卸载与依赖图写入共用一个顺序。
+	builds    sync.Mutex // 串行化源码构建，以及工具链和构建缓存的下载与删除。
+	tasks     sync.Map   // 任务 ID → *task。
+	running   sync.WaitGroup
 }
 
 // New 创建复用 Core 装配资源的管理服务。
