@@ -20,7 +20,11 @@
   <a href="https://alonabot.github.io/docs/">文档</a> ·
   <a href="docs/plugin-guide.zh-CN.md">插件开发</a> ·
   <a href="changelog/README.zh-CN.md">更新日志</a> ·
-  <a href="CONTRIBUTING.zh-CN.md">参与贡献</a>
+  <a href="CONTRIBUTING.zh-CN.md">参与贡献</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/wiki">Wiki</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/discussions">讨论区</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/issues/new/choose">报告问题</a> ·
+  <a href="SECURITY.md">安全报告</a>
 </p>
 
 ## 核心特性

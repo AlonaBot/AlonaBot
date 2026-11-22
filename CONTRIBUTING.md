@@ -8,13 +8,15 @@ Submit component changes to the corresponding [official repository](README.md#of
 
 ## Start with a concrete problem
 
+Use [Discussions](https://github.com/AlonaBot/AlonaBot/discussions) for usage questions and design discussions. Report vulnerabilities privately following the [security policy](SECURITY.md). The [Wiki](https://github.com/AlonaBot/AlonaBot/wiki) provides task navigation.
+
 Search existing Issues and open or merged PRs, and check current source. If a fix already exists, help reproduce or review it. For larger features, protocol changes or data changes, open an Issue describing the problem, expected behavior and approach, and wait for maintainer agreement.
 
 - **Bugs**: provide version, operating system and architecture, reproduction steps, expected and actual results, and complete errors. Reduce the issue to a repeatable example where possible.
 - **Features**: describe the actual use case, missing capability and expected result. Prefer separate components for platform integrations.
 - **Documentation**: identify the step that caused difficulty and its command or behavior. Small corrections can go directly into a PR.
 
-Before sharing logs, configuration or diagnostics, redact Bot Tokens, management tokens, database credentials and real user data. Report suspected credential leaks or security vulnerabilities privately using the contact details on the maintainer's GitHub profile. Avoid publishing exploitable details in public Issues.
+Before sharing logs, configuration or diagnostics, redact Bot Tokens, management tokens, database credentials and real user data. Report suspected credential leaks or security vulnerabilities privately following the [security policy](SECURITY.md). Avoid publishing exploitable details in public Issues.
 
 ## Prepare the environment
 

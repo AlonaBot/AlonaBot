@@ -20,7 +20,11 @@ English · [简体中文](README.zh-CN.md)
   <a href="https://alonabot.github.io/docs/en/">Documentation</a> ·
   <a href="docs/plugin-guide.md">Plugin development</a> ·
   <a href="changelog/README.md">Changelog</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/wiki">Wiki</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/discussions">Discussions</a> ·
+  <a href="https://github.com/AlonaBot/AlonaBot/issues/new/choose">Report an issue</a> ·
+  <a href="SECURITY.md">Security reports</a>
 </p>
 
 ## Core features

@@ -1,5 +1,7 @@
 # AlonaBot documentation / 文档
 
+[Wiki](https://github.com/AlonaBot/AlonaBot/wiki) · [Discussions / 讨论区](https://github.com/AlonaBot/AlonaBot/discussions) · [Security reports / 安全报告](../SECURITY.md)
+
 | Task / 任务 | English | 简体中文 |
 | --- | --- | --- |
 | Install, configure and operate / 安装、配置与运维 | [Deployment](deployment.md) | [安装与部署](deployment.zh-CN.md) |
