@@ -171,7 +171,7 @@ Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HT
 
 设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 
-`github_mirror`（缺省为空，表示直连）是前缀式加速地址，例如 `https://ghfast.top/`，只作用于 Core 从 `github.com` 下载的文件：Release 资产与源码构建的 tarball。实际请求地址为前缀加原始 URL；Release 元数据仍取自 `api.github.com`，资产 URL 仍须指向 `github.com`。下载的 Release 资产须与 Release API 给出的大小和 `digest`（`sha256:…`）一致；GitHub 开始提供摘要之前上传的资产没有 digest，此时只核对大小并记录一条 WARN。源码 tarball 没有公开摘要，源码构建因此信任所设镜像。`go_download_base`（缺省 `https://go.dev/dl/`，可填 `https://golang.google.cn/dl/`）与 `goproxy`（缺省 `https://proxy.golang.org,direct`）只用于源码构建，见[源码构建](#源码构建)。前缀须是以 `/` 结尾的 http(s) 地址；修改从下一次下载生效，无需重启。WebUI 经 `GET`/`PUT /api/v1/core/downloads` 读写这三项。
+`github_mirror`（缺省为空，表示直连）是前缀式加速地址，例如 `https://ghfast.top/`，只作用于 Core 从 `github.com` 下载的文件：Release 资产与源码构建的 tarball。实际请求地址为前缀加原始 URL；Release 元数据仍取自 `api.github.com`，资产 URL 仍须指向 `github.com`。下载的 Release 资产须与 Release API 给出的大小和 `digest`（`sha256:…`）一致；GitHub 开始提供摘要之前上传的资产没有 digest，此时只核对大小并记录一条 WARN。源码 tarball 没有公开摘要，源码构建因此信任所设镜像。`go_download_base`（缺省 `https://go.dev/dl/`，可填 `https://golang.google.cn/dl/`）与 `goproxy`（缺省 `https://proxy.golang.org,direct`）只用于源码构建，见[源码构建](#源码构建)。前缀须是以 `/` 结尾的 https 地址；修改从下一次下载生效，无需重启。WebUI 经 `GET`/`PUT /api/v1/core/downloads` 读写这三项。
 
 首次启动统一以 0600 权限持久保存 `<data_dir>/admin_token`，仅输出管理地址和文件路径。本机 WebUI 自动展示待确认的 token；复制保存后点击“我已保存”。远程浏览器可显式读取：
 ```fish

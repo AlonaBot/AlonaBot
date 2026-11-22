@@ -647,11 +647,15 @@ func readString(value, key string, s *Settings) error {
 }
 
 // ValidateURLPrefix 校验 github_mirror 与 go_download_base 的前缀式地址：
-// http 或 https、主机名有效、以 / 结尾，不带查询、片段或认证信息，直接与目标路径拼接。
+// https、主机名有效、以 / 结尾，不带查询、片段或认证信息，直接与目标路径拼接。
+// 源码 tarball 没有摘要，Go 发行版的摘要与归档来自同一前缀，因此不接受明文 http。
 func ValidateURLPrefix(value string) error {
 	u, err := baseURL(value)
 	if err != nil {
 		return err
+	}
+	if u.Scheme != "https" {
+		return errors.New("URL prefix must use https")
 	}
 	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return errors.New("URL prefix must not contain credentials, a query or a fragment")
