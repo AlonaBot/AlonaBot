@@ -82,7 +82,7 @@ uv run --no-project python scripts/integration.py
 uv run --no-project python scripts/integration.py --run '^TestAgentServices$' --race
 ```
 
-The integration entry point first runs `tests/agent`/`tests/e2e`. Agent service tests needing private Core assembly run via temporary modfiles/overlays without writing dependencies/tests back into Core's module. CLI end-to-end tests live in `tests/e2e`; `cmd/alonabot` contains production commands only.
+The integration entry point first runs `tests/agent`/`tests/e2e`. Agent service tests needing private Core assembly run via temporary modfiles/overlays using the Agent version resolved by `tests/go.mod`, without writing dependencies/tests back into Core's module. Test dependencies may pin real development commits; `components.lock.json` continues to pin published components for release builds. CLI end-to-end tests live in `tests/e2e`; `cmd/alonabot` contains production commands only.
 
 ## Code generation
 

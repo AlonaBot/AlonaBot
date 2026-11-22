@@ -5,7 +5,7 @@ Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core�
 ## 固定源码与发行说明
 
 1. 选择已审查的 Core 提交和发行版本，确认相应检查通过。
-2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试还使用其他条目。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
+2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试的 Agent 输入由 `tests/go.mod` 固定，可独立使用真实开发提交。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
 3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`，按[更新日志格式](../changelog/README.zh-CN.md)写入单版本标题和实际发行日期，执行 `go generate ./internal/core/manage` 更新 Core 管理 API 内嵌的双语原文。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`。
 4. 先将组件 SDK 固定到已验证的 Core 精确提交，待组件发布后再固定整合锁和 Core tag，避免相互引用尚未发布的版本。插件模板随后更新至正式 SDK tag。
 

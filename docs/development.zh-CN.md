@@ -82,7 +82,7 @@ uv run --no-project python scripts/integration.py
 uv run --no-project python scripts/integration.py --run '^TestAgentServices$' --race
 ```
 
-整合入口先运行 `tests/agent` 与 `tests/e2e`；需要 Core 私有装配入口的 Agent 服务测试通过临时 modfile 和 overlay 运行，依赖和测试文件均不写回 Core module。CLI 的端到端测试在 `tests/e2e`，`cmd/alonabot` 只保留正式命令。
+整合入口先运行 `tests/agent` 与 `tests/e2e`；需要 Core 私有装配入口的 Agent 服务测试通过临时 modfile 和 overlay 运行，复用 `tests/go.mod` 实际解析出的 Agent 版本，依赖和测试文件均不写回 Core module。测试依赖可以固定真实开发提交；`components.lock.json` 继续固定发行构建使用的已发布组件。CLI 的端到端测试在 `tests/e2e`，`cmd/alonabot` 只保留正式命令。
 
 ## 代码生成
 
