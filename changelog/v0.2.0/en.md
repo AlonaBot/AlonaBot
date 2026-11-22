@@ -11,8 +11,9 @@
 - Core installs and updates components directly from platform archives. Online installation selects GitHub Release assets and reads the inner `plugin.yaml`, retaining repository, identity, version, platform, build-info, resource, pin and dependency checks. Local installation and management uploads accept one archive. See [PR #305](https://github.com/AlonaBot/AlonaBot/pull/305).
 - Command registration registers handlers by default; add `.Menu()` to root commands that should appear automatically. Scoped Telegram menus require an adapter built with `CommandMenuController`; existing adapters retain `SyncCommands`.
 - Provide English and Simplified Chinese deployment, component development and contribution guides. Protocol and management API guidance now lives alongside usage instructions, with protocol fields defined in `.proto` sources.
-- Core and SDK use the MIT License. Bundled Agent and WebUI retain the licenses supplied in their pinned releases.
-- Publish five Core archives: four `.tar.gz` files and one Windows `.zip`; GitHub supplies source archives. Compose uses `ghcr.io/alonabot/alonabot:0.2.0`, with Agent v0.1.0 and WebUI v0.1.1. Other component versions remain independent: help and Telegram v0.1.0, OneBot 11 v0.1.1.
+- Core, SDK and the official components use the MIT License.
+- Pin Agent, WebUI, help, Telegram and OneBot 11 to their independent v0.2.0 releases. Agent reads quoted and forwarded-message nodes with image sources; WebUI supports single-archive uploads; help explicitly registers its menu entries; Telegram adds scoped menus, media mappings and typed actions.
+- Publish five Core archives: four `.tar.gz` files and one Windows `.zip`; GitHub supplies source archives. Compose uses `ghcr.io/alonabot/alonabot:0.2.0`, with Agent v0.2.0 and WebUI v0.2.0.
 
 ### Removed
 
@@ -23,7 +24,7 @@
 
 Stop Core normally and back up the complete data directory before upgrading. Replace the executable or update the pinned Compose image, then start with the same data directory. Installation records, component generations, source bindings and Adapter instance configuration are retained. Command menu persistence is added through a new state migration.
 
-Upgrade Core first. This version reads existing component platform archives, including releases with historical signing sidecars. Component and WebUI release workflows have been adapted in their own repositories; their next releases will use archives alone. Publish and verify the adapted WebUI before removing historical `release.json`, `release.json.sig` and `release.pub` assets. Older Core versions require an upgrade for online installation and updates after that cleanup. The bundled WebUI v0.1.1 still uses its previously published upload interface; use the Core CLI for archive-only local installation until the adapted WebUI is released.
+Upgrade Core first, then update WebUI and the other components. This version reads existing component platform archives. Official component v0.2.0 Releases use platform archives alone; historical `release.json`, `release.json.sig` and `release.pub` assets are removed after Core and WebUI verification. Older Core versions require an upgrade for online installation and updates after that cleanup. Installed components continue to use their existing data.
 
 Automatic command menus now include only entries explicitly marked with `.Menu()`. Previously published plugins need a rebuild with the new SDK and `.Menu()` to restore those entries; their command handlers continue to work. Upgrade Core and the relevant Adapter to use scoped menu control.
 

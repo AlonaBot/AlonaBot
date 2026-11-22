@@ -52,7 +52,7 @@ def main():
             assert set(actual) == {'alonabot-webui-admin', 'alonabot-agent-official'}, actual
             for identity, enabled in [('alonabot-webui-admin', True), ('alonabot-agent-official', False)]:
                 item = actual[identity]
-                assert item['Enabled'] == enabled and item['Signed'], item
+                assert item['Enabled'] == enabled and not item['Signed'], item
                 assert item['State'] == ('Activated' if enabled else 'Installed'), item
 
         try:
@@ -62,7 +62,7 @@ def main():
             assert token
             packages(token)
             call('/api/auth/login', token, json.dumps({'token': token}).encode())
-            # 领取后凭证文件已删除；同一 token 跨进程重启有效，证明持久化状态仍在卷内。
+            # 登录后凭据文件继续保留；同一 token 跨进程重启有效，证明卷内状态持久化。
             run('restart')
             ready()
             packages(token)
