@@ -112,7 +112,18 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 				chat.ChatType = "channel"
 			}
 		}
-		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, chat); err != nil {
+		var menu *state.CommandMenuChat
+		var membership *bool
+		if chat != nil && entry.commandMenu != nil {
+			menu = &state.CommandMenuChat{AdapterID: p.opt.AdapterID, AccountID: entry.account, ChatID: chat.ChatID, Active: true}
+			if ev.EventType == "member.joined" && ev.GetEventPayload().GetMemberJoined().GetMemberExternalUserId() == entry.account {
+				membership = proto.Bool(true)
+			}
+			if ev.EventType == "member.left" && ev.GetEventPayload().GetMemberLeft().GetMemberExternalUserId() == entry.account {
+				membership = proto.Bool(false)
+			}
+		}
+		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, chat, menu, membership); err != nil {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
 		// 3. Core 重建可信事件字段，只保留本 Session 声明的平台权限及其展开结果。
@@ -129,7 +140,7 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 		}
 		return serviceResponse(&pb.AdapterDeliverResponse{Accepted: err == nil})
 	case *pb.AdapterCursorRequest:
-		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, nil); err != nil {
+		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, nil, nil, nil); err != nil {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
 		return serviceResponse(&pb.AdapterCursorResponse{})

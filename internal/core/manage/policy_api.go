@@ -49,6 +49,9 @@ func (s *Service) accessRoutes(mux *http.ServeMux) {
 		if err == nil {
 			err = s.opt.Store.SetAdapterInstanceAccess(r.Context(), id, request.All, request.Instances)
 		}
+		if err == nil && s.opt.Router != nil {
+			s.opt.Router.CommandsChanged()
+		}
 		respond(w, struct{}{}, err)
 	})
 }

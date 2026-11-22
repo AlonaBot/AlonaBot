@@ -27,6 +27,8 @@ go build -o bin/alonabot ./cmd/alonabot
 bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 ```
 
+示例的 `/ping` 已显式调用 `.Menu()`，支持菜单的 Adapter 自动按聊天发布；未标记的命令仍可正常调用。手动接管菜单见[插件开发规范](plugin-guide.md#命令菜单)。
+
 在同一个终端输入 `/ping`，预期回复 `pong`；Ctrl-C 正常停止。要并行运行多个 Core，为每个实例选择独立数据目录与监听端口。首次管理认证和监听设置见[部署指南](deployment.md#core-设置与-http-入口)。
 
 ## 依赖管理

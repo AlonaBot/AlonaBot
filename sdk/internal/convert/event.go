@@ -44,6 +44,9 @@ func EventFromProto(e *pb.Event) *message.Event {
 	case *pb.EventPayload_BotOnline:
 		v := p.BotOnline
 		out.Payload = &message.BotOnlinePayload{AdapterID: v.AdapterId, AdapterInstanceID: v.AdapterInstanceId, AccountID: v.AccountId, AccountDisplayName: v.GetAccountDisplayName()}
+	case *pb.EventPayload_CommandMenuReady:
+		v := p.CommandMenuReady
+		out.Payload = &message.CommandMenuReadyPayload{AdapterID: v.AdapterId, AdapterInstanceID: v.AdapterInstanceId, AccountID: v.AccountId, ChatID: v.ChatId}
 	case *pb.EventPayload_BotOffline:
 		v := p.BotOffline
 		out.Payload = &message.BotOfflinePayload{AdapterID: v.AdapterId, AdapterInstanceID: v.AdapterInstanceId, AccountID: v.AccountId, Reason: message.OfflineReason(v.Reason), SafeError: ErrorFromProto(v.SafeError)}
@@ -115,6 +118,8 @@ func EventToProto(e *message.Event) (*pb.Event, error) {
 		payload.Kind = &pb.EventPayload_Scheduled{Scheduled: &pb.ScheduledPayload{JobId: p.JobID, RunId: p.RunID, ScheduledAtUnixMs: milliseconds(p.ScheduledAt), TaskKey: p.TaskKey}}
 	case *message.BotOnlinePayload:
 		payload.Kind = &pb.EventPayload_BotOnline{BotOnline: &pb.BotOnlinePayload{AdapterId: p.AdapterID, AdapterInstanceId: p.AdapterInstanceID, AccountId: p.AccountID, AccountDisplayName: optional(p.AccountDisplayName)}}
+	case *message.CommandMenuReadyPayload:
+		payload.Kind = &pb.EventPayload_CommandMenuReady{CommandMenuReady: &pb.CommandMenuReadyPayload{AdapterId: p.AdapterID, AdapterInstanceId: p.AdapterInstanceID, AccountId: p.AccountID, ChatId: p.ChatID}}
 	case *message.BotOfflinePayload:
 		payload.Kind = &pb.EventPayload_BotOffline{BotOffline: &pb.BotOfflinePayload{AdapterId: p.AdapterID, AdapterInstanceId: p.AdapterInstanceID, AccountId: p.AccountID, Reason: pb.BotOfflineReason(p.Reason), SafeError: ErrorToProto(p.SafeError)}}
 	case *message.AdapterEventPayload:

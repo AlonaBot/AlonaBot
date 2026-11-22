@@ -20,6 +20,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/host"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
 	"github.com/AlonaBot/AlonaBot/internal/core/profile"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -106,7 +107,8 @@ type Router struct {
 	policy         CommandPolicy
 	commandState   func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
 	commandNames   func(string) map[string][][]string
-	commandSyncs   map[string]*commandSync   // 当前运行实例身份与任务，由 mu 保护。
+	commandSyncs   map[string]*commandSync // 当前运行实例身份与任务，由 mu 保护。
+	menuStore      *state.Store
 	matches        map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
 	queue          []queuedEvent
 	concurrency    int
@@ -144,7 +146,7 @@ func New(opt Options) *Router {
 		matches: make(map[string][]commandRoute), plugins: make(map[string]*pluginSession),
 		snapshots: make(map[string]routeSnapshot),
 		inFlight:  make(map[inFlightKey]int), commands: &CommandIndex{},
-		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync),
+		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync), menuStore: opt.MenuStore,
 	}
 }
 
@@ -297,6 +299,12 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 
 func (r *Router) dispatch(event *trustedEvent) {
 	ev := event.retained
+	if event.recipient != "" {
+		candidates := r.candidates(ev)
+		candidates = slices.DeleteFunc(candidates, func(c candidate) bool { return c.pluginID != event.recipient })
+		r.dispatchEvents(event, event.rebuild(), candidates, false, false)
+		return
+	}
 	if ev.GetEventType() == commandInvokedEvent {
 		// 命令通知保留原消息的 Actor，直接交给订阅的事件路由。
 		r.dispatchEvents(event, event.rebuild(), r.candidates(ev), false, false)

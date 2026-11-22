@@ -41,3 +41,27 @@ func (entry *instance) SyncCommands(ctx context.Context, commands []*pb.CommandM
 	}
 	return nil
 }
+
+// CommandMenuConfig 返回本次运行由 Adapter 报告的菜单配置，nil 表示传统同步。
+func (entry *instance) CommandMenuConfig() *pb.CommandMenuConfig { return entry.commandMenu }
+
+// CommandMenu 在当前运行 Session 上执行单个菜单位置操作，保留完整错误。
+func (entry *instance) CommandMenu(ctx context.Context, operation string, menu *pb.CommandMenu) (*pb.CommandMenuResponse, *pb.ErrorInfo) {
+	p := entry.process
+	p.mu.Lock()
+	running := entry.running
+	p.mu.Unlock()
+	if !running {
+		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
+	}
+	response := &pb.CommandMenuResponse{}
+	err := call(ctx, entry.session, wire.ServiceAdapterCommandMenu, &pb.CommandMenuRequest{InstanceId: entry.id, Operation: operation, Menu: menu}, response)
+	if err != nil {
+		var failure *wire.CallError
+		if errors.As(err, &failure) {
+			return response, failure.ErrorInfo
+		}
+		return response, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+	}
+	return response, nil
+}

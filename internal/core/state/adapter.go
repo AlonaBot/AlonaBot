@@ -19,9 +19,9 @@ func (s *Store) AdapterCursor(ctx context.Context, instanceID string) ([]byte, e
 	return row.Cursor, err
 }
 
-// PutAdapterCursor 在同一事务中持久化游标与聊天；chat 为 nil 时只保存游标。
+// PutAdapterCursor 在同一事务中持久化游标、聊天与账号菜单关系；nil 项保持原记录。
 // 空名称与未知类型保留已有值，首次活跃时刻在聊天更新时保持不变。
-func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID string, cursor []byte, chat *Chat) error {
+func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID string, cursor []byte, chat *Chat, menu *CommandMenuChat, membership *bool) error {
 	// 空游标对无重放能力的平台有效，以空 BLOB 保存，满足 NOT NULL 契约。
 	if cursor == nil {
 		cursor = []byte{}
@@ -32,7 +32,12 @@ func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID strin
 			return err
 		}
 		if chat != nil {
-			return putChat(tx, chat, now)
+			if err := putChat(tx, chat, now); err != nil {
+				return err
+			}
+		}
+		if menu != nil {
+			return observeMenuChat(tx, *menu, membership)
 		}
 		return nil
 	})

@@ -185,6 +185,7 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 ### 6.4 媒体来源与新增片段
 
+- `MediaSource.MIME` 是 Core 填写的来源元数据（wire `mime=6`）：从已保存的媒体与入站对象读取，空串表示未知，插件提交时拒绝；租约和 SDK 转换保留该值。
 - 媒体来源（D-88）：https_url 原样作为 URL 参数；inline_base64 解码后以 multipart 上传；media_ref 以 multipart 上传，请求体边经 `core.media.read` 分块读取边写出，不在内存中拼出整份请求体；`platform_file` 直接作为 file_id 参数，不重新上传。
 - voice（D-89）：用 sendVoice，每个 voice 片段单独成一个物理操作，不与相册合并。入站 `voice` 映射为带 incoming_ref 的 voice，不再作为 file；入站 `audio` 仍为 file。
 - 动图（D-99）：mime 为 image/gif 的 image 用 sendAnimation 发送，并结束当前连续媒体组；mime 取 MediaRef 的值，inline_base64 按开头字节 `GIF8` 判断，https_url 不判断，按普通 image 发送。入站 `animation` 与 `video_note` 映射为 video；`sticker` 中 is_animated 与 is_video 都为 false 的映射为 image，其余贴纸只留在 platform_payload。
@@ -193,9 +194,9 @@ Telegram callback_data 限制为 1～64 bytes，不能拼接完整插件 ID、�
 
 ### 6.5 平台动作、撤回与命令菜单
 
-- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`alonabot-adapter-telegram/action` 为每个动作发布带类型的 Go 函数，只依赖 `sdk` 根包；另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
+- 平台动作（D-92）：参数沿用 Bot API 的字段名，数字 ID 写作十进制字符串，chat_id 与 message_thread_id 取自 Target，不在参数中重复；结果为 Bot API 的 `result` 原文。官方动作（版本 1，作用范围都为 chat）：`telegram.ban_chat_member`、`telegram.unban_chat_member`、`telegram.restrict_chat_member`、`telegram.pin_chat_message`、`telegram.unpin_chat_message`、`telegram.get_chat`、`telegram.get_chat_member`、`telegram.get_chat_member_count`、`telegram.get_chat_administrators`、`telegram.set_chat_title`、`telegram.leave_chat`、`telegram.send_chat_action`、`telegram.set_message_reaction`、`telegram.send_message_draft`。`alonabot-adapter-telegram/action` 为每个动作发布带类型的 Go 函数，通过 `sdk/action` 的 `action.Caller` 接口调用，并直接依赖 `sdk` 的选项/发送入口、`sdk/message` 的消息句柄/发送类型及 `sdk/errcode` 的错误类型；公开 action/event/perm 包保持不链接 Adapter 运行时。另提供两个辅助函数：输入状态每 4 秒刷新一次、ctx 结束即停止；草稿流式显示，结束后经普通 Send 发出正式消息（草稿经平台动作发出，不执行出站 Hook，正式消息执行，D-98）。
 - 撤回用 deleteMessages，每次最多 100 个同一会话的 ID，它们共享该请求的结果。`telegram.send_chat_action` 带 message_thread_id；`telegram.set_message_reaction` 把本机器人在该消息上的回应设为给出的列表（空列表为撤销）；`telegram.send_message_draft` 只用于私聊，其他会话在调用平台前返回 UNSUPPORTED，参数在实施时按 Bot API 原文核对。
-- 命令菜单（D-96、D-138）：Core 以 CommandBuilder.Description 登记的英文原文提供 en-US，其他语言按 CONTRACTS §8 的 commands 完整规范路径覆盖与回落规则选择；生成器不扫描注册，check/build 只检查顶层 commands 的结构（键为字符串，值为含字符串 description 的对象）；SDK 的 Collect 对没有对应已注册命令或命令未用 Description 登记英文原文的覆盖路径拒绝注册，错误为英文并带出路径。`adapter.commands.sync` 用 setMyCommands 设置 default scope，并为命令说明有翻译的每个语言各设置一次 language_code；名字不匹配 `^[a-z0-9_]{1,32}$` 的跳过，说明超过 256 字符时截断，两者都记诊断；与上一次成功同步的内容相同时不调用平台，实例停止时不删除菜单。
+- 命令菜单（D-96、D-138）：用 `CommandBuilder.Menu()` 显式展示，`.Description` 与 commands 翻译沿 CONTRACTS §8。Core 按 chat 的 Profile、许可、公开权限、前缀与主名胜出结果计算，default 受管菜单为空。普通自动同步按本 Session 的成功位置内容快照比较，内容未变时不调用平台；快照在平台成功且位置记账成功后保存，写入失败/UNKNOWN、删除、成员变化及模式切换使相关快照失效。实例新 Session、手动转自动及离群重入重新发布；显式 `command.Sync` 在自动模式全量重建活跃聊天菜单与受管 default，手动模式重新处理清理与就绪通知。`sdk/command` 提供类型化 Set/Get/Delete/Status/Sync，Adapter 的 `CommandMenuController` 报告自动/手动配置并执行单位置操作。每份最多 100 条，名字、说明和语言冲突在写前报错并保留已有菜单。模式切换、ready 事件、所有权、账号隔离持久化、离群与重入的完整规则见 CONTRACTS §8。
 
 ### 6.6 服务消息（D-133）
 

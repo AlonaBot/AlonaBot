@@ -63,6 +63,8 @@ message AdapterInstanceStartResponse {
   optional string account_display_name = 2;
   repeated Capability capabilities = 3;
   optional string account_username = 4; // 平台上可寻址的账号标识；平台没有时 absent。
+  // 存在时使用按聊天管理的菜单协议；缺省保留传统同步入口。
+  CommandMenuConfig command_menu = 5;
 }
 
 // AdapterInstanceStopRequest 指定要停止接收的实例。
@@ -213,6 +215,57 @@ message AdapterCommandsSyncRequest {
 
 // AdapterCommandsSyncResponse 确认菜单同步完成，错误沿用 ErrorInfo。
 message AdapterCommandsSyncResponse {
+}
+
+// CommandMenuConfig 由 Adapter 实例报告菜单模式，Core 无需解析平台配置。
+message CommandMenuConfig {
+  bool auto_sync_commands = 1;
+  bool clear_commands_on_disable = 2;
+}
+
+// CommandMenuScope 定位整个聊天或聊天内管理员、成员的菜单。
+message CommandMenuScope {
+  // default、chat、chat_administrators、chat_member。
+  string type = 1;
+  string chat_id = 2;
+  string user_id = 3;
+}
+
+// CommandMenuEntry 保存单个语言的命令与说明。
+message CommandMenuEntry {
+  string name = 1;
+  string description = 2;
+}
+
+// CommandMenu 定位账号内一份 scope 与 language_code 的完整菜单。
+message CommandMenu {
+  CommandMenuScope scope = 1;
+  string language_code = 2;
+  repeated CommandMenuEntry commands = 3;
+}
+
+// CommandMenuRequest 执行 set、get、delete、status 或 sync。
+message CommandMenuRequest {
+  string instance_id = 1;
+  string operation = 2;
+  CommandMenu menu = 3;
+}
+
+// CommandMenuPosition 返回最后一次成功写入的位置、模式与插件所有者。
+message CommandMenuPosition {
+  CommandMenuScope scope = 1;
+  string language_code = 2;
+  string mode = 3;
+  string owner_plugin_id = 4;
+}
+
+// CommandMenuResponse 保留远端菜单或 Core 模式状态及最后同步错误。
+message CommandMenuResponse {
+  repeated CommandMenuEntry commands = 1;
+  CommandMenuConfig config = 2;
+  bool ready = 3;
+  string last_error = 4;
+  repeated CommandMenuPosition positions = 5;
 }
 
 // AdapterReadNodesRequest 将查询绑定到实例账号及当前会话。

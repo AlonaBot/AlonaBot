@@ -460,8 +460,10 @@ type AdapterInstanceStartResponse struct {
 	AccountDisplayName *string                `protobuf:"bytes,2,opt,name=account_display_name,json=accountDisplayName,proto3,oneof" json:"account_display_name,omitempty"`
 	Capabilities       []*Capability          `protobuf:"bytes,3,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	AccountUsername    *string                `protobuf:"bytes,4,opt,name=account_username,json=accountUsername,proto3,oneof" json:"account_username,omitempty"` // 平台上可寻址的账号标识；平台没有时 absent。
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// 存在时使用按聊天管理的菜单协议；缺省保留传统同步入口。
+	CommandMenu   *CommandMenuConfig `protobuf:"bytes,5,opt,name=command_menu,json=commandMenu,proto3" json:"command_menu,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AdapterInstanceStartResponse) Reset() {
@@ -520,6 +522,13 @@ func (x *AdapterInstanceStartResponse) GetAccountUsername() string {
 		return *x.AccountUsername
 	}
 	return ""
+}
+
+func (x *AdapterInstanceStartResponse) GetCommandMenu() *CommandMenuConfig {
+	if x != nil {
+		return x.CommandMenu
+	}
+	return nil
 }
 
 // AdapterInstanceStopRequest 指定要停止接收的实例。
@@ -1755,6 +1764,442 @@ func (*AdapterCommandsSyncResponse) Descriptor() ([]byte, []int) {
 	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{27}
 }
 
+// CommandMenuConfig 由 Adapter 实例报告菜单模式，Core 无需解析平台配置。
+type CommandMenuConfig struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	AutoSyncCommands       bool                   `protobuf:"varint,1,opt,name=auto_sync_commands,json=autoSyncCommands,proto3" json:"auto_sync_commands,omitempty"`
+	ClearCommandsOnDisable bool                   `protobuf:"varint,2,opt,name=clear_commands_on_disable,json=clearCommandsOnDisable,proto3" json:"clear_commands_on_disable,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *CommandMenuConfig) Reset() {
+	*x = CommandMenuConfig{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenuConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenuConfig) ProtoMessage() {}
+
+func (x *CommandMenuConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenuConfig.ProtoReflect.Descriptor instead.
+func (*CommandMenuConfig) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *CommandMenuConfig) GetAutoSyncCommands() bool {
+	if x != nil {
+		return x.AutoSyncCommands
+	}
+	return false
+}
+
+func (x *CommandMenuConfig) GetClearCommandsOnDisable() bool {
+	if x != nil {
+		return x.ClearCommandsOnDisable
+	}
+	return false
+}
+
+// CommandMenuScope 定位整个聊天或聊天内管理员、成员的菜单。
+type CommandMenuScope struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// default、chat、chat_administrators、chat_member。
+	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	ChatId        string `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	UserId        string `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandMenuScope) Reset() {
+	*x = CommandMenuScope{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenuScope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenuScope) ProtoMessage() {}
+
+func (x *CommandMenuScope) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenuScope.ProtoReflect.Descriptor instead.
+func (*CommandMenuScope) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *CommandMenuScope) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *CommandMenuScope) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *CommandMenuScope) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+// CommandMenuEntry 保存单个语言的命令与说明。
+type CommandMenuEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandMenuEntry) Reset() {
+	*x = CommandMenuEntry{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenuEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenuEntry) ProtoMessage() {}
+
+func (x *CommandMenuEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenuEntry.ProtoReflect.Descriptor instead.
+func (*CommandMenuEntry) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CommandMenuEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CommandMenuEntry) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+// CommandMenu 定位账号内一份 scope 与 language_code 的完整菜单。
+type CommandMenu struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *CommandMenuScope      `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	LanguageCode  string                 `protobuf:"bytes,2,opt,name=language_code,json=languageCode,proto3" json:"language_code,omitempty"`
+	Commands      []*CommandMenuEntry    `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandMenu) Reset() {
+	*x = CommandMenu{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenu) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenu) ProtoMessage() {}
+
+func (x *CommandMenu) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenu.ProtoReflect.Descriptor instead.
+func (*CommandMenu) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CommandMenu) GetScope() *CommandMenuScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *CommandMenu) GetLanguageCode() string {
+	if x != nil {
+		return x.LanguageCode
+	}
+	return ""
+}
+
+func (x *CommandMenu) GetCommands() []*CommandMenuEntry {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+// CommandMenuRequest 执行 set、get、delete、status 或 sync。
+type CommandMenuRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Operation     string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	Menu          *CommandMenu           `protobuf:"bytes,3,opt,name=menu,proto3" json:"menu,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandMenuRequest) Reset() {
+	*x = CommandMenuRequest{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenuRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenuRequest) ProtoMessage() {}
+
+func (x *CommandMenuRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenuRequest.ProtoReflect.Descriptor instead.
+func (*CommandMenuRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CommandMenuRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *CommandMenuRequest) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *CommandMenuRequest) GetMenu() *CommandMenu {
+	if x != nil {
+		return x.Menu
+	}
+	return nil
+}
+
+// CommandMenuPosition 返回最后一次成功写入的位置、模式与插件所有者。
+type CommandMenuPosition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *CommandMenuScope      `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	LanguageCode  string                 `protobuf:"bytes,2,opt,name=language_code,json=languageCode,proto3" json:"language_code,omitempty"`
+	Mode          string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
+	OwnerPluginId string                 `protobuf:"bytes,4,opt,name=owner_plugin_id,json=ownerPluginId,proto3" json:"owner_plugin_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandMenuPosition) Reset() {
+	*x = CommandMenuPosition{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenuPosition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenuPosition) ProtoMessage() {}
+
+func (x *CommandMenuPosition) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenuPosition.ProtoReflect.Descriptor instead.
+func (*CommandMenuPosition) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *CommandMenuPosition) GetScope() *CommandMenuScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *CommandMenuPosition) GetLanguageCode() string {
+	if x != nil {
+		return x.LanguageCode
+	}
+	return ""
+}
+
+func (x *CommandMenuPosition) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *CommandMenuPosition) GetOwnerPluginId() string {
+	if x != nil {
+		return x.OwnerPluginId
+	}
+	return ""
+}
+
+// CommandMenuResponse 保留远端菜单或 Core 模式状态及最后同步错误。
+type CommandMenuResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Commands      []*CommandMenuEntry    `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	Config        *CommandMenuConfig     `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	Ready         bool                   `protobuf:"varint,3,opt,name=ready,proto3" json:"ready,omitempty"`
+	LastError     string                 `protobuf:"bytes,4,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	Positions     []*CommandMenuPosition `protobuf:"bytes,5,rep,name=positions,proto3" json:"positions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandMenuResponse) Reset() {
+	*x = CommandMenuResponse{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandMenuResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandMenuResponse) ProtoMessage() {}
+
+func (x *CommandMenuResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandMenuResponse.ProtoReflect.Descriptor instead.
+func (*CommandMenuResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *CommandMenuResponse) GetCommands() []*CommandMenuEntry {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *CommandMenuResponse) GetConfig() *CommandMenuConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *CommandMenuResponse) GetReady() bool {
+	if x != nil {
+		return x.Ready
+	}
+	return false
+}
+
+func (x *CommandMenuResponse) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *CommandMenuResponse) GetPositions() []*CommandMenuPosition {
+	if x != nil {
+		return x.Positions
+	}
+	return nil
+}
+
 // AdapterReadNodesRequest 将查询绑定到实例账号及当前会话。
 type AdapterReadNodesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1767,7 +2212,7 @@ type AdapterReadNodesRequest struct {
 
 func (x *AdapterReadNodesRequest) Reset() {
 	*x = AdapterReadNodesRequest{}
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[28]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1779,7 +2224,7 @@ func (x *AdapterReadNodesRequest) String() string {
 func (*AdapterReadNodesRequest) ProtoMessage() {}
 
 func (x *AdapterReadNodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alonabot_v1_adapter_proto_msgTypes[28]
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1792,7 +2237,7 @@ func (x *AdapterReadNodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterReadNodesRequest.ProtoReflect.Descriptor instead.
 func (*AdapterReadNodesRequest) Descriptor() ([]byte, []int) {
-	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{28}
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *AdapterReadNodesRequest) GetInstanceId() string {
@@ -1850,13 +2295,14 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"instanceId\x12\x1f\n" +
 	"\vconfig_json\x18\x02 \x01(\tR\n" +
 	"configJson\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\fR\x06cursor\"\x8f\x02\n" +
+	"\x06cursor\x18\x03 \x01(\fR\x06cursor\"\xd2\x02\n" +
 	"\x1cAdapterInstanceStartResponse\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x125\n" +
 	"\x14account_display_name\x18\x02 \x01(\tH\x00R\x12accountDisplayName\x88\x01\x01\x12;\n" +
 	"\fcapabilities\x18\x03 \x03(\v2\x17.alonabot.v1.CapabilityR\fcapabilities\x12.\n" +
-	"\x10account_username\x18\x04 \x01(\tH\x01R\x0faccountUsername\x88\x01\x01B\x17\n" +
+	"\x10account_username\x18\x04 \x01(\tH\x01R\x0faccountUsername\x88\x01\x01\x12A\n" +
+	"\fcommand_menu\x18\x05 \x01(\v2\x1e.alonabot.v1.CommandMenuConfigR\vcommandMenuB\x17\n" +
 	"\x15_account_display_nameB\x13\n" +
 	"\x11_account_username\"=\n" +
 	"\x1aAdapterInstanceStopRequest\x12\x1f\n" +
@@ -1950,7 +2396,38 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x128\n" +
 	"\bcommands\x18\x02 \x03(\v2\x1c.alonabot.v1.CommandMenuItemR\bcommands\"\x1d\n" +
-	"\x1bAdapterCommandsSyncResponse\"\x9e\x01\n" +
+	"\x1bAdapterCommandsSyncResponse\"|\n" +
+	"\x11CommandMenuConfig\x12,\n" +
+	"\x12auto_sync_commands\x18\x01 \x01(\bR\x10autoSyncCommands\x129\n" +
+	"\x19clear_commands_on_disable\x18\x02 \x01(\bR\x16clearCommandsOnDisable\"X\n" +
+	"\x10CommandMenuScope\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x17\n" +
+	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\"H\n" +
+	"\x10CommandMenuEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xa2\x01\n" +
+	"\vCommandMenu\x123\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1d.alonabot.v1.CommandMenuScopeR\x05scope\x12#\n" +
+	"\rlanguage_code\x18\x02 \x01(\tR\flanguageCode\x129\n" +
+	"\bcommands\x18\x03 \x03(\v2\x1d.alonabot.v1.CommandMenuEntryR\bcommands\"\x81\x01\n" +
+	"\x12CommandMenuRequest\x12\x1f\n" +
+	"\vinstance_id\x18\x01 \x01(\tR\n" +
+	"instanceId\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\tR\toperation\x12,\n" +
+	"\x04menu\x18\x03 \x01(\v2\x18.alonabot.v1.CommandMenuR\x04menu\"\xab\x01\n" +
+	"\x13CommandMenuPosition\x123\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1d.alonabot.v1.CommandMenuScopeR\x05scope\x12#\n" +
+	"\rlanguage_code\x18\x02 \x01(\tR\flanguageCode\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12&\n" +
+	"\x0fowner_plugin_id\x18\x04 \x01(\tR\rownerPluginId\"\xfd\x01\n" +
+	"\x13CommandMenuResponse\x129\n" +
+	"\bcommands\x18\x01 \x03(\v2\x1d.alonabot.v1.CommandMenuEntryR\bcommands\x126\n" +
+	"\x06config\x18\x02 \x01(\v2\x1e.alonabot.v1.CommandMenuConfigR\x06config\x12\x14\n" +
+	"\x05ready\x18\x03 \x01(\bR\x05ready\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x04 \x01(\tR\tlastError\x12>\n" +
+	"\tpositions\x18\x05 \x03(\v2 .alonabot.v1.CommandMenuPositionR\tpositions\"\x9e\x01\n" +
 	"\x17AdapterReadNodesRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12+\n" +
@@ -1977,7 +2454,7 @@ func file_alonabot_v1_adapter_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_adapter_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(AdapterInstanceState)(0),            // 0: alonabot.v1.AdapterInstanceState
 	(ActionScope)(0),                     // 1: alonabot.v1.ActionScope
@@ -2009,42 +2486,57 @@ var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(*CommandMenuItem)(nil),              // 27: alonabot.v1.CommandMenuItem
 	(*AdapterCommandsSyncRequest)(nil),   // 28: alonabot.v1.AdapterCommandsSyncRequest
 	(*AdapterCommandsSyncResponse)(nil),  // 29: alonabot.v1.AdapterCommandsSyncResponse
-	(*AdapterReadNodesRequest)(nil),      // 30: alonabot.v1.AdapterReadNodesRequest
-	nil,                                  // 31: alonabot.v1.CommandMenuItem.DescriptionsEntry
-	(*Capability)(nil),                   // 32: alonabot.v1.Capability
-	(*Target)(nil),                       // 33: alonabot.v1.Target
-	(*MessageChain)(nil),                 // 34: alonabot.v1.MessageChain
-	(*Event)(nil),                        // 35: alonabot.v1.Event
-	(*ErrorInfo)(nil),                    // 36: alonabot.v1.ErrorInfo
-	(*ForwardSegment)(nil),               // 37: alonabot.v1.ForwardSegment
+	(*CommandMenuConfig)(nil),            // 30: alonabot.v1.CommandMenuConfig
+	(*CommandMenuScope)(nil),             // 31: alonabot.v1.CommandMenuScope
+	(*CommandMenuEntry)(nil),             // 32: alonabot.v1.CommandMenuEntry
+	(*CommandMenu)(nil),                  // 33: alonabot.v1.CommandMenu
+	(*CommandMenuRequest)(nil),           // 34: alonabot.v1.CommandMenuRequest
+	(*CommandMenuPosition)(nil),          // 35: alonabot.v1.CommandMenuPosition
+	(*CommandMenuResponse)(nil),          // 36: alonabot.v1.CommandMenuResponse
+	(*AdapterReadNodesRequest)(nil),      // 37: alonabot.v1.AdapterReadNodesRequest
+	nil,                                  // 38: alonabot.v1.CommandMenuItem.DescriptionsEntry
+	(*Capability)(nil),                   // 39: alonabot.v1.Capability
+	(*Target)(nil),                       // 40: alonabot.v1.Target
+	(*MessageChain)(nil),                 // 41: alonabot.v1.MessageChain
+	(*Event)(nil),                        // 42: alonabot.v1.Event
+	(*ErrorInfo)(nil),                    // 43: alonabot.v1.ErrorInfo
+	(*ForwardSegment)(nil),               // 44: alonabot.v1.ForwardSegment
 }
 var file_alonabot_v1_adapter_proto_depIdxs = []int32{
-	32, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
+	39, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
 	3,  // 1: alonabot.v1.AdapterDescriptor.extensions:type_name -> alonabot.v1.ExtensionDeclaration
 	4,  // 2: alonabot.v1.AdapterDescriptor.permissions:type_name -> alonabot.v1.PermissionDeclaration
 	5,  // 3: alonabot.v1.AdapterDescriptor.events:type_name -> alonabot.v1.EventDeclaration
 	21, // 4: alonabot.v1.AdapterDescriptor.actions:type_name -> alonabot.v1.ActionDeclaration
-	32, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
-	33, // 6: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
-	34, // 7: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	35, // 8: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
-	0,  // 9: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
-	36, // 10: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
-	33, // 11: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
-	34, // 12: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
-	33, // 13: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
-	1,  // 14: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
-	33, // 15: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
-	33, // 16: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
-	31, // 17: alonabot.v1.CommandMenuItem.descriptions:type_name -> alonabot.v1.CommandMenuItem.DescriptionsEntry
-	27, // 18: alonabot.v1.AdapterCommandsSyncRequest.commands:type_name -> alonabot.v1.CommandMenuItem
-	33, // 19: alonabot.v1.AdapterReadNodesRequest.target:type_name -> alonabot.v1.Target
-	37, // 20: alonabot.v1.AdapterReadNodesRequest.segment:type_name -> alonabot.v1.ForwardSegment
-	21, // [21:21] is the sub-list for method output_type
-	21, // [21:21] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	39, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
+	30, // 6: alonabot.v1.AdapterInstanceStartResponse.command_menu:type_name -> alonabot.v1.CommandMenuConfig
+	40, // 7: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
+	41, // 8: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	42, // 9: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
+	0,  // 10: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
+	43, // 11: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
+	40, // 12: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
+	41, // 13: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
+	40, // 14: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
+	1,  // 15: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
+	40, // 16: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
+	40, // 17: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
+	38, // 18: alonabot.v1.CommandMenuItem.descriptions:type_name -> alonabot.v1.CommandMenuItem.DescriptionsEntry
+	27, // 19: alonabot.v1.AdapterCommandsSyncRequest.commands:type_name -> alonabot.v1.CommandMenuItem
+	31, // 20: alonabot.v1.CommandMenu.scope:type_name -> alonabot.v1.CommandMenuScope
+	32, // 21: alonabot.v1.CommandMenu.commands:type_name -> alonabot.v1.CommandMenuEntry
+	33, // 22: alonabot.v1.CommandMenuRequest.menu:type_name -> alonabot.v1.CommandMenu
+	31, // 23: alonabot.v1.CommandMenuPosition.scope:type_name -> alonabot.v1.CommandMenuScope
+	32, // 24: alonabot.v1.CommandMenuResponse.commands:type_name -> alonabot.v1.CommandMenuEntry
+	30, // 25: alonabot.v1.CommandMenuResponse.config:type_name -> alonabot.v1.CommandMenuConfig
+	35, // 26: alonabot.v1.CommandMenuResponse.positions:type_name -> alonabot.v1.CommandMenuPosition
+	40, // 27: alonabot.v1.AdapterReadNodesRequest.target:type_name -> alonabot.v1.Target
+	44, // 28: alonabot.v1.AdapterReadNodesRequest.segment:type_name -> alonabot.v1.ForwardSegment
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_adapter_proto_init() }
@@ -2062,7 +2554,7 @@ func file_alonabot_v1_adapter_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_adapter_proto_rawDesc), len(file_alonabot_v1_adapter_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   30,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

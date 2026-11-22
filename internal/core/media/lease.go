@@ -75,6 +75,9 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 			access.object.leases++
 			release := s.bindLease(ctx, lease, readerSessionKey, File{ExpiresAt: deadline})
 			prepared := &pb.MediaSource{Source: &pb.MediaSource_PlatformFile{PlatformFile: access.object.source.fileID}}
+			if access.object.mime != nil {
+				prepared.Mime = *access.object.mime
+			}
 			s.mu.Unlock()
 			return prepared, release, nil
 		}
@@ -126,7 +129,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	}
 	file.ExpiresAt = deadline
 	release = s.bindLease(ctx, lease, readerSessionKey, file)
-	return &pb.MediaSource{Source: &pb.MediaSource_MediaRef{MediaRef: lease.token}}, release, nil
+	return &pb.MediaSource{Mime: file.MIME, Source: &pb.MediaSource_MediaRef{MediaRef: lease.token}}, release, nil
 }
 
 // bindLease 要求持有 Store.mu；先发布 Session 索引，再安装结束回调。

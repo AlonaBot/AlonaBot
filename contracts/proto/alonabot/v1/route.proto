@@ -184,6 +184,8 @@ message CommandSpec {
   string usage_key = 12;
   // 英文说明原文；其他语言按完整规范路径覆盖。
   optional string description = 13;
+  // 显式展示根命令；缺省只登记处理器。
+  bool menu = 14;
 }
 
 // CommandAlias 描述命令的一条别名路径。

@@ -166,6 +166,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			}
 			defer release()
 			source.Source = prepared.Source
+			source.Mime = prepared.Mime
 		}
 		if err := ctx.Err(); err != nil {
 			return rejectError(target, err)

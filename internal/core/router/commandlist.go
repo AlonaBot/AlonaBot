@@ -11,9 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// RegisterCommandList 将当前路由器的命令列表服务接入固定服务分流器。
+// RegisterCommandList 将命令列表与菜单服务接入固定服务分流器。
 func (r *Router) RegisterCommandList(m *Mux) {
 	m.Handle(wire.ServiceCommandList, r.listCommands)
+	m.Handle(wire.ServiceCommandMenu, r.commandMenuService)
 }
 
 func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) wire.Response {

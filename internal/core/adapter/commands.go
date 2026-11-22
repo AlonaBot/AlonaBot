@@ -10,3 +10,9 @@ import (
 type CommandSynchronizer interface {
 	SyncCommands(ctx context.Context, commands []*pb.CommandMenuItem) *pb.ErrorInfo
 }
+
+// CommandMenuController 提供按 scope 与 language 管理菜单的运行实例接口。
+type CommandMenuController interface {
+	CommandMenuConfig() *pb.CommandMenuConfig
+	CommandMenu(ctx context.Context, operation string, menu *pb.CommandMenu) (*pb.CommandMenuResponse, *pb.ErrorInfo)
+}

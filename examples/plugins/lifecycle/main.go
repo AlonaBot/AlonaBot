@@ -56,7 +56,7 @@ func (*Lifecycle) OnStop(context.Context) error {
 
 // registerCommands 注册 /ping 命令，回复 pong。
 func registerCommands(r *sdk.Plugin) {
-	r.Command("ping").Handle(func(*sdk.Context) (message.Content, error) {
+	r.Command("ping").Menu().Handle(func(*sdk.Context) (message.Content, error) {
 		return message.Chain{message.Text("pong")}, nil
 	})
 }

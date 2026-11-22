@@ -36,7 +36,7 @@ func New() *sdk.Plugin {
 		_, err = db.ExecContext(ctx, "INSERT INTO startup (id, greeting) VALUES (?, ?)", starts+1, p.Config().Objects("greetings")[0].String("text"))
 		return err
 	})
-	p.Command("hello").Description("Show a translated greeting").Handle(func(c *sdk.Context) error {
+	p.Command("hello").Menu().Description("Show a translated greeting").Handle(func(c *sdk.Context) error {
 		return c.Reply(c.T("hello"))
 	})
 	p.On(sdk.MessageCreated).Rule(sdk.NotCommand()).Handle(func(c *sdk.Context, e *message.CreatedPayload) error {

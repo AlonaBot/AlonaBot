@@ -14,7 +14,7 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
+在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板显式标记 `.Menu()`，直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
@@ -181,6 +181,28 @@ return &adapter.Descriptor{
 省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证；`AuthStatic` 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
 查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](https://github.com/AlonaBot/alonabot-plugin-help/blob/main/help.go)。
+
+### 命令菜单
+
+根命令需要显示在平台菜单时写 `p.Command("hello").Menu().Description("Say hello").Handle(hello)`。缺省注册只提供处理器。自动菜单按聊天的 Profile、许可、公开权限、`/` 前缀和生效主名计算，论坛话题共用聊天菜单；关闭某个话题仍单独控制执行。
+
+手动接管时，将目标 Telegram 实例的 `auto_sync_commands` 设为 false。`clear_commands_on_disable` 缺省 true，自动转手动先清理受管位置；false 保留到插件覆盖。首次手动及手动重启保留菜单。订阅 ready 后按聊天设置整份菜单：
+
+```go
+p.On(sdk.CommandMenuReady).Handle(func(c *sdk.Context, ready *message.CommandMenuReadyPayload) error {
+    if ready.ChatID == "" {
+        return nil
+    }
+    return command.Set(c, ready.AdapterInstanceID, command.Menu{
+        Scope: command.Scope{Type: "chat", ChatID: ready.ChatID},
+        Commands: []command.Item{{Name: "hello", Description: "Say hello"}},
+    })
+})
+```
+
+导入 `sdk/command` 和 `sdk/message`。需要翻译时逐 language_code 设置，空串为缺省语言，非空取两位小写主语言。另有 `chat_administrators` 与带 UserID 的 `chat_member` scope。每份最多 100 条；非法名字、说明、超限及语言映射冲突返回错误，保留已有成功菜单。每次成功 Set 转移该 scope+language 整份菜单的 owner，禁用/卸载旧 owner 保留新 owner 的内容。
+
+`command.Get` 读取平台当前菜单，`Delete` 删除指定位置；`Status` 返回模式、Ready、LastError 和位置。普通自动同步在本 Session 跳过内容未变的位置。`command.Sync` 在自动模式全量重建活跃聊天菜单及受管 default，可用于修复远端漂移；手动模式重新处理清理与就绪通知。切换失败时读 LastError，修复原因后调用 Sync。插件的实例许可、聊天 Profile 与全局禁用在实际执行前重查；离群跳过写入，重入恢复。外部工具写入的历史 scope 需要明确给出位置再 Delete。完整契约见 [CONTRACTS §8](../spec/CONTRACTS-v0.1.md#8-adaptertarget-与消息)。
 
 ## 6. 跨插件协作
 
