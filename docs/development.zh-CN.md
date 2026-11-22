@@ -31,6 +31,8 @@ bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 
 在同一个终端输入 `/ping`，预期回复 `pong`；Ctrl-C 正常停止。要并行运行多个 Core，为每个实例选择独立数据目录与监听端口。首次管理认证和监听设置见[部署指南](deployment.zh-CN.md#core-设置与-http-入口)。
 
+示例的 `/ping` 已显式调用 `.Menu()`，支持菜单的 Adapter 自动按聊天发布；未标记命令仍可调用。手动接管见[命令菜单](plugin-guide.zh-CN.md#命令菜单)。
+
 ## 依赖管理
 
 Core 使用 `go.mod`、`go.sum` 中的锁定版本；官方组件各自维护 module 与锁文件，WebUI 另有 `package-lock.json`。新增依赖或扩大链接范围前，说明必要性和替代方案，等待维护者批准。当前直接依赖的允许用途如下：
@@ -505,3 +507,11 @@ TCP 与 stdio 均使用四字节无符号大端长度，后接 Protobuf Envelope
 调用按 `(session_id, initiator_side, call_id)` 匹配。call ID 非零、按方向单调递增，在同一 Session 内不复用。父调用须为同一 Session 中仍在途的 Core 发起调用。deadline 为绝对 UTC 毫秒，子调用沿用或缩短父期限。取消为协作式，已完成的副作用保留。载荷与 ErrorInfo 可同时存在以表示部分结果，调用方须保留两者。请求默认超时为 30 秒。Session 失败时，挂起调用取得真实错误；认证无效时关闭连接，避免暴露凭据。
 
 用 `alonabot tune list` 查看完整的当前调优表，包括名称、单位、默认值、生效值、约束与来源；`--args NAME=value` 使用同样的校验。[internal/tune/params.go](../internal/tune/params.go) 定义数值，[部署指南](deployment.zh-CN.md#插件休眠) 说明唤醒预算，[插件指南](plugin-guide.zh-CN.md) 说明延续、存储与任务。帧上限固定为 4 MiB。阶段预算默认 HELLO 10s、配置 60s、迁移 15m、OnStart 60s、OnReady 30s；停止总预算 10s，其中排空 6s、OnStop 4s。崩溃恢复窗口为五分钟，最多三次。组件自己的 Handler 与后台活动须响应取消。
+
+### 菜单协议新增字段
+
+Core→Adapter 的 `adapter.command.menu` 执行 set/get/delete；插件→Core 的 `core.command.menu` 执行 set/get/delete/status/sync，省略实例时取在途父调用的可信实例。两者使用 schema_version=1。`AdapterInstanceStartResponse.command_menu=5` 为可选消息，缺失时沿用 `adapter.commands.sync`；其 CommandMenuConfig 含 bool auto_sync_commands=1、clear_commands_on_disable=2。`CommandSpec.menu=14` 缺省 false；可信 `MediaSource.mime=6` 为 string。
+
+共用消息为 `CommandMenuRequest{instance_id=1, operation=2, menu=3}`、`CommandMenu{scope=1, language_code=2, commands=3}`、`CommandMenuScope{type=1, chat_id=2, user_id=3}`、`CommandMenuEntry{name=1, description=2}`、`CommandMenuResponse{commands=1, config=2, ready=3, last_error=4, positions=5}`、`CommandMenuPosition{scope=1, language_code=2, mode=3, owner_plugin_id=4}`，commands/positions 均 repeated。scope 类型为 default/chat/chat_administrators/chat_member，插件只开放后三种，thread 不进入 scope。
+
+`EventPayload.kind` 追加 command_menu_ready=13，string 字段为 adapter_id=1、adapter_instance_id=2、account_id=3、chat_id=4。Core 定向发送 `bot.command_menu_ready`，空 chat_id 表示实例手动就绪，非空表示聊天可用。Adapter 上报标准事件仍沿用原白名单。定义见 [Adapter 协议](../contracts/proto/alonabot/v1/adapter.proto)、[路由](../contracts/proto/alonabot/v1/route.proto)与[消息](../contracts/proto/alonabot/v1/message.proto)，生命周期与准入见[命令菜单](plugin-guide.zh-CN.md#命令菜单)。

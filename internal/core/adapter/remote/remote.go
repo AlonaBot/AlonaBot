@@ -66,9 +66,10 @@ type instance struct {
 	displayName  *string
 	username     string
 	capabilities []*pb.Capability
-	dropped      uint64        // 事件队列满时累计丢弃数
-	session      *wire.Session // 本次运行所属 Session，旧 Registry 引用不得切到新 Session
-	sessionKey   string        // 实例创建时绑定，Session 更换后旧实例仍保留旧值
+	commandMenu  *pb.CommandMenuConfig // 启动响应的只读模式快照。
+	dropped      uint64                // 事件队列满时累计丢弃数
+	session      *wire.Session         // 本次运行所属 Session，旧 Registry 引用不得切到新 Session
+	sessionKey   string                // 实例创建时绑定，Session 更换后旧实例仍保留旧值
 }
 
 // New 创建尚未绑定 Session 的 Adapter 包进程管理器。
@@ -226,7 +227,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) (err erro
 	}
 	// 3. 运行登记与在线事件在状态锁内完成，服务只接纳已登记实例。
 	p.mu.Lock()
-	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, session: bound.Session}
+	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, commandMenu: response.CommandMenu, session: bound.Session}
 	entry.sessionKey = p.caller.SessionKey
 	var registered adapter.Instance = entry
 	for _, capability := range entry.capabilities {
@@ -267,6 +268,12 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 	}
 	var stopErr error
 	if cleanup {
+		// 先取消菜单回调，再等待 SDK 排空；反向顺序会让 stop 等待仍在途的菜单。
+		if p.opt.StopCommandSync != nil {
+			entry.syncMu.Lock()
+			p.opt.StopCommandSync(entry)
+			entry.syncMu.Unlock()
+		}
 		stopErr = call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: instanceID}, &pb.AdapterInstanceStopResponse{})
 	}
 	p.mu.Lock()

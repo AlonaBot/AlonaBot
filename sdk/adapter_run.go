@@ -215,8 +215,12 @@ func (r *adapterRuntime) stopEntry(ctx context.Context, entry *adapterEntry) err
 	}
 	entry.busy = true
 	entry.core.stopped.Store(true)
+	core := entry.core
 	config := entry.config
 	r.mu.Unlock()
+	// 菜单写入排空后才能停止并重建实例，防止旧回调覆盖新模式的菜单。
+	core.commandSync.Lock()
+	defer core.commandSync.Unlock()
 	err := instance.Stop(ctx)
 	r.mu.Lock()
 	entry.busy = false
@@ -306,6 +310,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			capabilities = append(capabilities, &pb.Capability{Name: adapterMediaReadCapability, Version: 1, Supported: true})
 		}
 		response := &pb.AdapterInstanceStartResponse{AccountId: account.ID, Capabilities: capabilities}
+		if controller, ok := instance.(adapter.CommandMenuController); ok {
+			config := controller.CommandMenuConfig()
+			response.CommandMenu = &pb.CommandMenuConfig{AutoSyncCommands: config.AutoSyncCommands, ClearCommandsOnDisable: config.ClearCommandsOnDisable}
+		}
 		if account.DisplayName != "" {
 			response.AccountDisplayName = &account.DisplayName
 		}
@@ -365,6 +373,8 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(code, adapterSafeError(errors.New(message), config))
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
+	case wire.ServiceAdapterCommandMenu:
+		return r.commandMenu(ctx, in)
 	case wire.ServiceAdapterCommandsSync:
 		request := &pb.AdapterCommandsSyncRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {

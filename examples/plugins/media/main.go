@@ -34,14 +34,14 @@ const (
 func New() *sdk.Plugin {
 	p := sdk.NewPlugin()
 
-	p.Sub("captions").Permission(sdk.User).Command("caption").Handle(caption)
+	p.Sub("captions").Permission(sdk.User).Command("caption").Menu().Handle(caption)
 	edit := buttonapi.Define[string]("media.edit")
 	var mu sync.Mutex
 	sqlitedb.Migrate(p, func(ctx context.Context, db *sql.DB) error {
 		_, err := db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS messages (button_key TEXT PRIMARY KEY, ref TEXT NOT NULL)")
 		return err
 	})
-	p.Command("media").Handle(func(c *sdk.Context) error {
+	p.Command("media").Menu().Handle(func(c *sdk.Context) error {
 		c.StopPropagation()
 		// 1. 通过 Upload 取得媒体引用，再用同一来源构造相邻图片。
 		ref, err := mediaapi.Upload(c, bytes.NewReader(sample), "image/png")

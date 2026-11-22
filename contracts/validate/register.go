@@ -178,8 +178,8 @@ func register(r *pb.Register, isAdapter bool) error {
 				if len(filters) != 1 || (!IsEventType(filters[0]) && !IsAdapterEventType(filters[0])) {
 					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q requires exactly one valid event_type_filter", route.GetRouteId())
 				}
-				if filters[0] == "command.invoked" {
-					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q cannot subscribe to command.invoked", route.GetRouteId())
+				if filters[0] == "command.invoked" || filters[0] == "bot.command_menu_ready" {
+					return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "pre-event hook route %q cannot subscribe to %s", route.GetRouteId(), filters[0])
 				}
 			case pb.HookPhase_HOOK_PHASE_BEFORE_SEND, pb.HookPhase_HOOK_PHASE_AFTER_SEND:
 				if len(filters) != 0 {
@@ -369,7 +369,7 @@ func IsCommandToken(token string) bool {
 func IsEventType(eventType string) bool {
 	switch eventType {
 	case "message.created", "message.edited", "message.deleted", "button.clicked",
-		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline", "command.invoked":
+		"member.joined", "member.left", "reaction.added", "scheduled", "bot.online", "bot.offline", "command.invoked", "bot.command_menu_ready":
 		return true
 	}
 	return false

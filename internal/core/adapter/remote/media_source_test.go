@@ -37,7 +37,7 @@ func (i *loopInstance) inspectMediaSource(ctx context.Context, chain message.Cha
 	case source.InlineBase64 != "":
 		observed = []string{"inline", source.InlineBase64}
 	case source.PlatformFile != "":
-		observed = []string{"platform", source.PlatformFile}
+		observed = []string{"platform", source.PlatformFile, source.MIME}
 	case source.MediaRef != "":
 		address, expires, err := i.core.MediaURL(ctx, source.MediaRef, "")
 		if err != nil {
@@ -65,7 +65,7 @@ func (i *loopInstance) inspectMediaSource(ctx context.Context, chain message.Cha
 		if response.StatusCode != http.StatusOK {
 			return nil, errcode.Internal.New("platform media GET failed: " + response.Status)
 		}
-		observed = []string{"url", address, string(data)}
+		observed = []string{"url", address, string(data), source.MIME}
 	default:
 		return nil, errcode.Internal.New("missing prepared media source")
 	}
@@ -152,7 +152,7 @@ func TestMediaSources(t *testing.T) {
 	}
 	id := mediaStore.RegisterIncoming("source", "platform-file", proto.Uint64(11), proto.String("application/octet-stream"))
 	incoming := mediaStore.IssueIncoming(id, consumer, []*pb.Target{sourceTarget, otherTarget})
-	if result := send(sourceTarget, &pb.MediaSource{Source: &pb.MediaSource_IncomingRef{IncomingRef: incoming}}); !reflect.DeepEqual(result.PlatformMessageIds, []string{"platform", "platform-file"}) {
+	if result := send(sourceTarget, &pb.MediaSource{Source: &pb.MediaSource_IncomingRef{IncomingRef: incoming}}); !reflect.DeepEqual(result.PlatformMessageIds, []string{"platform", "platform-file", "application/octet-stream"}) {
 		t.Fatalf("platform source changed: %v", result)
 	}
 	sourceInstance, _ := registry.Get("source")
@@ -161,7 +161,7 @@ func TestMediaSources(t *testing.T) {
 		t.Fatalf("same-instance platform reads: %v %v", count, safe)
 	}
 	result := send(otherTarget, &pb.MediaSource{Source: &pb.MediaSource_IncomingRef{IncomingRef: incoming}})
-	if len(result.PlatformMessageIds) != 3 || result.PlatformMessageIds[0] != "url" || result.PlatformMessageIds[2] != "image bytes" {
+	if len(result.PlatformMessageIds) != 4 || result.PlatformMessageIds[0] != "url" || result.PlatformMessageIds[2] != "image bytes" || result.PlatformMessageIds[3] != "application/octet-stream" {
 		t.Fatalf("platform URL read: %v", result)
 	}
 	response, err := server.Client().Get(result.PlatformMessageIds[1])

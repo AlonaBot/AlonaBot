@@ -9,12 +9,14 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
 )
 
 // Options 提供事件分发限额与现有的路由依赖；限额使用 tune.Values 对应值。
 type Options struct {
+	MenuStore *state.Store // 按账号持久化菜单模式、位置与聊天关系。
 	// Profile 按可信默认目标读取会话的配置文件与插件开关；nil 时使用 default。
 	Profile func(ctx context.Context, pluginID string, target *pb.Target) (profileID string, enabled bool, err error)
 
@@ -79,6 +81,10 @@ func (r *Router) Start() {
 
 // Deliver 立即尝试接纳事件，不等待空闲链；条数、字节或全局预算不足时返回 ErrQueueFull。
 func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
+	return r.deliverTo(ctx, ev, "")
+}
+
+func (r *Router) deliverTo(ctx context.Context, ev *pb.Event, recipient string) error {
 	if err := ctx.Err(); err != nil {
 		r.metrics.Add("", "event", "cancelled")
 		return err
@@ -116,7 +122,9 @@ func (r *Router) Deliver(ctx context.Context, ev *pb.Event) error {
 		r.metrics.Add("", "event", "dropped_budget")
 		return adapter.ErrQueueFull
 	}
+	r.observeMenuChatLocked(ev)
 	event := retainEvent(ev)
+	event.recipient = recipient
 	if r.requestTimeout > 0 {
 		event.deadline = time.Now().Add(r.requestTimeout)
 	}
@@ -163,11 +171,13 @@ func (r *Router) run(event *trustedEvent) {
 
 // Close 停止接纳并释放排队事件，等待运行链；ctx 到期则取消调用并等链退出，返回 ctx.Err()。
 func (r *Router) Close(ctx context.Context) error {
+	var menuWorkers []*commandSync
 	// 1. 在接纳锁下丢弃等待事件，并记录本次调用是否需要等运行链。
 	r.mu.Lock()
 	if !r.closed {
 		r.closed = true
 		for id, state := range r.commandSyncs {
+			menuWorkers = append(menuWorkers, state)
 			state.cancel()
 			delete(r.commandSyncs, id)
 		}
@@ -184,6 +194,11 @@ func (r *Router) Close(ctx context.Context) error {
 	}
 	drained := r.stats.Running == 0
 	r.mu.Unlock()
+	defer func() {
+		for _, worker := range menuWorkers {
+			<-worker.done
+		}
+	}() // 关闭状态库前排空菜单的结果记账。
 	if drained {
 		r.cancel()
 		return nil

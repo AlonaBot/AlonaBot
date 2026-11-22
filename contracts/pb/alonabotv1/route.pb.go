@@ -1098,7 +1098,9 @@ type CommandSpec struct {
 	// USAGE_MODE_CUSTOM：插件 i18/ 中 messages 的文案键。
 	UsageKey string `protobuf:"bytes,12,opt,name=usage_key,json=usageKey,proto3" json:"usage_key,omitempty"`
 	// 英文说明原文；其他语言按完整规范路径覆盖。
-	Description   *string `protobuf:"bytes,13,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	Description *string `protobuf:"bytes,13,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// 显式展示根命令；缺省只登记处理器。
+	Menu          bool `protobuf:"varint,14,opt,name=menu,proto3" json:"menu,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1215,6 +1217,13 @@ func (x *CommandSpec) GetDescription() string {
 		return *x.Description
 	}
 	return ""
+}
+
+func (x *CommandSpec) GetMenu() bool {
+	if x != nil {
+		return x.Menu
+	}
+	return false
 }
 
 // CommandAlias 描述命令的一条别名路径。
@@ -2005,7 +2014,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"page_title\x18\x13 \x01(\tR\tpageTitleB\x06\n" +
 	"\x04specJ\x04\b\x05\x10\x06R\x13required_permission\"R\n" +
 	"\x0eRuleDescriptor\x12&\n" +
-	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\x9a\x04\n" +
+	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\xae\x04\n" +
 	"\vCommandSpec\x12/\n" +
 	"\x05match\x18\x01 \x01(\x0e2\x19.alonabot.v1.CommandMatchR\x05match\x12\x12\n" +
 	"\x04path\x18\x02 \x03(\tR\x04path\x123\n" +
@@ -2021,7 +2030,8 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\vignore_case\x18\v \x01(\bR\n" +
 	"ignoreCase\x12\x1b\n" +
 	"\tusage_key\x18\f \x01(\tR\busageKey\x12%\n" +
-	"\vdescription\x18\r \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
+	"\vdescription\x18\r \x01(\tH\x00R\vdescription\x88\x01\x01\x12\x12\n" +
+	"\x04menu\x18\x0e \x01(\bR\x04menuB\x0e\n" +
 	"\f_descriptionJ\x04\b\t\x10\n" +
 	"R\fcustom_usage\"\"\n" +
 	"\fCommandAlias\x12\x12\n" +

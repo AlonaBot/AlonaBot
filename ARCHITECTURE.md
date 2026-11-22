@@ -49,7 +49,7 @@ S-06.1 的 `manage.Options.SleepPolicy` 由 app 注入只读策略：复用 `idl
 
 `internal/app` 向 Router 注入 `Options.Profile func(context.Context, string, *pb.Target) (string, bool, error)` 与既有 `Options.MessageConfig func(context.Context, string, *pb.Event) (json.RawMessage, error)`；`profile.WithView` / `ReadView` 使一次准入与消息过滤共用配置文件选择、开关、Active 与有效覆盖。PreEvent 在媒体准备前检查开关。`router.Invocation.ProfileID` 与 `Root` 随 Handler、Service、Hook、定时任务与延续附件传递；`Begin() func()` 保留和释放根引用，`AfterFinished(func())` 在整条根调用及延续释放后锁外执行，根已结束时立即执行新登记回调，用于 default Pending 的延后 reload。
 
-`profile.Service.EffectivePlatform(id string) (prefixes []string, reply settings.Reply, err error)` 按键合并当前 default 与覆盖，保留显式零值。`internal/app` 向 Router 注入 `Options.Prefixes func(context.Context, *pb.Target) ([]string, error)`，派发使用完整 Target，菜单使用实例身份与空会话选择实例缺省配置文件；同时经 `message.Service.SetReply(resolve func(context.Context, *pb.Target) (settings.Reply, error))` 注入回复读取。message 在 Hook 前改写回复并复检；可信消息根通过 `Invocation.Root` 在手动发送、自动回复、Service 派生与延续间共享首条标记，根结束时清理。Edit 修饰按 Caller Session、完整 Target 与选定物理消息 ID 的已确认片段关联；`internal/app` 在 Session 退出时调用 `message.Service.Release(router.Caller)`，配置读取中的准备及迟到回执随之失效。
+`profile.Service.EffectivePlatform(id string) (prefixes []string, reply settings.Reply, err error)` 按键合并当前 default 与覆盖，保留显式零值。`internal/app` 向 Router 注入 `Options.Prefixes func(context.Context, *pb.Target) ([]string, error)`，派发使用完整 Target，菜单使用实例身份与 chat 选择聊天的配置文件，话题共用 chat 菜单；同时经 `message.Service.SetReply(resolve func(context.Context, *pb.Target) (settings.Reply, error))` 注入回复读取。message 在 Hook 前改写回复并复检；可信消息根通过 `Invocation.Root` 在手动发送、自动回复、Service 派生与延续间共享首条标记，根结束时清理。Edit 修饰按 Caller Session、完整 Target 与选定物理消息 ID 的已确认片段关联；`internal/app` 在 Session 退出时调用 `message.Service.Release(router.Caller)`，配置读取中的准备及迟到回执随之失效。
 
 `manage.Options.NotifyProfileOverrides func(context.Context, string) error` 由 `internal/app` 装配，读取新快照并向当前在线 Session 下发有效覆盖全集，失败关闭原 Session 并返回实际错误；离线插件在下次 Bootstrap 接收。候选 Bootstrap 按候选 schema 筛选覆盖集合。`contracts/configschema.Schema.ApplyProfile(raw json.RawMessage, overrides map[string]json.RawMessage) (json.RawMessage, error)` 提供字段路径替换，`sdk/config.Values.WithOverrides(overrides map[string]json.RawMessage) (Values, error)` 建立独立只读视图并保留子路径。SDK 原子发布集合，每次 Context 构造冻结视图，`c.Config()` 返回整个插件的调用配置，`p.Config()` 与 `s.Config()` 保持基础配置。
 
@@ -75,6 +75,9 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 
 `sdk.AdapterClient` 由 `Context.Adapter()` 绑定可信平台身份，复用 `Context.CallAction`、`core.action` 与 `adapter.action`。`ActionRequest.use_default_target` 仅供绑定客户端按已声明 scope 选取父调用默认会话或账号；声明、Schema、实例许可、出站 Hook 禁用与生命周期仍由现有链路执行。`sdk/action.Caller` 同时接受绑定客户端、Context 和后台 Client；Instance 的必需方法保持原有集合。
 
+命令菜单由 `internal/core/router/command_menu*.go` 的实例 worker 串行拥有，负责自动计算、模式切换、手动写入、owner 回收和定向就绪事件。`state` 追加 migration，按 Adapter+account 保存模式、聊天关系和位置，事件游标与关系同事务提交；远端每项成功后立即记账。`remote` 只转发类型化配置和操作，SDK 的实例执行锁跨菜单调用与停止排空，Adapter 只承担平台 Set/Get/Delete。
+
+
 ## 依赖方向
 
 `A -> B` 表示 **A 的 Go 源码 import B**（静态依赖，含测试代码），不表示运行时调用或数据流。「模块」指上表每一行的路径前缀；同一模块内部的 import（如 `contracts/release -> contracts/manifest`、`sdk -> sdk/message`）不受限制。跨模块的边只允许下表列出的；标准库和已批准的第三方依赖不受此表限制。
@@ -94,7 +97,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `internal/core/broker -> internal/core/metrics`、`internal/core/bus -> internal/core/metrics`、`internal/core/router -> internal/core/metrics`、`internal/app -> internal/core/metrics` | Service、Bus 与事件派发按原因计数（只在内存中，管理面在 T-09.14 读取） |
 | `sdk -> sdk/internal/convert`、`sdk/adapter -> sdk/internal/convert`；`sdk/internal/convert -> contracts`、`-> sdk/message`、`-> sdk/errcode` | 集中转换 SDK 自有类型与 pb，并组装 Adapter 的类型化声明；公开 API 使用 SDK 类型 |
 | `sdk -> sdk/errcode`、`sdk/message -> sdk/errcode`、`sdk/adapter -> sdk/errcode` | 共用 SDK 错误码与错误类型；`sdk/errcode` 只依赖标准库 |
-| `sdk/command -> sdk`、`-> sdk/errcode`、`-> sdk/internal/registry`、`-> contracts/pb`、`-> internal/wire` | `command.List` 复用 SDK 的父调用关联与固定服务协议，对外返回 `command.Entry` |
+| `sdk/command -> sdk`、`-> sdk/errcode`、`-> sdk/internal/registry`、`-> sdk/internal/convert`、`-> contracts/pb`、`-> internal/wire` | `command.List` 及菜单 Set/Get/Delete/Status/Sync 复用固定服务协议；`sdk/internal/convert` 提供 SDK 与 Adapter 共用的菜单值类型 |
 | `sdk/kv -> sdk/sqlitedb`、`sdk/kv -> sdk/errcode` | 复用受管 SQLite 的 Session 连接与 SDK 错误码 |
 | `sdk/message -> contracts/validate` | 会话、消息句柄与用户字符串复用 Adapter ID 的校验规则 |
 | `sdk -> sdk/internal/messagecodec`、`sdk/message -> sdk/internal/messagecodec`、`sdk/internal/convert -> sdk/internal/messagecodec` | 跨包传递按钮与片段的编码错误，在发送前报告；保留引用目标的省略信息 |
@@ -114,9 +117,10 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
 | `alonabot-plugin-help -> sdk/...`、`-> contracts`；`alonabot-agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`alonabot-agent/provider` 另用 openai-go 与 anthropic-sdk-go |
-| `alonabot-plugin-*/...`、`alonabot-agent/...`、`examples/plugins/...`、`plugintest -> alonabot-adapter-<adapter_id>/perm`、`-> alonabot-adapter-<adapter_id>/event`、`-> alonabot-adapter-<adapter_id>/action` | 引用 Adapter 声明的权限、扩展事件与平台动作；这三个包只含常量与数据类型，只 import `sdk` 根包，不链接 Adapter 的运行时 |
+| `alonabot-plugin-*/...`、`alonabot-agent/...`、`examples/plugins/...`、`plugintest -> alonabot-adapter-<adapter_id>/perm`、`-> alonabot-adapter-<adapter_id>/event`、`-> alonabot-adapter-<adapter_id>/action` | 引用 Adapter 声明的权限、扩展事件与平台动作；公开包提供权限/事件声明、载荷类型与动作类型助手，直接依赖见下一行；保持不链接 Adapter 运行时 |
+| `alonabot-adapter-<adapter_id>/perm`、`alonabot-adapter-<adapter_id>/event -> sdk`；`alonabot-adapter-<adapter_id>/action -> sdk`、`-> sdk/action`、`-> sdk/message`、`-> sdk/errcode` | 权限与事件声明使用 SDK builder；动作通过 `action.Caller` 调用，选项、消息句柄、流式正式发送与错误复用 SDK 类型；这些公开包只依赖标准库及所列 SDK 包 |
 
-明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`sdk` 根包 -> 分类子包（`sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`，）；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters（上表的常量包除外）| cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | internal/app | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`sdk` 根包 -> 分类子包（`sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`）；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters（上表的公开 perm/event/action 包除外）| cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | internal/app | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
 
 ## 状态归属
 

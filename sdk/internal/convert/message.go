@@ -249,7 +249,7 @@ func sourceToProto(s message.MediaSource) (*pb.MediaSource, error) {
 		return nil, errcode.InvalidArgument.New("platform_file is reserved for Core")
 	}
 	count := 0
-	out := &pb.MediaSource{}
+	out := &pb.MediaSource{Mime: s.MIME}
 	if s.MediaRef != "" {
 		count++
 		out.Source = &pb.MediaSource_MediaRef{MediaRef: s.MediaRef}
@@ -275,7 +275,7 @@ func sourceFromProto(s *pb.MediaSource) message.MediaSource {
 	if s == nil {
 		return message.MediaSource{}
 	}
-	return message.MediaSource{MediaRef: s.GetMediaRef(), Incoming: incomingFromProto(s.GetIncomingRef()), HTTPSURL: s.GetHttpsUrl(), InlineBase64: s.GetInlineBase64(), PlatformFile: s.GetPlatformFile()}
+	return message.MediaSource{MIME: s.GetMime(), MediaRef: s.GetMediaRef(), Incoming: incomingFromProto(s.GetIncomingRef()), HTTPSURL: s.GetHttpsUrl(), InlineBase64: s.GetInlineBase64(), PlatformFile: s.GetPlatformFile()}
 }
 func incomingFromProto(m *pb.IncomingMedia) *message.IncomingMedia {
 	if m == nil {

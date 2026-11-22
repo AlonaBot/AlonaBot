@@ -132,3 +132,9 @@ const ServiceReadNodes = "core.message.read_nodes"
 
 // ServiceAdapterReadNodes 从指定 Adapter 实例查询合并转发。
 const ServiceAdapterReadNodes = "adapter.message.read_nodes"
+
+// ServiceAdapterCommandMenu 对指定菜单位置执行 set、get 或 delete。
+const ServiceAdapterCommandMenu = "adapter.command.menu"
+
+// ServiceCommandMenu 提供受准入控制的手动菜单及同步状态入口。
+const ServiceCommandMenu = "core.command.menu"

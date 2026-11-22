@@ -48,7 +48,7 @@ type notebook struct {
 
 func registerCommands(p *sdk.Plugin) {
 	book := &notebook{}
-	p.Command("echo").Args("text").Optional("text", "echo").RawTail().Handle(echoText)
+	p.Command("echo").Menu().Args("text").Optional("text", "echo").RawTail().Handle(echoText)
 	notes := p.Sub("notebook").Permission(sdk.User).Group("note")
 	notes.Command("add").Alias("n", "add").Args("text").RawTail().Handle(book.add)
 	notes.Command("list").Alias("n", "list").Handle(book.list)
@@ -60,7 +60,7 @@ func registerCommands(p *sdk.Plugin) {
 		return c.Reply(c.T("echo.published"))
 	})
 	notes.Command("published").Handle(book.listPublished)
-	p.Command("calc").Handle(calculate)
+	p.Command("calc").Menu().Handle(calculate)
 	p.Regex(`^roll (\d+)d(\d+)$`).Handle(func(c *sdk.Context) error {
 		match := c.Match()
 		return c.Reply(c.T("echo.roll", "count", match[1], "sides", match[2]))
@@ -71,7 +71,7 @@ func registerCommands(p *sdk.Plugin) {
 	p.Raw().Rule(func(c *sdk.Context) (bool, error) {
 		return c.Text() == rawPhrase, nil
 	}).Handle(func(c *sdk.Context) error { return c.Reply(c.T("echo.raw")) })
-	p.Command("ask").Permission(sdk.User).Continue().Handle(ask)
+	p.Command("ask").Menu().Permission(sdk.User).Continue().Handle(ask)
 	service.Serve(p, notesService).Access(service.AccessPublic).Handle(func(_ *sdk.Context, _ NotesQuery) (NotesSnapshot, error) {
 		return book.snapshot(), nil
 	})

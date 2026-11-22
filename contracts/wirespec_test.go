@@ -11,6 +11,32 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+// TestCommandMenuFieldTypes 固定菜单事件分支与配置、MIME 的类型及 presence。
+func TestCommandMenuFieldTypes(t *testing.T) {
+	field := (&pb.EventPayload{}).ProtoReflect().Descriptor().Fields().ByNumber(13)
+	if field == nil || field.Name() != "command_menu_ready" || field.Kind() != protoreflect.MessageKind || field.IsList() || !field.HasPresence() || field.Message().FullName() != "alonabot.v1.CommandMenuReadyPayload" || field.ContainingOneof() == nil || field.ContainingOneof().Name() != "kind" {
+		t.Fatalf("EventPayload field 13 = %v", field)
+	}
+	for _, check := range []struct {
+		message  proto.Message
+		number   protoreflect.FieldNumber
+		kind     protoreflect.Kind
+		presence bool
+	}{
+		{&pb.MediaSource{}, 6, protoreflect.StringKind, false},
+		{&pb.CommandSpec{}, 14, protoreflect.BoolKind, false},
+		{&pb.AdapterInstanceStartResponse{}, 5, protoreflect.MessageKind, true},
+		{&pb.CommandMenuConfig{}, 1, protoreflect.BoolKind, false},
+		{&pb.CommandMenuConfig{}, 2, protoreflect.BoolKind, false},
+		{&pb.CommandMenuResponse{}, 3, protoreflect.BoolKind, false},
+	} {
+		field := check.message.ProtoReflect().Descriptor().Fields().ByNumber(check.number)
+		if field == nil || field.Kind() != check.kind || field.HasPresence() != check.presence || field.IsList() || field.ContainingOneof() != nil {
+			t.Errorf("%T field %d = %v", check.message, check.number, field)
+		}
+	}
+}
+
 // TestCommandInvokedFieldNumbers 固定命令结果载荷及事件分支的编号与类型。
 func TestCommandInvokedFieldNumbers(t *testing.T) {
 	fields := (&pb.CommandInvokedPayload{}).ProtoReflect().Descriptor().Fields()
@@ -294,8 +320,8 @@ func TestEnumValues(t *testing.T) {
 
 // TestCommandSpecFieldNumbers 固定命令描述及追加文本匹配字段的编号、类型与重复性。
 func TestCommandSpecFieldNumbers(t *testing.T) {
-	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key", "description"}
-	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind, protoreflect.StringKind}
+	names := []protoreflect.Name{"match", "path", "aliases", "params", "handler_mode", "rule", "regex", "usage_mode", "", "patterns", "ignore_case", "usage_key", "description", "menu"}
+	kinds := []protoreflect.Kind{protoreflect.EnumKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind}
 	fields := (&pb.CommandSpec{}).ProtoReflect().Descriptor().Fields()
 	if fields.Len() != len(names)-1 {
 		t.Fatalf("CommandSpec has %d fields, want %d", fields.Len(), len(names)-1)
@@ -420,7 +446,7 @@ func TestAdapterFieldNumbers(t *testing.T) {
 	cases := map[string][]string{
 		"Capability":                   {"name", "version", "supported", "text_limit"},
 		"TextLimit":                    {"max", "unit"},
-		"MediaSource":                  {"media_ref", "incoming_ref", "https_url", "inline_base64", "platform_file"},
+		"MediaSource":                  {"media_ref", "incoming_ref", "https_url", "inline_base64", "platform_file", "mime"},
 		"MediaURLRequest":              {"token", "base_url"},
 		"MediaURLResponse":             {"url", "expires_at_unix_ms"},
 		"AdapterDescriptor":            {"adapter_id", "capabilities", "extensions", "permissions", "events", "actions"},
@@ -429,7 +455,7 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"AdapterEventPayload":          {"version", "payload_json"},
 		"ExtensionDeclaration":         {"name", "version", "schema_json"},
 		"AdapterInstanceStartRequest":  {"instance_id", "config_json", "cursor"},
-		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username"},
+		"AdapterInstanceStartResponse": {"account_id", "account_display_name", "capabilities", "account_username", "command_menu"},
 		"AdapterInstanceStopRequest":   {"instance_id"},
 		"AdapterInstanceStopResponse":  {},
 		"AdapterSendRequest":           {"instance_id", "target", "chain"},
@@ -437,6 +463,14 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"CommandMenuItem":              {"name", "descriptions"},
 		"AdapterCommandsSyncRequest":   {"instance_id", "commands"},
 		"AdapterCommandsSyncResponse":  {},
+		"CommandMenuConfig":            {"auto_sync_commands", "clear_commands_on_disable"},
+		"CommandMenuScope":             {"type", "chat_id", "user_id"},
+		"CommandMenuEntry":             {"name", "description"},
+		"CommandMenu":                  {"scope", "language_code", "commands"},
+		"CommandMenuRequest":           {"instance_id", "operation", "menu"},
+		"CommandMenuResponse":          {"commands", "config", "ready", "last_error", "positions"},
+		"CommandMenuPosition":          {"scope", "language_code", "mode", "owner_plugin_id"},
+		"CommandMenuReadyPayload":      {"adapter_id", "adapter_instance_id", "account_id", "chat_id"},
 		"AdapterEditRequest":           {"instance_id", "target", "platform_message_id", "chain"},
 		"DeleteRequest":                {"to", "platform_message_ids"},
 		"DeleteItemResult":             {"platform_message_id", "status", "error"},

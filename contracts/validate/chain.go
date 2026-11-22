@@ -201,6 +201,9 @@ func entity(e *pb.TextEntity, utf16Len int, boundary map[int]bool) error {
 
 // media 校验媒体来源恰好设置一种且内容非空，https_url 必须是 https 绝对地址。
 func media(src *pb.MediaSource) error {
+	if src.GetMime() != "" {
+		return fmt.Errorf("media source mime is reserved for Core")
+	}
 	switch s := src.GetSource().(type) {
 	case *pb.MediaSource_MediaRef:
 		if s.MediaRef == "" {

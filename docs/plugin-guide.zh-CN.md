@@ -16,7 +16,7 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
+在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板显式标记 `.Menu()`，直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
@@ -183,6 +183,54 @@ return &adapter.Descriptor{
 省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证；`AuthStatic` 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。SDK 在连接 Core 前核对路径与重复路由。
 
 查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](https://github.com/AlonaBot/alonabot-plugin-help/blob/main/help.go)。
+
+### 命令菜单
+
+根命令需要显示在平台菜单时写 `p.Command("hello").Menu().Description("Say hello").Handle(hello)`。缺省注册只提供处理器。自动菜单按聊天的 Profile、许可、公开权限、`/` 前缀和生效主名计算，论坛话题共用聊天菜单；关闭某个话题仍单独控制执行。
+
+手动接管时，将目标 Telegram 实例的 `auto_sync_commands` 设为 false。`clear_commands_on_disable` 缺省 true，自动转手动先清理受管位置；false 保留到插件覆盖。首次手动及手动重启保留菜单。订阅 ready 后按聊天设置整份菜单：
+
+```go
+p.On(sdk.CommandMenuReady).Handle(func(c *sdk.Context, ready *message.CommandMenuReadyPayload) error {
+    if ready.ChatID == "" {
+        return nil
+    }
+    return command.Set(c, ready.AdapterInstanceID, command.Menu{
+        Scope: command.Scope{Type: "chat", ChatID: ready.ChatID},
+        Commands: []command.Item{{Name: "hello", Description: "Say hello"}},
+    })
+})
+```
+
+导入 `sdk/command` 和 `sdk/message`。需要翻译时逐 language_code 设置，空串为缺省语言，非空取两位小写主语言。另有 `chat_administrators` 与带 UserID 的 `chat_member` scope。每份最多 100 条；非法名字、说明、超限及语言映射冲突返回错误，保留已有成功菜单。每次成功 Set 转移该 scope+language 整份菜单的 owner，禁用/卸载旧 owner 保留新 owner 的内容。
+
+`command.Get` 读取平台当前菜单，`Delete` 删除指定位置；`Status` 返回模式、Ready、LastError 和位置。普通自动同步在本 Session 跳过内容未变的位置。`command.Sync` 在自动模式全量重建活跃聊天菜单及受管 default，可用于修复远端漂移；手动模式重新处理清理与就绪通知。切换失败时读 LastError，修复原因后调用 Sync。插件的实例许可、聊天 Profile 与全局禁用在实际执行前重查；离群跳过写入，重入恢复。外部工具写入的历史 scope 需要明确给出位置再 Delete。
+
+#### 菜单筛选、翻译与生命周期
+
+自动筛选仅保留带 Menu 标记、主名胜出的单 token 路径，权限为空或包含 user，且插件可用、实例许可、聊天 Profile/插件开关、命令策略及 `/` 前缀均允许。可正常唤醒的休眠插件保留菜单。`.Description` 为英文原文；其他语言在 `i18n/<locale>.json` 顶层 `commands` 按完整规范路径覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`。路径含 Group，以一个 ASCII 空格连接；别名与生效主名共用规范路径。en-US 覆盖报错。check/build 检查结构，SDK Collect 拒绝未注册命令或未声明英文说明的覆盖路径。逐键按目标 locale、插件默认 locale、英文回落，未登记说明取主名；Core 将 locale 映射为两位小写主语言，同命令映射后说明冲突返回 INVALID_ARGUMENT。缺省菜单用英文。名字须匹配 `^[a-z0-9_]{1,32}$`，说明为1～256个 Unicode 字符，写前验证，错误保留成功菜单。
+
+实例启动、插件安装/激活/卸载/禁用、许可、策略、Profile/assignment和前缀变化由实例串行 worker 从首次变化起合并2秒。首次消息和 Bot 自身入群后异步发布，普通消息继续派发；事件游标与账号聊天关系同事务保存。按 Adapter+account+scope+language 持久化模式及最后成功写入的插件，账号隔离，不逐条保存命令历史。受管 default 的已知语言菜单保持为空，thread 不进入位置。
+
+本 Session 的内容快照仅在平台写入与位置记账均成功后保存；写入失败/UNKNOWN、删除、成员变化和模式切换使相关快照失效，新 Session 与重入重新发布。Set 整份覆盖并转移 owner；手动 owner 卸载、禁用、失去实例许可或被聊天 Profile 关闭时回收位置，自动模式删除失效 scope/语言。
+
+自动转手动先停止调度并排空在途写入；首次手动、手动重启及只修改 clear 均保留菜单。离群位置保存进入手动时的清理决定，重入继续处理，之后单改 clear 保持原决定。清理失败保存完整错误并保持未就绪；成功后发 ready。手动转自动全量发布并移除失效手动位置。切换意图先持久化为新模式/未就绪；每项远端成功立即记账，错误或结果未知停止后续，存储错误完整返回，普通自动失败记诊断，后续变化或 Sync 可重处理。
+
+Set/Delete 要求手动且 ready，插件只开放三个聊天 scope。调用检查当前 Session、插件可用性、allowed_adapter_instances；聊天操作再查 Profile 和全局禁用，空 instanceID 可取在途 Handler 的可信实例。`bot.command_menu_ready` 定向通知实例就绪、已有/新聊天、晚激活或重新获准；`CommandMenuReadyPayload` 含 AdapterID、AdapterInstanceID、AccountID、ChatID。空 ChatID 表示实例手动就绪，有值表示聊天可用；回调内可直接 Set。平台、传输与存储错误完整返回，业务写入无自动重试。
+
+#### Adapter 菜单实现
+
+声明 `commands.sync` v1 supported=true，并实现 `adapter.CommandMenuController`：`CommandMenuConfig()` 返回 `AutoSyncCommands` 与 `ClearCommandsOnDisable`；`SetCommandMenu(ctx, menu)`、`GetCommandMenu(ctx, scope, languageCode)`、`DeleteCommandMenu(ctx, scope, languageCode)` 每次只操作一个位置。Telegram 两项配置缺省均 true；其他实现由类型化配置报告。SDK 在启动响应报告配置，Core 经 `adapter.command.menu` 调用；未报告配置的既有 Adapter 沿用原 `CommandSynchronizer.SyncCommands`。
+
+`CommandMenu{Scope, LanguageCode, Commands}` 中 Scope 含 Type、ChatID、UserID，Entry 含 Name、Description。Core 管理跨语言拆分、所有权、模式与持久化；Adapter 保留整份覆盖、空集合、完整平台错误及 UNKNOWN。SDK 实例执行锁跨平台调用持有（RPC取消后仍等平台调用返回），与旧 SyncCommands 共用锁；停止排空后才启动下一 worker。可信 member.left/member.joined 以成员ID等于账号ID识别 Bot 自身离群/重入。
+
+使用新接口的 Adapter/插件需在 SDK/Core 正式发布后更新依赖；已有命令按需添加 `.Menu()`，官方 help 的 `/help`、`/whoami` 也需标记。
+
+### 可信媒体 MIME 与平台助手
+
+`message.MediaSource.MIME` 是 Core 准备发送时填写的可信来源元数据。MediaRef/File 取已保存的元数据；同实例入站对象以 `platform_file` 转发时取可信入站 MIME，空串表示未知。插件提交 MIME 返回 INVALID_ARGUMENT，`MediaRef.Source()` 只携带引用。租约与 SDK 转换保留 MIME，`adapter.Core.ReadMedia` 签名保持。Telegram 将 `image/gif` 作为动图，inline 内容检查 `GIF8` 前缀；HTTPS URL 不推断 MIME，按普通图片发送。
+
+Adapter 公开 perm/event 包用 SDK builder 声明权限/事件；公开 action 助手通过 `sdk/action.Caller` 调用，可直接依赖 `sdk`、`sdk/action`、`sdk/message`、`sdk/errcode`，复用类型化选项、发送、消息句柄、流式助手与错误，保持不链接 Adapter 运行时。Telegram 输入状态助手每4秒刷新，ctx结束即停止；草稿助手结束时执行普通 Send。草稿动作不经过出站 Hook，最终 Send 经过 Hook。
 
 ## 6. 跨插件协作
 

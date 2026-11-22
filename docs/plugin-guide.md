@@ -16,7 +16,7 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-Enter `/hello` in the same terminal for `Hello AlonaBot`. Source edits reload automatically; Ctrl-C stops. Generated `New() *sdk.Plugin` is the entry point; `plugin.yaml` declares identity/source and `config_schema.json` supplies configuration Schema. Plugin/agent templates directly call `c.Reply("Hello AlonaBot")`; add `i18n/<locale>.json` when needed. Generated Go/plugin.yaml have no comments for any role. Change `source` to the component repository before release.
+Enter `/hello` in the same terminal for `Hello AlonaBot`. Source edits reload automatically; Ctrl-C stops. Generated `New() *sdk.Plugin` is the entry point; `plugin.yaml` declares identity/source and `config_schema.json` supplies configuration Schema. Plugin/agent templates explicitly mark `.Menu()` and directly call `c.Reply("Hello AlonaBot")`; add `i18n/<locale>.json` when needed. Generated Go/plugin.yaml have no comments for any role. Change `source` to the component repository before release.
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
@@ -183,6 +183,54 @@ return &adapter.Descriptor{
 Omitted Auth requires Core session; AuthPlatformToken delegates platform credentials to Adapter; AuthStatic publicly serves GET/HEAD without management/platform credentials. SDK checks paths/duplicates before connecting.
 
 Import sdk/command and call `entries, err := command.List(c)` in a Handler. Display Path/Aliases (space-joined multi-token paths) and localized Description. Return errors; background/finished Handler contexts return FAILED_PRECONDITION. See [official help](https://github.com/AlonaBot/alonabot-plugin-help/blob/main/help.go).
+
+### Command menus
+
+To show a root command in a platform menu, register `p.Command("hello").Menu().Description("Say hello").Handle(hello)`. Registration otherwise only installs a handler. Automatic menus use the chat's Profile, instance permission, public permission, `/` prefix and winning effective primary name. Forum topics share the chat menu; topic switches still control execution.
+
+For manual control, set the Telegram instance's `auto_sync_commands` to false. `clear_commands_on_disable` defaults to true: automatic-to-manual transitions first clear managed positions; false retains them until a plugin replaces them. First manual startup and manual restarts preserve menus. Subscribe to ready and set a complete menu per chat:
+
+```go
+p.On(sdk.CommandMenuReady).Handle(func(c *sdk.Context, ready *message.CommandMenuReadyPayload) error {
+    if ready.ChatID == "" {
+        return nil
+    }
+    return command.Set(c, ready.AdapterInstanceID, command.Menu{
+        Scope: command.Scope{Type: "chat", ChatID: ready.ChatID},
+        Commands: []command.Item{{Name: "hello", Description: "Say hello"}},
+    })
+})
+```
+
+Import `sdk/command` and `sdk/message`. Set each language separately: an empty LanguageCode is the default, and nonempty codes are two lowercase primary-language letters. Scopes also include `chat_administrators` and `chat_member` with UserID. Each menu accepts at most 100 commands. Invalid names, descriptions, limits and conflicting language mappings return errors while retaining previously successful menus. Each successful Set transfers ownership of the entire scope+language position; disabling or uninstalling the previous owner preserves the new owner's menu.
+
+`command.Get` reads the current platform menu; `Delete` removes a specified position. `Status` returns mode, Ready, LastError and positions. Ordinary automatic synchronization skips unchanged successful positions in this Session. `command.Sync` fully rebuilds active-chat menus and managed default positions in automatic mode to repair remote drift; manual mode reprocesses cleanup and readiness. Read LastError after a failed transition, fix its cause, then call Sync. Core rechecks instance permission, chat Profile and global disablement before execution. It skips writes after leaving a chat and resumes on rejoin. Historical scopes written by external tools require explicit positions for Delete.
+
+#### Filtering, translation and lifecycle
+
+Automatic selection requires Menu, a winning single-token primary path, empty permissions or a permission set containing user, plugin availability, instance permission, the chat Profile/plugin switch, command policy and a `/` prefix. Sleeping plugins that can wake remain listed. `.Description` is English source text. Other languages override full canonical paths in the top-level `commands` object of `i18n/<locale>.json`, e.g. `{"commands":{"rss add":{"description":"添加订阅"}}}`. Group tokens use one ASCII space; aliases and effective names share the canonical path. en-US overrides fail. check/build validate structure; SDK Collect rejects paths without a registered command or English description. Per-key fallback is target locale, plugin default locale, then English; without a description use the primary name. Core maps locales to two lowercase primary-language letters and returns INVALID_ARGUMENT for conflicting descriptions after mapping. The default menu uses English. Names match `^[a-z0-9_]{1,32}$`; descriptions contain 1–256 Unicode characters. Validation precedes writes and preserves successful menus on failure.
+
+An instance's serial worker coalesces changes for two seconds from the first change: startup, plugin installation/activation/removal/disablement, permissions, policies, Profile/assignment and prefixes. First messages and the Bot's own join publish asynchronously while ordinary dispatch continues. Event cursors and account/chat membership commit together. Mode and last successful writer persist per Adapter+account+scope+language, isolating accounts without per-command history. Known languages at managed default positions remain empty; threads do not enter positions.
+
+Session content snapshots are saved only after platform writes and position bookkeeping both succeed. Write failures/UNKNOWN, deletion, membership changes and mode switches invalidate relevant snapshots; new Sessions and rejoins publish again. Set replaces a whole position and transfers its owner. Manual owners lose positions on uninstall, disablement, loss of instance permission or chat Profile disablement; automatic mode removes obsolete scopes/languages.
+
+Automatic-to-manual transitions stop scheduling and drain in-flight writes. First manual startup, manual restarts and changes to clear alone preserve menus. Positions in departed chats retain the cleanup decision made when entering manual mode; rejoin resumes it, and later clear-only changes preserve that decision. Cleanup failure retains the full error and not-ready state; success emits ready. Manual-to-automatic transitions republish everything and remove obsolete manual positions. Transition intent persists as the new mode/not-ready first. Each remote success is recorded immediately; errors or unknown outcomes stop subsequent operations, storage errors return in full. Ordinary automatic failures record diagnostics; later changes or Sync may reprocess them.
+
+Set/Delete require manual mode and readiness; plugins can use only the three chat scopes. Calls check the current Session, plugin availability and allowed_adapter_instances; chat operations also check Profile and global disablement. An empty instanceID may use an in-flight Handler's trusted instance. `bot.command_menu_ready` targets instance readiness, existing/new chats, late activation and restored permissions. `CommandMenuReadyPayload` contains AdapterID, AdapterInstanceID, AccountID and ChatID: an empty ChatID means instance manual readiness; a value means that chat is available. Callbacks can call Set directly. Platform, transport and storage errors return in full; business writes have no automatic retries.
+
+#### Implementing Adapter menus
+
+Declare `commands.sync` v1 supported=true and implement `adapter.CommandMenuController`: `CommandMenuConfig()` returns `AutoSyncCommands` and `ClearCommandsOnDisable`; `SetCommandMenu(ctx, menu)`, `GetCommandMenu(ctx, scope, languageCode)` and `DeleteCommandMenu(ctx, scope, languageCode)` operate on one position at a time. Telegram defaults both settings to true; implementations report typed configuration. SDK reports it in the startup response and Core calls `adapter.command.menu`. Existing Adapters without that configuration retain `CommandSynchronizer.SyncCommands`.
+
+`CommandMenu{Scope, LanguageCode, Commands}` uses Scope fields Type, ChatID, UserID and Entry fields Name, Description. Core owns language splitting, ownership, modes and persistence. Adapters preserve whole-menu replacement, empty sets, full platform errors and UNKNOWN. SDK holds the instance execution lock throughout platform calls, even after RPC cancellation until the call returns, sharing it with legacy SyncCommands. Stop drains it before the next worker starts. Trusted member.left/member.joined events identify the Bot's own departure/rejoin by matching member ID with account ID.
+
+Adapters/plugins using the new interfaces must update dependencies after the SDK/Core release. Add `.Menu()` to commands that should be visible, including official help's `/help` and `/whoami`.
+
+### Trusted media MIME and platform helpers
+
+`message.MediaSource.MIME` is trusted source metadata filled by Core while preparing sends. MediaRef/File sources use saved metadata; same-instance incoming media forwarded as `platform_file` uses the trusted inbound MIME. Empty means unknown. Plugin-supplied MIME returns INVALID_ARGUMENT; `MediaRef.Source()` carries only the reference. Leases and SDK conversion preserve MIME; `adapter.Core.ReadMedia` keeps its signature. Telegram uses `image/gif` for animation, checks inline content for the `GIF8` prefix, and treats HTTPS URLs as ordinary images without MIME inference.
+
+Adapter public perm/event packages declare permissions/events using SDK builders. Public action helpers call through `sdk/action.Caller` and may directly import `sdk`, `sdk/action`, `sdk/message` and `sdk/errcode` for typed options, sends, handles, streaming helpers and errors. These public packages keep Adapter runtime code out of plugin binaries. Telegram typing helpers refresh every four seconds until context cancellation; draft helpers finish with an ordinary Send. Draft actions bypass outbound Hooks; the final Send runs them.
 
 ## 6. Cross-plugin collaboration
 

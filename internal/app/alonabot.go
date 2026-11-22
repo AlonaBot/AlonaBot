@@ -318,11 +318,16 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	version := Version()
 	managementReady := make(chan struct{}) // 启动回收完成后，全部设置发布交给运行循环。
 	managedSettings := c.assembly.settings.WithPublisher(func(change func() error) error {
+		publish := func() error {
+			err := change()
+			c.assembly.router.CommandsChanged()
+			return err
+		}
 		select {
 		case <-managementReady:
-			return c.operation(c.lifetime, func(context.Context) error { return change() })
+			return c.operation(c.lifetime, func(context.Context) error { return publish() })
 		default:
-			return change() // 启动阶段尚无并发管理写入，也没有休眠实例。
+			return publish() // 启动阶段尚无并发管理写入，也没有休眠实例。
 		}
 	})
 	bundles, err := bundledDirectory()
@@ -854,6 +859,7 @@ func (c *Core) reloadSettings() error {
 }
 
 func (c *Core) applySettings(configuration settings.Settings) {
+	c.assembly.router.CommandsChanged()
 	var admins []policy.Admin
 	for _, admin := range configuration.Admins {
 		admins = append(admins, policy.Admin{AdapterID: admin.AdapterID, UserID: admin.UserID})
