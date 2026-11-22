@@ -15,7 +15,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
 )
 
-// activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate（CONTRACTS §4.1）。
+// activation 跟踪 ACTIVATE → OnReady → ACTIVATED 与本地 ready gate。
 type activation struct {
 	l       launch
 	ack     *pb.HelloAck // 握手结果，提供 Session ID、协商版本与 Bootstrap
@@ -154,7 +154,7 @@ func (a *activation) reportFailure(code pb.ErrorCode, safe string, cause error) 
 	}
 }
 
-// onStopBudget 限制断链（未收到 STOPPING）时留给 OnStop 与资源关闭的时间（CONTRACTS §4.2）。
+// onStopBudget 限制断链（未收到 STOPPING）时留给 OnStop 与资源关闭的时间。
 var onStopBudget = 4 * time.Second
 
 // shutdown 取消 lifetime、关闭 ready gate，然后用独立 context 在 deadline 前执行 OnStop（不复用已取消的

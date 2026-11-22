@@ -2,7 +2,7 @@
 //
 // 解析是严格的：未知字段、多个 YAML 文档、缺失必填项或非法取值都会失败。
 // [ParseProject] 读取作者信息，[Generate] 补入构建信息，[Parse] 校验包内声明。
-// 三个入口共用 [Manifest] 的角色、ID、版本与相对路径规则，见 spec/CONTRACTS-v0.1.md §9.1。
+// 三个入口共用 [Manifest] 的角色、ID、版本与相对路径规则。
 // [CheckDependencies] 根据安装快照报告缺失或版本不足的依赖；本包不读取归档或安装记录。
 package manifest
 
@@ -25,7 +25,7 @@ type Platform struct {
 	Arch string // GOARCH 取值
 }
 
-// Platforms 列出首发的五个目标组合（CONTRACTS §7.1）。
+// Platforms 列出首发的五个目标组合。
 var Platforms = []Platform{
 	{"linux", "amd64"}, {"linux", "arm64"}, {"windows", "amd64"}, {"darwin", "amd64"}, {"darwin", "arm64"},
 }
@@ -64,7 +64,7 @@ type Capability struct {
 	Version uint32 `yaml:"version"` // 能力版本，不能为 0
 }
 
-// 迁移模式与准备期副作用声明（§9.1）。空串表示未声明：manifest 仍可解析，但不允许自动升级。
+// 迁移模式与准备期副作用声明。空串表示未声明：manifest 仍可解析，但不允许自动升级。
 const (
 	MigrationNone      = "none"
 	MigrationSelf      = "self"

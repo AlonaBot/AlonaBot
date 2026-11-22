@@ -1,7 +1,7 @@
 // Package hook 执行已激活插件的三阶段 Hook，并将出站递归禁令保存在 Core 调用附件中。
 //
 // [Runner] 每次从 Router 读取候选，按 priority、plugin_id、route_id 顺序调用。
-// BeforeSend 只接受 Chain 改写或错误；AfterSend 只观察回执，失败记录 WARN（CONTRACTS §2.3）。
+// BeforeSend 只接受 Chain 改写或错误；AfterSend 只观察回执，失败记录 WARN。
 package hook
 
 import (

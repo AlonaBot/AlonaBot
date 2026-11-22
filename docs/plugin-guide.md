@@ -1,11 +1,13 @@
-# 插件开发规范
+# Plugin development guide
 
-负责范围：插件作者（含本仓库的官方插件、Adapter、Agent 与示例）在依赖、存储、日志、生命周期与发布上必须遵守的规则，以及这样要求的原因。Adapter 与 Agent 是有进程的非插件组件（DESIGN §T），这里的规则同样适用于它们；WebUI 提供静态文件，也可带 Go 进程；静态发布遵守第 9 节与 CONTRACTS §7.5，进程部分沿用相应的 SDK 规则。行为的权威是 [CONTRACTS](../spec/CONTRACTS-v0.1.md)，本文只列规则并指向对应条款，两者冲突时以契约为准。
-更新时机：契约中影响插件作者的条款变化、SDK 新增按需包或依赖政策变化时。
+[简体中文](plugin-guide.zh-CN.md)
 
-## 从第一个命令开始
+Scope: dependency, storage, logging, lifecycle and publishing rules for component authors, including official plugins, Adapters, Agents and examples, with their rationale. Adapters and Agents are separate component roles; these rules also apply to them. WebUI serves static files and may include a Go process: static releases follow section 9; processes follow the relevant SDK rules. The public behavior described here is implemented by the SDK and Core; see [architecture](../ARCHITECTURE.md) for ownership and [protocol sources](../contracts/proto/alonabot/v1) for wire types.
+Update this guide when author-facing behavior, optional SDK packages or dependency policy changes.
 
-在 AlonaBot 源码仓库中创建插件，可以直接复用仓库的 SDK module。准备 Go 后，在仓库根目录执行：
+## Start with your first command
+
+Inside the AlonaBot source repository, plugins can reuse its SDK module. With Go ready, run from the repository root:
 
 ```fish
 go build -o bin/alonabot ./cmd/alonabot
@@ -14,47 +16,47 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板显式标记 `.Menu()`，直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
+Enter `/hello` in the same terminal for `Hello AlonaBot`. Source edits reload automatically; Ctrl-C stops. Generated `New() *sdk.Plugin` is the entry point; `plugin.yaml` declares identity/source and `config_schema.json` supplies configuration Schema. Plugin/agent templates explicitly mark `.Menu()` and directly call `c.Reply("Hello AlonaBot")`; add `i18n/<locale>.json` when needed. Generated Go/plugin.yaml have no comments for any role. Change `source` to the component repository before release.
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
 bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot-plugin-hello/bin
 ```
 
-`test` 执行离线准备检查；消息与生命周期的集成验证使用[插件测试套件](development.md#插件测试)。打包 target 换成实际支持的平台，签名与分发见[发布](#9-发布)。
+`test` performs offline preparation checks; use [plugin tests](development.md#plugin-tests) for message/lifecycle integration. Set actual supported packaging targets; see [publishing](#9-publishing) for signing/distribution.
 
-独立仓库中先建立自己的 Go module。正式 CLI 会写入对应 SDK 版本并整理依赖；当前源码构建的开发版需按提示选定可访问的 SDK 版本。详细说明见[开发运行](development.md#开发运行与热部署)。现成的[示例工程](../examples/plugins)可直接运行。
+For separate repositories create your own Go module first. Release CLI writes its SDK version and tidies dependencies; a source-built development CLI prompts you to choose an accessible SDK version. See [development runs](development.md#development-runs-and-hot-reload). Existing [example projects](../examples/plugins) run directly.
 
-## 1. 运行模型与内存
+## 1. Runtime model and memory
 
-- 每个插件是一个独立的 Native Go 进程（D-01），只经 SDK 与 Core 通信。崩溃只影响它自己，但插件仍是可信的本地代码，不是沙箱（CONTRACTS §7.1）。
-- 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 [发布说明](../changelog/v0.1.0/zh-CN.md#资源与依赖)。
-- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。支持 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒、自动空闲退出、即时休眠策略，以及静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
+- In separate-process deployment each plugin is a Native Go process communicating with Core only through SDK. A crash affects that component. Plugins remain trusted local code requiring source review. Library-mode components share Core's process; see [library mode](development.md#library-mode-one-process).
+- Disabled plugins have no running process; all enabled resident memory counts against the user's machine. Fixed linux/amd64 measurements on 2026-11-20 found echo median PSS about 10.094 MiB across three runs. Linked libraries/initialization add costs. See [release notes](../changelog/v0.1.0/en.md#resource-results-and-dependencies) for official measurements and maintainer acceptance.
+- Restart-safe plugin/agent components without independent background activity may declare `sleep_capable: true`. This supports command/event/Service/HTTP waking from SUSPENDED, automatic idle exit, immediate policy changes and natural expiry wakes for static interval/cron and dynamic at/interval/cron. Plans/static origins/pause states/dynamic instances/admitted work survive same-generation resume. Static deadlines start at original due time, dynamic deadlines on acquiring concurrency; cold starts consume original JOB_TIMEOUT. Handlers hold activity references. Abnormally offline triggers follow skip rules; expired at instances delete with WARN. Development components, Adapters and WebUI remain resident.
 
-## 2. 依赖
+## 2. Dependencies
 
-- 根包 `sdk` 提供插件对象、Handler Context、注册 builder、权限、事件类型与运行入口。分类 API 按需导入 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options` 和 `sdk/command`。
-- 只导入用到的包。SDK 根包只允许依赖 protobuf、x/sys 与 jsonschema-go（D-52）；数据库在 `sdk/sqlitedb` 与 `sdk/gormdb` 中，不导入就不链接（D-49）。
-- 能用标准库就不引入第三方库。HTTP 用 `net/http`；不要内嵌模型厂商的 SDK 或自己的 Provider 客户端，需要模型时调用 Agent 组件的 `llm.generate`（第 6 节）。
-- 包级变量与 `init` 不做重活：不加载大文件、不建大表、不批量编译正则，推迟到 OnStart 或首次使用。所有被链接的包的 `init` 都会在启动时执行，分配的内存会一直常驻。
-- 优先纯 Go。确需 CGO 时，必须为每个声明支持的平台提供真实可运行的二进制，不支持的平台在 manifest 中不声明（CONTRACTS §7.1、§9.1）。
-- 插件的依赖由它自己的 `go.mod` 管理，与其他插件和 Core 互不影响；代价是每个依赖都完整地进入这个插件的进程。
-- 消息、事件、会话、消息句柄、发送回执与媒体使用 `sdk/message`，错误码使用 `sdk/errcode`；公共 API 的协议转换由 SDK 内部完成。自有 Protobuf 服务仍以自己的 `proto.Message` 类型配合 `service.Proto`、`service.Spec.Call` 使用（CONTRACTS §3、§8，D-70、D-71）。
+- Root `sdk` provides plugins, Handler Context, registration builders, permissions, event types and runtime entry points. Import category APIs as needed: `sdk/task`, `sdk/service`, `sdk/bus`, `sdk/button`, `sdk/media`, `sdk/conversation`, `sdk/tool`, `sdk/action`, `sdk/options`, `sdk/command`.
+- Import only what you use. SDK root permits protobuf, x/sys, jsonschema-go and Goldmark through the message model. Databases live in optional `sdk/sqlitedb`/`sdk/gormdb`; unused packages are not linked.
+- Prefer standard libraries, e.g. `net/http`. Request models through Agent `llm.generate` (section 6), keeping vendor SDKs/custom Provider clients out of plugins.
+- Avoid heavy package variables/`init`: defer large files/tables/batch regex compilation to OnStart or first use. Every linked package's `init` runs at startup, keeping allocated memory resident.
+- Prefer pure Go. CGO components must supply actually runnable binaries for every declared supported platform; omit unsupported platforms from the manifest.
+- Plugin dependencies use their own `go.mod`, independently of Core/other plugins; each dependency fully enters that plugin process.
+- Use `sdk/message` for messages/events/sessions/handles/receipts/media, `sdk/errcode` for errors. SDK converts public API protocol types internally. Custom Protobuf services still use their own `proto.Message` with `service.Proto`/`service.Spec.Call`.
 
-## 3. 存储
+## 3. Storage
 
-- 业务数据放受管 SQLite：`sqlitedb.Open(ctx)` 返回 `*sql.DB`，`gormdb.Open(ctx)` 返回 `*gorm.DB`，两者共用同一个连接（CONTRACTS §6.1）。只需 SQL 时优先 `sqlitedb`，可以减少 GORM 的链接与初始化开销；现有实测条件见[发布说明](../changelog/v0.1.0/zh-CN.md#资源与依赖)。
-- 迁移用所选包的 `Migrate` 或 `Migrations`，二者择一；辅助迁移的 ID 发布后不能改成另一项操作（CONTRACTS §6.2）。
-- 同代次 `RESUME` 复用原 generation、配置与业务 DB，SELF/VERSIONED 数据库迁移回调跳过，原迁移模式与账本保持；首次激活、更新与回退仍按迁移规则执行。配置继续执行 `OnConfigLoad`、补值/校正与 required 校验，完整结果须与原快照一致（CONTRACTS §4.5）。
-- 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据（CONTRACTS §6.3）。框架外的文件与外部数据库不在这个保证内。
-- 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir(ctx)` 中的文件，不整份载入内存；内存缓存必须有上限。
-- 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护（CONTRACTS §6.1、§6.3）。Core 不创建、不备份外部数据库。
-- 简单状态用 `sdk/kv`（D-165）：数据放在受管 SQLite 的保留表 `_alonabot_kv` 中，与业务表一起随代次复制、回退和清理。链接 KV 会链接 SQLite，构建工具据此推导 `prepare_effects=managed_db`，保留表的初始化独立于插件迁移 ID。
-- 插件自己的文件写到 `sdk.PluginDataDir(ctx)` 返回的数据目录；它跨 restart 保留，不随代次回退。只卸载与 disable 保留文件，`uninstall --purge-data` 和 `--purge` 在确认对象中列出目录并删除。
+- Store business data in managed SQLite: `sqlitedb.Open(ctx)` returns `*sql.DB`, `gormdb.Open(ctx)` returns `*gorm.DB`, sharing one connection. Prefer `sqlitedb` for SQL-only use to reduce GORM linkage/initialization; see [measurement conditions](../changelog/v0.1.0/en.md#resource-results-and-dependencies).
+- Use either `Migrate` or `Migrations` from your chosen package. A released helper migration ID must retain its original operation.
+- Same-generation `RESUME` reuses generation/configuration/business DB, skipping SELF/VERSIONED migration callbacks while preserving mode/ledger. First activation/update/rollback still follow migration rules. Configuration still runs `OnConfigLoad`, filling/correction/required checks, with full results identical to the original snapshot.
+- Reload/update use independent candidate SQLite copies; preparation failures restore old data. External files/databases have their own recovery responsibilities.
+- Keep large indexes/caches/vectors on disk in managed SQLite or files under `sdk.PluginDataDir(ctx)`, rather than loading everything. Bound memory caches.
+- PostgreSQL/MySQL users supply drivers and administrator-filled connection configuration marked `"secret": true` in `config_schema.json` (§7). If migrations/OnStart write external DBs, declare `prepare_effects=external`; updates to existing installations then require administrator maintenance mode. Core neither creates nor backs up external DBs.
+- Use `sdk/kv` for simple state: reserved managed SQLite table `_alonabot_kv` copies/rolls back/cleans with generations. KV links SQLite, so tools infer `prepare_effects=managed_db`; reserved-table initialization is independent of plugin migration IDs.
+- Write plugin files under `sdk.PluginDataDir(ctx)`. They survive restart without generation rollback. Disable/ordinary uninstall preserve them; `uninstall --purge-data`/`--purge` lists and deletes the directory after confirmation.
 
-### 保存少量状态
+### Store small amounts of state
 
-在 Handler 或生命周期回调中传入所属 Session 的 `ctx`，例如保存订阅主题：
+Pass the owning Session's `ctx` in Handlers/lifecycle callbacks, for example to save a subscription:
 
 ```go
 import (
@@ -68,17 +70,17 @@ func saveTopic(ctx context.Context, topic string) error {
 }
 ```
 
-读取用 `value, ok, err := kv.Get(ctx, key)`；`err == nil` 且 `ok == false` 表示键不存在，`kv.Delete(ctx, key)` 删除不存在的键也成功。键须为 1～512 字节的 UTF-8，拒绝恰为 `.` 或 `..` 的键（D-178）；其他含点或斜杠的键按字面值保存。值最多 1 MiB，空值可以保存；非法参数返回 `INVALID_ARGUMENT`。没有受管 SQLite 的 Session 调用 KV 返回 `FAILED_PRECONDITION`。
+Read with `value, ok, err := kv.Get(ctx, key)`. `err == nil`/`ok == false` means absent; deleting absent keys with `kv.Delete(ctx, key)` succeeds. Keys are UTF-8, 1–512 bytes, excluding exactly `.`/`..`; other dots/slashes remain literal. Values allow up to 1 MiB including empty. Invalid arguments return `INVALID_ARGUMENT`; Sessions without managed SQLite return `FAILED_PRECONDITION`.
 
-`page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾，非空 `cursor` 遵守键的约束。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
+`page, err := kv.List(ctx, "subscription/", "", 20)` returns at most 20 keys in byte order. Use `page.Next` as subsequent `cursor`; empty means end. Nonempty cursors obey key constraints. Prefixes match literal bytes, including `%`/`_`; empty lists all, and `limit` must be positive.
 
-官方 WebUI 的插件「数据」页可浏览和编辑数据库表格、KV 与插件文件，并导出或清空数据；数据库保留代次只读。Agent 会话提供摘要与清除入口，接口与数据清理语义见 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 与 [§21](../spec/ADMIN-API.md#21-插件数据浏览)。
+WebUI plugin Data pages browse/edit DB tables, KV and files, export/clear data; retained DB generations are read-only. Agent conversations offer summaries/clear operations; see [management API](deployment.md#management-api) for interfaces/cleanup semantics.
 
-`examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
+`examples/plugins/configdb` commands `/note kvset <key> <value>` and `/note kvget <key>` demonstrate writes/reads with localized replies.
 
-### 保存插件文件
+### Store plugin files
 
-Core 在启动前创建目录，经 Bootstrap 下发。传入 Handler 或生命周期回调的 `ctx`（或其派生 context），SDK 优先用它确定所属插件 Session；同进程的多个插件各自取得自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。在 Session 就绪的 Handler 中通过 `sdk.PluginDataDir(ctx)` 取得 `<data_dir>/plugin_data/<id>/` 的绝对路径：
+Core creates the directory before startup and sends it in Bootstrap. Pass Handler/lifecycle `ctx` or a derived context; SDK uses its owning Session. In-process plugins get separate directories; separate processes use default Session if unbound. In a ready Handler, `sdk.PluginDataDir(ctx)` returns absolute `<data_dir>/plugin_data/<id>/`:
 
 ```go
 import (
@@ -94,59 +96,59 @@ func saveCache(ctx context.Context, content []byte) error {
 }
 ```
 
-`OnStart`、`OnReady` 均早于 Session 就绪；此时或 Session 停止后调用 `PluginDataDir(ctx)` 会 panic：`plugin session is not ready`。目录在 Unix 上权限为 `0700`，Windows 继承状态根目录的当前账号专用 ACL。Core 负责建立与卸载清理，文件由插件管理。准备失败与回退保留已写文件，因此需要随代次回退的数据放在 KV 或受管 SQLite 中。
+OnStart/OnReady precede Session readiness; calling `PluginDataDir(ctx)` there or after stop panics with `plugin session is not ready`. Unix mode is `0700`; Windows inherits the state root's account-only ACL. Core creates/purge-cleans, plugins manage files. Preparation failures/rollback preserve written files; use KV/managed SQLite for data requiring generation rollback.
 
-`examples/plugins/configdb` 的 `/note fileset <value>` 与 `/note fileget` 演示在该目录读写固定文件 `note.txt`。
+configdb `/note fileset <value>` and `/note fileget` read/write fixed `note.txt` there.
 
-## 4. 日志与文案
+## 4. Logs and text
 
-诊断包可收集组件日志及最近错误；日志和错误仍须避免记录凭证明文。导出只按规则遮盖列明的凭证格式和地址，聊天内容不作专门处理（[CONTRACTS §14.7](../spec/CONTRACTS-v0.1.md#147-诊断包)）。
+Diagnostics collect component logs/recent errors. Keep plaintext credentials out of logs/errors: export masks only specified credential/address patterns; chat content receives no special handling. See [diagnostics](deployment.md#export-diagnostics).
 
-- 用标准库 `log/slog` 记录，SDK 把记录交给 Core 并补上来源（CONTRACTS §14）。不要往 stdout 写内容：stdio 传输下 stdout 是协议通道。
-- 组件自己的数据损坏或无法继续运行、需要立即处理时，用 `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)` 记录 CRITICAL；Handler panic 仍由 SDK 记录为 ERROR（CONTRACTS §14.1）。
-- 日志、错误字符串与 safe_message 用英文；给用户看的文字放进 `i18n/` 的 `messages`，至少提供 en-US（D-30、CONTRACTS §5.4）。
-- `messages` 键与命名占位符使用点分隔的标识符，每段由 ASCII 大小写字母、数字与 `_` 组成（D-178），例如 `storeEmpty` 与 `account.Name`。
-- 取文案用 `c.T(key, name, value, ...)`，后台用 `sdk.T`，两者只返回字符串（D-106）。键与参数名尽量写成常量：`alonabot build` 与 `alonabot check` 会检查键是否存在于 en-US、参数是否成对、参数名是否为 `string` 类型且与占位符一致；键在运行时才确定时不检查，运行时找不到键或参数不符时返回键名或保留占位符原文，并在插件日志记一次 WARN（CONTRACTS §5.4）。
-- 不记录 secret、token、完整配置与 DSN；含凭证的 URL 先脱敏（CONTRACTS §14）。
+- Use standard `log/slog`; SDK forwards records to Core with source identity. Keep stdout free for the stdio protocol.
+- For corrupt component data or inability to continue requiring immediate action, log CRITICAL with `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)`. SDK still logs Handler panics as ERROR.
+- Logs/error strings/safe_message use English. Put localized user text in `i18n/` `messages`, with at least en-US.
+- `messages` keys/named placeholders are dot-separated identifiers, each part containing ASCII letters/digits/`_`, e.g. `storeEmpty`, `account.Name`.
+- `c.T(key, name, value, ...)` and background `sdk.T` return strings only. Prefer constant keys/argument names. `build/check` verify en-US keys, paired arguments, string argument names and matching placeholders. Runtime-determined keys skip static checks. Missing/mismatched runtime text returns the key or original placeholders and logs one plugin WARN.
+- Keep secrets/tokens/full configuration/DSNs out of logs; redact credential-bearing URLs first.
 
-## 5. 生命周期与调用
+## 5. Lifecycle and calls
 
-- 资源在 OnStart 中打开、在 OnStop 中关闭；后台 goroutine 随 OnStop 结束，并响应 ctx 取消（CONTRACTS §4）。
-- 普通请求的期限是 30s。需要更久的工作放进延续调用或 schedule 回调（CONTRACTS §1.2、§2.4、§4.3）。
-- 冷启动占用请求原有期限，等待取消只撤回该次请求；就绪后复核路由与权限，再交付一次。Core 按 Session 持有实际调用与资源租约的活动引用，本地取消先返回的业务持续占用至实际结束。HTTP 引用在反向代理返回时释放；自动退出进入 QUIESCING 后冻结新派发，新请求按原期限与预算等待旧树退出及下一次 Ready。排空、STOPPING、OnStop 与整树截止复用正常停止；HTTP/Bus 仍在执行的 SDK 回调沿用正常停止截止（D-179）。
-- 延续调用有两种写法，期限为 CONTINUATION_TIMEOUT，不占分发链：
-  - Handler 内调用 `c.Continue(func(c *sdk.Context) error { ... })`：原 Handler 照常返回并决定传播，fn 在原调用成功结束后的独立调用中执行，原调用返回错误时 fn 不执行。
-  - 命令、事件或按钮路由的 builder 写 `.Continue()`：SDK 在原调用中照常执行 Rule，匹配后整个 Handler 放到延续调用中执行。这类路由中 `StopPropagation` 不起作用；自动回复型 Handler 返回的非空内容在延续调用结束前发送一次。
-  - 在延续调用中，`c.Wait(timeout)` 等待同一用户在同一会话（含话题）的下一条消息，返回它的 Context，可用 `Text()` 取文本；这条消息不再进入普通分发。只能由真实入站事件触发（需要 Actor 与默认 Target），延续调用中不能再次 Continue，等待与延续都不持久化，插件停止或替换时结束（D-119）。
-- 有副作用的业务调用不自动重试；超时与取消不代表对端没有执行（CONTRACTS §1.2）。
-- 插件包导出 `func New() *sdk.Plugin`：`p := sdk.NewPlugin()` 后在 p 上登记路由、`p.OnStart`/`OnReady`/`OnStop`、`p.OnConfigLoad` 与数据库迁移，最后返回 p；`New` 可以被多次调用，不依赖包级状态（D-114、D-145）。逻辑模块用 `p.Sub(id)` 分成一层子插件，通常由子包导出 `func Register(s *sdk.SubPlugin)`；子插件的 ID 不进入 route_id、命令路径与 Service 名，生命周期回调与迁移只登记在插件对象上（D-116）。
-- 参数较多或需要可选、默认值时，命令 Handler 在 `*sdk.Context` 之后只收一个结构体：字段按顺序对应参数，名字取 `arg` 标签或把字段名开头的大写段转小写（`FeedURL` 为 `feedURL`），指针字段可选、缺失为 nil，`default:"…"` 给出默认值，`arg:",raw"` 接收末位 raw 尾部；与位置参数及 `Args`/`Optional`/`RawTail` 不能混用，全部检查在注册收集阶段完成（D-115）。
-- 位置参数的名字：省略 `Args` 时取 Handler 源码中的参数名，由构建工具自动记录，显式 `Args` 优先；`_` 与无名参数、同一行多个函数字面量（生成时给出 WARN）回退为 `argN`，这时要用 `Args` 显式命名后才能按名字写 `Optional`。
-- HTTP 路由写作 `p.Route(method, path).Handle(h)`（或 `.HandleFunc(f)`），公开回调在 `Handle` 之前加 `.Public(sdk.AuthCallbackState)` 等认证方式；定时任务写作 `p.Every(jobID, d).Handle(fn)` 或 `p.Cron(jobID, expr).Timezone(tz).Handle(fn)`。每个 builder 必须恰好 `Handle` 一次，`Handle` 之后不能再设置选项，错误在注册收集阶段报告。
-- 文本匹配直接写 `p.Regex(expr)`、`p.Keyword(patterns...)`、`p.StartsWith(patterns...)`、`p.EndsWith(patterns...)`、`p.FullMatch(patterns...)`，原始消息用 `p.Raw()`；子插件与命令组使用同样的写法。缺省 route ID 为小写类别名加冒号和以 `|` 连接的模式，Regex 保留表达式原文，Raw 为 `raw`。事件 ID 为事件名，Hook 用 `pre_event:<事件名>`、`before_send`、`after_send`。同插件内重复会报错，用 `.ID("stable-name")` 区分；模式会变化且需保留命令策略时也固定 ID。路径命令继续按命令路径生成 ID。
-- Hook 直接写 `p.PreEvent(sdk.MessageCreated)`、`p.BeforeSend()`、`p.AfterSend()`，子插件同样适用。需要固定身份时在 `Handle` 前调用 `.ID(routeID)`。
-- 事件直接写 `p.On(eventType)`；Plugin、SubPlugin 与 CommandGroup 均提供此接口。命令组的事件沿用所属子插件归属，route ID 为事件名，需要稳定身份时在 `Handle` 前调用 `.ID(routeID)`。
-- Handler 的 `c` 实现 `context.Context`，可直接传给 `kv.Set(c, ...)`、`task`、`service`、`llm`、`media`、`tool`、`command` 与 `conversation`。期限、取消与父调用关联沿用本次调用；`c.Context()` 仍可取得底层 context，Handler 返回后的失效规则保持。
-- 命令、文本匹配、事件、Service 与 Event Bus 订阅都链式注册，以 `Handle` 结束；漏写 `Handle`、重复调用或在它之后继续调用，都会让注册收集阶段报错（D-70）。
-- 命令说明在注册处写英文原文：`p.Command("set").Description("Set a value").Handle(Set)`。其他语言在 `i18n/<locale>.json` 的顶层 `commands` 中以完整规范路径（含 Group 前缀，token 用一个空格连接）覆盖，例如 `{"commands":{"rss add":{"description":"添加订阅"}}}`；只有 `commands` 的语言文件可以省略 en-US。`check`/`build` 只检查 `commands` 的结构，注册收集阶段检查覆盖路径对应已注册且登记了英文说明的命令，否则注册失败（D-138）。
-- 权限写成 `sdk.Permission`：`sdk.Anyone`、`sdk.User`、`sdk.Admin`、`sdk.ChatAdmin`、`sdk.PermissionName`，用 `Or` 取并集。命令与文本匹配取最近一层显式设置（路由、最近的组、外层的组），都没有时要求 `user`；事件路由没有设置时为空集合。Handler 内用 `c.Has` 按当前 Actor 判断。
-- `c.Send`、`sdk.Send`、编辑与自动回复都接收 `message.Content`，可以直接传 `message.Text(...)`、`message.ImageURL(...)` 等单个片段，也可以传 `message.Chain{...}`。自动回复型 Handler 的返回类型为 `(message.Content, error)`，成功返回的非空内容由 Core 在 Handler 返回后发送，排在本次调用的全部显式发送之后；nil 与空 Chain 表示不回复，显式发送与编辑的空内容返回 INVALID_ARGUMENT（CONTRACTS §8，MESSAGE-MODEL §2～§3，D-108）。
-- 发送目标用 `string` 会话字符串：`<adapter_id>:<chat_id>[#<thread_id>]`，例如 `telegram:-100123#42` 或 `onebot11:group:123456`。用 `message.SID(adapterID, chatID, threadID)` 处理 chat_id 与 thread_id 中 `%`、`#` 的转义，用 `message.ParseSID(sid)` 校验并拆解；adapter_id 遵守 manifest 的本地 ID 规则。`c.Send(content)` 使用本次调用的默认会话，`c.SendTo(sid, content)` 发往指定会话，`sdk.Via(instanceID)` 指定机器人实例；只有 Via 时保留默认会话与话题。后台用 `sdk.Send(ctx, session, content, opts...)`，opts 只接受 Via。省略实例时由 Core 选择并补齐账号；非法会话在发出请求前返回 INVALID_ARGUMENT（CONTRACTS §8、§9.1，MESSAGE-MODEL §1，D-102）。
-- 编辑、撤回与引用所指的消息统一用 `string` 消息句柄，格式为 `<会话字符串>/<platform_message_id>[@<实例名>]`，可以原样保存。用发送回执的 `Ref()`、`Refs()` 或 `c.Event().Ref()` 取得句柄，手工构造用 `message.Ref(sid, platformMessageID, instance)`，它负责消息 ID 中 `%`、`/`、`@` 的转义，用 `message.ParseRef(ref)` 校验并拆解。编辑用 `c.Edit(ref, content)` 或后台的 `sdk.Edit(ctx, ref, content)`，引用用 `message.Quote(ref)`；省略实例时由 Core 按目标选择规则补齐（CONTRACTS §8，MESSAGE-MODEL §4，D-104）。
-- 命令前缀与回复方式取当前会话的配置文件（CONTRACTS §5.6，T-04.19）。处理 `message.created` 时，向原实例、会话与话题的首条 Send 由 Core 按设置加入群提及、引用与普通文本前缀；手动发送、自动回复、Service 派生与延续共享首条标记，BeforeSend 看到改写后的 chain。提及与前缀加入后超出实例文本上限时两项一起省略，引用保留；每次回复 Send 按 `forward_threshold` 与 `message.forward` 能力决定合并转发，组合仍须满足原消息校验。后台、定时任务与跨会话发送沿用原行为。
-- 编辑首条回复时，Core 按当前插件 Session、完整目标与物理消息 ID 保留回执已确认发送的自动提及和前缀；重复编辑沿用已有修饰，实体偏移按 UTF-16 调整。Edit 接受一个 text（也可由通用 markdown 转换得到）与可选 buttons，需保留的普通文本前缀或自动提及与 Markdown 编辑组合无法表达时返回 UNSUPPORTED。Session 退出即释放关联；流式回复可直接沿用 `c.Edit` 与 `c.Stream`，修饰由 Core 处理。
-- 流式输出用 `c.Stream(next)`：next 每次返回一段增量文本，返回 `io.EOF` 正常结束（可以同时带上末段）。实例声明 `message.edit` 时先发送再节流编辑，超过 `TextLimit` 时换条；没有编辑能力时在正常结束后发送一次，输入出错时不发布缓存。返回全部回执，失败时保留已有回执（D-135）。
-- 回复文本用 `c.Reply(text)`；带片段时写 `c.Reply(text, message.ImageURL(url))`，文本与后续片段依次组成一条消息，只发送一次并返回错误。后台发文本用 `sdk.SendText(ctx, session, text, opts...)`，opts 只接受 Via，发送文本后丢弃回执，错误原样返回（D-118、D-180）。
-- `c.User()` 返回 `string` 用户字符串 `<adapter_id>:<external_user_id>`，没有 Actor 时为空串；`message.UID` 与 `message.ParseUID` 保留 external_user_id 中的冒号。`c.Session()` 返回默认会话，没有默认目标时为空串，未指定目标的发送返回 NO_DEFAULT_TARGET。Service 调用沿用调用上下文中的 Actor 与默认会话，`c.Event()` 为 nil（CONTRACTS §1.2、§3、§8，MESSAGE-MODEL §1，D-120）。
-- 事件用常量注册，例如 `p.On(sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`；也接受只收 `*sdk.Context` 的 Handler。其他标准事件同样使用对应常量与 payload 指针类型，注册收集阶段检查签名并在错误中给出 route_id。扩展事件用 `sdk.AdapterEvent[T]("adapter.name", version)`，T 须为结构体，带载荷的 Handler 收 `*T`；版本不符或 JSON 解码失败时记 WARN 并跳过 Handler，日志只含路由、事件名与版本或安全错误类别（MESSAGE-MODEL §1.1～§1.2，CONTRACTS §8，D-70、D-71、D-113）。
-- 上传用 `media.Upload(ctx, r, mime)` 得到 `*message.MediaRef`，SDK 计算大小与 SHA-256，mime 为空时按内容判断；r 可 Seek 时读两遍，否则使用临时文件，调用方应保持两遍读取的内容一致（CONTRACTS §1.3，D-109）。读取用 `media.Open(ctx, src)`，src 可以是片段的 `Source`、`MediaRef.Source()`、`IncomingMedia.Source()`，只持有 token 时用 `message.MediaSource{MediaRef: token}`。打开时先读第一块，失败直接返回错误；成功后顺序读取并关闭返回的 `io.ReadCloser`，读取响应 ctx 取消且不自动重试。HTTPS URL 来源在发出请求前返回 INVALID_ARGUMENT。向其他插件授权用 `media.Grant(ctx, token, granteePluginID, sessions...)`，会话参数为 `string`（CONTRACTS §1.3～§1.4，D-102、D-109、D-121）。
-- 错误码用 `errcode`，例如 `errcode.InvalidArgument.New("invalid input")`、`errcode.InvalidArgument.Errorf("invalid field %s", name)`；用 `errcode.Of(err)` 查询错误链中的 SDK 错误码，没有 SDK 错误时返回 0。`sdk.Error` 是 `errcode.Error` 的别名，仍可用 `errors.As` 取得错误并读取 Code 与 Message（CONTRACTS §1.2，D-123）。
+- Open resources in OnStart, close in OnStop. Background goroutines end with OnStop and honor ctx cancellation.
+- Ordinary deadlines are 30s. Put longer work in continuations or schedule callbacks.
+- Cold start consumes original deadlines; cancelling a wait withdraws only that request. Once ready, routes/permissions are rechecked and delivery occurs once. Session activity references track actual calls/resource leases; locally cancelled work remains active until actually finished. HTTP releases on reverse-proxy return. Automatic exit enters QUIESCING, freezes dispatch, and queues new requests within original deadlines/budgets until old-tree exit/new Ready. Drain/STOPPING/OnStop/tree deadlines reuse normal shutdown, including still-running HTTP/Bus SDK callbacks.
+- Continuations use CONTINUATION_TIMEOUT without occupying dispatch chains:
+  - `c.Continue(func(c *sdk.Context) error { ... })`: original Handler returns/controls propagation normally; fn runs separately after successful completion, and is skipped on original error.
+  - Builder `.Continue()` on commands/events/buttons: Rules run in the original call; the matched Handler runs wholly in a continuation. `StopPropagation` has no effect there. Nonempty automatic reply sends once before continuation completion.
+  - In continuations, `c.Wait(timeout)` returns the next message Context from the same user/chat/topic; `Text()` reads it and ordinary dispatch skips it. This requires real inbound Actor/default Target. Nested Continue is unavailable; waits/continuations are not persisted and end on stop/replacement.
+- Business calls with side effects do not retry automatically. Timeout/cancellation can occur after remote execution.
+- Export `func New() *sdk.Plugin`: create `p := sdk.NewPlugin()`, register routes/OnStart/OnReady/OnStop/OnConfigLoad/migrations and return p. New can run multiple times without package state. Split one level with `p.Sub(id)`, usually subpackages exporting `Register(s *sdk.SubPlugin)`. Subplugin IDs do not enter route_id/command paths/Service names. Register lifecycle/migrations only on Plugin.
+- For many/optional/defaulted arguments, accept only one struct after `*sdk.Context`. Fields map positionally; names use `arg` tags or lowercase leading capital runs (`FeedURL` → `feedURL`). Pointers are optional/nil; `default:"…"` supplies defaults; `arg:",raw"` consumes final raw tail. Mixing with positional/Args/Optional/RawTail fails during registration collection.
+- Without `Args`, tools record Handler source parameter names; explicit Args wins. `_`, unnamed arguments and multiple same-line function literals (generation WARN) fall back to `argN`; explicitly name with Args before named Optional in those cases.
+- HTTP uses `p.Route(method, path).Handle(h)`/`.HandleFunc(f)`; add `.Public(sdk.AuthCallbackState)` or another mode before Handle. Timers use `p.Every(jobID, d).Handle(fn)` or `p.Cron(jobID, expr).Timezone(tz).Handle(fn)`. Exactly one Handle is required, with no later options; collection reports misuse.
+- Match with `p.Regex(expr)`, `p.Keyword(patterns...)`, `p.StartsWith(patterns...)`, `p.EndsWith(patterns...)`, `p.FullMatch(patterns...)`, or `p.Raw()`, also on subplugins/groups. Default route IDs use lowercase category, colon, `|`-joined patterns; Regex preserves expressions, Raw is `raw`. Events use event names; Hooks use `pre_event:<event name>`, `before_send`, `after_send`. Duplicates fail; `.ID("stable-name")` distinguishes them or preserves policy across pattern changes. Path commands still derive IDs from command paths.
+- Hooks use `p.PreEvent(sdk.MessageCreated)`, `p.BeforeSend()`, `p.AfterSend()`, also on subplugins. Set stable `.ID(routeID)` before Handle.
+- `p.On(eventType)` works on Plugin/SubPlugin/CommandGroup. Group events retain subplugin ownership; IDs default to event names, overridable before Handle.
+- Handler `c` implements `context.Context`; pass directly to kv/task/service/llm/media/tool/command/conversation to preserve deadline/cancellation/parent association. `c.Context()` still returns the underlying context; post-Handler invalidation remains.
+- Command/text/event/Service/Bus registration chains end in Handle. Missing/duplicate Handle or later options fail collection.
+- Register English descriptions, e.g. `p.Command("set").Description("Set a value").Handle(Set)`. Other locales override top-level `commands` by complete canonical path including Group prefixes/single spaces, e.g. `{"commands":{"rss add":{"description":"添加订阅"}}}`. Commands-only locales may omit en-US. check/build validates structure; collection requires paths to registered commands with English descriptions, otherwise fails.
+- Permissions use `sdk.Permission`: Anyone/User/Admin/ChatAdmin/PermissionName, combined with `Or`. Command/text uses nearest explicit route/group permission, default `user`; events default empty. `c.Has` checks current Actor.
+- Send/Edit/automatic replies accept `message.Content`: individual `message.Text(...)`/`message.ImageURL(...)` or `message.Chain{...}`. Automatic Handlers return `(message.Content, error)`; nonempty successful results send after return and after all explicit sends. Nil/empty Chain means no automatic reply; explicit empty sends/edits return INVALID_ARGUMENT.
+- Session strings are `<adapter_id>:<chat_id>[#<thread_id>]`, e.g. `telegram:-100123#42`, `onebot11:group:123456`. `message.SID(adapterID, chatID, threadID)` escapes `%`/`#`; `message.ParseSID` validates/splits. adapter_id follows local manifest IDs. `c.Send` uses default chat; `c.SendTo(sid, content)` specifies it; `sdk.Via(instanceID)` selects account, retaining default chat/topic if alone. Background `sdk.Send(ctx, session, content, opts...)` accepts only Via options. Core fills omitted instances; invalid sessions return INVALID_ARGUMENT before requests.
+- Edit/delete/quote use storable string handles `<session string>/<platform_message_id>[@<instance name>]`. Get them from receipt Ref/Refs or `c.Event().Ref()`; `message.Ref(sid, platformMessageID, instance)` escapes `%`/`/`/`@`, `message.ParseRef` validates/splits. Edit via `c.Edit`/`sdk.Edit`, quote via `message.Quote`; Core fills omitted instances using target selection.
+- Prefix/reply settings come from the current chat's profile. For `message.created`, Core adds configured group mention/quote/plain-text prefix to the first Send to original instance/chat/topic. Explicit/automatic/Service-derived/continuation replies share that marker; BeforeSend sees rewritten chain. If mention+prefix exceeds instance text limits, omit both, retaining quote. Every reply Send uses forward_threshold/message.forward for merged forwarding, still requiring normal validation. Background/jobs/cross-chat sends retain behavior.
+- Editing the first reply preserves receipt-confirmed automatic mentions/prefixes by plugin Session/full target/physical message ID. Repeated edits retain them with UTF-16 offsets. Edit accepts one text (possibly converted Markdown) plus optional buttons; unsupported combinations of retained plain prefix/mention with Markdown edits return UNSUPPORTED. Associations release on Session exit; Core also handles decorations for c.Edit/c.Stream.
+- `c.Stream(next)` consumes incremental text until `io.EOF` (possibly with final text). With message.edit it sends then throttles edits, starting new messages beyond TextLimit. Without editing, send once on normal completion; input errors discard buffered content. Return all receipts, including existing ones on failure.
+- `c.Reply(text)` or `c.Reply(text, message.ImageURL(url))` sends one ordered text/segment message once, returning errors. Background `sdk.SendText(ctx, session, text, opts...)` accepts only Via, discards receipts and preserves errors.
+- `c.User()` is `<adapter_id>:<external_user_id>` or empty without Actor; message.UID/ParseUID preserve external-user colons. `c.Session()` is default chat or empty; untargeted send then returns NO_DEFAULT_TARGET. Services inherit Actor/default chat with nil `c.Event()`.
+- Register constants such as `p.On(sdk.MessageCreated).Handle(func(c *sdk.Context, e *message.CreatedPayload) error { return c.Reply(e.Chain.Text()) })`, or Context-only Handlers. Standard events use matching payload pointers; collection checks signatures with route_id errors. Extensions use `sdk.AdapterEvent[T]("adapter.name", version)`, struct T, Handler *T. Version/JSON failure warns and skips, logging only route/event/version or safe error category.
+- `media.Upload(ctx, r, mime)` yields `*message.MediaRef`; SDK determines size/SHA-256 and sniffs empty mime. Seekable readers read twice; others use temporary files. Keep both reads identical. `media.Open(ctx, src)` accepts segment Source, MediaRef.Source, IncomingMedia.Source, or `message.MediaSource{MediaRef: token}`. It reads the first chunk before success, then returns sequential io.ReadCloser honoring ctx without retries; close it. HTTPS URL sources return INVALID_ARGUMENT before requests. `media.Grant(ctx, token, granteePluginID, sessions...)` grants other plugins access using string chats.
+- Use errcode constructors such as `errcode.InvalidArgument.New("invalid input")`/`.Errorf("invalid field %s", name)`. `errcode.Of(err)` finds SDK codes through error chains or returns 0. `sdk.Error` aliases errcode.Error; errors.As still exposes Code/Message.
 
-发送带回调的按钮时，用 `a := button.Define[T](name)` 声明动作，通过 `button.On(r, a).Handle(...)` 注册签名为 `func(*sdk.Context, T) error` 的 Handler，再将 `a.Button(label, value)` 放入 `message.Buttons` 发送。`button.` 是按钮路由的保留前缀，注册其他路由时避开该前缀。value 用 `encoding/json` 编码，Core 限制编码结果最多 1024 字节；编码失败的按钮在发送前返回 INVALID_ARGUMENT。点击时 value 解码失败记 WARN，跳过 Handler 并正常结束本次调用。直接构造 `message.Button` 时，空的 `Value` 会省略该字段，省略值的点击同样按解码失败处理。`message.Extension(adapterID, name, version, payload)` 只能发往所属 Adapter 声明了对应 extension 名称与版本的实例，payload 按声明的 Schema 校验（[CONTRACTS §8](../spec/CONTRACTS-v0.1.md)、[MESSAGE-MODEL §6.3](../spec/MESSAGE-MODEL.md#63-按钮与回调)）。
+Declare buttons with `a := button.Define[T](name)`, register `button.On(r, a).Handle(...)` taking `func(*sdk.Context, T) error`, and send `a.Button(label, value)` inside message.Buttons. Reserve `button.` for button route IDs. Values use encoding/json, capped at 1024 bytes by Core; encoding failures return INVALID_ARGUMENT before sends. Click decode failure warns/skips Handler and completes normally. Direct message.Button with empty Value omits it; omitted-value clicks also fail decode. `message.Extension(adapterID, name, version, payload)` requires the target Adapter instance to declare that extension/version and validates its Schema.
 
-读取合并转发时，当前 Handler 可直接调用 `nodes, err := c.ReadNodes(forward)`；返回值为递归的 `[]message.ForwardItem`，保留作者、`OccurredAt` 和节点消息链。节点中的图片、文件等来源已经按本次调用授权，可用 `media.Open(c, segment.Source)` 读取。查询错误可带部分节点，处理 `err` 后再决定如何使用。后台调用使用 `sdk.ReadNodes(ctx, sid, forward, sdk.Via(instanceID))`，沿用插件发信许可和指定实例。
+`nodes, err := c.ReadNodes(forward)` returns recursive `[]message.ForwardItem`, preserving authors/OccurredAt/chains. Image/file sources are authorized for this call; read with media.Open(c, segment.Source). Errors may include partial nodes; handle err before using them. Background `sdk.ReadNodes(ctx, sid, forward, sdk.Via(instanceID))` respects send permissions/instance selection.
 
-通用 Markdown 使用对象方法转换为普通文本：
+Convert generic Markdown to plain text with the object method:
 
 ```go
 md := message.Markdown("**标题**\n[链接](https://example.com)")
@@ -154,17 +156,17 @@ result, err := c.Send(md) // 支持 message.markdown 的平台由 Core 转换为
 result, err = c.Send(md.PlainText()) // 显式普通文本，方法无需参数。
 ```
 
-通用语法采用 CommonMark 与删除线，保留块结构；富文本转换遇到图片或 HTML 时返回 `UNSUPPORTED`。平台未声明 `message.markdown` 时直接发送也返回该错误，调用者选择 `.PlainText()`。已有 `TextSegment.FormatMarkdown` 沿用 Adapter 的原生方言，Telegram 仍为 MarkdownV2。
+Generic syntax is CommonMark plus strikethrough, retaining block structure. Rich conversion with images/HTML returns UNSUPPORTED. Sending without instance message.markdown also returns it; choose .PlainText(). Existing TextSegment.FormatMarkdown retains native Adapter dialect, Telegram MarkdownV2.
 
-Handler 内先调用 `client, err := c.Adapter()` 取得绑定当前可信实例与账号的 `*sdk.AdapterClient`，处理错误后调用 Adapter 包提供的带类型动作函数。Adapter 的 `client.From(c)` 可调用 `c.Adapter()` 并核对 `AdapterID()`；客户端还提供只读的 `InstanceID()`、`AccountID()` 与 `Session()`。没有可信平台身份时返回 `NO_DEFAULT_TARGET`，Handler 结束后调用返回 `FAILED_PRECONDITION`。
+In Handlers, `client, err := c.Adapter()` binds trusted instance/account. Handle errors then call typed Adapter actions. Adapter `client.From(c)` can invoke c.Adapter and check AdapterID; clients expose read-only InstanceID/AccountID/Session. No trusted platform identity returns NO_DEFAULT_TARGET; calls after Handler completion return FAILED_PRECONDITION.
 
-底层入口 `client.Call(name, version, params)` 与 `client.CallAction("", name, version, params)` 按 Adapter 声明的作用范围选择目标：chat 动作使用当前默认会话，account 动作只使用绑定实例、向执行器传空会话。账号事件也可取得客户端，调用 chat 动作时需显式提供 `to`。`CallAction(to, name, version, params, opts...)` 接受显式业务会话与 `sdk.Via(instanceID)`，跨会话、跨实例调用继续检查原有发信许可；结果 JSON 与错误同时保留。所有调用继承当前 Handler 的父调用、取消与期限。
+`client.Call(name, version, params)`/`client.CallAction("", name, version, params)` choose declared scope: chat uses default chat, account uses bound instance/empty executor chat. Account events may acquire clients, but chat actions need explicit to. `CallAction(to, name, version, params, opts...)` accepts explicit chat/Via; cross-chat/instance calls retain send-permission checks, JSON results/errors together. All inherit parent/cancellation/deadline.
 
-`*sdk.AdapterClient`、`*sdk.Context` 与后台的 `*action.Client` 都实现 `action.Caller`。原入口 `c.CallAction` 保持显式目标语义，账号动作传空会话；后台沿用 `action.NewClient(ctx)`，由任务 context 控制取消与期限。
+`*sdk.AdapterClient`, `*sdk.Context` and background `*action.Client` implement action.Caller. Existing c.CallAction keeps explicit targets, empty chat for account actions. Background action.NewClient(ctx) uses task-context cancellation/deadlines.
 
-Adapter 作者用 `adapter.Event[T](name, version)` 与 `adapter.Extension[T](name, version)` 声明扩展事件与 extension；T 须为结构体，放在 Adapter 的常量与数据类型包中，供插件共用。SDK 从 Go 类型推导 Schema：没有 `omitempty` 的字段为必需，不允许未声明的属性；类型不符或推导失败时，`RunAdapter` 在 REGISTER 前返回带声明名的错误（CONTRACTS §8，MESSAGE-MODEL §1.2、§2，D-113）。
+Adapters declare extensions/events via `adapter.Event[T](name, version)`/`adapter.Extension[T](name, version)`. Struct T belongs in shared Adapter constants/data packages. SDK derives Schema: non-omitempty fields required, undeclared properties forbidden. Type/derivation failures make RunAdapter error with declaration name before REGISTER.
 
-Adapter 的 HTTP 路由在 `adapter.Descriptor.HTTP` 中声明，例如：
+Declare Adapter HTTP routes in adapter.Descriptor.HTTP, e.g.:
 
 ```go
 return &adapter.Descriptor{
@@ -178,15 +180,15 @@ return &adapter.Descriptor{
 }
 ```
 
-省略 `Auth` 时要求 Core 会话；`AuthPlatformToken` 由 Adapter 校验平台凭证；`AuthStatic` 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。SDK 在连接 Core 前核对路径与重复路由。
+Omitted Auth requires Core session; AuthPlatformToken delegates platform credentials to Adapter; AuthStatic publicly serves GET/HEAD without management/platform credentials. SDK checks paths/duplicates before connecting.
 
-查询当前会话的可用命令时，导入 `github.com/AlonaBot/AlonaBot/sdk/command`，在 Handler 内调用 `entries, err := command.List(c)`。成功时可用 `entry.Path` 和 `entry.Aliases` 显示生效命令名（多 token 路径用空格连接），用 `entry.Description` 显示本地化说明。调用失败时返回 `err`；后台或已结束的 Handler context 返回 `FAILED_PRECONDITION`。完整示例见[官方 help 插件](https://github.com/AlonaBot/alonabot-plugin-help/blob/main/help.go)。
+Import sdk/command and call `entries, err := command.List(c)` in a Handler. Display Path/Aliases (space-joined multi-token paths) and localized Description. Return errors; background/finished Handler contexts return FAILED_PRECONDITION. See [official help](https://github.com/AlonaBot/alonabot-plugin-help/blob/main/help.go).
 
-### 命令菜单
+### Command menus
 
-根命令需要显示在平台菜单时写 `p.Command("hello").Menu().Description("Say hello").Handle(hello)`。缺省注册只提供处理器。自动菜单按聊天的 Profile、许可、公开权限、`/` 前缀和生效主名计算，论坛话题共用聊天菜单；关闭某个话题仍单独控制执行。
+To show a root command in a platform menu, register `p.Command("hello").Menu().Description("Say hello").Handle(hello)`. Registration otherwise only installs a handler. Automatic menus use the chat's Profile, instance permission, public permission, `/` prefix and winning effective primary name. Forum topics share the chat menu; topic switches still control execution.
 
-手动接管时，将目标 Telegram 实例的 `auto_sync_commands` 设为 false。`clear_commands_on_disable` 缺省 true，自动转手动先清理受管位置；false 保留到插件覆盖。首次手动及手动重启保留菜单。订阅 ready 后按聊天设置整份菜单：
+For manual control, set the Telegram instance's `auto_sync_commands` to false. `clear_commands_on_disable` defaults to true: automatic-to-manual transitions first clear managed positions; false retains them until a plugin replaces them. First manual startup and manual restarts preserve menus. Subscribe to ready and set a complete menu per chat:
 
 ```go
 p.On(sdk.CommandMenuReady).Handle(func(c *sdk.Context, ready *message.CommandMenuReadyPayload) error {
@@ -200,32 +202,57 @@ p.On(sdk.CommandMenuReady).Handle(func(c *sdk.Context, ready *message.CommandMen
 })
 ```
 
-导入 `sdk/command` 和 `sdk/message`。需要翻译时逐 language_code 设置，空串为缺省语言，非空取两位小写主语言。另有 `chat_administrators` 与带 UserID 的 `chat_member` scope。每份最多 100 条；非法名字、说明、超限及语言映射冲突返回错误，保留已有成功菜单。每次成功 Set 转移该 scope+language 整份菜单的 owner，禁用/卸载旧 owner 保留新 owner 的内容。
+Import `sdk/command` and `sdk/message`. Set each language separately: an empty LanguageCode is the default, and nonempty codes are two lowercase primary-language letters. Scopes also include `chat_administrators` and `chat_member` with UserID. Each menu accepts at most 100 commands. Invalid names, descriptions, limits and conflicting language mappings return errors while retaining previously successful menus. Each successful Set transfers ownership of the entire scope+language position; disabling or uninstalling the previous owner preserves the new owner's menu.
 
-`command.Get` 读取平台当前菜单，`Delete` 删除指定位置；`Status` 返回模式、Ready、LastError 和位置。普通自动同步在本 Session 跳过内容未变的位置。`command.Sync` 在自动模式全量重建活跃聊天菜单及受管 default，可用于修复远端漂移；手动模式重新处理清理与就绪通知。切换失败时读 LastError，修复原因后调用 Sync。插件的实例许可、聊天 Profile 与全局禁用在实际执行前重查；离群跳过写入，重入恢复。外部工具写入的历史 scope 需要明确给出位置再 Delete。完整契约见 [CONTRACTS §8](../spec/CONTRACTS-v0.1.md#8-adaptertarget-与消息)。
+`command.Get` reads the current platform menu; `Delete` removes a specified position. `Status` returns mode, Ready, LastError and positions. Ordinary automatic synchronization skips unchanged successful positions in this Session. `command.Sync` fully rebuilds active-chat menus and managed default positions in automatic mode to repair remote drift; manual mode reprocesses cleanup and readiness. Read LastError after a failed transition, fix its cause, then call Sync. Core rechecks instance permission, chat Profile and global disablement before execution. It skips writes after leaving a chat and resumes on rejoin. Historical scopes written by external tools require explicit positions for Delete.
 
-## 6. 跨插件协作
+#### Filtering, translation and lifecycle
 
-- 用 Service Call 与 Event Bus 协作，不直接读写其他插件的文件或数据库（CONTRACTS §3）。
-- Service 与事件都先写成包级的声明，提供方与调用方共用同一个声明：`var Search = service.JSON[SearchIn, SearchOut]("weather/search")`（Protobuf 用 `service.Proto`），提供方在 `New()` 中 `service.Serve(p, Search).Handle(fn)`，调用方 `Search.Call(ctx, in)`；事件为 `var Updated = bus.Define[Update]("weather/updated")`，发布 `Updated.Publish(ctx, payload)`，订阅 `bus.Subscribe(p, Updated).Handle(fn)`，订阅的路由 ID 缺省为完整事件名，同一事件订阅多次时用 `.ID(routeID)` 区分。target 与事件名的组件部分必须是本插件的 ID，SDK 在握手取得插件 ID 后、REGISTER 之前检查。`@agent/<name>` 只应由 Agent 组件 Serve：SDK 只检查它的格式，Broker 只把 `@agent` 的调用转给 `role: agent` 的组件，普通插件写了也不会被找到。声明可以从其他 Go module 导入后直接调用，调用方的生成器会嵌入该声明的输入与输出 Schema，经包装函数调用时同样适用。
-- Event Bus 是非持久广播：`Publish` 只能发布到本插件的命名空间，返回成功只表示 Core 准入，不代表有人收到；订阅方队列满、预算不足或离线时事件会丢失，也不会补发。需要回执或可靠送达时改用 Service Call。订阅回调串行执行，不要在其中阻塞：积压的事件占用本插件的接收预算，会让命令请求也被拒绝。回调里没有 Actor 与默认会话，发消息时用 `sdk.Send(ctx, session, content, ...)` 或 `sdk.SendText(ctx, session, text, ...)` 显式给出会话（CONTRACTS §3、§8，D-102、D-118）。
-- `service.JSON`、`bus.Define` 与 `task.Define` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。JSON Service 与 Bus 事件的 schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot build`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
-- JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
-- 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别，策略按本次调用的可信默认 Target 所在会话选择配置文件；无 Target 或无父调用时使用 `default`。list、invoke 与 confirm 每次读取一次配置文件快照：插件关闭时为 deny，其余依次取配置文件覆盖、全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；管理更新从下一次操作生效，在途确认保留已接纳策略。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略（CONTRACTS §13.1）。
-- 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供请求与响应类型，完整请求通过 `agent.Generate(ctx, llm.Request{...})`（导入 `sdk/agent`）发送，一问一答使用 `llm.Ask(ctx, prompt)`。调用以 `@agent` 为目标，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束（CONTRACTS §13.5）。
-- 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；插件自行执行操作前用 `tool.Confirm(ctx, operation, summary, effect)` 请求许可，确认时展示插件给出的摘要，返回 nil 后可执行操作。无类别时传 `tool.Unspecified`，非法类别返回 INVALID_ARGUMENT。两者都需要父调用链；没有 Actor 时遇到确认返回 PERMISSION_DENIED，实例不支持按钮时返回 UNSUPPORTED（CONTRACTS §13.2）。
+Automatic selection requires Menu, a winning single-token primary path, empty permissions or a permission set containing user, plugin availability, instance permission, the chat Profile/plugin switch, command policy and a `/` prefix. Sleeping plugins that can wake remain listed. `.Description` is English source text. Other languages override full canonical paths in the top-level `commands` object of `i18n/<locale>.json`, e.g. `{"commands":{"rss add":{"description":"添加订阅"}}}`. Group tokens use one ASCII space; aliases and effective names share the canonical path. en-US overrides fail. check/build validate structure; SDK Collect rejects paths without a registered command or English description. Per-key fallback is target locale, plugin default locale, then English; without a description use the primary name. Core maps locales to two lowercase primary-language letters and returns INVALID_ARGUMENT for conflicting descriptions after mapping. The default menu uses English. Names match `^[a-z0-9_]{1,32}$`; descriptions contain 1–256 Unicode characters. Validation precedes writes and preserves successful menus on failure.
 
-### 插件页面
+An instance's serial worker coalesces changes for two seconds from the first change: startup, plugin installation/activation/removal/disablement, permissions, policies, Profile/assignment and prefixes. First messages and the Bot's own join publish asynchronously while ordinary dispatch continues. Event cursors and account/chat membership commit together. Mode and last successful writer persist per Adapter+account+scope+language, isolating accounts without per-command history. Known languages at managed default positions remain empty; threads do not enter positions.
 
-用 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` 将 HTTP 路由列为插件页面。`.Page` 写在 `Handle` 或 `HandleFunc` 前，参数为英文源标题；在 `i18n/zh-CN.json` 写入 `{"pages":{"/subs/":"订阅"}}` 即可覆盖该路径的标题。Core 在路由运行期间通过组件列表返回页面和标题（[ADMIN-API §20](../spec/ADMIN-API.md#20-webui-需要的补充接口)）。
+Session content snapshots are saved only after platform writes and position bookkeeping both succeed. Write failures/UNKNOWN, deletion, membership changes and mode switches invalidate relevant snapshots; new Sessions and rejoins publish again. Set replaces a whole position and transfers its owner. Manual owners lose positions on uninstall, disablement, loss of instance permission or chat Profile disablement; automatic mode removes obsolete scopes/languages.
 
-插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[ADMIN-API §7](../spec/ADMIN-API.md#7-插件页面-postmessage-桥)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css` 与 `kit.js` 两条 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索（D-159）。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+Automatic-to-manual transitions stop scheduling and drain in-flight writes. First manual startup, manual restarts and changes to clear alone preserve menus. Positions in departed chats retain the cleanup decision made when entering manual mode; rejoin resumes it, and later clear-only changes preserve that decision. Cleanup failure retains the full error and not-ready state; success emits ready. Manual-to-automatic transitions republish everything and remove obsolete manual positions. Transition intent persists as the new mode/not-ready first. Each remote success is recorded immediately; errors or unknown outcomes stop subsequent operations, storage errors return in full. Ordinary automatic failures record diagnostics; later changes or Sync may reprocess them.
 
-官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、记忆与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[ADMIN-API §15.2](../spec/ADMIN-API.md#152-agent-插件页面与数据路由d-170d-182)）。记忆页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [ADMIN-API §15](../spec/ADMIN-API.md#15-agent-会话管理) 的管理入口。
+Set/Delete require manual mode and readiness; plugins can use only the three chat scopes. Calls check the current Session, plugin availability and allowed_adapter_instances; chat operations also check Profile and global disablement. An empty instanceID may use an in-flight Handler's trusted instance. `bot.command_menu_ready` targets instance readiness, existing/new chats, late activation and restored permissions. `CommandMenuReadyPayload` contains AdapterID, AdapterInstanceID, AccountID and ChatID: an empty ChatID means instance manual readiness; a value means that chat is available. Callbacks can call Set directly. Platform, transport and storage errors return in full; business writes have no automatic retries.
 
-#### 套件挂载与引入
+#### Implementing Adapter menus
 
-在插件入口 `New()` 中声明页面：
+Declare `commands.sync` v1 supported=true and implement `adapter.CommandMenuController`: `CommandMenuConfig()` returns `AutoSyncCommands` and `ClearCommandsOnDisable`; `SetCommandMenu(ctx, menu)`, `GetCommandMenu(ctx, scope, languageCode)` and `DeleteCommandMenu(ctx, scope, languageCode)` operate on one position at a time. Telegram defaults both settings to true; implementations report typed configuration. SDK reports it in the startup response and Core calls `adapter.command.menu`. Existing Adapters without that configuration retain `CommandSynchronizer.SyncCommands`.
+
+`CommandMenu{Scope, LanguageCode, Commands}` uses Scope fields Type, ChatID, UserID and Entry fields Name, Description. Core owns language splitting, ownership, modes and persistence. Adapters preserve whole-menu replacement, empty sets, full platform errors and UNKNOWN. SDK holds the instance execution lock throughout platform calls, even after RPC cancellation until the call returns, sharing it with legacy SyncCommands. Stop drains it before the next worker starts. Trusted member.left/member.joined events identify the Bot's own departure/rejoin by matching member ID with account ID.
+
+Adapters/plugins using the new interfaces must update dependencies after the SDK/Core release. Add `.Menu()` to commands that should be visible, including official help's `/help` and `/whoami`.
+
+### Trusted media MIME and platform helpers
+
+`message.MediaSource.MIME` is trusted source metadata filled by Core while preparing sends. MediaRef/File sources use saved metadata; same-instance incoming media forwarded as `platform_file` uses the trusted inbound MIME. Empty means unknown. Plugin-supplied MIME returns INVALID_ARGUMENT; `MediaRef.Source()` carries only the reference. Leases and SDK conversion preserve MIME; `adapter.Core.ReadMedia` keeps its signature. Telegram uses `image/gif` for animation, checks inline content for the `GIF8` prefix, and treats HTTPS URLs as ordinary images without MIME inference.
+
+Adapter public perm/event packages declare permissions/events using SDK builders. Public action helpers call through `sdk/action.Caller` and may directly import `sdk`, `sdk/action`, `sdk/message` and `sdk/errcode` for typed options, sends, handles, streaming helpers and errors. These public packages keep Adapter runtime code out of plugin binaries. Telegram typing helpers refresh every four seconds until context cancellation; draft helpers finish with an ordinary Send. Draft actions bypass outbound Hooks; the final Send runs them.
+
+## 6. Cross-plugin collaboration
+
+- Use Service Calls/Bus, respecting other plugins' file/database ownership.
+- Share package-level declarations: `var Search = service.JSON[SearchIn, SearchOut]("weather/search")` (Protobuf service.Proto); provider `service.Serve(p, Search).Handle(fn)`, caller Search.Call(ctx,in). Events: `var Updated = bus.Define[Update]("weather/updated")`, Updated.Publish, bus.Subscribe(...).Handle. Subscription IDs default to full event name; use .ID for duplicates. Target/event component namespace must match this plugin ID, checked after handshake/before REGISTER. Only Agent should Serve `@agent/<name>`: SDK checks format, Broker routes only to role: agent. Imported declarations work directly or through wrappers; caller generation embeds input/output Schemas.
+- Bus broadcasts are nonpersistent. Publish only in your namespace; success means Core admission. Full subscriber queues/budgets/offline state drop events without replay. Use Service for receipts/reliable delivery. Callbacks execute serially; blocking backlog consumes plugin receive budget and can reject commands. No Actor/default chat is supplied; send with explicit sdk.Send/sdk.SendText sessions.
+- service.JSON/bus.Define/task.Define require package-level named nongeneric types, checked with source diagnostics. JSON Service/Bus schema_id derives from type, version from SchemaVersion() uint32 or default 1. Rebuild after type changes. Slices/maps accept null matching encoding/json nil.
+- Invalid JSON Service inputs return INVALID_ARGUMENT / `invalid service input` without calling Handler. Invalid output returns INTERNAL and logs only schema_id. Caller Call validates responses too, returning INTERNAL / `invalid service output for "<target>"`. Validation details can include business payloads; omit them from responses/logs.
+- tool.List(ctx) returns catalog/declared Info.Effect. Current trusted default Target selects profile; no Target/parent uses default. Each list/invoke/confirm snapshots once: disabled plugin denies, then profile override/global override/declaration defaults; confirmation operations default confirm without override. Same-named tools/operations match independently. Updates affect next operation; in-flight confirmation retains admitted policy. Register JSON tools with .Tool(description, tool.DefaultAllow/DefaultConfirm). Between Tool and Handle, optional .Effect(tool.ReadOnly), Write, Destructive; default Unspecified. Invalid order/category fails collection; effects are hints without changing policy.
+- Agent llm.generate supplies models: sdk/llm defines request/response; sdk/agent `agent.Generate(ctx, llm.Request{...})` sends full requests, `llm.Ask(ctx,prompt)` handles one exchange. @agent survives replacement. Administrators must add plugins to llm_service_allowed_plugins. Each call is nonstreaming and caller-deadline-bound.
+- In Handlers/continuations, `tool.Invoke(ctx,"plugin_id/service_name",args)` follows policy: deny → PERMISSION_DENIED; confirm sends actual arguments with Allow/Deny buttons, denial → PERMISSION_DENIED, timeout → DEADLINE_EXCEEDED. Before your own operations, `tool.Confirm(ctx,operation,summary,effect)` displays your summary; nil permits execution. Use Unspecified if unknown; invalid categories return INVALID_ARGUMENT. Both need parent chains; required confirmation without Actor returns PERMISSION_DENIED, without buttons UNSUPPORTED.
+
+### Plugin pages
+
+`p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` lists a page. Page precedes Handle/HandleFunc with English title; `{"pages":{"/subs/":"订阅"}}` in i18n/zh-CN.json translates it. Core exposes active pages/titles through component listings.
+WebUI hosts sandbox iframes/postMessage bridge. Page automatically registers public AuthStatic GET kit.css/kit.js beside the page. Relative imports provide shared styles/theme/locale and ⌘K/Ctrl+K global search. WebUI draws the first row (plugin/tabs/search); omit duplicate title/search bars inside pages.
+
+Official Agent's five pages live in [pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) and pages/: personas/MCP/skills/memory/user tasks use component HTML/CSS/JS, titles in pages, text in messages and bridged component management routes. Memory pages paginate full conversations/manage notes/profiles; Core conversation summaries/clear use [management endpoints](deployment.md#management-api).
+
+#### Mount and import the kit
+
+Declare the page in New():
 
 ```go
 import (
@@ -241,11 +268,11 @@ func New() *sdk.Plugin {
 }
 ```
 
-相对资源路径随页面 URL 解析：从 `/page` 打开时取 `/kit.css` 和 `/kit.js`，以 `/page/` 为基准时取 `/page/kit.css` 和 `/page/kit.js`（均在插件自己的 URL 前缀内）。作者已经登记的同方法、同路径路由优先保留；需要手动挂载套件时仍可使用 `page.Handler()`。页面运行在不透明源的沙箱中，加载样式、脚本、图片等子资源时不带管理 Cookie，所以页面自己的静态资源要以 `.Public(sdk.AuthStatic)` 登记（只限 GET 与 HEAD），否则浏览器只会拿到 401；页面 HTML 和数据接口保持缺省的管理会话认证，数据经 `window.AlonaBot.request` 由 WebUI 代为请求（D-183）。完整示例见 [showcase](../examples/plugins/showcase/main.go)。
+Relative assets resolve with page URLs: /page uses /kit.css,/kit.js; /page/ uses /page/kit.css,/page/kit.js under the plugin prefix. Existing same-method/path author routes win; page.Handler() also mounts manually. Opaque-origin sandbox subresource requests omit management cookies: register your static assets .Public(sdk.AuthStatic), GET/HEAD only, to avoid 401. HTML/data remain management-authenticated; window.AlonaBot.request asks WebUI to fetch data. See [showcase](../examples/plugins/showcase/main.go).
 
-#### 页面 HTML 与控件样式
+#### Page HTML and controls
 
-在返回的 HTML 中引用套件资源：
+Reference kit assets in returned HTML:
 
 ```html
 <!DOCTYPE html>
@@ -268,20 +295,20 @@ func New() *sdk.Plugin {
 </html>
 ```
 
-`kit.css` 只使用 `--ab-*` 设计令牌变量，为按钮（`button`、`.ab-btn`、`.ab-btn-primary`、`.ab-btn-danger`）、输入框（`input`、`textarea`、`.ab-input`）、选择框（`select`、`.ab-select`）、表格（`table`、`.ab-table`）、标签（`label`、`.ab-badge`）与卡片（`.ab-card`）提供好开箱即用的统一样式；未收到令牌时自动使用浅色缺省值，收到主题变更时即时跟随更新。
+kit.css uses only --ab-* tokens for buttons (button,.ab-btn,.ab-btn-primary,.ab-btn-danger), inputs (input,textarea,.ab-input), selects (select,.ab-select), tables (table,.ab-table), labels (label,.ab-badge), cards (.ab-card). Light defaults apply until tokens arrive; theme changes update immediately.
 
-#### 客户端接口 `window.AlonaBot`
+#### Client interface: window.AlonaBot
 
-`kit.js` 加载后会在全局注入 `window.AlonaBot` 对象：
+kit.js injects window.AlonaBot globally:
 
-- **`request(method, path, body?)`**：经 WebUI 桥请求当前插件自己的 HTTP 路由。对象正文按 JSON 发送。Promise 返回的对象包含 `status`、`ok`（HTTP 2xx）、`headers`、`body`（UTF-8 文本）、`data`（解析成功的 JSON 或原文本）和原始 `body_base64`，也可调用 `text()` 或 `json()` 分别取得 `body` 或 `data`。桥错误会拒绝 Promise，HTTP 错误状态可从返回对象读取。
-- **`t(key, args?) → Promise<string>`**：每次经桥发送 `translate`，传递 `key` 与可选的字符串参数对象 `args`，原样返回桥响应文案。桥按当前界面语言取插件文案并格式化 `{name}` 占位符；未知键返回键名，缺参数保留占位符。桥错误使 Promise 拒绝，独立打开时 Promise 返回键名。
-- **`onTheme(fn)`**：监听主题与令牌变化，回调签名 `fn(theme, tokens)`，注册时立即交付当前状态，返回取消订阅函数。
-- **`onLocale(fn)`**：监听界面语言变化，回调签名 `fn(locale)`，注册时立即交付当前语言，返回取消订阅函数；页面在回调里重新 `await t(...)` 渲染。
-- **快捷键转发**：页面内捕获 ⌘K（macOS）与 Ctrl+K（其他系统），自动向 WebUI 转发 `mod+k` 打开全局搜索。
-- **独立打开**：自动应用浅色缺省值与字体；`request` 返回 rejected Promise，提示桥仅在 iframe 中可用。
+- **request(method,path,body?)** calls this plugin's routes through WebUI. Objects send as JSON. Promise results include status/ok (2xx)/headers/body (UTF-8)/data (parsed JSON or text)/original body_base64, with text()/json() aliases for body/data. Bridge errors reject; HTTP errors remain inspectable results.
+- **t(key,args?) → Promise<string>** sends translate with key/optional string arguments on every call and returns bridge text unchanged. Current UI locale formats {name}; unknown keys return key, missing arguments retain placeholders. Bridge failure rejects; standalone pages resolve to key.
+- **onTheme(fn)** subscribes fn(theme,tokens), immediately delivers current state and returns unsubscribe.
+- **onLocale(fn)** subscribes fn(locale), immediately delivers current locale and returns unsubscribe; rerender by awaiting t in the callback.
+- **Shortcuts** capture ⌘K on macOS/Ctrl+K elsewhere and forward mod+k for global search.
+- **Standalone pages** apply light defaults/fonts; request rejects explaining the bridge requires an iframe.
 
-在 `i18n/en-US.json` 的 `messages` 中声明 `"hello_message": "Hello, {name}!"`，其他语言文件提供同键翻译。页面在语言回调中等待文案后更新：
+Declare `"hello_message": "Hello, {name}!"` under messages in i18n/en-US.json and matching translations elsewhere. Await text before updating on locale changes:
 
 ```js
 AlonaBot.onLocale(async function(locale) {
@@ -295,9 +322,9 @@ AlonaBot.onLocale(async function(locale) {
 });
 ```
 
-## 7. 配置与 secret
+## 7. Configuration and secrets
 
-在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [CONTRACTS §5.1](../spec/CONTRACTS-v0.1.md#51-配置真源缺失值与编辑)，例如：
+Place config_schema.json beside plugin.yaml, declaring types/English source text by field key. alonabot build validates/embeds normalized JSON through overlays; check validates the same. For example:
 
 ```json
 {
@@ -307,49 +334,49 @@ AlonaBot.onLocale(async function(locale) {
 }
 ```
 
-- 配置没有版本，也不写迁移（D-161，[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md#55-配置的校正与清理)）：新增字段自动取默认值；删掉或改名的旧键保留为无效配置，管理员可通过管理 API 清理，WebUI 提示与清理按钮由 T-09.9 接入；类型不符的值先无损转换，不行再恢复默认值并提示管理员。
-- 需要把旧值搬到新键，或检查业务取值时，用 `p.OnConfigLoad(fn)` 登记配置回调 `func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)`。`raw` 是完整的原始配置，在补默认值与校正之前；判断旧键是否存在再搬移，保留其他键，响应 ctx，只做可重复的纯配置变换；没有登记时原样使用。
-- 回调之后，SDK 给缺失或 `null` 的字段补 `default` 或类型零值，递归校正对象、列表与模板；类型不符时先无损转换，取值超出 options、slider 或数字范围时恢复默认值，失效的 template_list 元素被移除。每次转换、恢复和移除都记录路径、原因与原值，secret 字段省略原值；校正后 required 仍未满足时准备失败。未知键和数字精度保留。
-- `GET /api/v1/plugins/{id}/config` 的 `corrections` 返回 Active 代次的校正记录，`unknown` 列出无效配置路径。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除所列无效键并写入 Pending，随后调用 reload 生效。普通 restart 保持同一配置快照，回调或校正改变结果时返回 `FAILED_PRECONDITION`。
+- Configuration has no version/migration. Added fields get defaults; deleted/renamed old keys remain invalid until administrator cleanup. WebUI displays corrections/cleanup. Wrong types convert losslessly first, otherwise restore defaults/notify administrators.
+- To move old values/check business rules, register p.OnConfigLoad(fn), signature `func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error)`. raw is full original configuration before defaults/corrections. Check old-key presence, preserve other keys, honor ctx and perform repeatable pure transformations. Without callback, keep raw unchanged.
+- SDK then fills missing/null fields with default/type zero, recursively corrects objects/lists/templates, tries lossless type conversion, restores defaults outside options/slider/numeric bounds and removes invalid template_list elements. Record every path/reason/original value except secrets. Unmet required fields fail preparation. Preserve unknown keys/numeric precision.
+- GET /api/v1/plugins/{id}/config corrections describes Active; unknown lists invalid paths. POST .../config/prune removes invalid Active keys into Pending, then reload applies. Ordinary restart preserves snapshot; changed callback/correction results return FAILED_PRECONDITION.
 
-插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。基础配置取值对象在同一 Session 内保持不变，`c.Config()` 冻结本次调用的配置文件视图；两者均可并发读取，集合 getter 返回可独立修改的副本。
+From OnStart, p.Config() (Handler c.Config()) returns config.Values; subplugin s.Config() reads its same-named top-level object. Calling during/before OnConfigLoad panics. p.Config().String("greeting") reads the example. Base values stay fixed per Session; c.Config freezes the invocation profile. Both support concurrent reads; collection getters return independently mutable copies.
 
-给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值（CONTRACTS §5.1、§5.6，D-168）。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 已合并当前会话的有效覆盖，返回整个插件的只读配置；同一 Context 的视图保持不变。Rule、Service、Hook 与延续构造 Context 时同样冻结视图，覆盖更新从 SDK 接收之后开始的调用生效。`p.Config()`、`s.Config()`、OnStart 与后台读取保持基础配置。
+Mark top-level/object children `"profile": true` for per-profile overrides. Prefer leaves that vary by chat. Overriding composites requires the whole subtree, list elements/all template branches included, to contain no secret. Keep OnStart/background tokens/connections/caches unmarked. c.Config returns whole-plugin read-only effective chat configuration, stable within Context. Rules/Services/Hooks/continuations also freeze when constructing Context; override notifications affect subsequent calls. p.Config/s.Config/OnStart/background retain base values.
 
-覆盖以已经载入、补值及校正的配置为基线，按完整字段路径替换；object/list 整体替换，覆盖祖先 object 后子字段取新对象。`config.Values.WithOverrides(overrides map[string]json.RawMessage) (config.Values, error)` 可建立独立视图，保留当前子路径；覆盖只校验单值并替换，沿用原基础配置的载入与校正结果。
+Overrides replace full paths on loaded/filled/corrected base. Objects/lists replace wholly; replacing ancestor objects changes descendant values. `config.Values.WithOverrides(overrides map[string]json.RawMessage) (config.Values, error)` creates independent views retaining subpaths, validating single values and preserving base load/correction results.
 
-`sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 可读取本插件各配置文件的有效覆盖值副本，外层键为配置文件 ID，内层为字段路径。map 与 RawMessage 均为深拷贝，无覆盖返回空 map；基础配置由 `p.Config()` 读取。传入所属 Handler、HTTP 或生命周期的 ctx，同进程插件按 Session 隔离；独立进程未绑定时沿用默认 Session，缺少 Session 或插件时返回 FAILED_PRECONDITION。每次读取取得当前已发布集合，通知后的读取取得新值，已有副本与 `c.Config()` 冻结视图保持原值。官方 Agent 在 `agent/personas.go` 中与基础配置、`core.profile.list` 合并计算人格直接及继承引用（D-182）。
+`sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` returns deep-copied maps/RawMessages keyed by profile ID then field path, empty map without overrides; p.Config reads base. Pass owning Handler/HTTP/lifecycle ctx; in-process plugins isolate by Session, separate processes default if unbound. Missing Session/plugin returns FAILED_PRECONDITION. Reads see currently published collections; notifications change new reads while existing copies/c.Config retain values. Official Agent personas.go combines base/core.profile.list for direct/inherited persona references.
 
-Core 提供 `core.profile.list`、`current`、`assign` 与 `set`（[WIRE §3.5](../spec/WIRE-FORMAT.md#35-插件可调用的-core-固定服务)）。current/assign/set 从同一 Session 的在途父调用取得可信会话与 Actor，assign/set 要求 Core Admin；set 只修改本插件标记了 `profile` 的字段。会话使用 `default` 时写入 Pending，已有 Pending 或管理互斥占用返回 FAILED_PRECONDITION；整条根调用及延续结束后触发 reload，响应的 `reloading` 为 true。配置文件关闭插件时，命令按禁用处理，文本、事件、Raw 与 PreEvent 候选跳过。
+Core provides core.profile.list/current/assign/set. current/assign/set use trusted chat/Actor from same-Session in-flight parents; assign/set require Core Admin, set touches only this plugin's profile-marked fields. default writes Pending; existing Pending/management contention returns FAILED_PRECONDITION. After root and continuations finish, reload triggers with response reloading=true. Disabled profile plugins deny commands and skip text/event/Raw/PreEvent candidates.
 
-官方 Agent 的 `agent/profile.go` 提供调用示例：用包级 `service.Proto` 声明四个固定服务，调用传 `c`，用 `json.Marshal` 编码字段值，并按响应回复配置文件名称、会话数及 `reloading` 提示。`default` 的回复在当前 Handler 内完成，根调用结束后由 Core 重载。官方 Agent 的对话、定时任务和未显式指定模型的 `llm.generate` 均从 `c.Config()` 读取可覆盖字段。
+Official Agent profile.go demonstrates four package-level service.Proto declarations, passing c, json.Marshal values and replying with profile names/chat counts/reloading. default replies finish in the current Handler before root-end reload. Agent conversation/jobs/llm.generate without explicit model read overridable c.Config fields.
 
-| 声明类型 | 取值方法 |
+| Declaration | Getter |
 | --- | --- |
-| `string`、`text` | `String(key)` |
-| `int`、`float`、`bool` | 分别为 `Int(key)`（int64）、`Float(key)`（float64）、`Bool(key)` |
-| 没有 `items` 的 `list` | `Strings(key)` |
-| `object`、有 `items` 的 `list` | `Object(key)`、`Objects(key)`，再按子字段键读取 |
-| `dict` | `Dict(key)`，返回 `map[string]json.RawMessage` |
-| `template`、`template_list` | `Template(key)`、`TemplateList(key)`，通过 `Key()` 取选中的模板键，嵌入的 `Values` 读取模板字段 |
+| string, text | String(key) |
+| int, float, bool | Int(key) (int64), Float(key) (float64), Bool(key) |
+| list without items | Strings(key) |
+| object, list with items | Object(key), Objects(key), then child keys |
+| dict | Dict(key), returning map[string]json.RawMessage |
+| template, template_list | Template(key), TemplateList(key); Key() returns selected template, embedded Values reads fields |
 
-可选 `template` 缺失时表示未选择，`Key()` 返回空串；选中时值须恰好包含一个已声明的模板键。读取未声明键或使用与声明类型不符的方法会 panic，消息指明字段路径。
+Missing optional templates mean no selection and Key() returns empty; selected values contain exactly one declared template key. Undeclared keys/type-mismatched getters panic with field paths.
 
-secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `default` 与 `options`。Core 按 schema 抽取对象、列表与模板中的秘密值：非空值生成不可变引用保存到配置快照，Bootstrap 解析为明文，`Config()` 取到明文；空串表示未设置。插件对秘密值保密，日志、错误和业务数据库中均禁止明文存放（[CONTRACTS §5.3](../spec/CONTRACTS-v0.1.md#53-secret-与翻译)）。
+Secrets support string/text only: set secret=true, omit default/options. Core extracts secrets recursively through objects/lists/templates. Nonempty values become immutable snapshot references, resolved to plaintext in Bootstrap/Config(); empty means unset. Keep plaintext out of logs/errors/business DB.
 
-配置翻译写在 `i18n/<locale>.json` 的 `config` 根节点，按 schema 的字段层级覆盖文案，例如：
+Configuration translations live under config in i18n/<locale>.json, following schema field hierarchy:
 
 ```json
 {"config": {"greeting": {"description": "问候语"}, "token": {"description": "访问令牌"}}}
 ```
 
-字段可覆盖 `description`、`hint`、`labels`；子字段放在 `items`，模板放在 `templates`，模板文案可覆盖 `name`、`hint`。options 的存储值保持原文，翻译写在 labels 中。生成器核对覆盖键与 schema 的字段、模板和选项是否对应，问题诊断带文件名与路径。
+Override description/hint/labels; nested fields use items, templates use templates with name/hint. Stored options remain unchanged; labels translate. Generation checks keys against schema fields/templates/options with file/path diagnostics.
 
-- 字段的可选值来自运行时的数据（例如实例列表或本插件维护的条目）时，用 `options_from` 代替 `options`：`{"type": "string", "options_from": {"source": "core.adapter_instances", "filter": {"adapter_id": "telegram"}}}`，或指向本插件的选项服务 `"source": "<插件 ID>/<服务名>"`（[CONTRACTS §5.5](../spec/CONTRACTS-v0.1.md)「选项来源」，D-129）。选项服务用 `options.Serve(p, "feeds", func(ctx context.Context, q options.Query) (options.Page, error) {...})` 登记：按 `q.Search` 搜索、`q.Values` 按存储值取回显示名，最多返回 `q.Limit` 项，有更多结果时 `More` 为 true；输入、输出 Schema 由 SDK 固定提供，不用生成。该服务只由 Core 在管理页面打开表单时调用，访问固定为 PRIVATE。取值仍是普通字符串，来源不可用或值已不存在时配置照常加载，插件自己处理不认识的值。
+- For runtime choices (instances/plugin entries), use options_from instead of options: `{"type":"string","options_from":{"source":"core.adapter_instances","filter":{"adapter_id":"telegram"}}}`, or plugin source `<plugin ID>/<service name>`. Register `options.Serve(p,"feeds",func(ctx context.Context,q options.Query)(options.Page,error){...})`: search q.Search, resolve labels by stored q.Values, return at most q.Limit with More=true if needed. SDK fixes input/output Schema without generation. Core calls only for management forms; access is PRIVATE. Values stay ordinary strings; unavailable sources/stale values still load, and plugins handle unknowns.
 
-### 配置字段的回复示例
+### Reply examples for configuration fields
 
-要展示某个配置值对应的回复，在该字段上写 `example`。一个示例写成对象，多个示例写成数组；下面把问候语与一张包内图片组合起来：
+Add example to a field to show its reply. One object or an array supports one/multiple examples. This combines a greeting with a packaged image:
 
 ```json
 {
@@ -367,34 +394,34 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 }
 ```
 
-`input` 必填，写用户发出的文字并省略命令前缀；`reply` 必填，纯文字可以直接写字符串，混合回复按顺序列出片段。每个片段恰好写 `text` 或 `image`，图片可附 `alt`。图片放在工程的 `examples/` 下，格式为 PNG、JPEG、WebP 或 GIF，扩展名与内容须一致。`alonabot check`、`build` 和 `pack` 检查引用，`pack` 收集被引用的图片；安装与更新再次校验。
+Required input is user text without command prefix; required reply accepts string or ordered segments, each with exactly text or image and optional image alt. Put PNG/JPEG/WebP/GIF images in project examples/, matching extension/content. check/build/pack validate references; pack collects referenced images; install/update revalidate.
 
-`input` 与 `text` 中用 `{字段路径}` 引用草稿中的 string、text、int、float 或 bool；对象子字段写成 `{group.greeting}`，带 labels 的选项显示当前语言的 label。模板用 `{mode.$key}` 取选中键，用 `{mode.template_key.child}` 取该模板的子字段，其他模板的值显示为空串。secret、list、dict、object 与 template_list 字段禁止作为引用值。字面花括号写成 `{{`、`}}`。
+Use {field.path} in input/text for draft string/text/int/float/bool, e.g. {group.greeting}; labeled options display current locale labels. Templates use {mode.$key} or {mode.template_key.child}; unselected branches render empty. Secret/list/dict/object/template_list cannot supply references. Escape literal braces as {{/}}.
 
-可选的 `condition` 按字段路径写期望值，例如 `"condition": {"mode.$key": "simple", "enabled": true}`，全部相等时显示该示例。字段被自身的显示条件隐藏时，示例一同隐藏。示例只声明固定回复；草稿替换与显示由 WebUI 完成。
+Optional condition matches all path/value pairs, e.g. `"condition":{"mode.$key":"simple","enabled":true}`. Hiding the field by its own display condition also hides examples. Examples declare fixed replies; WebUI substitutes drafts/renders.
 
-翻译写在 `i18n/<locale>.json` 的 `config.<字段>.example` 下。沿用源 `example` 的对象或数组形状、源 `reply` 的字符串或片段数组形状；按位置覆盖 `input`、`reply` 字符串、片段的 `text` 或 `alt`。缺项沿用源文案，跳过数组中间一项时填 `{}`。`check`、`build` 和 `pack` 会核对覆盖键、文案类型、源形状、片段位置与占位符引用。
+Translate under config.<field>.example in i18n/<locale>.json, preserving example object/array and reply string/segment-array shapes. Positionally override input/reply strings/segment text/alt; omitted entries fall back, `{}` skips intermediate array items. check/build/pack validate keys/types/shapes/positions/placeholders.
 
-上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [ADMIN-API §3.3](../spec/ADMIN-API.md#33-组件图标)。
+After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/examples/greeting.png` serves only config_schema-referenced images in Active, with the same security headers as icons. See [management API](deployment.md#management-api).
 
-## 8. 测试
+## 8. Tests
 
-- 用插件测试套件 `plugintest` 在 `go test` 中启动真实 Core 与测试 Adapter，注入消息并检查发送（D-47、CONTRACTS §17）。
-- 本仓库中的官方插件另遵守 [编码规范](coding-standards.md) 的测试提交规则。
+- plugintest starts real Core/test Adapter in go test; inject messages/check sends. See [plugin tests](development.md#plugin-tests).
+- Repository official plugins also follow [coding standards](../CONTRIBUTING.md) test-submission rules.
 
-## 9. 发布
+## 9. Publishing
 
-- 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`（CONTRACTS §9.1，D-172）。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP，CONTRACTS §7.5）。
-- 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.md#开发运行与热部署)重建。
-- 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](../spec/ADMIN-API.md#22-更新内容changelog)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包（CONTRACTS §9.1）。
-- 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的 `release.json` 与包内 manifest 取得展示信息；发布条目的格式见 CONTRACTS §9.2。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
-- 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按 release.json 选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`（CONTRACTS §9.3）。
-- 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 为每个目标生成归档，全部资产共享一份归档外的 `release.json`；省略目标时取本机平台，静态 WebUI 只生成一个 `any/any` 归档，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。资产地址为 `--asset-base` 加 `/` 与归档名；`source` 为 `github.com/<owner>/<repo>` 时，缺省前缀为 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（无 query/fragment）。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，只对最终合并清单的原始字节签名一次，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单并清除输出目录中的旧签名和公钥（CONTRACTS §9.2、§9.3）。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
+- Marketplace role prefixes: alonabot-plugin-, alonabot-adapter-, alonabot-agent-, alonabot-webui-. Suffix words use single hyphens, no underscores. Plugin regex is `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`; other roles match that shape; maximum length 64. Local rules remain `^[a-z][a-z0-9_-]{0,63}$`. Manifest icon supports SVG/PNG/WebP.
+- Renames update plugin.yaml/dependencies/HTTP paths/raw Service names; pack uses new IDs for archives/release.json. Rebuild old development data using [development runs](development.md#development-runs-and-hot-reload).
+- Releases may include UTF-8 changelog exposed by [management API](deployment.md#management-api). Choose root CHANGELOG.md with version headings (e.g. `## [1.2.1] - 2026-11-17`, date optional), or version/locale files such as changelog/1.2.1/en-US.md and zh-CN.md. Directories use SemVer without v, at most manifest version; filenames use canonical BCP 47 tags and every version requires en-US.md. check validates; pack preserves original text.
+- WebUI defaults plugin sources to AlonaBot/plugin-store, supporting add/remove/persistently empty lists. It reads default-branch index.json and component latest-Release release.json/packaged manifest for display. See [contracts/pluginindex](../contracts/pluginindex) and [contracts/release](../contracts/release) for source/release formats. Update previews use bound-source Release bodies; installed updates use packaged changelog. HTML displays as text; backend persists monotonically increasing seen SemVers.
+- Install community components with install --source owner/repo; later updates stay bound there. Local install <archive> reads archives; install <component ID> reads adjacent packages/<component ID>/. No-argument discovery uses current directory (author bin/, including direct package children), release.json and one host candidate; static WebUI uses any/any. Zero/multiple candidates error/list paths. Same-category Adapter, Agent and WebUI cannot coexist; replacing official components requires --replace.
+- alonabot build validates/compiles, check is read-only. `alonabot pack [directory] --target linux/amd64 --target linux/arm64` creates archives sharing external release.json. Default target is host; static WebUI creates one any/any archive, Go-entry WebUI builds per platform. --tags selects source, --out defaults <project>/bin. URLs join --asset-base/archive name; source github.com/<owner>/<repo> defaults to https://github.com/<owner>/<repo>/releases/download/v<version>, others need absolute https without query/fragment. Optional --key FILE reads standard-base64 64-byte Ed25519 key, signs final merged bytes once and writes external release.json.sig/release.pub. Omission emits unsigned manifests/removes old output signature/key. Key/signature failures error directly. Processes include parseable build-info; static WebUI includes manifest/assets/optional changelog. Keep private keys outside resources/repositories/build logs.
 
-## 直接测试与构建
+## Direct testing and builds
 
-创建工程可运行 `alonabot init alonabot-plugin-hello`：ID 与外部 Go module 缺省取目录名，已有 module 内沿用其 go.mod。可用 `--id`、`--module`、`--role` 覆盖；Adapter 的 `--adapter-id` 缺省等于组件 ID。`my_plugin` 按本地 ID 创建并警告缺市场前缀；非法目录名报错并提示显式 `--id`。
+`alonabot init alonabot-plugin-hello` defaults ID/external module to directory name, reusing existing go.mod. Override --id/--module/--role; Adapter --adapter-id defaults to component ID. my_plugin creates local IDs with missing-prefix warnings; invalid names request explicit --id.
 
-`build`、`check`、`test`、`pack` 接受至多一个位置目录，省略时取当前目录，`--dir` 报未知参数。在组件目录运行 `go test ./...` 即可使用 plugintest。测试启动时按入口包现场扫描 manifest、Schema、i18n 和 Handler 参数名，并复用同一入口包的只读资源。作者的 `New()` 只创建插件并登记业务行为，工程里没有 `alonabot_gen.go`，也无需编写生成相关的代码或指令。
+build/check/test/pack accept at most one positional directory, default current; --dir is unknown. Run go test ./... directly with plugintest. Startup scans manifest/Schema/i18n/Handler argument names by entry package, sharing read-only resources. New only creates/registers behavior; author projects contain no alonabot_gen.go/generation code/directives.
 
-独立组件运行 `alonabot build .`；通过根包 `alonabot.Run` 或 `alonabot.Start` 装配组件的 main 包运行 `alonabot build ./cmd/bot`，执行产物为 `cmd/bot/bin/bot`（Windows 加 `.exe`）。库模式构建会只读扫描依赖中的组件，包括模块缓存中的第三方组件，并将资源经 main 包的 overlay 编入。直接 Go 构建的程序在启动缺少资源的组件时会提示使用 `alonabot build` 或 `alonabot run`。库模式的公开选项与停止用法见[开发指南](development.md#库模式运行同一进程)；独立进程开发运行与热部署使用 `alonabot run --reload`。
+Separate components use alonabot build .; main packages assembling via alonabot.Run/Start use alonabot build ./cmd/bot, producing cmd/bot/bin/bot (.exe on Windows). Library builds read-only scan dependencies including third-party module cache and embed resources via main overlays. Plain Go binaries prompt build/run for resource-missing components. See [library mode](development.md#library-mode-one-process) for options/stopping; separate-process hot development uses alonabot run --reload.

@@ -23,13 +23,15 @@ English · [简体中文](README.zh-CN.md)
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-## Why AlonaBot
+## Core features
 
-- **Process isolation**: Native Go plugins, Adapters and Agents run in separate processes. Core manages startup, shutdown and recovery. Components run as trusted local code; administrators still need to review their sources.
-- **Replaceable components**: Adapters connect chat platforms, Agents provide AI capabilities, and WebUI provides the management interface. Community components can replace the official implementations.
-- **Run on demand**: Disabled components start no processes. Plugins that support sleep can exit when idle and wake for messages, service calls, HTTP requests or scheduled tasks.
-- **Go development**: Chain command and event registrations, with hot reload, managed SQLite, configuration forms, i18n and a plugin test harness that runs against a real Core.
-- **Unified management**: Use WebUI or CLI to manage components, accounts, models, permissions, sessions, configuration, logs and updates. WebUI supports desktop and narrow screens.
+- **Fault isolation**: With separate-process deployment, plugins, Adapters and Agents each run in their own process. A component crash leaves Core running; Core manages startup, shutdown and automatic restarts.
+- **Decoupled modules**: Platform connectivity (Adapters), AI capabilities (Agents) and the management interface (WebUI) are separate from Core. You can replace official implementations with community or custom components at any time.
+- **Low resource usage**: Disabled components do not start processes. Plugins that support hibernation exit when idle to release memory and wake automatically for messages, HTTP requests, scheduled tasks or calls from other components.
+- **Plugin development**: Chainable command and event registration, hot reload, ready-to-use SQLite storage, configuration declarations rendered automatically as WebUI forms, i18n, and a test suite backed by a real Core.
+- **Centralized operations**: Manage component updates, accounts and permissions, models, session settings and runtime logs through WebUI and CLI, with desktop and mobile support.
+
+> Note: Separate processes provide stability rather than a security sandbox. Administrators must still review the sources of components running locally. Library-mode components share Core's process; an unhandled background panic terminates the entire process.
 
 ## Official components
 
@@ -49,7 +51,7 @@ English · [简体中文](README.zh-CN.md)
 | Write a plugin, Adapter or Agent | [Plugin guide](docs/plugin-guide.md) |
 | Change Core, SDK or WebUI | [Development](docs/development.md) · [Architecture](ARCHITECTURE.md) |
 | Report a problem, submit a fix or improve documentation | [Contributing](CONTRIBUTING.md) |
-| Look up exact API and protocol behavior | [Specifications](spec/README.md) |
+| Look up management APIs and protocol behavior | [Management API](docs/deployment.md#management-api) · [Protocol and sessions](docs/development.md#protocol-and-session-behavior) |
 | Build and verify release artifacts | [Release maintenance](docs/releasing.md) |
 
 Contributions to fixes, platform support, documentation and community components are welcome. Include the version, operating system and reproduction steps when reporting a problem, and redact logs and configuration before sharing them. Discuss larger changes in an Issue first.

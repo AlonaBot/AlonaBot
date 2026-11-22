@@ -2,7 +2,7 @@
 //
 // 状态库位于 <data_dir>/state.sqlite，实例锁位于 <data_dir>/core.lock。Open 先取得实例锁，
 // 保证同一个 data_dir 只有一个 Core；已有但无法读取的状态库会报错，不会被重建成空库。
-// 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。规则见 spec/CONTRACTS-v0.1.md §6.1 与 §12.2。
+// 提交 ActiveGeneration 时核对预期的旧值，拒绝陈旧候选。
 //
 // Secret 与配置路径随代次保存；正式 Journal 与恢复编排由管理层负责。
 // Unix 核对数据库及 WAL/SHM 的 0600 权限，Windows 为 data_dir 设置当前账号专用的可继承 DACL。
@@ -37,7 +37,7 @@ const (
 	stateFile = "state.sqlite" // data_dir 下的状态库
 )
 
-// 状态库连接设置（CONTRACTS §6.1），以回读 PRAGMA 时得到的值表示。
+// 状态库连接设置，以回读 PRAGMA 时得到的值表示。
 const (
 	journalModeWAL    = "wal"
 	synchronousFull   = 2
@@ -45,7 +45,7 @@ const (
 	busyTimeoutMillis = 5000
 )
 
-// pragmas 写在 DSN 中，驱动对每个新物理连接都会执行（CONTRACTS §6.1）。
+// pragmas 写在 DSN 中，驱动对每个新物理连接都会执行。
 var pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(" + strconv.Itoa(busyTimeoutMillis) + ")"
 
 var (

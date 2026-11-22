@@ -2,7 +2,7 @@
 //
 // Start 等全部组件激活后返回，调用方取消 context 后通过 Core.Wait 等待停止。
 // Options 描述一次运行的输入；开发 CLI 可通过 Core 的重启与设置方法热部署组件。
-// 已安装组件仍由独立进程运行。规格见 CONTRACTS §15.4、§15.5。
+// 已安装组件仍由独立进程运行。
 package app
 
 import (

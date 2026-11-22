@@ -2,7 +2,7 @@
 //
 // [Store] 经 [Store.AddServices] 提供顺序上传，经 [Store.Lookup] 查询已提交文件。
 // [Store.LeaseForSend] 准备出站来源，[Store.AddURLService] 与 [Store.ServeHTTP] 提供租约内的临时 URL。
-// 调用方负责定期 Sweep 和在 Session 结束时 ReleaseSession（CONTRACTS §1.3）。
+// 调用方负责定期 Sweep 和在 Session 结束时 ReleaseSession。
 package media
 
 import (

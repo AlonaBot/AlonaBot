@@ -1,4 +1,4 @@
-// Package media 上传、打开与授权媒体，并将内存字节转换为消息片段（CONTRACTS §1.3）。
+// Package media 上传、打开与授权媒体，并将内存字节转换为消息片段。
 package media
 
 import (

@@ -2,7 +2,7 @@
 //
 // [New] 从状态库与 Active schema 建立一次管理操作的快照；[Service.Resolve]
 // 与 [Service.Overrides] 在内存中解析该快照。管理调用方串行化写入，读取 Active
-// schema 到提交覆盖值期间持有对应插件的管理锁（CONTRACTS §5.6、ADMIN-API §23）。
+// schema 到提交覆盖值期间持有对应插件的管理锁。
 // 本包提供存储与管理，调用派发和 SDK 下发由调用方接入。
 package profile
 
@@ -23,7 +23,7 @@ import (
 
 // Default 指定固定存在的基础配置文件 ID。
 const Default = "default"
-const maxNameRunes = 32 // CONTRACTS §5.6。
+const maxNameRunes = 32
 
 // Profile 标识配置文件的 ID、显示名称与颜色。
 type Profile struct {

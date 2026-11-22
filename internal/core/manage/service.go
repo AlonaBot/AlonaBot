@@ -2,7 +2,7 @@
 //
 // [Service] 共用 Core 的状态库、设置文件与策略；[Service.Handler] 经管理认证保护，
 // [Service.WebUI] 提供登录前可读取的静态页面。配置读取隐藏秘密，实例配置写回共享设置文件。
-// 管理、日志与静态组件语义见 CONTRACTS §7.5、§9.3、§14、§15.1。
+// 管理 API 的调用方式见 docs/deployment.md 的 Management API 一节。
 package manage
 
 import (

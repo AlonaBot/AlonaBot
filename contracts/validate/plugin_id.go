@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// 插件 ID 规则（CONTRACTS §9.1）。
+// 插件 ID 规则。
 const (
 	// MaxPluginIDLen 限定插件 ID 的最大字节数。
 	MaxPluginIDLen = 64

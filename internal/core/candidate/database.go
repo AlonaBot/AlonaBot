@@ -1,7 +1,7 @@
 // Package candidate 准备独立的受管 SQLite 候选资源。
 //
 // 调用方持有插件操作锁，并在复制前确认旧进程树退出；PrepareDatabase 暂持
-// runtime.lock，返回前释放，随后由 SDK 取锁打开候选。规则见 CONTRACTS §6.1、§6.3、§12.2。
+// runtime.lock，返回前释放，随后由 SDK 取锁打开候选。
 //
 // 包的入口为 [PrepareDatabase] 与 [Discard]，分别返回 [Prepared] 和清理未受保护的候选。
 // 管理层按以下顺序使用本包：

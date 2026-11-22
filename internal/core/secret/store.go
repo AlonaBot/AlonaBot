@@ -2,7 +2,7 @@
 //
 // Store 在 Bootstrap 前解析所属插件的引用，在 REGISTER 后按 Schema 与保留路径抽取明文，
 // 并为管理读取提供脱敏结果。Collect 的调用方须提供 Active、Pending、保留代次和恢复操作的
-// 全部受保护快照，并在逐插件管理锁内协调抽取、持久化与清理。规则见 CONTRACTS §5.3。
+// 全部受保护快照，并在逐插件管理锁内协调抽取、持久化与清理。
 //
 // 包的组成：[New] 绑定 Core 状态库；[Store.Resolve] 与 [Store.Extract] 转换运行配置和快照；
 // [Store.Redact] 隐藏引用，[Store.Collect] 清理未受保护的版本。

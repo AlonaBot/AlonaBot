@@ -1,8 +1,7 @@
 // Package packages 在安装前检查组件安装包：校验发布清单及可选签名，受控解压归档，
 // 核对包内 manifest，并把通过检查的候选移入不可变的包目录。
 //
-// 包不下载归档、不登记安装、不持久化来源信任。检查顺序与上限见
-// spec/CONTRACTS-v0.1.md §9.1、§9.2 与 §9.3 末段。
+// 包不下载归档、不登记安装、不持久化来源信任。
 //
 // 包的组成：
 //   - [Preflight] 依次验签、核对归档与 manifest，返回暂存目录中的 [Candidate]。
@@ -65,7 +64,7 @@ type Limits struct {
 	MaxEntries       int   // 归档条目数，含目录
 }
 
-// NewLimits 从生效调优值构造安装包的资源上限（CONTRACTS §16）。
+// NewLimits 从生效调优值构造安装包的资源上限。
 func NewLimits(v tune.Values) Limits {
 	return Limits{MaxArchiveBytes: v.InstallMaxArchive, MaxExpandedBytes: v.InstallMaxExpanded, MaxEntries: v.InstallMaxEntries}
 }

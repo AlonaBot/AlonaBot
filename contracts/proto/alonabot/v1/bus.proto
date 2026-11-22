@@ -1,4 +1,4 @@
-// Event Bus 载荷（CONTRACTS §3、WIRE §5）。发布只确认 Core 已接纳，不确认订阅者已处理。
+// Event Bus 载荷。发布只确认 Core 已接纳，不确认订阅者已处理。
 syntax = "proto3";
 
 package alonabot.v1;

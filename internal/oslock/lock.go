@@ -1,4 +1,4 @@
-// Package oslock 提供跨进程的 OS 独占文件锁（CONTRACTS §12.2）：Linux/macOS 用 flock，
+// Package oslock 提供跨进程的 OS 独占文件锁：Linux/macOS 用 flock，
 // Windows 用 LockFileEx。Core 的 core.lock 与 SDK 的 runtime.lock 共用本实现。
 //
 // 锁文件在解锁后保留，不删除或替换，防止并发进程锁住不同的文件；Go 打开的文件默认

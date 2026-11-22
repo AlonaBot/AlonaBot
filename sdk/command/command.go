@@ -1,7 +1,7 @@
 // Package command 查询可用路径命令并管理平台命令菜单。
 //
-// List 接收 Handler 的 Context，返回 Core 筛选并本地化的 Entry（CONTRACTS §2.2、§2.3、§5.4）。
-// Set、Get、Delete、Status 与 Sync 按实例和聊天位置管理菜单（CONTRACTS §8）。
+// List 接收 Handler 的 Context，返回 Core 筛选并本地化的 Entry。
+// Set、Get、Delete、Status 与 Sync 按实例和聊天位置管理菜单。
 package command
 
 import (

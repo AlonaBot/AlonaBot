@@ -1,6 +1,55 @@
-# Go 代码与注释规范
+# 参与 AlonaBot 开发
 
-本文件规定 AlonaBot 的命名、文件组织、注释和测试提交规则。模块与依赖方向见 [架构地图](../ARCHITECTURE.md)，行为见 [spec](../spec/README.md)。调整约定时，同步相关仓库技能和 PR 检查项。
+[English](CONTRIBUTING.md)
+
+欢迎修复问题、改善文档、完善平台支持和开发社区组件。本文说明从反馈问题到提交 PR 的流程；环境和命令见[开发指南](docs/development.zh-CN.md)，编码与测试规则见下文。
+
+组件变更提交到对应的[官方组件仓库](README.zh-CN.md#官方组件)。本仓库维护 Core、SDK、协议、示例与整合发行。
+
+## 从一个明确的问题开始
+
+先搜索已有的 Issue、打开和已合并的 PR，并核对当前源码。已有修复时，可以帮助复现或审阅；准备较大的功能、协议或数据改动时，先开 Issue 说明问题、预期行为与方案，等待维护者确认方向。
+
+- **Bug**：提供版本、操作系统与架构、复现步骤、预期结果、实际结果和完整报错。尽量缩小到可重复的示例。
+- **功能建议**：说明具体使用场景、现有能力的缺口和期望效果。平台集成优先考虑独立组件。
+- **文档改进**：指出读到哪一步遇到困难，以及对应命令或行为；小修正可以直接提交 PR。
+
+分享日志、配置或诊断包前检查并脱敏，移除 Bot Token、管理 token、数据库凭据和真实用户数据。疑似凭据泄露或安全漏洞请通过维护者 GitHub 主页提供的联系方式私下报告，避免在公开 Issue 中披露可利用细节。
+
+## 准备开发环境
+
+先按[源码开发](docs/development.zh-CN.md#准备环境)准备所需工具。只改 Go 代码通常只需要 Go；修改协议生成产物还需要 protoc，修改 WebUI 还需要 Node 与 npm。
+
+从最新 main 创建一个用途明确的分支；通过 Fork 贡献时，先同步上游 main。分支名可以采用 `fix/问题`、`feat/功能` 或 `docs/主题`。一个 PR 解决一个连贯问题，避免夹带无关重构、个人配置或临时验收产物。使用 worktree 可以同时处理多个独立任务。
+
+## 同步变更
+
+- 修改生成源后重新生成产物。
+- 行为变更同步受影响调用方、示例与指南；数据库、进程生命周期和公开协议变更说明失败处理与恢复方法。
+- 现有依赖范围及链接开销见[依赖管理](docs/development.zh-CN.md#依赖管理)。
+
+## 提交 PR
+
+1. 使用简体中文 commit message，说明改了什么和必要原因，无固定类型前缀要求。
+2. PR 标题统一为 `type/scope: 中文摘要`，例如 `fix/scheduler: 修复休眠唤醒后的任务交付`。`type` 使用 `feat`、`fix`、`docs`、`refactor`、`test`、`ci`、`build`、`chore`、`perf` 或 `revert`；`scope` 使用实际模块的小写英文名称，可用连字符连接。摘要说明技术变化，省略任务编号、模型与执行工具署名。
+3. 将 PR 指向 main，按[PR 模板](.github/PULL_REQUEST_TEMPLATE.md)填写变更原因、验证、兼容性与风险，并完成清单。关联 Issue 时使用 `Closes #编号`。
+4. 核对 diff：仅包含本次改动及必要相邻修改，排除凭据、个人工作记录、运行数据和临时测试。
+5. 等待当前 head 的检查与维护者审阅；根据意见补充修正和受影响验证。
+
+维护者确认范围、实现、验证及延期项后使用 squash 合并，并核对合并后 main 的检查。贡献者通过 PR 交付；正式版本、签名和发布由维护者控制。
+
+## CI 与审查
+
+- [Quality gate](.github/workflows/ci.yml) 检查空白与 main 文件范围；修改 Go 源码、协议或依赖时，再运行 Go 格式、生成一致性、vet、race 与五目标 pure-Go 构建。前端验证由改动者按开发指南执行。
+- [PR metadata](.github/workflows/pr-metadata.yml) 检查打开且非草稿 PR 的标题格式、必要说明与确认项；维护者审查其实际内容。
+- 路径标签、指派与审阅请求由 GitHub 自动化处理；元数据工作流保持代码与 secret 隔离。
+- main 保存产品、现行规范和公共工程资料。个人 Agent 配置、任务调度记录、历史实施与验收材料由 CI 路径检查拒绝。
+
+分支保护配置由维护者管理；具体 CI 命令与权限以工作流为准。
+
+## 贡献许可
+
+AlonaBot 与官方组件采用 [MIT License](LICENSE)。提交贡献时，请确认你有权以该许可证提供相关代码与文档；引用第三方材料时保留其版权与许可声明。
 
 ## 风格基线
 
@@ -11,7 +60,7 @@
 
 ## 命名与术语
 
-名字使用规格里的领域术语，让读代码的人能对上 spec 中的概念。
+名字沿用指南和协议定义中的领域术语，让读代码的人能对上文档中的概念。
 
 | 术语 | 含义 |
 | --- | --- |
@@ -19,18 +68,18 @@
 | Adapter、Adapter 实例（Instance） | 平台适配器 / 一个已配置的平台账号接入 |
 | Session | Core 与一个插件进程之间的一次认证连接 |
 | Generation（代次） | 插件程序、配置与数据的一次已提交组合 |
-| Target、Actor | 发送目标 / 事件触发者，定义见 MESSAGE-MODEL §1 |
+| Target、Actor | 发送目标 / 事件触发者，定义见 [identity.proto](contracts/proto/alonabot/v1/identity.proto) |
 | Route、Handler、Hook | 插件注册的路由 / 处理函数 / 收发前后的拦截点 |
 | MessageChain、Segment | 一次逻辑发送的消息 / 其中的片段 |
 | MediaRef、IncomingMedia、Grant | 已上传媒体的引用 / 入站媒体描述 / 签发给其他 Session 的读权限 |
 | Pending、Active | 待激活的配置或代次 / 当前生效的代次 |
 | Budget、Deadline | 准入字节预算 / 绝对截止时刻 |
 
-- 新概念先在 spec 中确定名字，再进入代码。同一个概念在全项目只用一个名字，不混用同义词。
+- 新概念先在相关指南或协议定义中确定名字，再进入代码。同一个概念在全项目只用一个名字，不混用同义词。
 - 不用含糊的通用词做名字或后缀：`Kind`、`Type`（作为万能区分字段时）、`Info`、`Data`、`Item`、`Object`、`Manager`、`Helper`、`Util`、`Common`、`Misc`、`Impl`。改用说明具体角色的词，例如 `Phase`、`Mode`、`Source`、`Status`、`Registry`、`Store`。
 - 不用缩写，`Deps`、`Cfg`、`Mgr`、`Svc`、`Msg`、`Req`、`Resp`、`Tmp`、`Val` 都写完整单词。Go 惯例的短名不受此限：只在几行内使用的局部变量（如 `ctx`、`err`、`ok`、`i`、`n`、`msg`、`req`、`env`），以及一两个字母的方法接收者。字段、导出符号和作用域较大的变量仍写完整单词。`ID`、`URL`、`HTTP` 等首字母缩写词保持全大写。
 - 包名用简短的小写名词，不用 `util`、`common`、`base`、`types` 这类包名。
-- 协议生成的名字（如 `pb.FrameKind`、`pb.RouteKind`）以 WIRE-FORMAT 为准，不在 Go 代码里另起别名；新写的 Go 类型不再沿用这种 `Kind` 后缀。
+- 协议生成的名字（如 `pb.FrameKind`、`pb.RouteKind`）以 [Protobuf 定义](contracts/proto/alonabot/v1) 为准，不在 Go 代码里另起别名；新写的 Go 类型不再沿用这种 `Kind` 后缀。
 
 ## 按职责分文件
 
@@ -50,7 +99,7 @@
 
 ## 日志用默认 Logger，依赖显式传递
 
-Core 进程只有一个日志出口，使用 Go 标准库 `log/slog`，字段、格式和级别遵循 CONTRACTS §14。
+Core 进程只有一个日志出口，使用 Go 标准库 `log/slog`，字段、格式和级别见[日志说明](docs/deployment.zh-CN.md#core-设置与-http-入口)。
 
 - `cmd/alonabot` 在 `logging.Open` 成功后立即调用 `slog.SetDefault(out.Logger())`，然后再构造 Core 组件。`internal/core` 下的包在记录处调用 `slog.Info`、`slog.Warn`、`slog.Error`、`slog.With` 等包函数；不在构造函数、结构字段或包级变量里保存 `slog.Default()` 或它的 `With` 结果。
 - 不为日志新增构造参数、Options 字段、结构字段或 context 值。组件进程的日志使用 SDK 设置的默认 Logger。
@@ -70,7 +119,7 @@ v0.1.0 是首个正式发行的接口与状态库基线。发布后的数据迁�
 - Core 状态库（`state.sqlite`）的已发布迁移保持不变，包括 `internal/core/state/schema.sql`。新增表、列或约束放入新的 SQL 迁移，追加到 `migrations`，同时验证从上一发行版本升级时数据保留，以及全新建库的最终结构。
 - 修改内部函数签名、结构字段或其语义时，同一次改动更新全部调用方；公开 SDK、协议或组件行为的变更在 changelog 中说明版本影响和升级方法。
 - 兼容措施须对应已发布的调用方或数据格式；保留既有错误处理和数据含义，不用零值重新解释已有接口。
-- 插件受管 SQLite 的迁移接口按契约维护；配置没有版本与迁移（D-161）。生成文件由源文件和生成器维护。
+- 插件受管 SQLite 的迁移接口按契约维护；配置没有版本与迁移。生成文件由源文件和生成器维护。
 
 ## Core 状态库不写 SQL
 
@@ -84,13 +133,13 @@ Core 状态库（`internal/core/state`）经 GORM 读写，业务的增删改查
 - 范围条件、排序与取最大值用 `clause` 结构（`clause.Gte`、`clause.OrderByColumn` 等），列名写成包内常量；取最大值按该列降序取一行，不写 `max()`、`coalesce()`。能在 Go 中完成的排序与聚合不写进查询。不引入 GORM CLI 等查询代码生成工具。
 - DDL 不写在 Go 代码里。建表、索引等语句放在包内的 `*.sql` 文件中，用 `//go:embed` 读入后执行；初始迁移即 `internal/core/state/schema.sql`。测试为构造异常文件临时建的表不在此列。
 - PRAGMA 回读与打开前的只读预检属于连接管理，可以在 Go 代码里写 SQL。
-- 只约束 Core。插件经 `sdk/sqlitedb` 使用 `database/sql` 是面向插件作者的产品功能（D-49），官方插件按[插件开发规范](plugin-guide.md)选择入口。
+- 只约束 Core。插件经 `sdk/sqlitedb` 使用 `database/sql` 是面向插件作者的产品功能，官方插件按[插件开发规范](docs/plugin-guide.zh-CN.md)选择入口。
 
 ## 程序输出用英文
 
 - 日志、错误字符串、CLI 输出、panic 消息、测试失败消息，以及协议中的 safe_message 一律用英文。错误字符串按 Go 惯例小写开头、不加句号，用 `%w` 包装时前面写清正在做什么，例如 `open SQLite: %w`。
 - 面向最终用户的文字（WebUI 界面、机器人发给用户的回复）不写在代码里，通过 i18n 词典提供，源语言为英文，另附简体中文。
-- 代码注释和文档仍用简体中文。
+- 代码注释与内部维护说明用简体中文。用户使用与开发指南提供中英内容，短页可以同页并列两语。
 
 ## 不写魔法值
 
@@ -106,7 +155,7 @@ Core 状态库（`internal/core/state`）经 GORM 读写，业务的增删改查
 // Package wire 实现 Core 与 SDK 共用的协议运行时：帧编解码、传输与 Session 调用引擎。
 //
 // 每帧由 4 字节 big-endian 载荷长度和 Protobuf Envelope 组成，长度范围为 1～4,194,304 字节；
-// TCP 与 stdio 使用相同的编码。帧格式见 spec/WIRE-FORMAT.md §1。
+// TCP 与 stdio 使用相同的编码。帧格式见 docs/development.md 的协议与会话行为。
 package wire
 ```
 
@@ -184,7 +233,7 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 
 ### 写现状，不写进度
 
-注释和错误消息只写代码当前的行为、限制和原因，不写 PLAN 工作包、切片、goal 或 task 编号，也不写「某阶段实现」「后续补齐」这类进度。尚未支持的能力直接写「尚不支持 X」。临时实现用 `shortcut: <限制>，<替换条件>` 的形式，替换条件写成条件，例如「有稳定 route_id 生成器后替换」。引用 CONTRACTS、WIRE-FORMAT 等规格小节是可以的。
+注释和错误消息只写代码当前的行为、限制和原因，不写 PLAN 工作包、切片、goal 或 task 编号，也不写「某阶段实现」「后续补齐」这类进度。尚未支持的能力直接写「尚不支持 X」。临时实现用 `shortcut: <限制>，<替换条件>` 的形式，替换条件写成条件，例如「有稳定 route_id 生成器后替换」。引用现行指南或协议源文件中的具体定义。
 
 ## 测试提交规则
 
@@ -192,8 +241,8 @@ func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
 
 - **集成测试**通过组件的公开入口驱动真实的协作方，例如真实的插件进程、两端都是真实代码的 Session 连接、真实的 SQLite、真实的文件系统和系统锁。外部平台可以用仓库提供的模拟服务替代（例如内存 Adapter、本地 Bot API 模拟服务），但不能用假实现替换仓库里的其他组件。
 - **协议编号检查**只有 `contracts/wirespec_test.go`，用来防止误改协议字段号和枚举值。
-- **不提交绑定 SDK API 的测试**（D-86）：`sdk/` 不提交测试；`internal/core/supervisor/` 只保留 `supervisor_test.go`，其中不依赖 SDK API；不新增 `testdata` 测试插件。这些验证写在 `*_local_test.go`，结果写进 PR。
-- **数量**：一个 PR 默认只提交一个覆盖主路径的集成测试，场景只放规格要求的主路径和只有跨进程才会暴露的失败。多列测试时，在 PR 正文写明理由。其余分项用本地测试取证，按[开发指南](development.md#验证改动)记录实际输入、命令、平台与结果。
+- **不提交绑定 SDK API 的测试**：`sdk/` 不提交测试；`internal/core/supervisor/` 只保留 `supervisor_test.go`，其中不依赖 SDK API；不新增 `testdata` 测试插件。这些验证写在 `*_local_test.go`，结果写进 PR。
+- **数量**：一个 PR 默认只提交一个覆盖主路径的集成测试，场景只放规格要求的主路径和只有跨进程才会暴露的失败。多列测试时，在 PR 正文写明理由。其余分项用本地测试取证，按[开发指南](docs/development.zh-CN.md#验证改动)记录实际输入、命令、平台与结果。
 - 单元测试、边界穷举、回归复现和临时测试，写在包目录下以 `_local_test.go` 结尾的文件里。这类文件已被 `.gitignore` 忽略，写多少都可以，不会被提交。不在 Go 包内的一次性脚本放在 `tmp/test/`。
 - **前端**：CI 不跑前端，提交的前端测试没有门禁。纯函数的测试（Schema 解析、patch 构造、API 客户端的请求格式）写在以 `.local.test.ts` 或 `.local.test.tsx` 结尾的文件里，它们已被 `.gitignore` 忽略，vitest 的默认匹配也能运行它们。`npm run test` 使用 `vitest run --passWithNoTests`，没有本地测试的检出也能通过。
 - 提交的集成测试要对应规格中的行为或 V 编号：同类情况合并成表驱动测试，不为 getter、构造函数或显而易见的分支写测试。

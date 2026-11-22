@@ -218,7 +218,7 @@ func reminderKey(c *sdk.Context, key string) (string, error) {
 	user, session := c.User(), c.Session()
 	// 长度前缀保留各段边界，用户 key 中的分隔符也无法改变身份作用域。
 	internalKey := fmt.Sprintf("%d:%s/%d:%s/%s", len(user), user, len(session), session, key)
-	if len(internalKey) > 128 { // CONTRACTS §4.3 按 UTF-8 字节限制完整内部 key。
+	if len(internalKey) > 128 { // 按 UTF-8 字节限制完整内部 key。
 		return "", errcode.InvalidArgument.New("reminder key with user and session scope exceeds 128 bytes")
 	}
 	return internalKey, nil

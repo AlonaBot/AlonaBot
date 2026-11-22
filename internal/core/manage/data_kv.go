@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	dataKeyMaximum   = 512 // CONTRACTS §6.1，单位字节。
+	dataKeyMaximum   = 512 // 单位字节。
 	dataValueMaximum = 1 << 20
 )
 

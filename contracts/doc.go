@@ -4,7 +4,7 @@
 // 不依赖运行时状态的校验。本包及其子包不依赖本 module 的其他包，也不做运行时 I/O。
 //
 // 修改协议时只改 proto/ 下的源文件，然后在仓库根执行 go generate ./... 重新生成；不要手改 pb/。
-// 字段号与枚举值只能追加，删除时必须 reserved，规则见 spec/WIRE-FORMAT.md §5A。
+// 字段号与枚举值只能追加，删除时必须 reserved。
 //
 // testdata/frames/*.bin 是 golden 帧，internal/wire 的集成测试读取它们；
 // testdata/manifest 与 testdata/release 供本地测试使用，release.json 中的 publisher_key_id 是占位值。

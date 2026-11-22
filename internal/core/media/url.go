@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	urlTokenBytes = 32 // CONTRACTS §1.3：URL 令牌使用 256-bit 随机值。
+	urlTokenBytes = 32 // URL 令牌使用 256-bit 随机值。
 	mediaPrefix   = "/media/"
 )
 

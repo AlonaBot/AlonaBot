@@ -1,22 +1,24 @@
-# 用 devbot 完成一次收发
+# Send and receive a message with devbot
 
-在仓库根目录先构建 CLI：`go build -o bin/alonabot ./cmd/alonabot`。以下命令使用 fish。
+[简体中文](README.zh-CN.md)
 
-1. 创建插件工程：`bin/alonabot init ./alonabot-plugin-hello`。
-2. 运行：`bin/alonabot run ./alonabot-plugin-hello`。
-3. 在同一个终端输入 `/hello`，看到 `Hello!`。Ctrl-C 停止。
+Build the CLI from the repository root first: `go build -o bin/alonabot ./cmd/alonabot`. The commands below use fish.
 
-已安装 CLI 时，在工程目录直接执行 `alonabot run` 即可。终端输入且设置中没有任何 Adapter 实例时，自动启用终端对话；`--console` 强制启用（支持管道），`--console=false` 关闭。终端用户 `console:local` 在当前运行中具有 Core Admin 权限，实例与管理员保持在内存中。输入 `#1` 点击最近一条带按钮消息的第一个回调按钮，编辑回复显示为 `(edited)` 新段，媒体显示方括号占位。管道结束后 Core 继续运行到收到停止信号。
+1. Create a plugin project: `bin/alonabot init ./alonabot-plugin-hello`.
+2. Run it: `bin/alonabot run ./alonabot-plugin-hello`.
+3. Enter `/hello` in the same terminal to see `Hello AlonaBot`. Press Ctrl-C to stop.
 
-开发目录缺省开启重载；修改源码、翻译或配置后，下一次输入即可观察新回复。`--reload=false` 关闭。外部工程使用发布版 CLI 时，`init` 自动写入 SDK 版本并执行 `go mod tidy`；失败保留工程并显示恢复命令。开发版 CLI 的 SDK 补齐提示见[开发指南](../../docs/development.md#开发运行与热部署)。
+With an installed CLI, run `alonabot run` from the project directory. Console chat starts automatically when stdin is a terminal and no Adapter instances are configured; `--console` forces it on (including pipes), and `--console=false` disables it. The console user `console:local` has Core Admin permission for this run; the instance and administrator remain in memory. Enter `#1` to click the first callback button on the most recent message with buttons. Edits appear as new `(edited)` segments; media appear as bracketed placeholders. After a pipe ends, Core keeps running until it receives a stop signal.
 
-## 不经终端：回环 Adapter 与 curl
+Development directories enable reload by default. After changing source, translations or configuration, send another message to observe the new reply. Use `--reload=false` to disable it. For external projects with a release CLI, `init` writes the SDK version and runs `go mod tidy`; on failure it keeps the project and prints recovery commands. See the [development guide](../../docs/development.md#project-creation-and-sdk-selection) for SDK setup with a development CLI.
 
-下面使用已有 devbot 插件和回环 Adapter。两者都是可导入的组件工程；CLI 为它们生成独立进程入口，`main.go` 将同一组 `New()` 装配到当前进程。
+## Without a terminal: loopback Adapter and curl
 
-已有改名前的数据目录时，先停止 Core 和 devbot，再按[开发指南](../../docs/development.md#开发运行与热部署)重建；本例的组件 ID 为 `alonabot-plugin-devbot` 和 `alonabot-adapter-devbot`，平台 ID 仍为 `devloop`。
+The following uses the existing devbot plugin and loopback Adapter. Both are importable component projects. The CLI generates separate process entry points, while `main.go` assembles the same `New()` functions in the current process.
 
-先构建 CLI，把初始设置复制到临时数据目录，并指定回复观察文件：
+If you have a data directory from before the rename, stop Core and devbot first and rebuild as described in the [development guide](../../docs/development.md#development-runs-and-hot-reload). The component IDs are `alonabot-plugin-devbot` and `alonabot-adapter-devbot`; the platform ID remains `devloop`.
+
+Build the CLI, copy the initial settings into a temporary data directory, and choose a file in which to observe replies:
 
 ```fish
 go build -o bin/alonabot ./cmd/alonabot
@@ -27,13 +29,13 @@ printf 'DEVBOT_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_DATA $DEVBOT_OUTPUT
 bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVBOT_DATA --reload
 ```
 
-命令占用前台。另开终端，将 `DEVBOT_DATA`、`DEVBOT_OUTPUT` 设为上一步的实际路径。首次在终端启动时，Core 向 stderr 显示一次管理 token；将其填入 `set token '…'`。非终端启动会把 token 写到数据目录，可用 `show` 读取：
+The command runs in the foreground. Open another terminal and set `DEVBOT_DATA` and `DEVBOT_OUTPUT` to the actual paths from the previous step. On first startup, Core persists the management token in `$DEVBOT_DATA/admin_token` with mode 0600 and prints only its location. Management CLI commands read it automatically using `--data-dir`; for manual HTTP requests, explicitly read it with `admin-token show`:
 
 ```fish
 set token (bin/alonabot admin-token show --data-dir $DEVBOT_DATA)
 ```
 
-取得 token 后注入命令：
+After obtaining the token, inject a command:
 
 ```fish
 curl --fail-with-body -X POST \
@@ -42,21 +44,21 @@ curl --fail-with-body -X POST \
 cat $DEVBOT_OUTPUT
 ```
 
-注入返回 HTTP 204；等发送完成后，文件内容为 `Hello from devbot!`。这是异步消息分发，204 表示 Core 已接纳事件，稍后再读文件即可观察回复。普通文本例如 `text=hello` 原样回声。路由要求 `instance` 与非空 `text` 查询参数，使用 URL 编码。样例固定 Actor 为 `devloop:user`，私聊会话为 `devloop:chat`，实例为 `one`，消息经 `adapter.Core.Deliver` 进入标准命令／事件与发送流水线。
+Injection returns HTTP 204. Once the asynchronous send finishes, the file contains `Hello from devbot!`. A 204 means Core accepted the event; read the file again shortly afterward to observe the reply. Plain text such as `text=hello` is echoed unchanged. The route requires `instance` and a nonempty `text` query parameter; URL-encode them. The example fixes Actor to `devloop:user`, the private chat to `devloop:chat`, and the instance to `one`. Messages enter the normal command/event and send pipeline through `adapter.Core.Deliver`.
 
-`/inject` 是私有路由，复用 Core 管理 Bearer token；Cookie 认证的 POST 还需要受控 Origin 与 `X-Alonabot-CSRF`。Host 必须匹配 `base_url`；样例的监听与 Base URL 均为 `127.0.0.1:7650`。停止已有 Core 后再复用此端口。
+`/inject` is a private route using the Core management Bearer token. Cookie-authenticated POST requests also require a controlled Origin and `X-Alonabot-CSRF`. Host must match `base_url`; both the example listener and Base URL are `127.0.0.1:7650`. Stop any existing Core before reusing this port.
 
-注入接口的状态码：
+Injection status codes:
 
-| 状态码 | 含义 |
+| Status | Meaning |
 | --- | --- |
-| 204 | Core 已接纳事件，回复异步发送 |
-| 400 | 缺少 `instance` 或非空 `text` |
-| 401 | 缺少有效认证 |
-| 503 | 实例不可用，或 Core 分发队列已满、事件被丢弃；响应正文给出英文原因 |
-| 500 | `Deliver` 返回错误，响应正文保留错误说明 |
+| 204 | Core accepted the event; the reply is sent asynchronously |
+| 400 | Missing `instance` or nonempty `text` |
+| 401 | Missing valid authentication |
+| 503 | Instance unavailable, or Core's dispatch queue was full and the event was dropped; the body gives the reason in English |
+| 500 | `Deliver` returned an error; the body retains its description |
 
-## 工程与配置
+## Project and configuration
 
 ```text
 examples/devbot/
@@ -75,7 +77,7 @@ examples/devbot/
     └── adapter_config_schema.json
 ```
 
-样例中实例所在的设置如下，`${DEVBOT_OUTPUT}` 在读取设置时展开为环境变量的完整值。`output` 可填写绝对文件路径；空串表示只返回发送回执。文件保存最近一次发送的文本，权限为 0600。
+The example's instance settings are shown below. `${DEVBOT_OUTPUT}` expands to the complete environment variable value when settings are read. `output` accepts an absolute file path; an empty string returns only the send receipt. The file stores the most recently sent text with mode 0600.
 
 ```json
 {
@@ -89,26 +91,26 @@ examples/devbot/
 }
 ```
 
-数据目录缺省为当前工作目录的 `data/`。组件配置在 `<data_dir>/plugins/alonabot-plugin-devbot/config.json`，受管数据库在同目录的 `dev.sqlite`。配置缺失时使用 schema 缺省的 `greetings: [{"text":"Hello"}]`。每次插件启动向 `startup` 表追加首项问候文本，重启保留记录；原始配置文件保持原文。开发代次固定为 `dev:<组件 ID>`；管理入口对 dev 来源的 update、rollback、uninstall 返回 `FAILED_PRECONDITION`。
+The data directory defaults to `data/` in the current working directory. Component configuration is at `<data_dir>/plugins/alonabot-plugin-devbot/config.json`, with the managed database `dev.sqlite` in the same directory. Missing configuration uses the schema default `greetings: [{"text":"Hello"}]`. Each plugin startup appends the first greeting to the `startup` table, retaining rows across restarts; the original configuration file is preserved. The development generation is fixed to `dev:<component ID>`. Management update, rollback and uninstall return `FAILED_PRECONDITION` for dev sources.
 
-## 改源码、翻译和配置
+## Change source, translations and configuration
 
-保持 `run` 运行，修改 `plugin/i18n/en-US.json` 的 `messages.hello`，再次注入 `/hello`，观察新的译文。设置 `default_locale` 为 `zh-CN` 后，新建立的插件 Session 使用中文。修改 `plugin.go` 同样会重新构建并只重启插件，Core、回环实例及已安装组件保持运行。
+Keep `run` running, edit `messages.hello` in `plugin/i18n/en-US.json`, then inject `/hello` again to see the new translation. After setting `default_locale` to `zh-CN`, new plugin Sessions use Chinese. Changing `plugin.go` also rebuilds and restarts only that plugin; Core, the loopback instance and installed components keep running.
 
-在 `plugin/` 临时放一个有语法错误的 `.go` 文件，日志会保留编译器诊断，旧插件仍能回复；修正或删除该文件后自动恢复构建。
+Temporarily add a `.go` file with a syntax error under `plugin/`. Logs retain compiler diagnostics and the old plugin can still reply. Fix or remove the file to resume builds automatically.
 
-只改配置时可在另一个终端操作：
+For a configuration-only change, use another terminal:
 
 ```fish
 mkdir -p $DEVBOT_DATA/plugins/alonabot-plugin-devbot
 printf '%s\n' '{"greetings":[{"text":"Updated"}]}' > $DEVBOT_DATA/plugins/alonabot-plugin-devbot/config.json
 ```
 
-这会重启插件并追加 startup 记录，`<data_dir>/dev/bin/alonabot-plugin-devbot` 的字节和 mtime 保持。只改一个 Adapter 实例的设置时，只重启该实例。schema、i18n、源码、嵌入资源、manifest、go.mod/go.sum 的变化会触发重新构建；编译失败保留当前进程。轮询缺省为 500ms，可用 `--args DEV_RELOAD_POLL=1s` 调整。
+This restarts the plugin and appends a startup row while preserving the bytes and mtime of `<data_dir>/dev/bin/alonabot-plugin-devbot`. Changing only one Adapter instance's settings restarts only that instance. Changes to schemas, i18n, source, embedded resources, the manifest or go.mod/go.sum trigger a rebuild; a compilation failure keeps the current process. Polling defaults to 500ms; adjust it with `--args DEV_RELOAD_POLL=1s`.
 
-## 同进程调试
+## Debug in the same process
 
-先用 Ctrl-C 停止独立进程模式，再准备另一个数据目录，复用相同 Adapter 身份与实例 schema：
+Stop the separate-process run with Ctrl-C, then prepare another data directory using the same Adapter identity and instance schema:
 
 ```fish
 set -gx DEVBOT_LIBRARY_DATA (mktemp -d)
@@ -120,13 +122,13 @@ go run ./cmd/alonabot build examples/devbot --out $DEVBOT_BIN
 $DEVBOT_BIN/devbot -data-dir $DEVBOT_LIBRARY_DATA
 ```
 
-使用上面的 token 与注入步骤，将数据目录替换为 `DEVBOT_LIBRARY_DATA`。库模式的资源由 `alonabot build` 在构建时编入，直接 `go run` 或 `go build` 的程序在启动组件前会报缺少资源。调试器可在 `plugin.New()` 注册的 Handler 与 Adapter 的 `Send` 中打断点。源码与资源变化后，重新运行 `alonabot build` 再启动程序。
+Follow the token and injection steps above, replacing the data directory with `DEVBOT_LIBRARY_DATA`. Library-mode resources are embedded by `alonabot build`; a plain `go run` or `go build` executable reports missing resources before starting components. Set debugger breakpoints in Handlers registered by `plugin.New()` and in the Adapter's `Send`. After changing source or resources, run `alonabot build` again and restart the program.
 
-两个模式收到 SIGINT/SIGTERM 后按同一停止预算排空、执行停止回调，缺省总计 `STOP_TOTAL=10s`。独立进程由 supervisor 隔离并执行有限崩溃恢复；库模式下未捕获的后台 panic 使整个进程非零退出，停止预算到期仍有组件运行时 `Wait` 返回错误。SDK Handler 边界捕获的 panic 记录 stack 并返回 `INTERNAL`，后续调用继续。
+Both modes drain work and run stop callbacks on SIGINT/SIGTERM with the same stop budget, default total `STOP_TOTAL=10s`. The supervisor isolates separate processes and performs bounded crash recovery. In library mode, an unhandled background panic exits the entire process with a nonzero status; `Wait` returns an error if components remain after the stop budget expires. Panics caught at SDK Handler boundaries log a stack and return `INTERNAL`; later calls continue.
 
-## 创建与检查工程
+## Create and check a project
 
-`alonabot init [目录] --id ID` 在空目录创建可导入插件包、作者 manifest、schema、i18n 与忽略 `data/`、`bin/` 的 `.gitignore`，导出只做注册的 `New()`，工程中没有生成文件，资源在构建与 `go test` 时自动取得。模板与本示例的 plugin 具有相同工程形状；本示例另含启动计数 SQL、回声与回环 Adapter。库模式宿主沿用本示例根目录的 main.go。
+`alonabot init [directory] --id ID` creates an importable plugin package, author manifest, schema and `.gitignore` excluding `data/` and `bin/`. Its exported `New()` only registers behavior. No generated files are kept in the project; resources are collected automatically during builds and `go test`. The template and this example's plugin share the same project shape; the example additionally includes startup-count SQL, echo behavior, i18n and the loopback Adapter. Library-mode hosts follow the root main.go in this example.
 
 ```fish
 go run ./cmd/alonabot build examples/devbot/plugin --out bin/devbot-plugin
@@ -136,4 +138,4 @@ go run ./cmd/alonabot check examples/devbot/adapter
 go run ./cmd/alonabot test examples/devbot/plugin
 ```
 
-创建外部工程时，目标目录已有 Go module 就复用；否则 module 缺省取目录名，也可用 `--module` 指定，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](../../docs/development.md)。管理界面的开发配置写回与重启由 T-09.14 承接。
+An external project reuses an existing Go module in the target directory; otherwise the module defaults to the directory name, or can be set with `--module`. See the [development guide](../../docs/development.md#project-creation-and-sdk-selection) for SDK version selection and the full `init → build → check → test → pack` flow. T-09.14 covers development configuration writeback and restarts through the management UI.

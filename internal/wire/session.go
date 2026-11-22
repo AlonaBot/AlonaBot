@@ -368,7 +368,7 @@ func (s *Session) SendEnvelopeSync(env *pb.Envelope) error {
 	}
 }
 
-// enqueuePriority 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session（CONTRACTS §1.2）。
+// enqueuePriority 把帧放入有界优先通道；放不进说明连控制通道都无法推进，关闭 Session。
 func (s *Session) enqueuePriority(env *pb.Envelope) error {
 	return s.enqueuePriorityFrame(priorityFrame{env: env})
 }
@@ -999,7 +999,7 @@ func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbo
 	_ = s.enqueuePriority(env)
 }
 
-// handle 调用 Handler；panic 转为 INTERNAL，不当作空成功（CONTRACTS §2.1）。
+// handle 调用 Handler；panic 转为 INTERNAL，不当作空成功。
 func (s *Session) handle(ctx context.Context, in *Inbound) (r Response) {
 	if s.opt.Handler == nil {
 		return Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, SafeMessage: "this side does not accept calls"}}

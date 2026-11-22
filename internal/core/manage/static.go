@@ -19,7 +19,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
-// AdminAPIMajor 标识当前管理 HTTP 契约的主版本（CONTRACTS §7.5）。
+// AdminAPIMajor 标识当前管理 HTTP 契约的主版本。
 const AdminAPIMajor uint32 = 1
 
 const (

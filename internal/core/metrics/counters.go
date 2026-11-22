@@ -1,7 +1,7 @@
 // Package metrics 按插件、业务种类和原因累计 Core 的内存计数。
 //
 // Counters 的零值可用；Add 与 Snapshot 可并发调用，快照独立于后续写入。
-// 计数随 Core 生命周期保留，遵循 CONTRACTS §3。
+// 计数随 Core 生命周期保留。
 package metrics
 
 import "sync"

@@ -24,7 +24,7 @@ type ToolPolicy struct {
 	Policy    string     `json:"policy"`
 }
 
-// ToolPolicies 按 ADMIN-API §23 编码工具策略集合。
+// ToolPolicies 编码工具策略集合供管理端读取。
 type ToolPolicies struct {
 	Items []ToolPolicy `json:"items"`
 }

@@ -1,4 +1,4 @@
-// Event、MessageChain/Segment、Send 与回执（MESSAGE-MODEL §1/§2/§4、CONTRACTS §8）。
+// Event、MessageChain/Segment、Send 与回执。
 syntax = "proto3";
 
 package alonabot.v1;

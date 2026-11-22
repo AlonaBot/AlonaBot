@@ -1,4 +1,4 @@
-// Package tool 列出和调用 Core 工具，并在有效 Handler 内请求用户确认（CONTRACTS §13）。
+// Package tool 列出和调用 Core 工具，并在有效 Handler 内请求用户确认。
 package tool
 
 // Default 指定工具未被管理策略覆盖时的调用方式。

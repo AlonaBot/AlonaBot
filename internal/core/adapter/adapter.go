@@ -1,7 +1,7 @@
 // Package adapter 定义 Core 接纳事件、发送消息与查找平台实例的接口。
 //
 // [Instance] 负责平台接入，[Sink] 只接纳事件，[Registry] 按实例 ID 保存接入。
-// 发送结果与错误可以同时存在，调用方须保留二者（CONTRACTS §8）。
+// 发送结果与错误可以同时存在，调用方须保留二者。
 package adapter
 
 import (

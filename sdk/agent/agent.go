@@ -1,6 +1,6 @@
 // Package agent 提供当前 Agent 组件的调用入口。
 //
-// [Generate] 发送完整文本生成请求，调用许可与期限见 CONTRACTS §13.5。
+// [Generate] 发送完整文本生成请求，调用许可与期限见 docs/plugin-guide.md。
 package agent
 
 import (

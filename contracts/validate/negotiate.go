@@ -24,7 +24,7 @@ type capKey struct {
 	version uint32
 }
 
-// Negotiate 实现 WIRE §3.1：Major 必须相等，Minor 取较小值；能力以 name+version 精确匹配，
+// Negotiate 协商协议版本与能力：Major 必须相等，Minor 取较小值；能力以 name+version 精确匹配，
 // 交集按 local.Supported 的顺序给出，双方的 required 都必须包含于交集。失败返回 FAILED_PRECONDITION。
 func Negotiate(local, peer Offer) (Agreement, error) {
 	if local.Major != peer.Major {

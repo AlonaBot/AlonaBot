@@ -2,7 +2,7 @@
 //
 // [Open] 返回当前 Session 复用的连接，由 SDK 在停止或准备失败时关闭。
 // [OpenFile] 打开独立文件，由调用方关闭。[ReadPragmas] 回读连接实际生效的设置。
-// 两个入口均采用单连接、WAL、FULL、外键和 5 秒忙等待，见 CONTRACTS §6.1。
+// 两个入口均采用单连接、WAL、FULL、外键和 5 秒忙等待。
 //
 // 包的组成：[Migrate] 登记自行管理的迁移，[Migrations] 登记逐步迁移；
 // [RunVersioned] 与 [AppliedMigrations] 执行迁移并查询与 GORM 入口共用的账本。
@@ -31,7 +31,7 @@ var ErrNoDatabase = errors.New("this plugin has no database")
 //go:embed kv.sql
 var kvDDL string
 
-// 受管连接的 PRAGMA 值由 CONTRACTS §6.1 规定。
+// 受管连接固定使用以下 PRAGMA 值，并在打开连接时回读核对。
 const (
 	journalModeWAL    = "wal"
 	synchronousFull   = 2

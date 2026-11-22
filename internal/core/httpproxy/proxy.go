@@ -1,7 +1,7 @@
 // Package httpproxy 将 Core 的插件与 Adapter HTTP 入口代理到当前已激活 Session 的 loopback Listener。
 //
 // 装配方在激活后调用 [Server.Bind]，排空时调用 [Server.Drain]，停止或 Session 失效时调用 [Server.Unbind]；
-// 每次请求读取一个不可变路由快照，网络转发期间不持有映射锁。代理身份隔离见 CONTRACTS §7.2。
+// 每次请求读取一个不可变路由快照，网络转发期间不持有映射锁。
 package httpproxy
 
 import (

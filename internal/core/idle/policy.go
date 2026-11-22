@@ -2,7 +2,6 @@
 //
 // Controller 由 Core 生命周期循环串行调用；进程停止与唤醒仍由 supervisor 执行。
 // 路由判定只读已验证的描述，不启动插件，也不参与消息过滤和权限检查。
-// 规格见 CONTRACTS §4.4、§4.5 与 ADMIN-API §24。
 package idle
 
 import (

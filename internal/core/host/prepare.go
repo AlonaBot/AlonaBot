@@ -2,7 +2,7 @@
 //
 // 一个插件进程连上 Core 后，依次经过握手认证、Bootstrap 下发、REGISTER 校验与 PREPARED（Prepare），
 // 提交 ActiveGeneration、ACTIVATE 与 ACTIVATED（Activate），以及冻结、排空、STOPPING 与结束进程树（Stop）。
-// 有限重启策略也在这里。状态与可见性规则见 spec/CONTRACTS-v0.1.md §4 与 §12.1。
+// 有限重启策略也在这里。
 //
 // 本包不启动进程，也不持久化状态；这些由 internal/core/process、internal/core/state 和
 // internal/core/supervisor 负责。
@@ -33,9 +33,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Limits 规定阶段预算与双方共用的 Session 限额（CONTRACTS §4.2、§16）。
+// Limits 规定阶段预算与双方共用的 Session 限额。
 type Limits struct {
-	// 从连接建立到 HELLO_ACK 发出的预算（CONTRACTS §4.2 的 Hello/HelloAck）。
+	// 从连接建立到 HELLO_ACK 发出的预算。
 	Handshake          time.Duration
 	Config             time.Duration // 配置转换与校验的预算
 	Migration          time.Duration // 数据库迁移的预算
@@ -64,7 +64,7 @@ func (l Limits) proto() *pb.PhaseLimits {
 // failNotifyTimeout 限制失败路径上发送 SESSION_ERROR 的时间：会话已经判定失败，只是尽力通知。
 const failNotifyTimeout = time.Second
 
-// HTTP 代理材料与 WIRE §3.1 的 http_listener v1 协议一致。
+// HTTP 代理材料遵循 http_listener v1 协议。
 const (
 	httpListenerVersion = 1
 	httpProxyTokenBytes = 32
@@ -188,7 +188,7 @@ func Prepare(ctx context.Context, conn *wire.Conn, exp Expect, boot *pb.Bootstra
 		_ = conn.Close()
 		return nil, err
 	}
-	// minor 在协商成功后更新为协商值，之后的 SESSION_ERROR 都使用它（WIRE §1）。
+	// minor 在协商成功后更新为协商值，之后的 SESSION_ERROR 都使用它。
 	var minor uint32
 	// sendErr 认证之后的失败路径：限时尽力发出 SESSION_ERROR 后关闭连接。
 	sendErr := func(phase pb.SessionPhase, kind pb.FrameKind, code pb.ErrorCode, safe string) {

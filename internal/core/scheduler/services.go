@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const maxTaskKeyBytes = 128 // CONTRACTS §4.3。
+const maxTaskKeyBytes = 128
 
 // Services 将六个固定服务绑定到 Mux；current 核对调用者的当前 Session。
 func (s *Scheduler) Services(m *router.Mux, current func(router.Caller) (router.Plugin, bool)) {

@@ -15,7 +15,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
-// 命令菜单变化从首次变化起合并 2 秒，见 CONTRACTS §8。
+// 命令菜单变化从首次变化起合并 2 秒。
 const commandSyncWindow = 2 * time.Second
 const commandSyncCapability = "commands.sync"
 

@@ -1,4 +1,4 @@
-// 配置文件查询、指定、字段写入与覆盖集合下发载荷（CONTRACTS §5.6、WIRE §3.5）。
+// 配置文件查询、指定、字段写入与覆盖集合下发载荷。
 syntax = "proto3";
 
 package alonabot.v1;

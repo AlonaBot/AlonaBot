@@ -17,8 +17,8 @@ import (
 // slowQueryThreshold 超过它的 SQL 会以慢查询记录。
 const slowQueryThreshold = 200 * time.Millisecond
 
-// newGormLogger 经所属 Session 的 Logger 记录慢查询与错误 SQL（CONTRACTS §14.1）。
-// ParameterizedQueries 使日志只含占位符 SQL，绑定参数（可能是业务数据或 secret）不进入日志（CONTRACTS §5.3）。
+// newGormLogger 经所属 Session 的 Logger 记录慢查询与错误 SQL。
+// ParameterizedQueries 使日志只含占位符 SQL，绑定参数（可能是业务数据或 secret）不进入日志。
 func newGormLogger(l *slog.Logger) logger.Interface {
 	return logger.NewSlogLogger(l, logger.Config{
 		SlowThreshold:        slowQueryThreshold,

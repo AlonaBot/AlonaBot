@@ -24,10 +24,10 @@ const levelOff = slog.Level(math.MaxInt)
 // logLevel 是本进程的生效日志级别；收到 Bootstrap 之前为 INFO。
 var logLevel slog.LevelVar
 
-// setupLogging 把默认 Logger 换成以 JSON 行写 stderr、带源码位置的 Logger（CONTRACTS §14.1），
+// setupLogging 把默认 Logger 换成以 JSON 行写 stderr、带源码位置的 Logger，
 // 插件用 log/slog 或 log 包写的日志都经由它交给 Core。stdio 传输时 stdout 专用于协议帧。
 //
-// Core 消失后再写 stdout 或 stderr 时，Go 运行时默认以 SIGPIPE 终止进程，来不及执行 OnStop（CONTRACTS §4.2）。
+// Core 消失后再写 stdout 或 stderr 时，Go 运行时默认以 SIGPIPE 终止进程，来不及执行 OnStop。
 // 接收该信号后这些写入只返回 EPIPE；不用 signal.Ignore，因为忽略状态会被插件启动的子进程继承。
 func setupLogging() {
 	signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE)
@@ -42,7 +42,7 @@ func logLevelAttr(groups []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-// setLogLevel 按 Core 下发的级别在进程内过滤；UNSPECIFIED 按 INFO 处理（WIRE-FORMAT §3.2）。
+// setLogLevel 按 Core 下发的级别在进程内过滤；UNSPECIFIED 按 INFO 处理。
 func setLogLevel(level *slog.LevelVar, lv pb.LogLevel) {
 	switch lv {
 	case pb.LogLevel_LOG_LEVEL_DEBUG:
@@ -75,7 +75,7 @@ func (s *componentSession) changeLogLevel(in *wire.Inbound) wire.Response {
 	return adapterResponse(&pb.LogSetLevelResponse{}, nil)
 }
 
-// logPanic 把调用边界捕获的 panic 记为一条 ERROR，堆栈放在 stack 字段（CONTRACTS §14.1）；
+// logPanic 把调用边界捕获的 panic 记为一条 ERROR，堆栈放在 stack 字段；
 // 只能在 recover 所在的 defer 中调用，堆栈才包含 panic 的位置。
 func logPanic(ctx context.Context, boundary string, p any) {
 	componentLogger(ctx).ErrorContext(ctx, boundary+" panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))

@@ -2,7 +2,7 @@
 //
 // [Bus.Register] 将发布入口接入 router.Mux，身份取自认证 Session 的 Caller。
 // 装配处在插件激活和停止时调用 [Bus.Attach]、[Bus.Detach]；离线事件不缓存、不补发。
-// 每个订阅插件有独立的发送 goroutine，写出结果仅供计数，无业务回执（CONTRACTS §3、WIRE §5）。
+// 每个订阅插件有独立的发送 goroutine，写出结果仅供计数，无业务回执。
 package bus
 
 import (

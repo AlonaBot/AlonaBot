@@ -2,7 +2,7 @@
 //
 // [Start] 创建独立临时数据目录，[Harness.Message]、[Harness.Event] 与 [Harness.Click] 注入事件，
 // [Harness.Trigger] 与 [Harness.TriggerTask] 经 Scheduler 立即触发任务。
-// [Result] 汇总 Core 完成或等待通知前的发送与 Handler 结果，区间外的记录由 [Harness.Background] 读取（CONTRACTS §17）。
+// [Result] 汇总 Core 完成或等待通知前的发送与 Handler 结果，区间外的记录由 [Harness.Background] 读取。
 package plugintest
 
 import (

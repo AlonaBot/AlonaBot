@@ -4,16 +4,15 @@
 
 ## 开发入口
 
-- 环境与检查：[开发指南](docs/development.md)。
+- 环境与检查：[源码开发](docs/development.zh-CN.md)。
 - 模块与依赖方向：[架构地图](ARCHITECTURE.md)。
-- 命名、注释与测试：[编码规范](docs/coding-standards.md)。
-- 公开行为：[技术规范](spec/README.md)。
-- PR 与许可：[贡献流程](CONTRIBUTING.md)。
+- [贡献流程与编码规范](CONTRIBUTING.zh-CN.md)。
+- 公开行为：[插件指南](docs/plugin-guide.zh-CN.md)。
 - 打包与发布：[发行维护](docs/releasing.md)。
 
 ## 工作约定
 
-- 沟通、文档、注释和 commit message 使用简体中文；标识符、日志、错误与 CLI 输出使用英文。用户界面通过 i18n 提供。
+- 沟通、内部维护说明、注释和 commit message 使用简体中文；用户使用与开发指南提供中英内容；标识符、日志、错误与 CLI 输出使用英文。用户界面通过 i18n 提供。
 - 先读取受影响实现、调用方和当前 diff；保留用户已有改动，Git 写操作使用独立 worktree。提交、推送、合并和发布按本次明确授权执行。
 - 新依赖先说明必要性与替代方案，取得维护者明确批准。生成代码修改源文件后重新生成。
 - 只在外部输入与信任边界进行必要校验；错误保留原始原因，业务副作用的重试与超时遵循现行契约。

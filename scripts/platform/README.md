@@ -1,6 +1,6 @@
 # 平台验收
 
-`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。四个 Linux/macOS 环境已完整通过；Windows 完成交叉构建，实际运行仍为「未运行」，2026-11-20 经维护者按 [Windows 实跑延期](../../changelog/v0.1.0/zh-CN.md#发行内容) 批准延期。实际候选、环境与原失败见 [TEST-MATRIX §3.6](https://github.com/AlonaBot/AlonaBot/blob/d8b9678931013b6d46a044dbdbb0db9182262065/spec/TEST-MATRIX.md#36-五平台运行增量t-102--v-32v-34)。
+`platform` 消费明确指定的 Core 与当前平台组件安装包，保存运行身份、命令和结果。Unix 与 Windows 入口覆盖首次认证、真实 echo 消息往返、showcase HTTP、100 次启停、Core 强杀后重启、合作型子树清理及完整事务恢复。传入 CGO 构建记录后还验证真实 C 函数调用；全部步骤成功才将该平台结果标为 `passed`，省略 CGO 输入时为 `incomplete`。四个 Linux/macOS 环境已完整通过；Windows 完成交叉构建，实际运行仍为「未运行」，2026-11-20 经维护者按 [Windows 实跑延期](../../changelog/v0.1.0/zh-CN.md#added) 批准延期。实际候选、环境与原失败见 [TEST-MATRIX §3.6](https://github.com/AlonaBot/AlonaBot/blob/d8b9678931013b6d46a044dbdbb0db9182262065/spec/TEST-MATRIX.md#36-五平台运行增量t-102--v-32v-34)。
 
 先从候选源码构建验收程序、Core 与三个示例组件包，并准备下文约定的本地 `platform-tree` 插件。fixture 源码和产物放在 git 忽略的本地目录，随本次证据保留。以下为本机 fish 命令；交叉构建时分别为验收程序与 Core 设置目标，并为 `pack` 指定同一 `--target OS/arch`。
 
