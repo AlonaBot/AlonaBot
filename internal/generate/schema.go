@@ -12,9 +12,14 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 )
 
-const configSchemaFileName = "config_schema.json"
+const configSchemaFileName = "plugin_config_schema.json"
 
 func (s *scan) configSchema() error {
+	if _, err := s.resourceFile("config_schema.json"); err == nil {
+		return fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", s.entry.ImportPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read legacy config_schema.json: %w", err)
+	}
 	// 1. 未声明 schema 时使用空字段集核对翻译，生成项保持 nil。
 	fileName := configSchemaFileName
 	if s.adapterProject {

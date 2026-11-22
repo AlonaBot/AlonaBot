@@ -23,6 +23,9 @@ var (
 	environmentReference = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
 )
 
+// RedactText 遮盖输出文本中的认证材料、URL 凭证、秘密查询参数与公网 IP。
+func RedactText(value string) string { return redactText(value) }
+
 func redactText(value string) string {
 	value = authorization.ReplaceAllString(value, "${1}${2}"+redacted)
 	value = urlUser.ReplaceAllString(value, "${1}"+redacted+"@")
@@ -187,7 +190,11 @@ func maskCredentials(value any) {
 				value[key] = mask(child)
 			default:
 				if text, ok := child.(string); ok {
-					value[key] = urlUser.ReplaceAllString(text, "${1}"+redacted+"@")
+					if key == "github_api_base" || key == "github_download_prefix" {
+						value[key] = redactText(text)
+					} else {
+						value[key] = urlUser.ReplaceAllString(text, "${1}"+redacted+"@")
+					}
 				}
 				maskCredentials(child)
 			}

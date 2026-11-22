@@ -290,6 +290,9 @@ func readSums(filename string) (map[string]string, error) {
 }
 
 func checkPackage(dir string, files []string, c component, version, goos, goarch string) ([]string, error) {
+	if slices.Contains(files, "config_schema.json") {
+		return nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", c.id)
+	}
 	entrypoint := "component"
 	if goos == "windows" {
 		entrypoint += ".exe"
@@ -348,7 +351,7 @@ func checkPackage(dir string, files []string, c component, version, goos, goarch
 	}
 	resources := []string{"plugin.yaml:author-identity-records"}
 	for _, name := range files {
-		if name != "config_schema.json" && name != "adapter_config_schema.json" && !(filepath.ToSlash(filepath.Dir(name)) == "i18n" && strings.HasSuffix(name, ".json")) {
+		if name != "plugin_config_schema.json" && name != "adapter_config_schema.json" && !(filepath.ToSlash(filepath.Dir(name)) == "i18n" && strings.HasSuffix(name, ".json")) {
 			continue
 		}
 		raw, err := readRegular(filepath.Join(dir, filepath.FromSlash(name)))

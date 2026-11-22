@@ -814,6 +814,7 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		{&pb.ForwardItem{}, 4, "occurred_at_unix_ms", protoreflect.Int64Kind, false, ""},
 		{&pb.ReadNodesRequest{}, 1, "to", protoreflect.MessageKind, false, "alonabot.v1.Target"},
 		{&pb.ReadNodesRequest{}, 2, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
+		{&pb.AdapterOperationsRequest{}, 1, "instance_id", protoreflect.StringKind, false, ""},
 		{&pb.AdapterReadNodesRequest{}, 1, "instance_id", protoreflect.StringKind, false, ""},
 		{&pb.AdapterReadNodesRequest{}, 2, "target", protoreflect.MessageKind, false, "alonabot.v1.Target"},
 		{&pb.AdapterReadNodesRequest{}, 3, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
@@ -1030,5 +1031,13 @@ func TestReadNodesResponseFieldNumbers(t *testing.T) {
 	field := fields.ByNumber(1)
 	if fields.Len() != 1 || field == nil || field.Name() != "items" || field.Kind() != protoreflect.MessageKind || !field.IsList() || field.Message().FullName() != "alonabot.v1.ForwardItem" {
 		t.Fatalf("ReadNodesResponse.items = %v", field)
+	}
+}
+
+// TestAdapterOperationCatalogFieldNumber 固定目录重复操作字段的编号与类型。
+func TestAdapterOperationCatalogFieldNumber(t *testing.T) {
+	field := (&pb.AdapterOperationsResponse{}).ProtoReflect().Descriptor().Fields().ByNumber(1)
+	if field == nil || field.Name() != "operations" || !field.IsList() || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "alonabot.v1.ActionDeclaration" {
+		t.Fatalf("unexpected operation catalog field: %v", field)
 	}
 }

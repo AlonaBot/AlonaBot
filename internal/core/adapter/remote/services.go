@@ -33,6 +33,10 @@ func serviceResponse(message proto.Message) wire.Response {
 }
 
 func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	return p.serviceRequest(ctx, caller, in, nil)
+}
+
+func (p *Process) serviceRequest(ctx context.Context, caller router.Caller, in *wire.Inbound, expected *instance) wire.Response {
 	// 1. 身份先于载荷处理；无权调用者不会得到实例信息。
 	if caller.PluginID != p.opt.PluginID {
 		return serviceError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "caller does not own adapter process")
@@ -64,6 +68,9 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 	invalid := func() wire.Response {
 		slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id)
 		return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter instance or event identity mismatch")
+	}
+	if expected != nil && entry != expected {
+		return invalid()
 	}
 	if ctx.Err() != nil || p.session == nil || caller != p.caller || entry == nil || !entry.running || entry.session != p.session.Session {
 		return invalid()
@@ -123,7 +130,13 @@ func (p *Process) service(ctx context.Context, caller router.Caller, in *wire.In
 				membership = proto.Bool(false)
 			}
 		}
-		if err := p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, chat, menu, membership); err != nil {
+		var persistenceError error
+		if expected != nil {
+			persistenceError = p.opt.Store.ObserveAdapterEvent(ctx, p.opt.PluginID, id, chat, menu, membership)
+		} else {
+			persistenceError = p.opt.Store.PutAdapterCursor(ctx, p.opt.PluginID, id, r.Cursor, chat, menu, membership)
+		}
+		if err := persistenceError; err != nil {
 			return serviceError(pb.ErrorCode_ERROR_CODE_INTERNAL, err.Error())
 		}
 		// 3. Core 重建可信事件字段，只保留本 Session 声明的平台权限及其展开结果。

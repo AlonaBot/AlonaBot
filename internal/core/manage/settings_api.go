@@ -29,6 +29,7 @@ var escapeChat = strings.NewReplacer("%", "%25", "#", "%23")
 var unescapeChat = strings.NewReplacer("%25", "%", "%23", "#")
 
 func (s *Service) settingsRoutes(mux *http.ServeMux) {
+	s.githubRoutes(mux)
 	mux.HandleFunc("GET /api/v1/core/settings/corrections", func(w http.ResponseWriter, r *http.Request) {
 		current := s.opt.Settings.Settings()
 		w.Header().Set("Cache-Control", "no-store")

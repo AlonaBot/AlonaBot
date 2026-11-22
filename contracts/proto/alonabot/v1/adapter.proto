@@ -274,3 +274,13 @@ message AdapterReadNodesRequest {
   Target target = 2;
   ForwardSegment segment = 3;
 }
+
+// AdapterOperationsRequest 查询当前运行实例的真实操作接口。
+message AdapterOperationsRequest {
+  string instance_id = 1;
+}
+
+// AdapterOperationsResponse 保留标准操作与平台声明的相同描述格式。
+message AdapterOperationsResponse {
+  repeated ActionDeclaration operations = 1;
+}

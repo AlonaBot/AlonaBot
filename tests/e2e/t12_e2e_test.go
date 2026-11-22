@@ -78,16 +78,16 @@ func TestAgentPackage(t *testing.T) {
 	if m.ID != agentPackageID || m.Role != "agent" || m.Source != "github.com/AlonaBot/alonabot-agent" || m.Version != strings.TrimPrefix(componentLock["agent"].Version, "v") || m.OS != runtime.GOOS || m.Arch != runtime.GOARCH || m.MigrationMode != manifest.MigrationVersioned || m.PrepareEffects != manifest.EffectsManagedDB {
 		t.Fatalf("packaged manifest: %+v", m)
 	}
-	for _, name := range []string{m.Entrypoint, "build-info", "config_schema.json", "i18n/en-US.json", "i18n/zh-CN.json", m.Icon} {
+	for _, name := range []string{m.Entrypoint, "build-info", "plugin_config_schema.json", "i18n/en-US.json", "i18n/zh-CN.json", m.Icon} {
 		if len(resources[name]) == 0 {
 			t.Fatalf("missing package resource %q", name)
 		}
 	}
-	schema, problems := configschema.Parse(developmentRead(t, filepath.Join(componentDirectories["agent"], "config_schema.json")))
+	schema, problems := configschema.Parse(developmentRead(t, filepath.Join(componentDirectories["agent"], "plugin_config_schema.json")))
 	if len(problems) != 0 {
 		t.Fatal(problems)
 	}
-	if !bytes.Equal(resources["config_schema.json"], schema.Canonical()) {
+	if !bytes.Equal(resources["plugin_config_schema.json"], schema.Canonical()) {
 		t.Fatal("package schema differs from canonical source")
 	}
 	for _, name := range []string{"i18n/en-US.json", "i18n/zh-CN.json", m.Icon} {

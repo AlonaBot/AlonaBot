@@ -1,5 +1,7 @@
 package wire
 
+import "github.com/AlonaBot/AlonaBot/contracts/adapterops"
+
 // ServiceSend 指定 Core 的消息发送服务；固定服务名不含 /，与插件路由目标分离。
 const ServiceSend = "core.send"
 
@@ -9,7 +11,7 @@ const (
 	// ServiceAdapterInstanceStop 停止一个账号实例。
 	ServiceAdapterInstanceStop = "adapter.instance.stop"
 	// ServiceAdapterSend 向账号实例提交消息发送。
-	ServiceAdapterSend = "adapter.send"
+	ServiceAdapterSend = adapterops.SendRPC
 	// ServiceCoreAdapterDeliver 向 Core 交付实例事件与游标。
 	ServiceCoreAdapterDeliver = "core.adapter.deliver"
 	// ServiceCoreAdapterCursor 保存实例的接收游标。
@@ -41,7 +43,7 @@ const (
 const ServiceBusPublish = "core.bus.publish"
 
 // ServiceAdapterMediaRead 指定 Adapter 平台文件的分块读取服务。
-const ServiceAdapterMediaRead = "adapter.media.read"
+const ServiceAdapterMediaRead = adapterops.MediaReadRPC
 
 // ServiceMediaRead 指定 Core 媒体令牌的分块读取服务。
 const ServiceMediaRead = "core.media.read"
@@ -56,13 +58,13 @@ const ServiceToolList = "core.tool.list"
 const ServiceEdit = "core.edit"
 
 // ServiceAdapterEdit 向账号实例提交消息编辑。
-const ServiceAdapterEdit = "adapter.edit"
+const ServiceAdapterEdit = adapterops.EditRPC
 
 // ServiceDelete 指定 Core 的消息撤回服务。
 const ServiceDelete = "core.delete"
 
 // ServiceAdapterDelete 向账号实例提交消息撤回。
-const ServiceAdapterDelete = "adapter.delete"
+const ServiceAdapterDelete = adapterops.DeleteRPC
 
 // ServiceAction 指定 Core 的平台动作服务。
 const ServiceAction = "core.action"
@@ -74,7 +76,7 @@ const ServiceAdapterAction = "adapter.action"
 const ServiceMediaURL = "core.media.url"
 
 // ServiceAdapterCommandsSync 替换账号实例的命令菜单。
-const ServiceAdapterCommandsSync = "adapter.commands.sync"
+const ServiceAdapterCommandsSync = adapterops.SyncRPC
 
 // ServiceContinuationStart 登记父 Handler 成功结束后的延续调用。
 const ServiceContinuationStart = "core.continuation.start"
@@ -131,10 +133,13 @@ const ServiceProfileSetOverrides = "sdk.profile.set_overrides"
 const ServiceReadNodes = "core.message.read_nodes"
 
 // ServiceAdapterReadNodes 从指定 Adapter 实例查询合并转发。
-const ServiceAdapterReadNodes = "adapter.message.read_nodes"
+const ServiceAdapterReadNodes = adapterops.NodesRPC
 
 // ServiceAdapterCommandMenu 对指定菜单位置执行 set、get 或 delete。
-const ServiceAdapterCommandMenu = "adapter.command.menu"
+const ServiceAdapterCommandMenu = adapterops.MenuRPC
 
 // ServiceCommandMenu 提供受准入控制的手动菜单及同步状态入口。
 const ServiceCommandMenu = "core.command.menu"
+
+// ServiceAdapterOperations 查询实例当前实现的标准接口与平台动作。
+const ServiceAdapterOperations = "adapter.operations"

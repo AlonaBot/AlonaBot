@@ -452,7 +452,7 @@ func developmentSources(dir, dataDir string) (map[string]string, error) {
 		return nil, err
 	}
 	for name := range files {
-		keep := strings.HasSuffix(name, ".go") || name == "go.mod" || name == "go.sum" || name == "plugin.yaml" || name == "config_schema.json" || name == "adapter_config_schema.json" || strings.HasPrefix(name, "i18n/")
+		keep := strings.HasSuffix(name, ".go") || name == "go.mod" || name == "go.sum" || name == "plugin.yaml" || name == "plugin_config_schema.json" || name == "config_schema.json" || name == "adapter_config_schema.json" || strings.HasPrefix(name, "i18n/")
 		for _, pattern := range embeds {
 			for path := name; path != "."; path = filepath.ToSlash(filepath.Dir(path)) {
 				matched, err := filepath.Match(pattern, path)

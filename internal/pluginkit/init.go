@@ -73,7 +73,7 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	switch role {
 	case "plugin", "agent":
 		files["plugin.go"] = []byte(pluginTemplate)
-		files["config_schema.json"] = []byte("{}\n")
+		files["plugin_config_schema.json"] = []byte("{}\n")
 	case "adapter":
 		files["adapter.go"] = []byte(fmt.Sprintf(adapterTemplate, adapterID))
 		files["adapter_config_schema.json"] = []byte("{}\n")

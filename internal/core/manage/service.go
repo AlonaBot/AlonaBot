@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
+	"github.com/AlonaBot/AlonaBot/contracts/debugapi"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -31,14 +32,19 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
+	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
 // Options 绑定同一个 Core 的持久状态与运行登记。
 type Options struct {
-	NotifyProfileOverrides func(ctx context.Context, pluginID string) error              // 只通知当前在线 Session，完整替换有效集合。
-	Logs                   *logging.Output                                               // 与 Core 共用的输出、缓冲与级别表。
-	Stopping               <-chan struct{}                                               // Core 开始停机时关闭，在 HTTP Shutdown 等待之前结束日志流。
-	NotifyLogLevel         func(ctx context.Context, id string, level pb.LogLevel) error // 仅通知当前 Activated Session。
+	DebugEvent             func(context.Context, *pb.Event) (debugapi.EventResult, error)                // 管理认证后的标准事件注入及观察。
+	DebugCall              router.ServiceFunc                                                            // 管理认证后的调用复用 Core 固定服务。
+	DebugRelease           func(router.Caller)                                                           // 调用结束时回收消息关联与媒体授权。
+	DebugMenu              func(context.Context, adapter.Instance, *pb.CommandMenuRequest) wire.Response // 复用实例菜单的串行执行入口。
+	NotifyProfileOverrides func(ctx context.Context, pluginID string) error                              // 只通知当前在线 Session，完整替换有效集合。
+	Logs                   *logging.Output                                                               // 与 Core 共用的输出、缓冲与级别表。
+	Stopping               <-chan struct{}                                                               // Core 开始停机时关闭，在 HTTP Shutdown 等待之前结束日志流。
+	NotifyLogLevel         func(ctx context.Context, id string, level pb.LogLevel) error                 // 仅通知当前 Activated Session。
 	Store                  *state.Store
 	SleepPolicy            func(ctx context.Context, in state.Install) (SleepPolicy, error) // 只读查询；使用休眠策略端点时由 Core 注入。
 	Settings               *settings.File

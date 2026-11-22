@@ -130,7 +130,7 @@ func (s Directory) load(ctx context.Context, opts Options) (result snapshot, err
 		if instance && c.Source == "dev" {
 			return nil, nil // 开发声明由运行 Core 持有；离线由 maskAdapter 完整遮盖实例值。
 		}
-		name := "config_schema.json"
+		name := "plugin_config_schema.json"
 		if instance {
 			name = "adapter_config_schema.json"
 		}
@@ -140,6 +140,11 @@ func (s Directory) load(ctx context.Context, opts Options) (result snapshot, err
 			return nil, fmt.Errorf("invalid package digest for %s", c.ID)
 		}
 		path := filepath.Join(s.DataDir, "packages", c.ID, c.Version+"-"+digest[:digestPrefix], name)
+		if _, err := os.Lstat(filepath.Join(filepath.Dir(path), "config_schema.json")); err == nil {
+			return nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", c.ID)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
 		raw, err := os.ReadFile(path)
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil // 没有配置声明的组件仍可能有 Active 配置。

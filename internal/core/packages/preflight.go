@@ -138,6 +138,11 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	m := parsed.Manifest
+	if _, err := os.Lstat(filepath.Join(dir, "config_schema.json")); err == nil {
+		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", m.ID))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	switch {
 	case in.ID != "" && m.ID != in.ID:
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest plugin ID does not match the requested component")
@@ -185,7 +190,7 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 }
 
 func checkExampleImages(dir string) error {
-	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+	for _, schemaName := range []string{"plugin_config_schema.json", "adapter_config_schema.json"} {
 		raw, err := os.ReadFile(filepath.Join(dir, schemaName))
 		if errors.Is(err, os.ErrNotExist) {
 			continue

@@ -81,7 +81,7 @@ func scanProject(ctx context.Context, options generate.Options) (*projectScan, e
 	snapshot.generated = result
 	// 包资源与生成代码均采用同一份规范 schema。
 	if len(result.ConfigSchema) > 0 {
-		files["config_schema.json"] = result.ConfigSchema
+		files["plugin_config_schema.json"] = result.ConfigSchema
 	}
 	if raw, ok := files["adapter_config_schema.json"]; ok {
 		schema, problems := configschema.Parse(raw)
@@ -114,6 +114,11 @@ func webUIHasSource(ctx context.Context, options generate.Options) (bool, error)
 
 // projectResources 在工程文件系统边界检查打包资源，所有角色共用这份白名单。
 func projectResources(dir string, project *manifest.Manifest, process bool) (map[string][]byte, error) {
+	if _, err := os.Lstat(filepath.Join(dir, "config_schema.json")); err == nil {
+		return nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", project.ID)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	files := map[string][]byte{}
 	names := map[string]string{}
 	add := func(name string, info fs.FileInfo) error {
@@ -179,7 +184,7 @@ func projectResources(dir string, project *manifest.Manifest, process bool) (map
 				return nil, fmt.Errorf("adapter_config_schema.json:1:1: %w", err)
 			}
 		}
-		for _, name := range []string{"config_schema.json", "adapter_config_schema.json", "i18n"} {
+		for _, name := range []string{"plugin_config_schema.json", "adapter_config_schema.json", "i18n"} {
 			if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
 				continue
 			} else if err != nil {
@@ -208,7 +213,7 @@ func projectResources(dir string, project *manifest.Manifest, process bool) (map
 			return nil, err
 		}
 	}
-	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+	for _, schemaName := range []string{"plugin_config_schema.json", "adapter_config_schema.json"} {
 		raw, exists := files[schemaName]
 		if !exists {
 			continue

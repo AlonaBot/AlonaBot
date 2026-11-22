@@ -26,10 +26,21 @@ func (s *Store) PutAdapterCursor(ctx context.Context, pluginID, instanceID strin
 	if cursor == nil {
 		cursor = []byte{}
 	}
+	return s.recordAdapterEvent(ctx, pluginID, instanceID, cursor, chat, menu, membership, true)
+}
+
+// ObserveAdapterEvent 保存管理注入的聊天与菜单关系，保留真实 Adapter 接收游标。
+func (s *Store) ObserveAdapterEvent(ctx context.Context, pluginID, instanceID string, chat *Chat, menu *CommandMenuChat, membership *bool) error {
+	return s.recordAdapterEvent(ctx, pluginID, instanceID, nil, chat, menu, membership, false)
+}
+
+func (s *Store) recordAdapterEvent(ctx context.Context, pluginID, instanceID string, cursor []byte, chat *Chat, menu *CommandMenuChat, membership *bool, saveCursor bool) error {
 	now := time.Now().UTC()
 	return s.tx(ctx, func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.OnConflict{UpdateAll: true}).Create(&adapterCursor{InstanceID: instanceID, PluginID: pluginID, Cursor: cursor, UpdatedAt: now.UnixMilli()}).Error; err != nil {
-			return err
+		if saveCursor {
+			if err := tx.Clauses(clause.OnConflict{UpdateAll: true}).Create(&adapterCursor{InstanceID: instanceID, PluginID: pluginID, Cursor: cursor, UpdatedAt: now.UnixMilli()}).Error; err != nil {
+				return err
+			}
 		}
 		if chat != nil {
 			if err := putChat(tx, chat, now); err != nil {

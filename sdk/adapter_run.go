@@ -250,6 +250,8 @@ func adapterResponse(message proto.Message, safe *pb.ErrorInfo) wire.Response {
 
 func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Response {
 	switch in.Target {
+	case wire.ServiceAdapterOperations:
+		return r.operations(ctx, in)
 	case wire.ServiceAdapterInstanceStart:
 		request := &pb.AdapterInstanceStartRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
@@ -370,7 +372,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 				code = validate.PublicCode(pb.ErrorCode(public.Code))
 				message = public.Message
 			}
-			return dispatchError(code, adapterSafeError(errors.New(message), config))
+			return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, &pb.ErrorInfo{Code: code, SafeMessage: adapterSafeError(errors.New(message), config)})
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
 	case wire.ServiceAdapterCommandMenu:

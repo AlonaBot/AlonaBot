@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/debugapi"
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -91,6 +92,7 @@ type CommandPolicy interface {
 // Router 并发执行有界的事件链；每条链内按稳定次序调用候选。
 // mu 串行化接纳、出队和注册；链调用插件期间不持锁。
 type Router struct {
+	debugEvents    map[string]*debugObservation
 	dispatched     func(Dispatch)
 	dispatches     map[string]*dispatchState // 只在启用回调时分配，由 mu 保护。
 	preEvent       func(context.Context, *pb.Event) (*pb.EventPayload, bool, error)
@@ -393,6 +395,7 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		}
 		ctx := profile.WithView(r.ctx)
 		if failure := r.commandPolicyFailure(ctx, &candidate, ev); failure != nil {
+			r.recordDiagnostic(event.dispatch, candidate, nil, debugapi.PhaseAdmission, failure)
 			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_INTERNAL {
 				slog.Warn("event route admission failed", "plugin_id", candidate.pluginID, "route_id", candidate.route.GetRouteId(), "error", failure.GetSafeMessage())
 			}
@@ -449,7 +452,19 @@ func (r *Router) current(c candidate) bool {
 	return c.pluginSession != nil && r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
 }
 
-func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (wire.Response, error) {
+func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (response wire.Response, callErr error) {
+	phase := debugapi.PhaseAdmission
+	called := false
+	// 调用前失败保留独立诊断；实际 Call 的业务错误继续由 recordOutcome 记录。
+	defer func() {
+		if !called && callErr != nil {
+			failure := invocationError(callErr)
+			if phase == debugapi.PhaseArguments {
+				failure = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, SafeMessage: callErr.Error()}
+			}
+			r.recordDiagnostic(event.dispatch, *c, trace, phase, failure)
+		}
+	}()
 	// 1. 每次调用先重建可信字段，再在锁外为接收 Session 签发媒体。
 	event.invocation = nil
 	ev := event.rebuild()
@@ -521,6 +536,7 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 			// 参数错误的 usage 同样回复可信原消息，并保留到本条分发结束。
 			event.invocation = &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, RouteID: c.route.GetRouteId(), Event: proto.CloneOf(event.retained), DefaultTarget: proto.CloneOf(event.retained.GetTarget()), TraceID: trace}
 			event.finished = append(event.finished, event.invocation.Begin())
+			phase = debugapi.PhaseArguments
 			return wire.Response{}, fmt.Errorf("%w: %w", errCommandArguments, err)
 		}
 	}
@@ -565,7 +581,8 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 			finish()
 		}
 	}
-	response, err := c.plugin.Call(ctx, wire.Request{
+	called = true
+	response, err = c.plugin.Call(ctx, wire.Request{
 		Target: request.RouteId, TraceID: trace, Deadline: event.deadline,
 		Attach:  inv,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded},

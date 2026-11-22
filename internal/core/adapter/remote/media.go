@@ -71,13 +71,12 @@ func (entry *mediaInstance) ReadMedia(ctx context.Context, fileID string, offset
 	if err != nil {
 		return nil, 0, false, err
 	}
-	response, err := entry.session.Call(ctx, wire.Request{Target: wire.ServiceAdapterMediaRead, Payload: request})
-	if err != nil {
-		return nil, 0, false, err
-	}
+	response, callErr := entry.session.Call(ctx, wire.Request{Target: wire.ServiceAdapterMediaRead, Payload: request})
 	result := &pb.AdapterMediaReadResponse{}
-	if err := decode(response.Payload, result); err != nil {
-		return nil, 0, false, err
+	if response.Payload.SchemaID != "" {
+		if err := decode(response.Payload, result); err != nil {
+			return nil, 0, false, err
+		}
 	}
-	return result.Data, result.NextOffset, result.Eof, nil
+	return result.Data, result.NextOffset, result.Eof, callErr
 }

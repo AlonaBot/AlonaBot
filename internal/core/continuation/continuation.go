@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/clock"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -22,6 +23,7 @@ const schemaVersion = 1
 
 // Options 提供生效的延续调用限额、期限及 Router 的调用和事件准备入口。
 type Options struct {
+	Clock           clock.Clock   // nil 使用真实时钟；测试与 Scheduler 共用。
 	Max             int           // 每个 Session 已登记与正在运行的总数，取 CONTINUATION_MAX。
 	Timeout         time.Duration // 独立调用的期限，取 CONTINUATION_TIMEOUT。
 	Call            func(ctx context.Context, inv *router.Invocation, continuationOf uint64, deadline time.Time) (wire.Response, error)
@@ -60,6 +62,9 @@ var _ router.Continuations = (*Manager)(nil)
 
 // New 创建内存中的延续登记与等待表。
 func New(opt Options) *Manager {
+	if opt.Clock == nil {
+		opt.Clock = clock.Real{}
+	}
 	return &Manager{opt: opt, calls: make(map[*router.Invocation]*continuation), waits: make(map[waitKey]*waiter), delivering: make(map[*waiter]struct{})}
 }
 
@@ -156,9 +161,10 @@ func (m *Manager) run(inv *router.Invocation, call *continuation) {
 	if call.ctx.Err() != nil {
 		return
 	}
-	deadline := time.Now().Add(m.opt.Timeout)
-	ctx, cancel := context.WithDeadline(call.ctx, deadline)
+	deadline := m.opt.Clock.Now().Add(m.opt.Timeout)
+	ctx, cancel := clock.WithDeadline(call.ctx, m.opt.Clock, deadline)
 	defer cancel()
+	deadline, _ = ctx.Deadline()
 	result, err := m.opt.Call(ctx, inv, call.parentID, deadline)
 	// 日志只保留身份与错误码，插件参数和错误文本可能含业务数据。
 	if err != nil || result.Err != nil {
@@ -211,21 +217,22 @@ func (m *Manager) wait(ctx context.Context, caller router.Caller, in *wire.Inbou
 		}
 		defer release()
 	}
+	timer := m.opt.Clock.NewTimer(timeout)
+	defer timer.Stop()
 	m.waits[k] = w
 	if inv.OnWait != nil {
 		inv.OnWait()
 	}
 	m.mu.Unlock()
 	// 2. 超时、父调用取消和交付竞争；取得表项的一方负责交付唯一结果。
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
+
 	var expired wire.Response
 	select {
 	case result := <-w.result:
 		return result
 	case <-ctx.Done():
 		expired = failure(pb.ErrorCode_ERROR_CODE_CANCELLED, "wait request cancelled")
-	case <-timer.C:
+	case <-timer.C():
 		expired = failure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "wait timed out")
 	}
 	m.mu.Lock()

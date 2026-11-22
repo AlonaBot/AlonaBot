@@ -38,7 +38,7 @@ func (h *Harness) Click(from User, sent Sent, actionID string) Result {
 					chatType = message.ChatGroup
 				}
 				return h.deliverEvent(from, &message.Event{Type: "button.clicked", AdapterID: adapterID,
-					AdapterInstanceID: sent.Result.AdapterInstanceID, AccountID: AccountID, Session: sent.To, ChatType: chatType,
+					AdapterInstanceID: sent.Result.AdapterInstanceID, AccountID: h.instances[sent.Result.AdapterInstanceID].AccountID, Session: sent.To, ChatType: chatType,
 					Payload: &message.ButtonClickedPayload{Value: button.CoreToken, OriginPlatformMessageID: sent.Result.PrimaryPlatformMessageID}})
 			}
 		}

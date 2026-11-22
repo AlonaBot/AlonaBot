@@ -84,3 +84,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 2. 发布采用单归档上传和商店读取流程的 WebUI，再发布 Agent、Adapter、插件与模板的工作流变更。组件和模板使用新 Core CLI 打包前，先将 CLI/SDK 固定到已发布的精确版本。通过 CLI 与 WebUI 验证在线安装、更新、来源拒绝以及数据保留。
 3. 新 Core 和 WebUI 均验证通过后，逐个列出五个组件仓库的历史 Release 资产，仅删除 `release.json`、`release.json.sig`、`release.pub`。保留平台归档、源码、Release 正文和 tag。此步骤须在具备发布授权的会话中执行。
 4. 清理完成后逐仓核对资产只含平台归档，并重新验证公开在线安装。旧 Core 在线安装及更新需先升级；已安装组件和用户数据继续保留。整合发行仍按上文固定组件版本和构建镜像。
+
+## Schema 文件名切换的发行准备
+
+本轮插件与 Agent 改用 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。先发行包含严格旧名检查的新 SDK/Core，再让五个官方组件固定该真实版本并重新构建。Agent 的 Schema、WebUI 的 Schema fixtures 和各组件双语升级说明须同步。新 SDK 发布前，`test`、`build`、`check` 可通过临时 `go.work` 将组件接到本地 Core。`pack` 会使用临时 `-modfile`；本地打包时复制组件源码到临时目录，在副本的 `go.mod` 添加指向本地 Core 的 `replace`，再执行 `env GOWORK=off alonabot pack <临时副本目录>`。组件源码保留已有真实 module 版本。组件发布后再更新 `components.lock.json`，整合归档沿用公开资产构建流程。用户先停用旧组件、升级 Core，再经管理端更新新包并启用；配置值和数据保留。

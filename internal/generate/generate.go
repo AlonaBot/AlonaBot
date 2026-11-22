@@ -3,7 +3,7 @@
 // 命令、文本匹配与事件登记在插件对象上。
 // 入口包按调用方 module 的构建列表解析，支持模块缓存中的第三方组件。
 // 扫描遵守 GOOS/GOARCH 和 build tags，仅收集入口所属 module，排除 vendor 与测试文件。
-// 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对。
+// 配置从 plugin_config_schema.json 检查并嵌入，翻译覆盖按声明核对。
 // 工程 plugin.yaml 声明 Adapter 时按入口包登记身份与实例 Schema；旧实例声明目录仍只检查。
 // JSON Service 类型经 go/types 检查生成 Schema。
 // 构建入口的 i18n/*.json 按声明检查并将原文嵌入生成代码。
@@ -55,7 +55,7 @@ type Result struct {
 	PluginConstructor string              // 插件的导入路径.New；Adapter 或只有实例声明时为空。
 	AdapterType       string              // Adapter 的导入路径.具体类型名；插件或只有实例声明时为空。
 	HTTP              bool                // 入口工程在所选目标下登记 HTTP 路由；构建据此向包内 required_capabilities 写入 http_listener。
-	ConfigSchema      []byte              // config_schema.json 的规范 JSON；没有该文件时为 nil
+	ConfigSchema      []byte              // plugin_config_schema.json 的规范 JSON；没有该文件时为 nil
 	Source            []byte              // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
 	Generated         generated.Resources // 本次扫描取得的全部只读资源。
 	Diagnostics       []Diagnostic

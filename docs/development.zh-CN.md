@@ -233,6 +233,27 @@ examples/devbot/bin/devbot -data-dir ./data
 
 库模式公开入口由根目录 `alonabot_test.go` 的 `TestLibraryLifecycle` 验证；装配、内部服务、候选与 WebUI 的 9 个集成测试文件位于 `internal/app/`。开发 CLI 与热部署测试位于 `tests/e2e/`，覆盖经 `internal/app` 运行的独立进程开发组件与单组件重启。
 
+## 调试运行中的 Adapter
+
+先列出实例，再读取该实例当前支持的操作与 Schema，最后提交调用：
+
+```fish
+alonabot adapter instance list --data-dir ./data
+alonabot adapter actions main --data-dir ./data
+alonabot adapter actions main sdk/message.send --data-dir ./data
+alonabot adapter call main sdk/message.send --version 1 --to '{"chatId":"private:alice"}' --params '{"chain":{"segments":[{"text":{"text":"hello"}}]}}' --data-dir ./data
+```
+
+`--params-file params.json` 从文件读取完整参数，与 `--params` 互斥。`--to` 使用 Target 的 protobuf JSON，可提供 `chatId` 和 `threadId`；Core 按实例绑定 Adapter 与账号。命令输出 JSON；业务失败以非零状态退出，stdout 仍保留 `payload`、`error` 与 `trace_id`，可检查部分成功的回执。管理连接沿用 `--data-dir`、`--admin-url` 与 `admin_token`。
+
+SDK 在持有真实 Instance 的进程里识别 Send、Editor、Deleter、MediaSource、NodesReader、CommandSynchronizer、CommandMenuController 和 ActionExecutor，并结合实例能力提供目录。标准名称为 `sdk/message.send`、`sdk/message.edit`、`sdk/message.delete`、`sdk/media.read`、`sdk/message.read_nodes`、`sdk/commands.sync`、`sdk/command.menu`；平台动作沿用 Descriptor.Actions 的名称、版本、scope 与参数、结果 Schema。参数采用目录展示的 protobuf JSON；平台动作直接接收自身 JSON 参数。停止、重启和实例替换后重新查询目录。
+
+公共客户端 `sdk/debug.Client{URL, Token, Host, HTTP}` 提供 `Instances(ctx)`、`Operations(ctx, instance, name)` 与 `Invoke(ctx, debug.Call{Instance, Name, Version, To, Params})`。`Invoke` 遇到业务错误时同时返回完整 Result 和 error；请求 context 传递取消，释放客户端保持 Core 运行。
+
+目录端点为 `GET /api/v1/debug/adapters/{instance}/operations`，调用端点为 `POST /api/v1/debug/adapters/call`。两者使用现有管理认证。Send/Edit/Delete、节点和平台动作复用 Core 的业务准入；发送经过 Hook 与媒体授权，菜单沿用实例 worker 和 SDK 菜单锁。平台媒体读取使用 `fileId`、`offset`、`length`，响应 `data` 为 base64。实际平台操作仍会产生真实副作用。
+
+验证入口为 `go test -race ./internal/core/adapter/remote -run '^TestDebugAdapter$'`，通过真实 SDK 子进程与管理认证验证目录、调用、部分成功、媒体分块和实例替换。
+
 ## Adapter 的 HTTP 路由
 
 Adapter 在 `adapter.Descriptor.HTTP` 中用 `[]adapter.HTTPRoute` 声明路由，对外位于统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。`Auth` 的零值要求 Core 会话；公开路由写 `Auth: adapter.AuthPlatformToken`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
@@ -336,7 +357,7 @@ func TestPing(t *testing.T) {
 
 `RequireReply(t, want)` 先检查每个 Handler Outcome 的错误，再要求恰好一次发送且 `Sent.Text()` 为 want；失败时报告插件与路由身份或实际发送。回复同时包含图片等片段时，可继续检查 `result.Sends[0].Chain`。
 
-直接运行 `go test ./...`。plugintest 按被测插件的入口包自动扫描工程身份与资源，沿用测试二进制的 GOOS、GOARCH 与 build tags；同一入口包在一个进程中只扫描一次。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；同一 Harness 的注入与读取按顺序调用。
+直接运行 `go test ./...`。plugintest 按被测插件的入口包自动扫描工程身份与资源，沿用测试二进制的 GOOS、GOARCH 与 build tags；同一入口包在一个进程中只扫描一次。每次 Start 创建独立的临时目录、配置和 `dev.sqlite`，在测试清理时停止组件；Submit 支持同一 Harness 的并行注入，结果按 trace 归属。
 
 `Message(chat, user, message.Chain{...})` 可以注入混合片段，`Sent.Text()` 按顺序提取文本。`Sent.To`、`Chain`、`Result` 保留目标、消息链与回执；`Op` 区分 send/edit，`Edited` 保存编辑句柄。`Event` 注入通过 `Adapter` 选项声明的扩展事件。
 
@@ -400,7 +421,7 @@ answer := h.Text(chat, alice, "answer")
 
 命中等待后的发送和最终错误归入新注入，直到延续调用结束或再次等待；其他用户或会话继续正常分发。注入返回由 Core 的完成或等待通知决定。
 
-**后台发送。** `h.Background()` 按 Adapter 接受顺序返回并清空尚未交付的发送和编辑。注入开始到完成通知之间的发送随 `Result.Sends` 交付，区间外的留给 Background，每条记录消费一次。测试用自己的 channel 控制后台工作，并等待 Send 返回后读取：
+**后台发送。** `h.Background()` 按 Adapter 完成顺序消费未归属事件或显式触发任务的发送和编辑。事件与显式任务的发送随各自的 `Result.Sends` 交付，每条记录消费一次。测试用自己的 channel 控制后台工作，并等待 Send 返回后读取：
 
 ```go
 send, done := make(chan struct{}), make(chan error, 1)
@@ -495,6 +516,151 @@ plugintest.LLM(func(context.Context, llm.Request) (llm.Response, error) {
 ```sh
 go test -race -count=2 ./plugintest/...
 ```
+
+### 媒体、动作与完整记录
+
+在插件中用公共 `sdk/media` 读取入站内容，再上传或转发；下面的命令可放进现有 `New()`（增加 `bytes`、`io`、`sdk/media` 导入）：
+
+```go
+p.FullMatch("copy").Handle(func(c *sdk.Context) error {
+    source := c.Event().Payload.(*message.CreatedPayload).Chain[1].(message.FileSegment).Source
+    reader, err := media.Open(c, source)
+    if err != nil { return err }
+    data, readErr := io.ReadAll(reader)
+    closeErr := reader.Close()
+    if readErr != nil { return readErr }
+    if closeErr != nil { return closeErr }
+    ref, err := media.Upload(c, bytes.NewReader(data), "image/png")
+    if err != nil { return err }
+    _, err = c.Send(message.Chain{message.Text("copied"), message.Image(ref.Source()), message.File(ref.Source(), "copy.png")})
+    return err
+})
+```
+
+测试中生成一个小图片，注入其平台文件 fixture，再检查 Adapter 实际取得的字节与消息顺序（增加 `image`、`image/png`）：
+
+```go
+var pixel bytes.Buffer
+if err := png.Encode(&pixel, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil { t.Fatal(err) }
+h := plugintest.Start(t, plugintest.Plugin(New()))
+source := h.Fixture(plugintest.InstanceID, "pixel", plugintest.Media{Data: pixel.Bytes(), MIME: "image/png"})
+alice := plugintest.User{ID: "alice"}
+result := h.Message(plugintest.Private(alice.ID), alice,
+    message.Chain{message.Text("copy"), message.File(source, "input.png")})
+if len(result.Sends) != 1 { t.Fatalf("sends = %+v", result.Sends) }
+sent := result.Sends[0]
+if len(sent.Chain) != 3 || len(sent.Media) != 2 { t.Fatalf("send = %+v", sent) }
+for _, output := range sent.Media {
+    _, format, err := output.Image()
+    if err != nil || format != "png" || output.MIME != "image/png" || !bytes.Equal(output.Data, pixel.Bytes()) {
+        t.Fatalf("media = %+v, format = %s, error = %v", output, format, err)
+    }
+}
+if sent.Media[1].Filename != "copy.png" { t.Fatalf("filename = %q", sent.Media[1].Filename) }
+```
+
+fixture 由真实 Adapter 媒体 RPC 取件；插件 `media.Open`、`media.Upload` 和出站 Adapter `ReadMedia` 使用同一 Core 的授权、存储和令牌校验。`Sent.Media` 按消息链遍历顺序保存实际内容；HTTPS 来源保留 URL，测试中的字节断言使用 fixture 或上传的受管媒体。
+
+`Operations(Behavior{...})` 设置缺省实例的 Send/Edit/Action/Delete/Nodes/Menu 回调；多账号分别放在 `InstanceConfig.Behavior`。Send/Edit 收到的 `Call.SendResult` 已含缺省成功回执，可调整整体状态、逐段状态及错误后返回：
+
+```go
+behavior := plugintest.Behavior{
+    Send: func(ctx context.Context, call plugintest.Call) (*message.SendResult, *errcode.Error) {
+        receipt := call.SendResult
+        return receipt, errcode.Unavailable.New("platform accepted the message with a warning")
+    },
+    Action: func(ctx context.Context, call plugintest.Call) (json.RawMessage, *errcode.Error) {
+        return call.Params, errcode.Unavailable.New("platform returned a warning")
+    },
+}
+h := plugintest.Start(t, plugintest.Plugin(New()), plugintest.Operations(behavior))
+```
+
+Send/Edit 可返回 Accepted、Rejected、Partial、Unknown 及结果和错误同时存在的任意合法组合。平台 Action 的参数、结果遵循 `Adapter(..., adapter.Action[P,R](...))` 或实例 Descriptor 的原声明；上述 Action 回显适用于参数和结果 Schema 相同的动作。已声明 Action 未配置回调时返回 `UNSUPPORTED`。Delete 缺省逐项接受，Nodes 缺省返回请求中的条目；平台 ID 查询可用 Nodes 回调返回展开节点。菜单缺省按 scope/language 保存 set/get/delete 状态，支持传统 SyncCommands。
+
+`h.Calls()` 保留全部已完成的 Adapter 操作；`h.WaitCalls(ctx, count)` 等待数量。每条 Call 含操作、Adapter/实例/账号、目标、参数、实际结果、错误和 TraceID。一次事件的 `Result.Calls` 与 `Sends` 按 trace 归属。`Result.Outcomes` 保存实际调用 Handler 的结果；调用前的参数解析与权限等准入失败由 `Diagnostics` 保存，包含 Phase、PluginID、RouteID、TraceID 和 Err。`RequireReply` 继续检查 Handler 结果和回复，可正常断言参数错误的 usage 回复；真实 Handler 返回的 `INVALID_ARGUMENT` 仍在 Outcomes 中。媒体、菜单或动作直接联调也可用 `h.DebugClient().Invoke`，标准名称见上文的 Adapter 目录。
+
+### 多账号、并行事件与可推进时钟
+
+```go
+p := New()
+h := plugintest.Start(t, plugintest.Plugin(p),
+    plugintest.Instance(plugintest.InstanceConfig{AdapterID: "first", InstanceID: "one", AccountID: "bot1"}),
+    plugintest.Instance(plugintest.InstanceConfig{AdapterID: "first", InstanceID: "two", AccountID: "bot2"}),
+    plugintest.Instance(plugintest.InstanceConfig{AdapterID: "second", InstanceID: "three", AccountID: "bot3"}),
+    plugintest.DefaultInstance("first", "one"),
+    plugintest.DefaultInstance("second", "three"),
+    plugintest.AllowedInstances(p, "one", "three"))
+alice := plugintest.User{ID: "alice"}
+first := h.Submit(plugintest.Private(alice.ID).OnInstance("one"), alice, message.Text("/ping"))
+second := h.Submit(plugintest.Private("bob").OnInstance("two"), plugintest.User{ID: "bob"}, message.Text("/ping"))
+for _, pending := range []*plugintest.Pending{first, second} {
+    result, err := pending.Wait(t.Context())
+    if err != nil { t.Fatal(err) }
+    result.RequireReply(t, "pong")
+}
+```
+
+显式 Instance 列表替换缺省测试实例；入站用 `OnInstance` 选择账号，`DefaultInstance` 选择显式发信的默认账号，`AdminOn(adapterID, userID)` 指定平台管理员。`Descriptor.Capabilities` 提供平台声明全集，实例 `Capabilities` 选择实际启用的名称；nil 沿用 Harness 的能力选项，显式空列表表示无可选能力。同平台不同账号可共用 Descriptor 并分别收紧能力。未配置 Instance 时保留原单实例选项。`Submit` 立即提交，`Wait(ctx)` 可取消等待并再次调用；事件继续执行，最终 `TraceIDs`、Sends 和 Calls 关联自己的事件。`WaitBackground(ctx, count)` 等待并消费后台输出，超时等待结束后的回复也可从后台读取。
+
+```go
+clock := plugintest.NewClock(time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC))
+t.Cleanup(clock.Close)
+p := New()
+p.Every("testtick", time.Second).Handle(func(c *sdk.Context) error {
+    _, err := c.SendTo("plugintest:private:alice", message.Text("tick"))
+    return err
+})
+h := plugintest.Start(t, plugintest.Plugin(p), plugintest.WithClock(clock))
+clock.Advance(time.Second)
+records, err := h.WaitBackground(t.Context(), 1)
+if err != nil { t.Fatal(err) }
+if records[0].Text() != "tick" { t.Fatalf("records = %+v", records) }
+```
+
+Scheduler 的自然定时任务、动态 `task.At/Every`、continuation 期限与 `c.Wait` 共用此时钟。测试创建绝对任务时用 `clock.Now()` 构造时间；进入 `Result.Waiting` 后再 Advance 可触发等待超时。Advance 交付到期定时器，异步 RPC 的完成使用 Wait/WaitBackground 等待。任务取消与 Harness.Close 会注销相应定时器；生产继续使用真实时钟，Session 协议期限使用真实绝对时间并接收逻辑时钟的取消。
+
+### Connect 连接运行中的 Core
+
+先在 Core 中启用待测插件和真实 Adapter 实例，准备本机 `admin_token`。下面的测试使用已有 `/ping` 命令；修改 URL 和实例身份以匹配运行配置（导入 `context`、`os`、`strings`、`sdk/debug`、`plugintest`）：
+
+```go
+func TestRunningCore(t *testing.T) {
+    token, err := os.ReadFile("../data/admin_token")
+    if err != nil { t.Fatal(err) }
+    client := &debug.Client{URL: "http://127.0.0.1:7650", Token: strings.TrimSpace(string(token))}
+    connection, err := plugintest.Connect(context.Background(), client,
+        plugintest.InstanceConfig{AdapterID: "telegram", InstanceID: "main", AccountID: "123456"})
+    if err != nil { t.Fatal(err) }
+    defer connection.Close()
+    alice := plugintest.User{ID: "987654"}
+    result, err := connection.Text(t.Context(), plugintest.Private(alice.ID), alice, "/ping")
+    if err != nil { t.Fatal(err) }
+    result.RequireReply(t, "pong")
+    if len(result.Outcomes) == 0 || len(result.TraceIDs) == 0 { t.Fatalf("dispatch = %+v", result) }
+}
+```
+
+会话 ID 使用对应 Adapter 的实际格式；Telegram 的 `private:<userID>` 可通过上例构造。`Connection.Event(ctx, event)` 注入完整标准 SDK 事件；`Message` 发送混合链，`Submit` 配合 Pending.Wait 支持异步联调。`connection.Client.Operations/Invoke` 可发现并执行该真实 Adapter 的动作。
+
+客户端经 `POST /api/v1/debug/events` 的管理认证注入标准 Event，Core 重新绑定来源身份、展开权限，执行正常命令匹配、参数解析与路由。结果保留实际 RouteID、TraceIDs、回复及同时存在的回执和错误；Outcome、Diagnostic 与回复各自携带所属 TraceID。调试事件及 Adapter 调用在管理元数据写锁和 GC 临界区外等待，独立会话可并行执行；元数据写入仍遵循原有锁与回收顺序。请求取消释放观察器，Close 只结束本客户端资源。既有 Core、Adapter 与插件继续运行。Core 的真实接收游标保持原值。
+
+参数与权限诊断在本地 Harness、Connect 和 `sdk/debug.Client.Inject` 中使用相同字段。例如已有 `echo <text>` 命令缺少参数时：
+
+```go
+invalid, err := connection.Text(t.Context(), chat, alice, "/echo")
+if err != nil { t.Fatal(err) }
+invalid.RequireReply(t, "Usage: /echo <text>")
+if len(invalid.Outcomes) != 0 || len(invalid.Diagnostics) != 1 { t.Fatalf("dispatch = %+v", invalid) }
+diagnostic := invalid.Diagnostics[0]
+if diagnostic.Phase != plugintest.PhaseArguments || errcode.Of(diagnostic.Err) != errcode.InvalidArgument {
+    t.Fatalf("diagnostic = %+v", diagnostic)
+}
+```
+
+示例需导入 `sdk/errcode`；`chat`、`alice` 为已配置实例的会话与用户。权限或生命周期准入失败的 Phase 为 `plugintest.PhaseAdmission`，并保留实际错误码；使用 `sdk/debug` 时对应常量为 `debug.PhaseArguments` 与 `debug.PhaseAdmission`。
+
+同机集成测试 [plugintest/debug_test.go](../plugintest/debug_test.go) 使用真实 Core/Session、认证 HTTP 和 loopback 平台验证上述链路；真实平台联调需要相应账号凭据和实际聊天目标。
 
 ## 协议与会话行为
 

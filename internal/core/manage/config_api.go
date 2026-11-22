@@ -136,7 +136,12 @@ func (s *Service) configResources(ctx context.Context, id string) (json.RawMessa
 		}
 	} else {
 		directory := s.directory(in)
-		raw, err = os.ReadFile(filepath.Join(directory, "config_schema.json"))
+		if _, err := os.Lstat(filepath.Join(directory, "config_schema.json")); err == nil {
+			return nil, nil, nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", in.PluginID)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, nil, nil, err
+		}
+		raw, err = os.ReadFile(filepath.Join(directory, "plugin_config_schema.json"))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, nil, nil, err
 		}

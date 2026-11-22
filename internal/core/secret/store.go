@@ -59,7 +59,7 @@ func (s *Store) Resolve(ctx context.Context, pluginID string, snapshot []byte) (
 	return json.Marshal(result)
 }
 
-// Extract 按 config_schema.json 与 keptPaths 抽取秘密值，保留未知字段；同位置的明文未变时复用原引用。
+// Extract 按 plugin_config_schema.json 与 keptPaths 抽取秘密值，保留未知字段；同位置的明文未变时复用原引用。
 // 空串不生成引用，新值创建独立版本；失败时产生的孤立版本由调用方在安全时机通过 Collect 清理。
 func (s *Store) Extract(ctx context.Context, pluginID string, schema, candidate, previous []byte, keptPaths []string) ([]byte, []string, error) {
 	// 1. 解码完整对象，合并手写 schema 与旧快照保留的秘密路径。

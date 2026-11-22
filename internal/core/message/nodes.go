@@ -52,7 +52,7 @@ func (s *Service) ReadNodes(ctx context.Context, caller router.Caller, in *wire.
 	if safe := s.policy.CheckSend(ctx, caller.PluginID, invocation, target); safe != nil {
 		return wire.Response{Err: safe}
 	}
-	instance, ok := s.adapters.Get(target.AdapterInstanceId)
+	instance, ok := s.adapters.Resolve(ctx, target.AdapterInstanceId)
 	if !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}

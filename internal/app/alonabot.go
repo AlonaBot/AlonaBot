@@ -38,11 +38,13 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/policy"
+	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
+	"github.com/AlonaBot/AlonaBot/internal/inproc"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
@@ -254,6 +256,13 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err := adminauth.FirstToken(ctx, store, dir); err != nil {
 		return fail(err)
 	}
+	if harness := inproc.HarnessFor(dir); harness != nil {
+		token, err := os.ReadFile(filepath.Join(dir, adminauth.FirstTokenFile))
+		if err != nil {
+			return fail(err)
+		}
+		harness.DebugToken = strings.TrimSpace(string(token))
+	}
 	slog.Info("admin credentials", "url", configuration.BaseURL, "path", filepath.Join(dir, adminauth.FirstTokenFile))
 	if configuration.Proxy != "" {
 		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
@@ -334,7 +343,12 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return fail(err)
 	}
-	management := manage.New(manage.Options{NotifyProfileOverrides: func(ctx context.Context, id string) error {
+	management := manage.New(manage.Options{DebugEvent: c.assembly.router.DebugEvent, DebugCall: func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+		return c.assembly.mux.For(caller)(ctx, in)
+	}, DebugRelease: func(caller router.Caller) {
+		c.assembly.messages.Release(caller)
+		c.assembly.media.ReleaseSession(caller.SessionKey)
+	}, DebugMenu: c.assembly.router.DebugCommandMenu, NotifyProfileOverrides: func(ctx context.Context, id string) error {
 		return c.operation(ctx, func(ctx context.Context) error { return c.assembly.notifyProfileOverrides(ctx, id) })
 	}, Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
@@ -480,6 +494,11 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			http.Error(w, "Core is stopping", http.StatusServiceUnavailable)
 			return
 		}
+		// 调试调用沿业务链等待平台或 Handler，使用各自生命周期锁；元数据写锁与回收只覆盖管理变更。
+		if r.Method == http.MethodPost && (r.URL.Path == "/api/v1/debug/events" || r.URL.Path == "/api/v1/debug/adapters/call") {
+			managementHandler.ServeHTTP(w, r)
+			return
+		}
 		managementWrites.Lock()
 		defer managementWrites.Unlock()
 		managementHandler.ServeHTTP(w, r)
@@ -516,6 +535,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	listener, err := net.Listen("tcp", configuration.Listen)
 	if err != nil {
 		return fail(fmt.Errorf("listen HTTP: %w", err))
+	}
+	if harness := inproc.HarnessFor(dir); harness != nil {
+		harness.DebugURL = "http://" + listener.Addr().String()
+		harness.DebugHost = baseURL.Host
 	}
 	c.http = &http.Server{Addr: listener.Addr().String(), Handler: publicHost, ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError)}
 	c.httpErrors = make(chan error, 1)

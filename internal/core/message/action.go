@@ -62,7 +62,7 @@ func (s *Service) Action(ctx context.Context, caller router.Caller, in *wire.Inb
 		return wire.Response{Err: safe}
 	}
 	// 3. 实例启用与账号、Adapter 绑定先于声明检查和任何平台调用。
-	instance, ok := s.adapters.Get(target.GetAdapterInstanceId())
+	instance, ok := s.adapters.Resolve(ctx, target.GetAdapterInstanceId())
 	if !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}

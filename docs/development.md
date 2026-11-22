@@ -233,6 +233,27 @@ After library source/resource edits, rebuild with `alonabot build` and restart. 
 
 Root `alonabot_test.go`'s `TestLibraryLifecycle` checks public library entry points; nine `internal/app/` integration-test files cover assembly/internal services/candidates/WebUI. Development CLI/hot-deployment tests cover separate-process components through `internal/app` and individual restarts; CLI end-to-end tests are in `tests/e2e/`.
 
+## Debug a running Adapter
+
+List instances, inspect the live operation schemas, then submit a call:
+
+```fish
+alonabot adapter instance list --data-dir ./data
+alonabot adapter actions main --data-dir ./data
+alonabot adapter actions main sdk/message.send --data-dir ./data
+alonabot adapter call main sdk/message.send --version 1 --to '{"chatId":"private:alice"}' --params '{"chain":{"segments":[{"text":{"text":"hello"}}]}}' --data-dir ./data
+```
+
+`--params-file params.json` reads complete parameters from a file and is mutually exclusive with `--params`. `--to` uses Target protobuf JSON, including `chatId` and optional `threadId`; Core binds the Adapter and account from the selected instance. Output is JSON. Business failures exit nonzero while stdout preserves `payload`, `error` and `trace_id`, including partial receipts. Connections use the existing `--data-dir`, `--admin-url` and `admin_token`.
+
+The SDK discovers interfaces on the real running Instance and combines them with declared capabilities: Send, Editor, Deleter, MediaSource, NodesReader, CommandSynchronizer, CommandMenuController and ActionExecutor. Standard names are `sdk/message.send`, `sdk/message.edit`, `sdk/message.delete`, `sdk/media.read`, `sdk/message.read_nodes`, `sdk/commands.sync` and `sdk/command.menu`. Platform actions retain Descriptor.Actions names, versions, scopes and parameter/result schemas. Standard parameters use the protobuf JSON shown in the catalog; platform actions accept their own JSON parameters. Query again after stopping, restarting or replacing an instance.
+
+The public `sdk/debug.Client{URL, Token, Host, HTTP}` exposes `Instances(ctx)`, `Operations(ctx, instance, name)` and `Invoke(ctx, debug.Call{Instance, Name, Version, To, Params})`. Invoke returns both a complete Result and an error for business failures. Request contexts carry cancellation; releasing the client keeps Core running.
+
+Endpoints are `GET /api/v1/debug/adapters/{instance}/operations` and `POST /api/v1/debug/adapters/call`, protected by existing management authentication. Send/Edit/Delete, node reads and platform actions reuse Core admission. Sending retains hooks and media authorization; menus share the instance worker and SDK menu lock. Platform media reads accept `fileId`, `offset`, `length` and return base64 `data`. Calls perform real platform operations.
+
+Run `go test -race ./internal/core/adapter/remote -run '^TestDebugAdapter$'` to exercise the real SDK subprocess, authentication, catalog, calls, partial results, media chunks and instance replacement.
+
 ## Adapter HTTP routes
 
 Adapters declare `[]adapter.HTTPRoute` in `adapter.Descriptor.HTTP` under `/plugins/<Adapter package ID>/...` on the shared port, such as OneBot 11 reverse WebSocket. Private routes need Core sessions; non-GET/HEAD Cookie requests need CSRF/Origin. Zero `Auth` requires Core session. Public `Auth: adapter.AuthPlatformToken` preserves incoming `Authorization` for Adapter platform-credential validation/platform error responses. Plugin routes always strip `Authorization`. Both strip incoming Cookie/CSRF/Forwarded/X-Forwarded-* and inject an internal proxy credential, constant-time checked/removed by SDK before user Handler. WebSocket Upgrade forwards bidirectionally without normal request deadlines; Core closes it on route withdrawal/Session invalidation.
@@ -336,7 +357,7 @@ func TestPing(t *testing.T) {
 
 `RequireReply(t, want)` checks every Handler Outcome error, then requires exactly one send with `Sent.Text()` equal to want, reporting plugin/route identity or actual sends on failure. For image/mixed replies also inspect `result.Sends[0].Chain`.
 
-Run `go test ./...` directly. plugintest scans identity/resources from the plugin entry package, using test-binary GOOS/GOARCH/build tags, once per entry package/process. Each Start creates independent temporary directory/configuration/`dev.sqlite`, stopping components at cleanup. Call injection/reads sequentially within one Harness.
+Run `go test ./...` directly. plugintest scans identity/resources from the plugin entry package, using test-binary GOOS/GOARCH/build tags, once per entry package/process. Each Start creates independent temporary directory/configuration/`dev.sqlite`, stopping components at cleanup. Submit supports concurrent injection on one Harness with results assigned by trace.
 
 `Message(chat, user, message.Chain{...})` injects mixed segments; `Sent.Text()` extracts ordered text. `Sent.To`, `Chain`, `Result` preserve target/chain/receipt; `Op` distinguishes send/edit, `Edited` holds edit handles. `Event` injects extension events declared through `Adapter`.
 
@@ -400,7 +421,7 @@ answer := h.Text(chat, alice, "answer")
 
 Sends/final errors after matching the wait belong to the new injection until continuation completes/waits again. Other users/chats dispatch normally. Core's completion/wait notification determines injection return.
 
-**Background sends.** `h.Background()` returns/clears undelivered sends/edits in Adapter acceptance order. Sends between injection start/completion notification arrive in `Result.Sends`; others remain for Background, consumed once. Control background timing through your own channels and read after Send returns:
+**Background sends.** `h.Background()` consumes sends/edits without event or explicit-task ownership in Adapter completion order. Event and explicit-task sends arrive in their own `Result.Sends`; each record is consumed once. Control background timing through your own channels and read after Send returns:
 
 ```go
 send, done := make(chan struct{}), make(chan error, 1)
@@ -495,6 +516,151 @@ See full integration test [plugintest/llm_test.go](../plugintest/llm_test.go). R
 ```sh
 go test -race -count=2 ./plugintest/...
 ```
+
+### Media, actions and complete records
+
+Use public `sdk/media` to read incoming content, then upload or forward it. Add this command to your existing `New()` (import `bytes`, `io` and `sdk/media`):
+
+```go
+p.FullMatch("copy").Handle(func(c *sdk.Context) error {
+    source := c.Event().Payload.(*message.CreatedPayload).Chain[1].(message.FileSegment).Source
+    reader, err := media.Open(c, source)
+    if err != nil { return err }
+    data, readErr := io.ReadAll(reader)
+    closeErr := reader.Close()
+    if readErr != nil { return readErr }
+    if closeErr != nil { return closeErr }
+    ref, err := media.Upload(c, bytes.NewReader(data), "image/png")
+    if err != nil { return err }
+    _, err = c.Send(message.Chain{message.Text("copied"), message.Image(ref.Source()), message.File(ref.Source(), "copy.png")})
+    return err
+})
+```
+
+Generate a small image in the test, inject its platform-file fixture and check the actual Adapter bytes and chain order (import `image` and `image/png`):
+
+```go
+var pixel bytes.Buffer
+if err := png.Encode(&pixel, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil { t.Fatal(err) }
+h := plugintest.Start(t, plugintest.Plugin(New()))
+source := h.Fixture(plugintest.InstanceID, "pixel", plugintest.Media{Data: pixel.Bytes(), MIME: "image/png"})
+alice := plugintest.User{ID: "alice"}
+result := h.Message(plugintest.Private(alice.ID), alice,
+    message.Chain{message.Text("copy"), message.File(source, "input.png")})
+if len(result.Sends) != 1 { t.Fatalf("sends = %+v", result.Sends) }
+sent := result.Sends[0]
+if len(sent.Chain) != 3 || len(sent.Media) != 2 { t.Fatalf("send = %+v", sent) }
+for _, output := range sent.Media {
+    _, format, err := output.Image()
+    if err != nil || format != "png" || output.MIME != "image/png" || !bytes.Equal(output.Data, pixel.Bytes()) {
+        t.Fatalf("media = %+v, format = %s, error = %v", output, format, err)
+    }
+}
+if sent.Media[1].Filename != "copy.png" { t.Fatalf("filename = %q", sent.Media[1].Filename) }
+```
+
+Fixtures are fetched through the real Adapter media RPC. Plugin `media.Open`, `media.Upload` and outgoing Adapter `ReadMedia` use the same Core authorization, storage and token checks. `Sent.Media` contains actual content in chain traversal order. HTTPS sources retain their URLs; use fixtures or uploaded managed media for byte assertions.
+
+`Operations(Behavior{...})` configures the default instance's Send/Edit/Action/Delete/Nodes/Menu callbacks; configure multiple accounts through `InstanceConfig.Behavior`. Send/Edit receive a default successful receipt in `Call.SendResult`, which can be adjusted and returned with an error:
+
+```go
+behavior := plugintest.Behavior{
+    Send: func(ctx context.Context, call plugintest.Call) (*message.SendResult, *errcode.Error) {
+        receipt := call.SendResult
+        return receipt, errcode.Unavailable.New("platform accepted the message with a warning")
+    },
+    Action: func(ctx context.Context, call plugintest.Call) (json.RawMessage, *errcode.Error) {
+        return call.Params, errcode.Unavailable.New("platform returned a warning")
+    },
+}
+h := plugintest.Start(t, plugintest.Plugin(New()), plugintest.Operations(behavior))
+```
+
+Send/Edit support Accepted, Rejected, Partial, Unknown and any valid result/error combination. Platform Action parameters/results follow the original `Adapter(..., adapter.Action[P,R](...))` or instance Descriptor declaration. The echo callback above suits actions with matching parameter/result Schemas. A declared Action without a callback returns `UNSUPPORTED`. Delete accepts each item by default; Nodes returns request items by default. Configure Nodes to expand a platform-ID query. Default menus persist set/get/delete state by scope/language and also support legacy SyncCommands.
+
+`h.Calls()` retains all completed Adapter operations; `h.WaitCalls(ctx, count)` waits for a count. Each Call includes operation, Adapter/instance/account, target, parameters, actual results, error and TraceID. Event `Result.Calls` and `Sends` use trace ownership. `Result.Outcomes` records actual Handler calls. `Diagnostics` separately records argument parsing and admission failures with Phase, PluginID, RouteID, TraceID and Err. `RequireReply` checks Handler results and replies, including usage replies for invalid arguments. An actual Handler returning `INVALID_ARGUMENT` remains in Outcomes. Use `h.DebugClient().Invoke` to exercise media, menus or actions directly with standard names from the Adapter catalog above.
+
+### Multiple accounts, concurrent events and manual time
+
+```go
+p := New()
+h := plugintest.Start(t, plugintest.Plugin(p),
+    plugintest.Instance(plugintest.InstanceConfig{AdapterID: "first", InstanceID: "one", AccountID: "bot1"}),
+    plugintest.Instance(plugintest.InstanceConfig{AdapterID: "first", InstanceID: "two", AccountID: "bot2"}),
+    plugintest.Instance(plugintest.InstanceConfig{AdapterID: "second", InstanceID: "three", AccountID: "bot3"}),
+    plugintest.DefaultInstance("first", "one"),
+    plugintest.DefaultInstance("second", "three"),
+    plugintest.AllowedInstances(p, "one", "three"))
+alice := plugintest.User{ID: "alice"}
+first := h.Submit(plugintest.Private(alice.ID).OnInstance("one"), alice, message.Text("/ping"))
+second := h.Submit(plugintest.Private("bob").OnInstance("two"), plugintest.User{ID: "bob"}, message.Text("/ping"))
+for _, pending := range []*plugintest.Pending{first, second} {
+    result, err := pending.Wait(t.Context())
+    if err != nil { t.Fatal(err) }
+    result.RequireReply(t, "pong")
+}
+```
+
+An explicit Instance list replaces the default test instance. Select incoming identity with `OnInstance`, explicit sending defaults with `DefaultInstance`, and platform administrators with `AdminOn(adapterID, userID)`. Descriptor.Capabilities declares the platform capability set; instance Capabilities selects enabled names. Nil inherits Harness capability options; an explicit empty list enables no optional capabilities. Accounts on the same platform can share a Descriptor and restrict capabilities independently. Omitting Instance preserves existing single-instance options. `Submit` submits immediately; `Wait(ctx)` can be cancelled and called again while the event continues. Final TraceIDs, Sends and Calls belong to their own event. `WaitBackground(ctx, count)` waits for and consumes background output, including replies after a conversation wait times out.
+
+```go
+clock := plugintest.NewClock(time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC))
+t.Cleanup(clock.Close)
+p := New()
+p.Every("testtick", time.Second).Handle(func(c *sdk.Context) error {
+    _, err := c.SendTo("plugintest:private:alice", message.Text("tick"))
+    return err
+})
+h := plugintest.Start(t, plugintest.Plugin(p), plugintest.WithClock(clock))
+clock.Advance(time.Second)
+records, err := h.WaitBackground(t.Context(), 1)
+if err != nil { t.Fatal(err) }
+if records[0].Text() != "tick" { t.Fatalf("records = %+v", records) }
+```
+
+Natural Scheduler jobs, dynamic `task.At/Every`, continuation deadlines and `c.Wait` share this clock. Use `clock.Now()` when constructing absolute task times. Advance after `Result.Waiting` to expire a conversation wait. Advance delivers due timers; use Wait/WaitBackground for asynchronous RPC completion. Task cancellation and Harness.Close unregister their timers. Production uses real time; Session protocol deadlines retain real absolute timestamps and receive logical-clock cancellation.
+
+### Connect to a running Core
+
+Enable the tested plugin and a real Adapter instance in Core and obtain its local `admin_token`. This test calls an existing `/ping` command. Match the URL and identity to your running configuration (import `context`, `os`, `strings`, `sdk/debug` and `plugintest`):
+
+```go
+func TestRunningCore(t *testing.T) {
+    token, err := os.ReadFile("../data/admin_token")
+    if err != nil { t.Fatal(err) }
+    client := &debug.Client{URL: "http://127.0.0.1:7650", Token: strings.TrimSpace(string(token))}
+    connection, err := plugintest.Connect(context.Background(), client,
+        plugintest.InstanceConfig{AdapterID: "telegram", InstanceID: "main", AccountID: "123456"})
+    if err != nil { t.Fatal(err) }
+    defer connection.Close()
+    alice := plugintest.User{ID: "987654"}
+    result, err := connection.Text(t.Context(), plugintest.Private(alice.ID), alice, "/ping")
+    if err != nil { t.Fatal(err) }
+    result.RequireReply(t, "pong")
+    if len(result.Outcomes) == 0 || len(result.TraceIDs) == 0 { t.Fatalf("dispatch = %+v", result) }
+}
+```
+
+Use the Adapter's actual session-ID format; Telegram private chats use `private:<userID>` as constructed above. `Connection.Event(ctx, event)` injects a complete standard SDK event; Message sends a mixed chain, and Submit with Pending.Wait supports asynchronous integration. `connection.Client.Operations/Invoke` discovers and executes that real Adapter's operations.
+
+The client injects standard Events through authenticated `POST /api/v1/debug/events`. Core rebinds trusted source identity, expands permissions and performs normal command matching, argument parsing and routing. Results retain actual RouteIDs, TraceIDs, replies and simultaneous receipts/errors; each Outcome, Diagnostic and reply carries its owning TraceID. Debug events and Adapter calls wait outside the management metadata write lock and GC critical section, allowing independent sessions to run concurrently. Metadata writes keep their existing locking and collection order. Request cancellation releases its observer; Close releases client resources. Existing Core, Adapter and plugin components keep running, and the real Adapter receive cursor is preserved.
+
+Local Harness, Connect and sdk/debug.Client.Inject expose the same diagnostic fields. For an existing `echo <text>` command called without its argument:
+
+```go
+invalid, err := connection.Text(t.Context(), chat, alice, "/echo")
+if err != nil { t.Fatal(err) }
+invalid.RequireReply(t, "Usage: /echo <text>")
+if len(invalid.Outcomes) != 0 || len(invalid.Diagnostics) != 1 { t.Fatalf("dispatch = %+v", invalid) }
+diagnostic := invalid.Diagnostics[0]
+if diagnostic.Phase != plugintest.PhaseArguments || errcode.Of(diagnostic.Err) != errcode.InvalidArgument {
+    t.Fatalf("diagnostic = %+v", diagnostic)
+}
+```
+
+Import sdk/errcode and use the configured instance's chat and user as `chat` and `alice`. Permission and lifecycle admission failures carry Phase `plugintest.PhaseAdmission` and their actual error code. The sdk/debug constants are `debug.PhaseArguments` and `debug.PhaseAdmission`.
+
+The local integration test [plugintest/debug_test.go](../plugintest/debug_test.go) exercises real Core/Session, authenticated HTTP and a loopback platform. Real-platform integration requires platform credentials and actual chat targets.
 
 ## Protocol and session behavior
 

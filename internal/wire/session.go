@@ -393,6 +393,9 @@ func (s *Session) enqueuePriorityFrame(f priorityFrame) error {
 // Call 发起一次调用并等待结果。准入不足时立即返回 RESOURCE_EXHAUSTED，不等待槽位。
 // 本地期限或取消先结束调用并返回，再尽力通知对端；已发出的副作用不会撤销，也不自动重试。
 func (s *Session) Call(ctx context.Context, req Request) (Response, error) {
+	if len(req.TraceID) == 0 {
+		req.TraceID, _ = ctx.Value(traceContextKey{}).([]byte)
+	}
 	// 1. 有效期限取请求期限（或默认期限）与 ctx 期限中较早者。
 	n := int64(len(req.Payload.Bytes))
 	deadline := req.Deadline
@@ -979,7 +982,7 @@ func (s *Session) onRequest(env *pb.Envelope, payloadError *validate.Error) erro
 func (s *Session) serve(ctx context.Context, cancel context.CancelFunc, in *Inbound, n int64, finished func()) {
 	defer cancel()
 	// 1. 执行 Handler；没有结果也没有错误时按 INTERNAL 回复。
-	r := s.handle(ctx, in)
+	r := s.handle(WithTraceID(ctx, in.TraceID), in)
 	if r.Payload.SchemaID == "" && r.Err == nil {
 		r.Err = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "handler returned neither a result nor an error"}
 	}

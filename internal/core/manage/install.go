@@ -2,7 +2,6 @@ package manage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,10 +23,12 @@ import (
 
 // InstallRequest 指定本地归档，或由 Core 下载的 GitHub 来源。
 type InstallRequest struct {
-	Archive          string
-	Source           string // GitHub 的 owner/repo；本地安装时留空。
-	ID               string // 自动预装时指定期望的组件身份。
-	Replace, Confirm bool
+	GitHubAPIBase        *string `json:"github_api_base,omitempty"`        // nil 沿用 Core 设置，空串使用官方 API。
+	GitHubDownloadPrefix *string `json:"github_download_prefix,omitempty"` // nil 沿用 Core 设置，空串直连原资产。
+	Archive              string
+	Source               string // GitHub 的 owner/repo；本地安装时留空。
+	ID                   string // 自动预装时指定期望的组件身份。
+	Replace, Confirm     bool
 }
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -157,7 +158,16 @@ func exists(message string) error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, Message: message}
 }
 
-func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Candidate, error) {
+func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.Candidate, err error) {
+	defer func() {
+		if req.Source != "" && err != nil {
+			err = downloadFailure{err}
+		}
+	}()
+	apiBase, downloadPrefix, err := s.githubEndpoints(req)
+	if err != nil {
+		return nil, err
+	}
 	// 1. 下载只写临时文件；预检完成前保留已有组件。
 	if req.Source != "" && req.Archive != "" {
 		return nil, invalid("source and local archive are mutually exclusive")
@@ -172,37 +182,9 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 	input := packages.Input{ID: req.ID, OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: req.Archive}
 	var asset release.Download
 	if req.Source != "" {
-		if !repositoryName.MatchString(req.Source) {
-			return nil, invalid("source must be owner/repo")
-		}
-		for _, part := range strings.Split(req.Source, "/") {
-			if part == "." || part == ".." {
-				return nil, invalid("source must be owner/repo")
-			}
-		}
-		address := strings.TrimRight(s.opt.ReleaseBaseURL, "/") + "/repos/" + req.Source + "/releases/latest"
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+		publication, err := s.githubRelease(ctx, req.Source, apiBase)
 		if err != nil {
 			return nil, err
-		}
-		request.Header.Set("Accept", "application/vnd.github+json")
-		response, err := s.opt.HTTPClient.Do(request)
-		if err != nil {
-			return nil, err
-		}
-		raw, readErr := io.ReadAll(response.Body)
-		if err := errors.Join(readErr, response.Body.Close()); err != nil {
-			return nil, err
-		}
-		if response.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("download %s: %s: %s", address, response.Status, raw)
-		}
-		var publication release.GitHubRelease
-		if err := json.Unmarshal(raw, &publication); err != nil {
-			return nil, fmt.Errorf("parse GitHub release: %w", err)
-		}
-		if err := publication.Validate(req.Source); err != nil {
-			return nil, invalid(err.Error())
 		}
 		asset, err = publication.Select(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
@@ -218,16 +200,17 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 		}
 		input.ArchivePath = file.Name()
 		defer os.Remove(input.ArchivePath)
-		request, err = http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadPrefix+asset.URL, nil)
 		if err != nil {
 			return nil, errors.Join(err, file.Close())
 		}
-		response, err = s.opt.HTTPClient.Do(request)
+		response, err := s.opt.HTTPClient.Do(request)
 		if err != nil {
 			return nil, errors.Join(err, file.Close())
 		}
 		if response.StatusCode != http.StatusOK {
-			return nil, errors.Join(fmt.Errorf("download archive: %s", response.Status), response.Body.Close(), file.Close())
+			raw, readErr := io.ReadAll(response.Body)
+			return nil, errors.Join(fmt.Errorf("download archive %s: %s: %s", request.URL, response.Status, raw), readErr, response.Body.Close(), file.Close())
 		}
 		n, copyErr := io.Copy(file, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
 		if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
