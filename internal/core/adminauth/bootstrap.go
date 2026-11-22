@@ -2,12 +2,14 @@ package adminauth
 
 import (
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,10 +19,64 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
+// routeTable 是 Linux 内核导出的 IPv4 路由表。
+const routeTable = "/proc/net/route"
+
+// containerGateway 返回容器的 IPv4 默认网关；只在 ALONABOT_CONTAINER=1 时调用，测试可替换。
+var containerGateway = func() (netip.Addr, error) {
+	raw, err := os.ReadFile(routeTable)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	return defaultGateway(raw)
+}
+
+// defaultGateway 从 /proc/net/route 的文本中找出目标与掩码均为 0 且带 RTF_GATEWAY 的路由。
+// 内核以主机字节序的十六进制输出地址，Linux 支持的容器平台均为小端序。
+func defaultGateway(table []byte) (netip.Addr, error) {
+	const gatewayFlag = 0x2 // RTF_GATEWAY
+	for _, line := range strings.Split(string(table), "\n")[1:] {
+		fields := strings.Fields(line)
+		if len(fields) < 8 || fields[1] != "00000000" || fields[7] != "00000000" {
+			continue
+		}
+		flags, err := strconv.ParseUint(fields[3], 16, 32)
+		if err != nil || flags&gatewayFlag == 0 {
+			continue
+		}
+		raw, err := hex.DecodeString(fields[2])
+		if err != nil || len(raw) != 4 {
+			return netip.Addr{}, fmt.Errorf("parse default gateway %q", fields[2])
+		}
+		return netip.AddrFrom4([4]byte{raw[3], raw[2], raw[1], raw[0]}), nil
+	}
+	return netip.Addr{}, errors.New("no IPv4 default route")
+}
+
+// bootstrapConnection 只接受来自本机的直连请求。容器内宿主机经端口发布到达时，
+// 来源是容器的默认网关，因此 ALONABOT_CONTAINER=1 时额外接受该地址；Host、Origin 与转发头检查不变。
 func (a *Auth) bootstrapConnection(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil || !net.ParseIP(host).IsLoopback() {
+	if err != nil {
 		return false
+	}
+	remote, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	remote = remote.Unmap()
+	if !remote.IsLoopback() {
+		if os.Getenv("ALONABOT_CONTAINER") != "1" {
+			return false
+		}
+		gateway, err := containerGateway()
+		if err != nil {
+			slog.Warn("read container default gateway failed", "error", err)
+			return false
+		}
+		if remote != gateway {
+			return false
+		}
 	}
 	target := a.baseURL
 	target.Host = r.Host

@@ -74,6 +74,8 @@ docker compose exec alonabot alonabot admin-token show --data-dir /data
 
 端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
 
+首次领取接口 `POST /api/auth/bootstrap` 只接受本机直连。宿主机经发布端口访问容器时，容器看到的来源是网桥的默认网关，因此 `ALONABOT_CONTAINER=1` 时 Core 额外接受 `/proc/net/route` 中的 IPv4 默认网关地址；Host 与 Origin 仍须是 `base_url` 的本机地址，请求不能带 `Forwarded`、`X-Forwarded-*` 或 `X-Real-IP`，令牌经 WebUI 确认后接口不再返回令牌。端口若发布到 `0.0.0.0` 或其他非回环地址，局域网乃至公网的连接同样经网关到达容器，任何能访问该端口的人都可以在你确认之前领取首次令牌并取得完整管理权限；这时先用 `docker compose exec alonabot alonabot admin-token show --data-dir /data` 读出令牌登录确认，或保持只发布到 `127.0.0.1`。
+
 按需安装 Adapter 后，在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
 
 ## 管理组件
