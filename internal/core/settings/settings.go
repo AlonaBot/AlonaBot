@@ -649,6 +649,11 @@ func readString(value, key string, s *Settings) error {
 // ValidateURLPrefix 校验 github_mirror 与 go_download_base 的前缀式地址：
 // https、主机名有效、以 / 结尾，不带查询、片段或认证信息，直接与目标路径拼接。
 // 源码 tarball 没有摘要，Go 发行版的摘要与归档来自同一前缀，因此不接受明文 http。
+// ValidateProxy 校验 proxy 设置：空串表示直连，否则为 http、https 或 socks5 地址。
+func ValidateProxy(value string) error {
+	return readString(value, "proxy", &Settings{})
+}
+
 func ValidateURLPrefix(value string) error {
 	u, err := baseURL(value)
 	if err != nil {
