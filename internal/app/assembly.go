@@ -300,7 +300,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	}
 	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Profile: a.resolveProfile, EnsureActive: a.ensureActive, RequestTimeout: v.RequestTimeout, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.commandPrefixes, CommandNames: p.CommandNames,
-		Continuations: continuations, Metrics: a.metrics,
+		Continuations: continuations, Metrics: a.metrics, MenuStore: a.store,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
 		},

@@ -71,6 +71,9 @@ func (s *Service) profileRoutes(mux *http.ServeMux) {
 				return
 			}
 			action(profiles, w, r)
+			if r.Method != http.MethodGet && s.opt.Router != nil {
+				s.opt.Router.CommandsChanged()
+			}
 		})
 	}
 	register("GET /api/v1/profiles", func(p *profile.Service, w http.ResponseWriter, r *http.Request) {
@@ -340,6 +343,9 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 		if err := profiles.Assign(ctx, parent.DefaultTarget.GetAdapterInstanceId(), profileSession(parent.DefaultTarget), id); err != nil {
 			return fail(err)
 		}
+		if s.opt.Router != nil {
+			s.opt.Router.CommandsChanged()
+		}
 		response = &pb.ProfileAssignResponse{}
 	case *pb.ProfileSetRequest:
 		if schema == nil {
@@ -457,6 +463,9 @@ func (s *Service) changeProfileOverrides(ctx context.Context, profiles *profile.
 	}
 	if err := change(); err != nil {
 		return err
+	}
+	if s.opt.Router != nil {
+		s.opt.Router.CommandsChanged()
 	}
 	if s.opt.NotifyProfileOverrides == nil {
 		return nil

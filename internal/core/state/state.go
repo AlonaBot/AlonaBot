@@ -224,9 +224,11 @@ func preflight(ctx context.Context, path string) error {
 //go:embed schema.sql
 var initialSchema string
 
-// migrations 按顺序执行，版本号即下标加 1。首次发布前只有初始这一条，schema 改动直接写在其中，
-// 不追加迁移（编码规范「首次发布前不写兼容层」）。
-var migrations = []string{initialSchema}
+//go:embed command_menu.sql
+var commandMenuSchema string
+
+// migrations 保留已发布的初始迁移，后续结构按下标顺序追加。
+var migrations = []string{initialSchema, commandMenuSchema}
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
 func (s *Store) migrate(ctx context.Context, fresh bool) error {

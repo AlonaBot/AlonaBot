@@ -21,6 +21,7 @@ type IncomingMedia struct {
 
 // MediaSource 指定恰好一个媒体来源。
 type MediaSource struct {
+	MIME         string // Core 准备来源时从受管对象填写，空值表示未知。
 	MediaRef     string
 	Incoming     *IncomingMedia
 	HTTPSURL     string

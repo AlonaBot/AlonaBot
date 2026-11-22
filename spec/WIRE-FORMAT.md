@@ -159,7 +159,7 @@ message ConfigCorrection {
 Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流程（CONTRACTS §8、D-26），区别如下：
 
 - 启动的是插件还是 Adapter 由 Core 依据安装记录决定，不采信进程自报。Adapter 的 REGISTER 必须携带 Adapter 描述（adapter_id、平台 Capability、extension 声明及其 Schema、平台动作声明，D-92），可以携带 HTTP 路由与实际监听的 loopback endpoint（D-94、D-136，路径、内部代理认证与生命周期规则同插件，CONTRACTS §7.2），不得携带其他插件路由或迁移信息；插件的 REGISTER 不得携带 Adapter 描述。不一致按注册失败处理。
-- Core 与 Adapter 之间的固定服务如下（共十三个），服务名不含 `/`：
+- Core 与 Adapter 之间的固定服务如下（共十四个），服务名不含 `/`：
 
 | 服务 | 方向 | 请求 → 响应 |
 | --- | --- | --- |
@@ -171,11 +171,20 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `adapter.media.read` | Core→Adapter | instance_id、平台文件标识、offset、length（1～1 MiB）→ bytes、next_offset、eof |
 | `adapter.action` | Core→Adapter | instance_id、Target?（作用范围为 chat 时必有）、动作完整名、版本、JSON 参数 → JSON 结果与/或 ErrorInfo（D-92） |
 | `adapter.delete` | Core→Adapter | instance_id、Target、platform_message_ids（1～100）→ 每个 ID 的状态（ACCEPTED / REJECTED / UNKNOWN / NOT_ATTEMPTED）与安全错误（MESSAGE-MODEL §4A） |
+| `adapter.command.menu` | Core→Adapter | CommandMenuRequest（set/get/delete）→ CommandMenuResponse 与/或 ErrorInfo；实例声明类型化配置后使用 |
 | `adapter.commands.sync` | Core→Adapter | instance_id、命令列表（name、descriptions：locale → 文本，英文原文与路径覆盖按 CONTRACTS §8）→ 空结果或 ErrorInfo（D-96、D-138） |
 | `core.adapter.deliver` | Adapter→Core | instance_id、Event、交付后的游标 → 是否接纳；Core 队列满时为未接纳并计数 |
 | `core.adapter.cursor` | Adapter→Core | instance_id、游标 → 空结果；用于没有事件时的游标变化 |
 | `core.adapter.status` | Adapter→Core | instance_id、实例状态、安全错误 → 空结果；用于 401/409 等使实例停止接收的错误 |
 | `core.media.url` | Adapter→Core | Core 为本次发送签发的只读 token、可选的 URL 前缀 → 临时媒体 URL 与到期时间（CONTRACTS §1.3，D-88） |
+
+**命令菜单与 MIME 的追加字段**
+
+`AdapterInstanceStartResponse.command_menu=5` 为可选消息 `CommandMenuConfig`，字段 `auto_sync_commands=1`、`clear_commands_on_disable=2` 均为 bool；absent 使用原 `adapter.commands.sync`。`CommandSpec.menu=14` 为 bool，缺省 false。`MediaSource.mime=6` 为 string，只由 Core 准备可信来源时填写。
+
+两个菜单服务共用 schema_version=1：`CommandMenuRequest{instance_id=1, operation=2, menu=3}`，`CommandMenu{scope=1, language_code=2, commands=3}`；scope 消息为 `CommandMenuScope{type=1, chat_id=2, user_id=3}`，单条为 `CommandMenuEntry{name=1, description=2}`。`CommandMenuResponse{commands=1, config=2, ready=3, last_error=4, positions=5}`，commands 与 positions 均 repeated；`CommandMenuPosition{scope=1, language_code=2, mode=3, owner_plugin_id=4}`。scope.type 为 default/chat/chat_administrators/chat_member；插件只开放后三种，thread 不进入 scope；语言为空或两位小写主语言。位置、模式切换、准入与错误语义见 CONTRACTS §8。
+
+`EventPayload.kind` 追加 `CommandMenuReadyPayload command_menu_ready=13`，标准事件名为 `bot.command_menu_ready`；payload 字段为 string `adapter_id=1`、`adapter_instance_id=2`、`account_id=3`、`chat_id=4`。Core 定向发送，chat_id 为空表示实例手动就绪，非空表示该聊天可用。Adapter 上报的标准事件保持既有白名单。
 
 **通用 Markdown 与节点读取的字段**
 
@@ -208,6 +217,7 @@ Adapter 包使用与插件相同的帧、握手、Bootstrap、准备与激活流
 | `core.conversation.append` | 会话键、一条或多条 JSON 条目 → 最后一条的序号 | CONTRACTS §13.3 |
 | `core.conversation.list` | 会话键、起始序号 → 条目及序号、下一个序号 | CONTRACTS §13.3 |
 | `core.conversation.clear` | 会话键 → 空结果 | CONTRACTS §13.3 |
+| `core.command.menu` | CommandMenuRequest（set/get/delete/status/sync）→ CommandMenuResponse 与/或 ErrorInfo；instance_id 缺省取在途父调用的可信实例 | CONTRACTS §8、§9.1 |
 | `core.command.list` | 必须带同一 Session 内仍在途的 `parent_call_id`，从父调用取可信 Actor 与默认 Target；空的 `CommandListRequest` → `CommandListResponse`（字段见 §5A）；参数用法由 Core 的 usage 回复给出，不在列表中（D-171） | CONTRACTS §2.3、§15.2 |
 | `core.task.set` | 任务名、key、触发规则（at_unix_ms、interval_ms 或 cron 加可选的 timezone，恰有一个）、参数 JSON → 下一次触发时刻 | CONTRACTS §4.3、D-124 |
 | `core.task.cancel` | 任务名、key → 空结果；实例正在执行时同时取消该次调用 | CONTRACTS §4.3、D-124 |

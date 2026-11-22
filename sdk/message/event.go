@@ -145,6 +145,11 @@ type ScheduledPayload struct {
 // BotOnlinePayload 保存上线实例的账号信息。
 type BotOnlinePayload struct{ AdapterID, AdapterInstanceID, AccountID, AccountDisplayName string }
 
+// CommandMenuReadyPayload 通知相关插件接管手动菜单；ChatID 为空表示整个实例就绪。
+type CommandMenuReadyPayload struct{ AdapterID, AdapterInstanceID, AccountID, ChatID string }
+
+func (*CommandMenuReadyPayload) payload() {}
+
 // OfflineReason 指定实例离线的原因。
 type OfflineReason int
 

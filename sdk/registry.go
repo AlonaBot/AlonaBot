@@ -209,6 +209,13 @@ func (b *CommandBuilder) Description(text string) *CommandBuilder {
 	return b
 }
 
+// Menu 将根路径命令显式加入平台菜单，处理器仍按原权限执行。
+func (b *CommandBuilder) Menu() *CommandBuilder {
+	b.touch()
+	b.command.spec.Menu = true
+	return b
+}
+
 // UsageKey 设置 usage 文案键。
 func (b *CommandBuilder) UsageKey(key string) *CommandBuilder {
 	b.touch()

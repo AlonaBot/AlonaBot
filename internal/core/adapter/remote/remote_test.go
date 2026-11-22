@@ -215,9 +215,9 @@ func registerLoopCommands(r *sdk.Plugin) {
 	}
 	if os.Getenv(helperEnv) == "command-plugin" {
 		handler := func(*sdk.Context) error { return nil }
-		r.Command("ping").Description("Ping the bot").Alias("p").Handle(handler)
-		r.Command("bare").Handle(handler)
-		r.Command("admin").Description("Admin command").Permission(sdk.Admin).Handle(handler)
+		r.Command("ping").Menu().Description("Ping the bot").Alias("p").Handle(handler)
+		r.Command("bare").Menu().Handle(handler)
+		r.Command("admin").Menu().Description("Admin command").Permission(sdk.Admin).Handle(handler)
 		r.Group("rss").Command("add").Description("Add a feed").Handle(handler)
 		return
 	}

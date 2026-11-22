@@ -103,7 +103,18 @@ message EventPayload {
     AdapterEventPayload adapter_event = 11;
     // Core 在命令调用结束或权限拒绝后生成。
     CommandInvokedPayload command_invoked = 12;
+    // Core 完成手动菜单模式就绪后向相关插件发送。
+    CommandMenuReadyPayload command_menu_ready = 13;
   }
+}
+
+// CommandMenuReadyPayload 通知插件可以接管实例或指定聊天的菜单。
+message CommandMenuReadyPayload {
+  string adapter_id = 1;
+  string adapter_instance_id = 2;
+  string account_id = 3;
+  // 空值表示实例就绪；非空表示已知聊天首次可用或重新获准。
+  string chat_id = 4;
 }
 
 // CommandInvokedPayload 记录命令调用结果，不携带参数与聊天内容。
@@ -285,6 +296,8 @@ message TextEntity {
 
 // MediaSource 描述媒体来源；platform_file 只由 Core 发往 Adapter。
 message MediaSource {
+  // Core 根据受管媒体元数据填写；插件提交的 MIME 不作为可信来源。
+  string mime = 6;
   // 媒体来源，恰有一个分支。
   oneof source {
     // 已提交 MediaRef 的 token。

@@ -33,7 +33,11 @@ func (p *Policy) Deny(ctx context.Context, kind DenyKind, adapterID, subjectID s
 	if err := checkDeny(kind, adapterID, subjectID); err != nil {
 		return err
 	}
-	return p.store.AddGlobalDeny(ctx, state.GlobalDeny{Kind: string(kind), AdapterID: adapterID, SubjectID: subjectID})
+	err := p.store.AddGlobalDeny(ctx, state.GlobalDeny{Kind: string(kind), AdapterID: adapterID, SubjectID: subjectID})
+	if err == nil && p.commandsChanged != nil {
+		p.commandsChanged()
+	}
+	return err
 }
 
 // Undeny 按完整身份幂等取消用户或会话禁止。
@@ -41,7 +45,11 @@ func (p *Policy) Undeny(ctx context.Context, kind DenyKind, adapterID, subjectID
 	if err := checkDeny(kind, adapterID, subjectID); err != nil {
 		return err
 	}
-	return p.store.RemoveGlobalDeny(ctx, state.GlobalDeny{Kind: string(kind), AdapterID: adapterID, SubjectID: subjectID})
+	err := p.store.RemoveGlobalDeny(ctx, state.GlobalDeny{Kind: string(kind), AdapterID: adapterID, SubjectID: subjectID})
+	if err == nil && p.commandsChanged != nil {
+		p.commandsChanged()
+	}
+	return err
 }
 
 // Denies 按种类、Adapter 与主体 ID 的字典序读取禁止名单。
