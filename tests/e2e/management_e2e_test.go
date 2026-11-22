@@ -78,7 +78,7 @@ func TestT09ManagementFlow(t *testing.T) {
 	}
 	c.management(t, dir, "", "install", firstPackage, "--yes")
 	installed := findPackage(t, c, dir, id)
-	if installed.Enabled || installed.Active != "" || installed.Version != "1.0.0" || !installed.Signed || installed.Source != source {
+	if installed.Enabled || installed.Active != "" || installed.Version != "1.0.0" || installed.Signed || installed.Source != source {
 		t.Fatalf("installed package: %+v", installed)
 	}
 	c.management(t, dir, "", "enable", id)

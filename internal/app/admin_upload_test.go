@@ -7,13 +7,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"debug/buildinfo"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,11 +22,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 )
 
-// TestAdminSessionAndUploads 经真实 Core、SQLite、签名插件进程与文件系统验证浏览器管理流程。
+// TestAdminSessionAndUploads 经真实 Core、SQLite、插件进程与文件系统验证浏览器管理流程。
 func TestAdminSessionAndUploads(t *testing.T) {
 	h := newWebUIHarness(t)
 	h.start(nil)
@@ -81,11 +75,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if response.StatusCode != 200 || len(core) != 3 || core["listen"] != h.core.http.Addr || strings.HasSuffix(core["listen"].(string), ":0") || core["version"] != Version() || core["admin_api_major"] != float64(1) {
 		t.Fatalf("core=%d %s", response.StatusCode, raw)
 	}
-	_, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := adminSignedBundle(t, h, "1.0.0", key)
+	first := adminBundle(t, h, "1.0.0")
 	const updateResponse = `{"warnings":["plugin ID \"upload_demo\" lacks the market prefix alonabot-plugin- and can only be installed as a local plugin"]}`
 	upload := func(action string, request manage.InstallRequest, omit string, want int, contains string) {
 		t.Helper()
@@ -97,12 +87,12 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		adminUploadsClean(t, h)
 	}
 	first.Confirm = false
-	upload("install", first, "", 409, "trust publisher")
+	upload("install", first, "", 409, "trust source")
 	first.Confirm = true
 	upload("install", first, "", 200, `"ID":"upload_demo"`)
 	h.action("enable", "upload_demo", 200)
 	before := adminInstalled(t, h)
-	if before.State != "Activated" || !before.Enabled || !before.Signed || before.Version != "1.0.0" {
+	if before.State != "Activated" || !before.Enabled || before.Signed || before.Version != "1.0.0" {
 		t.Fatalf("installed=%+v", before)
 	}
 	plugin, ok := h.core.assembly.router.Plugin("upload_demo")
@@ -142,17 +132,25 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		}
 		adminDatabase(t, h, before.Active, "1.0.0")
 	}
-	next := adminSignedBundle(t, h, "1.1.0", key)
-	upload("update", next, "release", 400, "INVALID_ARGUMENT")
+	next := adminBundle(t, h, "1.1.0")
+	upload("update", next, "archive", 400, "INVALID_ARGUMENT")
 	preserved()
-	bad := next
-	bad.Signature = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
-	upload("update", bad, "", 403, "PERMISSION_DENIED")
+	corrupt := next
+	rawArchive, err := os.ReadFile(next.Archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawArchive[len(rawArchive)-8] ^= 1
+	corrupt.Archive = filepath.Join(t.TempDir(), "corrupt.tar.gz")
+	if err := os.WriteFile(corrupt.Archive, rawArchive, 0600); err != nil {
+		t.Fatal(err)
+	}
+	upload("update", corrupt, "", 400, "INVALID_ARGUMENT")
 	preserved()
 	upload("update", next, "", 200, updateResponse)
 	after := adminInstalled(t, h)
 	updated, ok := h.core.assembly.router.Plugin("upload_demo")
-	if after.Version != "1.1.0" || after.State != "Activated" || !after.Enabled || !after.Signed || after.Active == before.Active || !ok || !updated.Activated() {
+	if after.Version != "1.1.0" || after.State != "Activated" || !after.Enabled || after.Signed || after.Active == before.Active || !ok || !updated.Activated() {
 		t.Fatalf("updated component=%+v activated=%v", after, ok)
 	}
 	data, err := os.ReadFile(dataPath)
@@ -162,7 +160,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	// 更新迁移只写候选副本，旧代次的数据库保留原值。
 	adminDatabase(t, h, before.Active, "1.0.0")
 	adminDatabase(t, h, after.Active, "1.1.0")
-	t.Log("V-40/V-47 API: real Core Listener, SQLite, signed plugin processes; 409 replay, rejected uploads preserve old state, successful 1.1.0 update preserves user data through a migrated database copy, upload cleanup passed")
+	t.Log("V-40/V-47 API: real Core Listener, SQLite, plugin processes; 409 replay, rejected uploads preserve old state, successful 1.1.0 update preserves user data through a migrated database copy, upload cleanup passed")
 }
 
 func adminDatabase(t *testing.T, h *webUIHarness, generation, version string) {
@@ -212,8 +210,8 @@ func adminMultipart(t *testing.T, request manage.InstallRequest, update bool, om
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	for _, file := range []struct{ name, filename, content string }{{"archive", "../../client-name.tar.gz", ""}, {"release", "release.json", request.ReleaseJSON}, {"signature", "release.json.sig", request.Signature}} {
-		if file.name == omit || (file.name == "signature" && file.content == "") {
+	for _, file := range []struct{ name, filename, content string }{{"archive", "../../client-name.tar.gz", ""}} {
+		if file.name == omit {
 			continue
 		}
 		out, err := writer.CreateFormFile(file.name, file.filename)
@@ -234,7 +232,7 @@ func adminMultipart(t *testing.T, request manage.InstallRequest, update bool, om
 			t.Fatal(err)
 		}
 	}
-	fields := map[string]string{"public_key": request.PublicKey, "confirm": fmt.Sprint(request.Confirm)}
+	fields := map[string]string{"confirm": fmt.Sprint(request.Confirm)}
 	if update {
 		fields["id"] = "upload_demo"
 	} else {
@@ -282,9 +280,9 @@ func adminInstalled(t *testing.T, h *webUIHarness) manage.Package {
 	return manage.Package{}
 }
 
-func adminSignedBundle(t *testing.T, h *webUIHarness, version string, key ed25519.PrivateKey) manage.InstallRequest {
+func adminBundle(t *testing.T, h *webUIHarness, version string) manage.InstallRequest {
 	t.Helper()
-	// 复用 WebUI 测试的归档/清单装配，只替换真实插件二进制、版本和签名。
+	// 复用 WebUI 测试的归档装配，只替换真实插件二进制与版本。
 	request := h.bundle("upload_demo", "plugin", "", 1)
 	project := t.TempDir()
 	source := `package main
@@ -376,24 +374,5 @@ func main(){if err:=sdk.Run(New());err!=nil{slog.Error("fixture failed","error",
 	if err := os.WriteFile(request.Archive, archive.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// release 契约要求整个归档的摘要，仅计算安装验签所需的一份。
-	digest := sha256.Sum256(archive.Bytes())
-	var manifest release.Release
-	if err := json.Unmarshal([]byte(request.ReleaseJSON), &manifest); err != nil {
-		t.Fatal(err)
-	}
-	public := key.Public().(ed25519.PublicKey)
-	manifest.Version = version
-	manifest.PublisherKeyID = release.KeyID(public)
-	manifest.Assets[0].Size = int64(archive.Len())
-	manifest.Assets[0].SHA256 = hex.EncodeToString(digest[:])
-	raw, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw = append(raw, '\n')
-	request.ReleaseJSON = string(raw)
-	request.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw)) + "\n"
-	request.PublicKey = base64.StdEncoding.EncodeToString(public) + "\n"
 	return request
 }

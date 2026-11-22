@@ -1,23 +1,16 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
-	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
@@ -42,24 +35,10 @@ func officialBundledPackage(dir, id string) (manage.InstallRequest, error) {
 	if err != nil {
 		return req, err
 	}
-	official, ok := trust.Official()
-	if !ok {
-		return req, fmt.Errorf("official publisher key is unavailable; use alonabot install to install %s manually", id)
+	if trust.Source(id) == "" {
+		return req, fmt.Errorf("unknown official component %q", id)
 	}
-	key, err := release.DecodePublicKey([]byte(req.PublicKey))
-	if err != nil {
-		return req, err
-	}
-	if !bytes.Equal(key, official) || req.Signature == "" {
-		return req, fmt.Errorf("bundled component %s requires the official publisher signature", id)
-	}
-	publication, err := release.Verify([]byte(req.ReleaseJSON), []byte(req.Signature), official)
-	if err != nil {
-		return req, err
-	}
-	if !trust.MatchesSource(id, publication.Source) {
-		return req, fmt.Errorf("bundled component %s has non-official source %q", id, publication.Source)
-	}
+	req.Confirm = true
 	return req, nil
 }
 
@@ -84,6 +63,9 @@ func (c *Core) preinstall(ctx context.Context, management *manage.Service, dir s
 			continue
 		}
 		id := entry.Name()
+		if slices.ContainsFunc(c.development, func(component Component) bool { return component.manifest.ID == id }) {
+			continue
+		}
 		// 已有记录包括卸载选择；完成标记前中断也保留管理员的状态。
 		if _, err := c.store.GetInstall(ctx, id); err == nil {
 			continue
@@ -126,12 +108,20 @@ func (c *Core) configuredAdapters(ctx context.Context, management *manage.Servic
 	}
 	slices.Sort(adapterIDs)
 	configured := make(map[string]bool)
+adapterGroups:
 	for _, adapterID := range adapterIDs {
 		group := groups[adapterID]
 		if len(group.Instances) == 0 {
 			continue
 		}
 		id := group.Package
+		// 开发 Adapter 稍后统一登记，预装阶段保留它对配置块的选择。
+		for _, entry := range c.development {
+			if entry.role == state.RoleAdapter && entry.manifest.AdapterID == adapterID && (id == "" || id == entry.manifest.ID) {
+				configured[entry.manifest.ID] = true
+				continue adapterGroups
+			}
+		}
 		if id == "" {
 			// 未绑定时使用当前安装的 Adapter；只有卸载记录时保留卸载选择。
 			for _, in := range installs {
@@ -188,106 +178,12 @@ func (c *Core) configureAdapter(ctx context.Context, management *manage.Service,
 	return nil
 }
 
-// installOfficialAdapter 从对应官方仓库下载签名组件，再交给普通安装流程。
-func (c *Core) installOfficialAdapter(ctx context.Context, management *manage.Service, id string) (err error) {
-	key, ok := trust.Official()
-	if !ok {
-		return fmt.Errorf("official publisher key is unavailable; use alonabot install to install %s manually", id)
-	}
+// installOfficialAdapter 经普通在线安装流程准备指定官方 Adapter。
+func (c *Core) installOfficialAdapter(ctx context.Context, management *manage.Service, id string) error {
 	source := trust.Source(id)
 	if source == "" || !strings.HasPrefix(id, officialAdapterPrefix) {
 		return fmt.Errorf("unknown official adapter %q", id)
 	}
-	base := "https://" + source + "/releases/latest/download/"
-	limits := packages.NewLimits(c.values)
-	contents := make(map[string][]byte)
-	for _, name := range []string{"release.json", "release.json.sig", "release.pub"} {
-		raw, err := officialReleaseBytes(ctx, base+name, limits.MaxArchiveBytes)
-		if err != nil {
-			return err
-		}
-		contents[name] = raw
-	}
-	if len(contents["release.json.sig"]) == 0 {
-		return errors.New("official adapter release requires a signature")
-	}
-	publisher, err := release.DecodePublicKey(contents["release.pub"])
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(publisher, key) {
-		return errors.New("official adapter publisher key differs from trusted key")
-	}
-	publication, err := release.Verify(contents["release.json"], contents["release.json.sig"], key)
-	if err != nil {
-		return err
-	}
-	if publication.PluginID != id || !trust.MatchesSource(id, publication.Source) {
-		return errors.New("official adapter release identity differs from requested component")
-	}
-	asset, ok := publication.Asset(runtime.GOOS, runtime.GOARCH)
-	if !ok {
-		return fmt.Errorf("official adapter has no asset for %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
-	address, err := url.Parse(asset.URL)
-	if err != nil || address.Scheme != "https" || address.Host == "" {
-		return fmt.Errorf("official adapter URL must be absolute HTTPS: %q", asset.URL)
-	}
-	staging := filepath.Join(c.dir, "staging")
-	if err := os.MkdirAll(staging, 0o700); err != nil {
-		return err
-	}
-	dir, err := os.MkdirTemp(staging, "official-adapter-*")
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, os.RemoveAll(dir)) }()
-	archive := filepath.Join(dir, "package.tar.gz")
-	file, err := os.OpenFile(archive, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	response, err := officialReleaseResponse(ctx, asset.URL)
-	if err != nil {
-		return errors.Join(err, file.Close())
-	}
-	n, copyErr := io.Copy(file, io.LimitReader(response.Body, limits.MaxArchiveBytes+1))
-	if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
-		return err
-	}
-	if n > limits.MaxArchiveBytes {
-		return errors.New("official adapter exceeds archive size limit")
-	}
-	_, err = management.Install(ctx, manage.InstallRequest{Archive: archive, ReleaseJSON: string(contents["release.json"]), Signature: string(contents["release.json.sig"]), PublicKey: string(contents["release.pub"])})
+	_, err := management.Install(ctx, manage.InstallRequest{Source: strings.TrimPrefix(source, "github.com/"), ID: id, Confirm: true})
 	return err
-}
-
-func officialReleaseBytes(ctx context.Context, address string, limit int64) ([]byte, error) {
-	response, err := officialReleaseResponse(ctx, address)
-	if err != nil {
-		return nil, err
-	}
-	raw, readErr := io.ReadAll(io.LimitReader(response.Body, limit+1))
-	if err := errors.Join(readErr, response.Body.Close()); err != nil {
-		return nil, err
-	}
-	if int64(len(raw)) > limit {
-		return nil, fmt.Errorf("official asset exceeds archive size limit: %s", address)
-	}
-	return raw, nil
-}
-
-func officialReleaseResponse(ctx context.Context, address string) (*http.Response, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, errors.Join(fmt.Errorf("download %s: %s", address, response.Status), response.Body.Close())
-	}
-	return response, nil
 }

@@ -173,11 +173,8 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 	if staged != nil {
 		packageDir = staged.Dir
 		m = staged.Manifest
-		target.Entrypoint, target.Version, target.PublisherKeyID = m.Entrypoint, m.Version, staged.Release.PublisherKeyID
-		target.BuildDigest, err = hex.DecodeString(staged.Asset.SHA256)
-		if err != nil {
-			return nil, err
-		}
+		target.Entrypoint, target.Version, target.PublisherKeyID = m.Entrypoint, m.Version, ""
+		target.BuildDigest = staged.Digest
 	}
 	if kind == KindRollback {
 		record, err := o.rollbackSource(ctx, pluginID, source, active, records)

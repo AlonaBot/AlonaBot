@@ -32,7 +32,7 @@ uv run --no-project --offline --no-python-downloads scripts/platform/cgo_build.p
 | 参数 | 输入 |
 | --- | --- |
 | `--alonabot` | 待验收 Core 的可执行文件路径 |
-| `--packages` | 当前平台组件包目录；分别包含 echo、showcase、alonabot-adapter-telegram、platform-tree 的唯一目标 `.tar.gz`，每包保留相邻 `release.json`；递归记录归档路径与长度 |
+| `--packages` | 当前平台组件包目录；分别包含 echo、showcase、alonabot-adapter-telegram、platform-tree 的唯一目标 `.tar.gz`；递归记录归档路径与长度 |
 | `--scenarios` | 候选源码 checkout 内的 `scripts/scenarios` 目录，含 `run.py` 与恢复模板 |
 | `--cgo` | 本地 `platform-cgo` 的构建记录 JSON；可选，省略时整体验收为 `incomplete` |
 | `--out` | 新建 JSON 文件；父目录须存在，已有文件会被拒绝 |
@@ -71,7 +71,7 @@ Windows 同样需要已存在的 Go、Git 和 uv，以及当前候选的全部�
 
 JSON 的 `recovery` 保存源码与候选提交、构建参数、七个产物的身份、三个场景的输入和完整 `events.jsonl`；每个场景另留 `go-test.log`、overlay、真实 `state.sqlite` 与业务数据库。程序同时核对所需测试名的成功记录和独立 cwd 标记，证据缺失即失败；部分事件和损坏输入的原始字节也保留在失败结果中。所有构建、运行目录与证据路径均位于 JSON 的 `workspace` 下，目录内容沿用原场景入口的布局。
 
-CGO fixture 源码和产物留在 ignored 目录。它是使用当前候选 SDK 的独立 `package main`，以 `genimpl.Register("main", genimpl.Resources{})` 登记资源并经 `sdk.Run` 启动；真实 `GET /native?value=81` 路由解析输入、调用 C 数学库的 `sqrt`，返回 `{"value":9,"compiler":"C __VERSION__","os":"darwin","arch":"arm64","pid":123}`，平台、PID 和编译器字符串均取实际值。Linux／Windows 的 C 入口通过 `#cgo linux windows LDFLAGS: -lm` 链接数学库。`build/pack` 固定 `CGO_ENABLED=0`；本地 `cgo_build.py` 为此单独编译已有 CGO 源文件并生成 unsigned 安装包，fixture ID 固定为 `platform-cgo`、版本 `0.1.0`，使用标准归档、外置 `release.json` 和必需的完整性字段。
+CGO fixture 源码和产物留在 ignored 目录。它是使用当前候选 SDK 的独立 `package main`，以 `genimpl.Register("main", genimpl.Resources{})` 登记资源并经 `sdk.Run` 启动；真实 `GET /native?value=81` 路由解析输入、调用 C 数学库的 `sqrt`，返回 `{"value":9,"compiler":"C __VERSION__","os":"darwin","arch":"arm64","pid":123}`，平台、PID 和编译器字符串均取实际值。Linux／Windows 的 C 入口通过 `#cgo linux windows LDFLAGS: -lm` 链接数学库。`build/pack` 固定 `CGO_ENABLED=0`；本地 `cgo_build.py` 为此单独编译已有 CGO 源文件并生成安装归档，fixture ID 固定为 `platform-cgo`、版本 `0.1.0`，使用标准归档和包内 plugin.yaml。
 
 `cgo_build.py` 需要已有 Go、C 编译器与 uv，`--root` 指向候选源码 checkout，`--source` 指向上述单个 Go 源文件，`--target` 为本次 `os/arch`，`--out` 必须为尚未存在的目录。它保留 `go env` 的目标、CC/CXX、CGO 参数和 GOFLAGS，执行实际 C 编译器 `--version` 及 `go build -x -work`，完整命令、cwd、起止耗时、stdout/stderr 和退出码写入 `build.json`；Go 构建临时工作区也保留。宿主版描述器只读取目标文件的 build-info。构建或编译器失败仍写记录，保留原错；缺工具时先取得安装授权。
 

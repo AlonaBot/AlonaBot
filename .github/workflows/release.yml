@@ -34,13 +34,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go run ./scripts/dist --version "${TAG#v}" --public-key .github/release.pub --out dist/core
+          go run ./scripts/dist --version "${TAG#v}" --out dist/core
           go run ./scripts/release-check --candidate dist/core --version "${TAG#v}" \
-            --public-key .github/release.pub --out "$RUNNER_TEMP/core-evidence"
-          go run ./scripts/dist --bundle --version "${TAG#v}" --public-key .github/release.pub \
+            --out "$RUNNER_TEMP/core-evidence"
+          go run ./scripts/dist --bundle --version "${TAG#v}" \
             --platforms linux/amd64,linux/arm64 --out dist/bundle
           go run ./scripts/release-check --bundle --candidate dist/bundle --version "${TAG#v}" \
-            --platforms linux/amd64,linux/arm64 --public-key .github/release.pub --out "$RUNNER_TEMP/bundle-evidence"
+            --platforms linux/amd64,linux/arm64 --out "$RUNNER_TEMP/bundle-evidence"
       - name: 验收本次归档首次启动
         env:
           ALONABOT_RELEASE_DIR: ${{ github.workspace }}/dist/core

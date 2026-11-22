@@ -139,7 +139,7 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 	}
 	for _, item := range api {
 		enabled, exists := want[item.ID]
-		if !exists || item.Enabled != enabled || item.Uninstalled || !item.Signed || item.AvailableUpdate != "" {
+		if !exists || item.Enabled != enabled || item.Uninstalled || item.Signed || item.AvailableUpdate != "" {
 			t.Fatalf("preinstalled: %+v", item)
 		}
 		if enabled && item.State != "Activated" || !enabled && (item.Active != "" || item.State != "Installed") {

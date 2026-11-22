@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	officialKeySymbol  = "github.com/AlonaBot/AlonaBot/internal/core/trust.officialKey"
 	versionSymbol      = "github.com/AlonaBot/AlonaBot/internal/app.releaseVersion"
 	goStringHeaderSize = 16 // 五个发行目标均为 64 位，string 为指针和长度。
 )

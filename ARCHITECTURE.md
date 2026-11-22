@@ -16,7 +16,7 @@ Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用�
 | `internal/tune/` | 调优参数表：名称、缺省值、单位、约束与 `--args` 解析 | 参数的业务含义（由使用方实现） |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） |
 | `internal/inproc/` | 库模式同进程组件的启动参数与运行入口（`internal/app` 构造参数；SDK 读取参数，并在 init 中登记入口） | 启动流程本身（归 sdk 与 `internal/app`） |
-| `internal/pluginkit/` | 开发 CLI 的打包、release.json 生成与签名（plugin build/pack） | 安装与预检（归 `internal/core/packages`） |
+| `internal/pluginkit/` | 开发 CLI 的构建与组件归档打包（plugin build/pack） | 安装与预检（归 `internal/core/packages`） |
 | `sdk/`（含 `sdk/message`、`sdk/sqlitedb`、`sdk/gormdb`、`sdk/llm`、`sdk/agent` 等子包） | 组件侧 API：根包只放插件对象、Context/Send、注册 builder、权限、生命周期 Hook 与运行入口，动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作、选项来源与命令目录按类别放在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`，根包与这些子包共用的注册状态在 `sdk/internal/registry`；runtime.lock；公开消息与事件 API 使用 `sdk/message` 的消息、事件、`SendResult` 与媒体类型，会话字符串、消息句柄与用户字符串是 string，由 `sdk/message` 的 `SID`/`ParseSID`、`Ref`/`ParseRef`、`UID`/`ParseUID` 拼接与拆分，错误使用 `sdk/errcode`；只供 CLI 注入的登记代码导入的资源登记入口 `sdk/genimpl`；受管 SQLite 的 `database/sql` 与 GORM 两个按需入口；`sdk/llm` 提供文本生成类型与 Ask，`sdk/agent` 提供以 `@agent` 为目标的 Generate | Core 状态库、管理凭证、其他插件 |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 |
 | `internal/app/` | Core 装配、候选与进程管理、同进程运行开发组件，以及只供开发 CLI 使用的独立进程开发组件、单组件重启与重新读取设置；放在 `internal/core` 之外，因为它要 import `sdk` | 库模式的公开接口（归根包）、业务逻辑 |
@@ -112,8 +112,8 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> internal/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 | `tests/e2e -> alonabot-adapter-telegram/telegramtest`（仅集成测试） | Telegram 目录运行集成测试与本地故障矩阵复用官方 Adapter、Bot API 模拟服务和开发构建装配 |
-| `scripts/dist -> contracts/manifest`、`-> contracts/release`、`-> internal/releasenotes`；`scripts/release-notes -> internal/releasenotes`；`internal/releasenotes -> contracts/manifest`；`scripts/release-check -> contracts/release` | 发行构建与发布复验只用契约包核对签名；其余步骤经 `os/exec` 调用 go 与 alonabot |
-| `alonabot-webui -> sdk`、`-> sdk/message`、`-> sdk/sqlitedb`、`-> contracts/manifest`、`-> contracts/pluginindex`、`-> contracts/release` | 官方 WebUI 后台通过公共 SDK 观察事件、发送回执与管理会话路由，只读写自身受管 SQLite；契约包解析插件源、版本与发行清单，Core 管理数据由浏览器经 Admin API 操作 |
+| `scripts/dist -> contracts/release`、`-> internal/core/packages`、`-> internal/tune`、`-> internal/releasenotes`；`scripts/release-notes -> internal/releasenotes`；`internal/releasenotes -> contracts/manifest`；`scripts/release-check -> contracts/manifest`、`-> contracts/release` | 发行构建复用安装预检核对组件身份与资源，发布复验读取包内声明；其余步骤经 `os/exec` 调用 go 与 alonabot |
+| `alonabot-webui -> sdk`、`-> sdk/message`、`-> sdk/sqlitedb`、`-> contracts/manifest`、`-> contracts/pluginindex` | 官方 WebUI 后台通过公共 SDK 观察事件、发送回执与管理会话路由，只读写自身受管 SQLite；契约包解析插件源和包内声明，Core 管理数据由浏览器经 Admin API 操作 |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
 | `alonabot-plugin-help -> sdk/...`、`-> contracts`；`alonabot-agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`alonabot-agent/provider` 另用 openai-go 与 anthropic-sdk-go |

@@ -199,16 +199,16 @@ bin/alonabot check ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,
 
 `test` 在全新临时数据目录中构建宿主平台组件，完成真实握手、准备、注册、激活与停止，报告注册命令及清理结果；Adapter 保持零平台实例，WebUI 检查静态加载资源。进程组件的 Bootstrap 下发临时状态根内 `plugin_data/<id>/` 的绝对路径，测试结束时随临时目录清理。准备、注册、停止或清理失败均非零退出。
 
-`pack` 为每个 `--target` 分别扫描源码、检查资源并构建，输出 `<id>-<version>-<os>-<arch>.tar.gz`；静态 WebUI 只输出一个 `<id>-<version>-any.tar.gz`，带 Go 入口的 WebUI 按平台构建。全部归档共享一份列出本次全部资产的 `release.json`，`--out` 默认同 build。资产地址为 `--asset-base` 加 `/` 与归档名；省略时，`source: github.com/<owner>/<repo>` 推出 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀，前缀保留路径且无 query/fragment。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
+`pack` 为每个 `--target` 分别扫描源码、检查资源并构建，输出 `<id>-<version>-<os>-<arch>.tar.gz`；静态 WebUI 只输出一个 `<id>-<version>-any.tar.gz`，带 Go 入口的 WebUI 按平台构建。`pack` 只生成组件归档，`--out` 默认同 build；Release 上传这些归档，源码由 GitHub 自动提供。进程包的 `build-info` 是 `debug.BuildInfo.String()` 文本；生成代码、资源旁车与归档共用扫描时校验的资源快照，配置 schema 使用同一规范内容；扫描后保存的工程资源留待下次构建。
 
 配置字段的 `example` 引用图片时，`check`、`build`、`pack` 检查两种配置 schema 中的引用及图片签名；被引用的图片随资源快照进入构建目录和归档。示例写法见 [插件开发规范](plugin-guide.zh-CN.md#配置字段的回复示例)。
 
 ```fish
 bin/alonabot pack ./alonabot-plugin-hello --target linux/amd64 --target linux/arm64 \
-  --asset-base https://example.com/releases/v0.1.0 --key ./release.key --out ./dist
+  --out ./dist
 ```
 
-`--key` 可选，文件内容为标准 base64 编码的 64 字节 Ed25519 私钥，允许首尾空白。提供时只对最终合并清单的原始字节签名一次，额外写 `release.json.sig` 和 `release.pub`，分别为标准 base64 签名及公钥；省略时生成 unsigned release，并清除输出目录中旧的签名与公钥。密钥读取或签名失败直接报错。私钥、运行配置与数据目录均应留在打包资源之外。
+安装直接读取归档中的 `plugin.yaml`，在线安装使用 GitHub Release API 选择对应平台的归档。运行配置与数据目录应留在打包资源之外。
 
 ## 库模式运行（同一进程）
 

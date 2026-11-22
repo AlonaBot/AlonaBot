@@ -1,24 +1,7 @@
-// Package trust 读取发行构建内置的官方发布者公钥。
-//
-// 公钥通过链接器注入；开发构建没有预先信任的发布者。
+// Package trust 定义官方组件的仓库来源。
 package trust
 
-import (
-	"crypto/ed25519"
-	"encoding/base64"
-	"strings"
-)
-
-var officialKey string
-
-// Official 返回发行构建内置的 Ed25519 公钥；未注入有效公钥时返回 false。
-func Official() (ed25519.PublicKey, bool) {
-	key, err := base64.StdEncoding.DecodeString(officialKey)
-	if err != nil || len(key) != ed25519.PublicKeySize {
-		return nil, false
-	}
-	return ed25519.PublicKey(key), true
-}
+import "strings"
 
 // Source 返回官方组件独立仓库的规范来源；未知组件返回空字符串。
 func Source(id string) string {

@@ -1,10 +1,10 @@
-// Package packages 在安装前检查组件安装包：校验发布清单及可选签名，受控解压归档，
+// Package packages 在安装前检查组件安装包：受控解压归档，
 // 核对包内 manifest，并把通过检查的候选移入不可变的包目录。
 //
 // 包不下载归档、不登记安装、不持久化来源信任。
 //
 // 包的组成：
-//   - [Preflight] 依次验签、核对归档与 manifest，返回暂存目录中的 [Candidate]。
+//   - [Preflight] 核对归档与 manifest，返回暂存目录中的 [Candidate]。
 //   - [Extract] 按 [Limits] 受控解压 tar.gz，只接受普通文件和目录。
 //   - [Candidate.MoveTo] 与 [Candidate.Discard] 结束暂存目录的生命周期。
 package packages
@@ -13,7 +13,6 @@ import (
 	"archive/tar"
 	"cmp"
 	"compress/gzip"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
@@ -35,7 +34,6 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
@@ -71,46 +69,27 @@ func NewLimits(v tune.Values) Limits {
 
 // Input 是 [Preflight] 的输入。
 type Input struct {
-	ReleaseJSON []byte            // release.json 的原始字节
-	Signature   []byte            // release.json.sig 的原始字节
-	PublicKey   ed25519.PublicKey // 已信任的发布者公钥
-	Source      string            // 已绑定的来源，例如 github.com/owner/repo
-	OS, Arch    string            // 本机平台
-	ArchivePath string            // 已下载到本地的归档
+	Source      string // 在线安装时绑定的仓库来源；本地安装取包内声明。
+	ID, Version string // 已知的目标身份与 Release 版本，空串表示由包内声明确定。
+	OS, Arch    string
+	ArchivePath string
 }
 
 // Candidate 是通过预检、仍在暂存目录中的安装包。
 type Candidate struct {
 	Dir      string // 暂存目录；MoveTo 成功或 Discard 后为空
 	Manifest *manifest.Manifest
-	Release  *release.Release
-	Asset    release.Asset // 本机平台对应的资产
-	Warnings []string      // manifest.Parse 返回的全部警告，保持原顺序。
+	Digest   []byte   // 不可变包目录和安装记录使用的归档摘要。
+	Warnings []string // manifest.Parse 返回的全部警告，保持原顺序。
 }
 
-// Preflight 校验发布清单、可选签名与归档，并解压到 stagingRoot 下新建的唯一目录。
+// Preflight 校验组件归档，并解压到 stagingRoot 下新建的唯一目录。
 //
 // 任何一步失败都会删除已建的暂存目录。校验失败返回带协议错误码的 *validate.Error：
-// 签名或来源不符为 PERMISSION_DENIED，缺少本平台资产为 UNSUPPORTED，超出上限为
-// RESOURCE_EXHAUSTED，归档与清单或 manifest 不一致为 INVALID_ARGUMENT。
+// 来源不符为 PERMISSION_DENIED，平台不符为 UNSUPPORTED，超出上限为
+// RESOURCE_EXHAUSTED，归档或 manifest 无效为 INVALID_ARGUMENT。
 func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
-	// 1. 先验签再解析清单，核对来源与本机平台。
-	r, err := release.Verify(in.ReleaseJSON, in.Signature, in.PublicKey)
-	if err != nil {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "verify release: "+err.Error())
-	}
-	if r.Source != in.Source {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "release source does not match the bound source")
-	}
-	asset, ok := r.Asset("any", "any")
-	if !ok {
-		asset, ok = r.Asset(in.OS, in.Arch)
-	}
-	if !ok {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, fmt.Sprintf("release has no asset for %s/%s", in.OS, in.Arch))
-	}
-
-	// 2. 核对归档的大小与整个文件的 SHA256，之后才解压。
+	// 1. 检查归档大小并计算现有不可变包标识。
 	archive, err := os.Open(in.ArchivePath)
 	if err != nil {
 		return nil, fmt.Errorf("open archive: %w", err)
@@ -123,21 +102,15 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	if info.Size() > lim.MaxArchiveBytes {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "archive exceeds the size limit")
 	}
-	if info.Size() != asset.Size {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "archive size does not match the release")
-	}
 	hash := sha256.New()
 	if _, err := io.Copy(hash, archive); err != nil {
 		return nil, fmt.Errorf("hash archive: %w", err)
-	}
-	if hex.EncodeToString(hash.Sum(nil)) != asset.SHA256 {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "archive SHA256 does not match the release")
 	}
 	if _, err := archive.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("rewind archive: %w", err)
 	}
 
-	// 3. 解压到新的唯一暂存目录；之后的失败都删除整个目录。
+	// 2. 解压到新的唯一暂存目录；之后的失败都删除整个目录。
 	if err := os.MkdirAll(stagingRoot, dirMode); err != nil {
 		return nil, fmt.Errorf("create staging root: %w", err)
 	}
@@ -155,7 +128,7 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		return nil, err
 	}
 
-	// 4. 包内 manifest 必须与签名清单和本机平台一致，声明的入口与图标必须是普通文件。
+	// 3. 核对期望身份、本机平台以及声明的入口与图标。
 	data, err := os.ReadFile(filepath.Join(dir, manifestFileName))
 	if err != nil {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "archive has no readable "+manifestFileName)
@@ -166,16 +139,16 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	}
 	m := parsed.Manifest
 	switch {
-	case m.ID != r.PluginID:
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest plugin ID does not match the release")
-	case m.Version != r.Version:
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest version does not match the release")
-	case m.Source != r.Source:
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest source does not match the release")
-	case m.OS != asset.OS || m.Arch != asset.Arch:
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest platform does not match this host")
-	case (m.Role != "webui" || m.Entrypoint != "") && (asset.OS != in.OS || asset.Arch != in.Arch):
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "process packages must match the host platform")
+	case in.ID != "" && m.ID != in.ID:
+		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest plugin ID does not match the requested component")
+	case in.Version != "" && m.Version != in.Version:
+		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest version does not match the release tag")
+	case in.Source != "" && m.Source != in.Source:
+		return nil, failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "manifest source does not match the bound source")
+	case m.OS != in.OS || m.Arch != in.Arch:
+		if m.Role != "webui" || m.Entrypoint != "" || m.OS != "any" || m.Arch != "any" {
+			return nil, failure(pb.ErrorCode_ERROR_CODE_UNSUPPORTED, "manifest platform does not match this host")
+		}
 	}
 	// 解压已拒绝所有链接；这里核对声明的文件存在且类型正确。
 	files := []string{m.Entrypoint}
@@ -197,18 +170,18 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 	if err := checkChangelog(dir, m.Version); err != nil {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
-	// 5. 示例图片来自已检查的声明；解压已拒绝链接，仍需核对普通文件与图片签名。
+	// 4. 示例图片来自已检查的声明；解压已拒绝链接，仍需核对普通文件与图片签名。
 	if err := checkExampleImages(dir); err != nil {
 		return nil, err
 	}
-	// 6. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
+	// 5. 进程包的外置构建信息须来自同一入口，并与声明的平台一致。
 	if m.Role != "webui" || m.Entrypoint != "" {
 		if err := checkBuildInfo(dir, m); err != nil {
 			return nil, err
 		}
 	}
 	keep = true
-	return &Candidate{Dir: dir, Manifest: m, Release: r, Asset: asset, Warnings: parsed.Warnings}, nil
+	return &Candidate{Dir: dir, Manifest: m, Digest: hash.Sum(nil), Warnings: parsed.Warnings}, nil
 }
 
 func checkExampleImages(dir string) error {
@@ -307,6 +280,14 @@ func extract(r io.Reader, dest string, lim Limits) error {
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
+			// tar 结束标记早于 gzip 校验尾，继续读取以拒绝截断或损坏的归档。
+			n, err := io.Copy(io.Discard, io.LimitReader(gz, lim.MaxExpandedBytes-expanded+1))
+			if err != nil {
+				return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("archive gzip stream is invalid: %v", err))
+			}
+			if n > lim.MaxExpandedBytes-expanded {
+				return failure(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "archive expanded size exceeds the limit")
+			}
 			return nil
 		}
 		if err != nil {
@@ -398,7 +379,7 @@ func (c *Candidate) MoveTo(packagesRoot string) (string, error) {
 	if err := os.MkdirAll(parent, dirMode); err != nil {
 		return "", fmt.Errorf("create package parent: %w", err)
 	}
-	final := filepath.Join(parent, c.Manifest.Version+"-"+c.Asset.SHA256[:digestPrefixLength])
+	final := filepath.Join(parent, c.Manifest.Version+"-"+hex.EncodeToString(c.Digest)[:digestPrefixLength])
 	if _, err := os.Lstat(final); err == nil {
 		return "", failure(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "package directory already exists")
 	} else if !errors.Is(err, os.ErrNotExist) {

@@ -3,12 +3,9 @@ package manage
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -18,61 +15,32 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
-// BundledPackage 读取发行物中指定组件的本机安装输入，保留清单、签名和公钥的原始字节。
-// 验签、摘要与包内身份校验由 Install 或 Update 完成；缺失文件保留 os.ErrNotExist。
+// BundledPackage 定位发行物中指定组件的唯一平台归档。
 func BundledPackage(dir, id string) (InstallRequest, error) {
-	var req InstallRequest
+	req := InstallRequest{ID: id}
 	if _, err := validate.PluginID(id); err != nil {
 		return req, err
 	}
 	directory := filepath.Join(dir, id)
-	for _, file := range []struct {
-		name   string
-		target *string
-	}{
-		{"release.json", &req.ReleaseJSON},
-		{"release.json.sig", &req.Signature},
-		{"release.pub", &req.PublicKey},
-	} {
-		raw, err := os.ReadFile(filepath.Join(directory, file.name))
-		if err != nil {
-			return req, fmt.Errorf("read bundled %s: %w", id, err)
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return req, fmt.Errorf("read bundled %s: %w", id, err)
+	}
+	publication := release.GitHubRelease{}
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			publication.Assets = append(publication.Assets, release.Download{Name: entry.Name()})
 		}
-		*file.target = string(raw)
 	}
-	var publication release.Release
-	if err := json.Unmarshal([]byte(req.ReleaseJSON), &publication); err != nil {
-		return req, fmt.Errorf("parse bundled %s release: %w", id, err)
-	}
-	if publication.PluginID != id {
-		return req, fmt.Errorf("bundled component %s has release identity %q", id, publication.PluginID)
-	}
-	asset, ok := publication.Asset("any", "any")
-	if !ok {
-		asset, ok = publication.Asset(runtime.GOOS, runtime.GOARCH)
-	}
-	if !ok {
-		return req, fmt.Errorf("bundled component %s has no asset for %s/%s", id, runtime.GOOS, runtime.GOARCH)
-	}
-	address, err := url.Parse(asset.URL)
+	asset, err := publication.Select(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
-		return req, fmt.Errorf("parse bundled %s asset URL: %w", id, err)
+		return req, fmt.Errorf("select bundled %s: %w", id, err)
 	}
-	name := path.Base(address.Path)
-	if !filepath.IsLocal(name) || name == "." {
-		return req, fmt.Errorf("bundled component %s has an invalid archive name", id)
-	}
-	req.Archive, err = filepath.Abs(filepath.Join(directory, name))
-	if err != nil {
-		return req, err
-	}
-	if _, err := os.Stat(req.Archive); err != nil {
-		return req, fmt.Errorf("stat bundled %s archive: %w", id, err)
-	}
-	return req, nil
+	req.Archive, err = filepath.Abs(filepath.Join(directory, asset.Name))
+	return req, err
 }
 
-// bundledUpdate 只选择仍绑定官方来源与发布者的更高版本，和正式更新共用完整预检。
+// bundledUpdate 只选择仍绑定官方来源的更高版本，和正式更新共用完整预检。
 func (s *Service) bundledUpdate(ctx context.Context, id string) (req InstallRequest, version string, err error) {
 	if s.opt.BundledPackages == "" {
 		return req, "", nil
@@ -81,8 +49,7 @@ func (s *Service) bundledUpdate(ctx context.Context, id string) (req InstallRequ
 	if err != nil {
 		return req, "", err
 	}
-	key, official := trust.Official()
-	if !official || in.Uninstalled || !trust.MatchesSource(id, in.Source) || in.PublisherKeyID != release.KeyID(key) {
+	if in.Uninstalled || !trust.MatchesSource(id, in.Source) {
 		return req, "", nil
 	}
 	if _, err := os.Stat(filepath.Join(s.opt.BundledPackages, id)); errors.Is(err, os.ErrNotExist) {
@@ -94,30 +61,20 @@ func (s *Service) bundledUpdate(ctx context.Context, id string) (req InstallRequ
 	if err != nil {
 		return req, "", err
 	}
-	if req.Signature == "" {
-		return req, "", denied("bundled update requires an official signature")
-	}
-	publication, err := release.Verify([]byte(req.ReleaseJSON), []byte(req.Signature), key)
-	if err != nil {
-		return req, "", err
-	}
-	if publication.Source != in.Source {
-		return req, "", denied("bundled update source differs from installed binding")
-	}
-	if compareBundledVersions(publication.Version, in.Version) <= 0 {
-		return req, "", nil
-	}
 	candidate, err := s.prepare(ctx, req)
 	if err != nil {
 		return req, "", err
 	}
 	defer func() { err = errors.Join(err, candidate.Discard()) }()
 	m := candidate.Manifest
-	if m.ID != id || m.Role != string(in.Role) || m.AdapterID != in.AdapterID || candidate.Release.PublisherKeyID != in.PublisherKeyID {
+	if m.ID != id || m.Role != string(in.Role) || m.AdapterID != in.AdapterID || m.Source != in.Source {
 		return req, "", denied("bundled update identity differs from installed binding")
 	}
 	if err := checkWebUIVersion(m); err != nil {
 		return req, "", err
+	}
+	if compareBundledVersions(m.Version, in.Version) <= 0 {
+		return req, "", nil
 	}
 	return req, m.Version, nil
 }

@@ -12,14 +12,12 @@ import (
 
 func packCommand(code *int) *cobra.Command {
 	var options generate.Options
-	var assetBase, key, out string
+	var out string
 	var targets []string
-	command := &cobra.Command{Use: "pack [directory]", Short: "Build target archives and a shared release.json, optionally signed", Args: cobra.MaximumNArgs(1)}
+	command := &cobra.Command{Use: "pack [directory]", Short: "Build component archives for target platforms", Args: cobra.MaximumNArgs(1)}
 	flags := command.Flags()
 	flags.StringArrayVar(&targets, "target", nil, "target OS/arch (repeatable; default: host platform)")
 	flags.StringSliceVar(&options.Tags, "tags", nil, "comma-separated build tags")
-	flags.StringVar(&assetBase, "asset-base", "", "absolute https asset URL prefix (default: GitHub source release)")
-	flags.StringVar(&key, "key", "", "standard base64 Ed25519 private key file (64 bytes)")
 	flags.StringVar(&out, "out", "", "output directory (default: <project>/bin)")
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		*code = exitFailure
@@ -32,7 +30,7 @@ func packCommand(code *int) *cobra.Command {
 			}
 			platforms = append(platforms, manifest.Platform{OS: goos, Arch: goarch})
 		}
-		paths, err := pluginkit.PackTargets(cmd.Context(), options, platforms, assetBase, key, out)
+		paths, err := pluginkit.PackTargets(cmd.Context(), options, platforms, out)
 		if err != nil {
 			return err
 		}

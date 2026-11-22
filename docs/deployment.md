@@ -83,10 +83,10 @@ alonabot run --data-dir ./data
 
 `run` and library mode (`alonabot.Start`) share Core assembly in `internal/app`: CLI calls it directly, the root package provides a thin library wrapper. Management services install/start/stop components. CLI calls the API at `base_url`, automatically reads persistent credentials from `--data-dir`, connects directly to local listen and preserves base_url Host. Override the local connection address with `--admin-url`:
 ```fish
-alonabot install pkg.tar.gz --yes             # release.json、签名和公钥缺省取归档同目录
+alonabot install pkg.tar.gz --yes             # Install the local archive
 alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
 alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
-alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
+alonabot install --source owner/repo --yes      # Select a platform archive via the GitHub Release API
 alonabot install --source AlonaBot/alonabot-webui --yes
 alonabot enable alonabot-webui-admin
 alonabot install --source AlonaBot/alonabot-agent --yes
@@ -100,9 +100,9 @@ alonabot adapter instance create alonabot-adapter-telegram primary --config inst
 alonabot admin add telegram:123456
 ```
 
-An existing regular-file positional argument to `install` selects that archive; other values locate a component ID in adjacent `packages/<component ID>/`, listing available official IDs if missing. Without an argument, author projects search `bin/`; other directories search themselves, also checking manifests in direct package subdirectories. `release.json` selects host assets; static WebUI uses `any/any`. Exactly one candidate installs; zero/multiple candidates print search paths/candidates and exit. Discovery is read-only; management API performs installation.
+An existing regular-file positional argument to `install` selects that archive; other values locate a component ID in adjacent `packages/<component ID>/`, listing available official IDs if missing. Without an argument, author projects search `bin/`; other directories search themselves, also checking direct package subdirectories. Archive names select host assets; static WebUI uses `any/any`. Exactly one candidate installs; zero/multiple candidates print search paths/candidates and exit. Discovery is read-only; management API performs installation.
 
-`--archive` still explicitly selects archives; `--release`, `--signature`, `--public-key` override metadata. Unspecified signature/key default to `release.json.sig`/`release.pub` beside release.json. Positional argument, `--archive` and `--source` are mutually exclusive; `--source` also excludes local metadata options. Source/signature confirmations, archive preflight, `--yes` and `--replace` follow the management service.
+`--archive` explicitly selects an archive. Positional arguments, `--archive` and `--source` are mutually exclusive. Source confirmation, archive preflight, `--yes` and `--replace` use the management service. Browser installation and updates also need only the archive. After historical Release sidecars are removed, older Core versions need an upgrade for online installation and updates; see [release sequencing](releasing.md).
 
 After enabling help, send `/whoami` in chat and pass its returned user string to `admin add`. The returned instance name identifies its source.
 
@@ -206,7 +206,7 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Operation | Endpoint and request |
 | --- | --- |
 | Core identity and components | `GET /api/v1/core`, `GET /api/v1/packages` |
-| Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `ReleaseJSON`, `Signature`, `PublicKey`, `Source`, `Confirm`, `Replace`); see [management types](../internal/core/manage/install.go) |
+| Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`); see [management types](../internal/core/manage/install.go) |
 | Enable, disable, restart, reload | `POST /api/v1/packages/{action}` with `{"id":"demo"}`; disable may require `confirm` |
 | Update | `POST /api/v1/packages/update`, `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |
 | Rollback | `POST /api/v1/packages/rollback`, `{"id":"demo","generation":"retained-generation","confirm":false}` |
@@ -223,6 +223,10 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Conversations | `GET /api/v1/plugins/{id}/conversations` returns summaries; `DELETE /api/v1/plugins/{id}/conversations/{key}` clears one full opaque key |
 | Plugin data | `/api/v1/plugins/{id}/data/`: tables/rows, kv, files, export and clear; see [data handlers](../internal/core/manage/data_api.go) |
 | Diagnostics | `POST /api/v1/diagnostics`, `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}` defaults; returns ZIP with no-store |
+
+Local JSON installation provides an `Archive` path on the Core host; identity and source come from the archive’s `plugin.yaml`. Online installation provides only `Source: "owner/repo"`; Core selects a platform archive through the latest Release API. Optional `ID` constrains the expected identity. First source trust and same-kind replacement require confirmation when applicable. Updates and reinstalls with retained records preserve source and identity binding. `Package.PublisherKeyID` and `Package.Signed` retain their historical meaning; new installs and successful updates or reinstalls set them to empty and false.
+
+Browsers send `multipart/form-data` to the install/update endpoints: one required file part `archive`, optional text `confirm=true|false`, install-only text `replace=true|false`, and update-only required text `id`. File parts have `filename`; text parts omit it. Unknown or duplicate parts, missing archives/update IDs, invalid booleans and truncated requests return 400 / INVALID_ARGUMENT. Authentication precedes parsing. Archives stream into exclusive temporary directories under existing installation limits and preflight checks; cleanup follows the service call. Confirmation returns 409 with all `affected` objects; resend the archive with `confirm=true` after approval. Preflight precedes changes to existing components. Source binding failures return 403 / PERMISSION_DENIED; updates retain identity, pin and dependency checks and preserve user data.
 
 Pending edits require the current `base_generation`; stale edits return 409. Secrets are masked as `{"$secret_set":true}` on reads; submit new plaintext only where intended, never the mask or Core secret references. Reload creates a candidate generation with its own managed SQLite; restart keeps Active. A failed OnReady after commit leaves the new Active degraded rather than restoring the old database. Installed generation lists are available at `GET /api/v1/plugins/{id}/generations`. Development components reject update/rollback/uninstall with 412.
 
@@ -252,7 +256,7 @@ Search is a case-insensitive substring match over name, description, repo, autho
 
 `GET /updates?repo=owner/repo` refreshes on every query and returns `repo,version,release_url,markdown,fetched_at,stale`. The latest Release tag must be SemVer after stripping a leading v; Markdown preserves the Release body. A latest-Release 404 returns 404 / NO_RELEASE, mapped to null by WebUI's `getLatestRelease`. Source and Release caches use lowercase source/repo keys. Links allow only HTTP/HTTPS/mailto; HTML renders as text. Update previews use the component's bound source, installed changelogs supply post-update notes, and seen versions advance only to versions actually displayed.
 
-For submission, `GET /store/check?repo=owner/repo` reads the latest Release, release.json and its first platform archive without changing persistent caches. It checks repository/Release URLs, SemVer, release structure/version/source and package manifest ID/version/source agreement. It returns `repo,role,id,name,version,release_url`, optional description/author and ordered manifest `warnings` (including an empty array). The returned repo preserves the verified release Source's canonical case after removing `github.com/`. Core installation preflight verifies signatures, keys, archive length and digest integrity. Only latest-Release 404 maps to NO_RELEASE; bad asset 404s and other failures return 500 / INTERNAL with the actual error.
+For submission, `GET /store/check?repo=owner/repo` reads the latest Release API and its first platform archive without changing persistent caches. It checks repository, Release and asset URLs, tag SemVer, asset name/length, and packaged manifest ID/version/source. It returns `repo,role,id,name,version,release_url`, optional description/author and ordered manifest `warnings` (including an empty array). The returned repo preserves the verified manifest Source’s canonical case after removing `github.com/`. Core preflight also checks platform, build-info, resources and archive integrity. Only latest-Release 404 maps to NO_RELEASE; bad asset 404s and other failures return 500 / INTERNAL with the actual error.
 
 A source index uses `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`; tags are optional. After checking, the user supplies tags and opens the source repository's `issues/new` with `template=submit-plugin.yml` and URL-encoded `repo`, `role`, `tags`, `release_url`, using the canonical checked repo. The browser submits the GitHub Issue.
 

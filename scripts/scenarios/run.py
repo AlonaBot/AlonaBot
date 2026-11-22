@@ -271,9 +271,9 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description="Build fixtures or run management and recovery scenarios against supplied binaries.")
     commands = parser.add_subparsers(dest="scenario", required=True)
-    build = commands.add_parser("build", help="build three signed recovery fixture packages")
+    build = commands.add_parser("build", help="build three recovery fixture packages")
     build.add_argument("--out", type=Path, required=True, help="new output directory")
-    recovery_build = commands.add_parser("build-recovery", help="build checkpoint Core and signed recovery, probe and adapter packages")
+    recovery_build = commands.add_parser("build-recovery", help="build checkpoint Core and recovery, probe and adapter packages")
     recovery_build.add_argument("--out", type=Path, required=True, help="new output directory")
     management = commands.add_parser("management", help="run the complete management flow")
     management.add_argument("--alonabot", type=Path, required=True)

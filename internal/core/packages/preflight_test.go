@@ -4,13 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
 	"debug/buildinfo"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -20,7 +15,6 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
@@ -98,48 +92,30 @@ func buildArchive(t *testing.T, entries []testEntry) []byte {
 	return buf.Bytes()
 }
 
-// pkg 是一份在临时目录中生成的归档与签名清单。
+// pkg 是一份在临时目录中生成的组件归档。
 type pkg struct {
 	root  string
 	input Input
 }
 
-// newPackage 写出归档，并签名 edit 修改后的清单。
-func newPackage(t *testing.T, entries []testEntry, edit func(*release.Release)) pkg {
+// newPackage 写出组件归档及期望身份。
+func newPackage(t *testing.T, entries []testEntry) pkg {
 	t.Helper()
 	archive := buildArchive(t, entries)
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256(archive)
-	r := release.Release{
-		PublisherKeyID: release.KeyID(pub), Source: testSource, PluginID: testPluginID, Version: testVersion,
-		Assets: []release.Asset{{OS: testOS, Arch: testArch, URL: "https://example.com/demo.tar.gz", Size: int64(len(archive)), SHA256: hex.EncodeToString(sum[:])}},
-	}
-	if edit != nil {
-		edit(&r)
-	}
-	raw, err := json.Marshal(r)
-	if err != nil {
-		t.Fatal(err)
-	}
 	root := t.TempDir()
 	archivePath := filepath.Join(root, "demo.tar.gz")
 	if err := os.WriteFile(archivePath, archive, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return pkg{root: root, input: Input{
-		ReleaseJSON: raw,
-		Signature:   []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(priv, raw))),
-		PublicKey:   pub, Source: testSource, OS: testOS, Arch: testArch, ArchivePath: archivePath,
+		ID: testPluginID, Version: testVersion, Source: testSource, OS: testOS, Arch: testArch, ArchivePath: archivePath,
 	}}
 }
 
-// TestPreflightAndMoveTo 用真实归档、签名与文件系统驱动合法包的完整流程（V-27、V-41 的预检分项）。
+// TestPreflightAndMoveTo 用真实归档与文件系统驱动合法包的完整流程（V-27、V-41 的预检分项）。
 func TestPreflightAndMoveTo(t *testing.T) {
 	entries := validEntries()
-	p := newPackage(t, entries, nil)
+	p := newPackage(t, entries)
 	staging, packages := filepath.Join(p.root, "staging"), filepath.Join(p.root, "packages")
 
 	c, err := Preflight(p.input, staging, NewLimits(tune.Defaults()))
@@ -150,7 +126,7 @@ func TestPreflightAndMoveTo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(packages, testPluginID, testVersion+"-"+c.Asset.SHA256[:12]); final != want {
+	if want := filepath.Join(packages, testPluginID, testVersion+"-"+hex.EncodeToString(c.Digest)[:12]); final != want {
 		t.Fatalf("MoveTo() = %s, want %s", final, want)
 	}
 	if got, err := os.ReadFile(filepath.Join(final, "bin", "plugin")); err != nil || string(got) != entries[2].body {
@@ -195,21 +171,17 @@ func TestPreflightRejects(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		entries []testEntry
-		release func(*release.Release)
 		input   func(*Input)
 		limits  Limits
 		want    pb.ErrorCode
 	}{
-		{name: "bad signature", input: func(in *Input) { in.ReleaseJSON = append(in.ReleaseJSON, ' ') }, want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
 		{name: "source mismatch", input: func(in *Input) { in.Source = "github.com/other/demo" }, want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
 		{name: "no asset for platform", input: func(in *Input) { in.OS = "unsupported" }, want: pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
-		{name: "size mismatch", release: func(r *release.Release) { r.Assets[0].Size++ }, want: invalid},
-		{name: "digest mismatch", release: func(r *release.Release) { r.Assets[0].SHA256 = strings.Repeat("0", 64) }, want: invalid},
 		{name: "archive over limit", limits: Limits{MaxArchiveBytes: 1, MaxExpandedBytes: 1 << 20, MaxEntries: 100}, want: exhausted},
 		{name: "manifest id", entries: withManifest("alonabot-plugin-other", testVersion, testSource, testOS, testArch, "bin/plugin"), want: invalid},
 		{name: "manifest version", entries: withManifest(testPluginID, "1.2.4", testSource, testOS, testArch, "bin/plugin"), want: invalid},
-		{name: "manifest source", entries: withManifest(testPluginID, testVersion, "github.com/other/demo", testOS, testArch, "bin/plugin"), want: invalid},
-		{name: "manifest platform", entries: withManifest(testPluginID, testVersion, testSource, otherOS, testArch, "bin/plugin"), want: invalid},
+		{name: "manifest source", entries: withManifest(testPluginID, testVersion, "github.com/other/demo", testOS, testArch, "bin/plugin"), want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
+		{name: "manifest platform", entries: withManifest(testPluginID, testVersion, testSource, otherOS, testArch, "bin/plugin"), want: pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
 		{name: "manifest entrypoint missing", entries: withManifest(testPluginID, testVersion, testSource, testOS, testArch, "bin/missing"), want: invalid},
 		{name: "parent traversal", entries: validEntries(file("../x")), want: invalid},
 		{name: "absolute path", entries: validEntries(file("/abs")), want: invalid},
@@ -231,7 +203,7 @@ func TestPreflightRejects(t *testing.T) {
 			if entries == nil {
 				entries = validEntries()
 			}
-			p := newPackage(t, entries, tc.release)
+			p := newPackage(t, entries)
 			if tc.input != nil {
 				tc.input(&p.input)
 			}
@@ -292,7 +264,7 @@ func TestProjectManifestPreflight(t *testing.T) {
 	}
 	entries := validEntries()
 	entries[0].body = string(data)
-	p := newPackage(t, entries, nil)
+	p := newPackage(t, entries)
 	candidate, err := Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +278,7 @@ func TestProjectManifestPreflight(t *testing.T) {
 	}
 
 	entries[0].body = strings.Replace(string(data), "name: Demo\n", "", 1)
-	p = newPackage(t, entries, nil)
+	p = newPackage(t, entries)
 	_, err = Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
 	if errorCode(err) != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || !strings.Contains(err.Error(), "name") {
 		t.Fatalf("Preflight() error = %v, want INVALID_ARGUMENT containing name", err)

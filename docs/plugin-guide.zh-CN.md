@@ -23,7 +23,7 @@ bin/alonabot test ./alonabot-plugin-hello
 bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot-plugin-hello/bin
 ```
 
-`test` 执行离线准备检查；消息与生命周期的集成验证使用[插件测试套件](development.zh-CN.md#插件测试)。打包 target 换成实际支持的平台，签名与分发见[发布](#9-发布)。
+`test` 执行离线准备检查；消息与生命周期的集成验证使用[插件测试套件](development.zh-CN.md#插件测试)。打包 target 换成实际支持的平台，归档与分发见[发布](#9-发布)。
 
 独立仓库中先建立自己的 Go module。正式 CLI 会写入对应 SDK 版本并整理依赖；当前源码构建的开发版需按提示选定可访问的 SDK 版本。详细说明见[开发运行](development.zh-CN.md#开发运行与热部署)。现成的[示例工程](../examples/plugins)可直接运行。
 
@@ -413,11 +413,11 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 ## 9. 发布
 
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP）。
-- 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名和 `release.json`。已有改名前的开发数据时，按[开发指南](development.zh-CN.md#开发运行与热部署)重建。
+- 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名。已有改名前的开发数据时，按[开发指南](development.zh-CN.md#开发运行与热部署)重建。
 - 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](deployment.zh-CN.md#管理-api)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包。
-- 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的 `release.json` 与包内 manifest 取得展示信息；发布条目的字段见 [release 定义](../contracts/release)。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
-- 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按 release.json 选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`。
-- 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 为每个目标生成归档，全部资产共享一份归档外的 `release.json`；省略目标时取本机平台，静态 WebUI 只生成一个 `any/any` 归档，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。资产地址为 `--asset-base` 加 `/` 与归档名；`source` 为 `github.com/<owner>/<repo>` 时，缺省前缀为 `https://github.com/<owner>/<repo>/releases/download/v<version>`，其他来源须显式给出绝对 https 前缀（无 query/fragment）。可选 `--key FILE` 读取标准 base64 编码的 64 字节 Ed25519 私钥，只对最终合并清单的原始字节签名一次，并在归档外写 `release.json.sig` 与 `release.pub`；省略时输出 unsigned 清单并清除输出目录中的旧签名和公钥。密钥读取或签名失败直接报错。进程包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选的 changelog。签名私钥由作者保管，留在打包资源、仓库和构建日志之外。
+- 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的平台归档内 manifest 取得展示信息；发布条目的字段见 [release 定义](../contracts/release)。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
+- 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按归档名选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`。
+- 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 仅生成平台 tar.gz；省略目标时取本机平台，静态 WebUI 只生成一个 any 包，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。Release 只上传这些归档，源码压缩包由 GitHub 自动提供。进程包包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选 changelog。
 
 ## 直接测试与构建
 

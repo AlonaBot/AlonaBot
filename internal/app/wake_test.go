@@ -69,19 +69,16 @@ func TestWake(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	archive, err := pluginkit.Pack(ctx, generate.Options{Dir: project}, "https://example.invalid/wakeprobe.tar.gz", "", out)
+	archive, err := pluginkit.Pack(ctx, generate.Options{Dir: project}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	releaseJSON, err := os.ReadFile(filepath.Join(out, "release.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	h := newWebUIHarness(t)
 	h.start(nil)
 	core := h.core
 	manager := manage.New(manage.Options{Store: core.store, Settings: core.assembly.settings, Packages: filepath.Join(h.dir, "packages"), Limits: packages.NewLimits(core.values), Adapters: core.assembly.adapters, State: core.assembly.componentState})
-	if _, err := manager.Install(ctx, manage.InstallRequest{Archive: archive, ReleaseJSON: string(releaseJSON), Confirm: true}); err != nil {
+	if _, err := manager.Install(ctx, manage.InstallRequest{Archive: archive, Confirm: true}); err != nil {
 		t.Fatal(err)
 	}
 	h.stop()

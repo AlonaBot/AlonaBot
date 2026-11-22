@@ -8,13 +8,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"debug/buildinfo"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,19 +35,10 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
 	"github.com/AlonaBot/AlonaBot/internal/pluginkit"
-
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
 
-var packageKey ed25519.PrivateKey
-
 func prepareTestPackages() error {
-	_, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return err
-	}
-	packageKey = private
-	if _, err = writeTestPackage(filepath.Join(binDir, "demo-package"), "demo", "plugin", "", "github.com/example/lifecycle", "1.0.0", filepath.Join(binDir, "lifecycle"), "", nil); err != nil {
+	if _, err := writeTestPackage(filepath.Join(binDir, "demo-package"), "demo", "plugin", "", "github.com/example/lifecycle", "1.0.0", filepath.Join(binDir, "lifecycle"), "", nil); err != nil {
 		return err
 	}
 	for name, source := range map[string]string{"adapter-fixture": adapterFixtureSource, "command-fixture": commandFixtureSource, "job-fixture": jobFixtureSource} {
@@ -86,7 +72,7 @@ func TestManagementLifecycle(t *testing.T) {
 	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
 	c.management(t, dir, "", "install", filepath.Join(binDir, "demo-package", "package.tar.gz"), "--yes")
 	item := findPackage(t, c, dir, "demo")
-	if item.Enabled || item.Active != "" || item.State != "Installed" || !item.Signed {
+	if item.Enabled || item.Active != "" || item.State != "Installed" || item.Signed {
 		t.Fatalf("installed: %+v", item)
 	}
 	c.management(t, dir, "", "enable", "demo")
@@ -305,7 +291,7 @@ func TestManagementLifecycle(t *testing.T) {
 		stopTestCore(t, c)
 	})
 	t.Run("changelog", func(t *testing.T) {
-		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -407,7 +393,7 @@ func TestManagementLifecycle(t *testing.T) {
 		stopTestCore(t, c)
 	})
 	t.Run("configuration-examples", func(t *testing.T) {
-		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, "https://example.invalid/showcase.tar.gz", "", t.TempDir())
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/showcase"}, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -467,7 +453,7 @@ func TestManagementLifecycle(t *testing.T) {
 		stopTestCore(t, c)
 	})
 	t.Run("package-warnings-and-build-info", func(t *testing.T) {
-		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/package.tar.gz", "", t.TempDir())
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1136,14 +1122,14 @@ func packWebUIFixture(t *testing.T, version, source string, files map[string]str
 			t.Fatal(err)
 		}
 	}
-	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: dir}, "https://example.invalid/webui.tar.gz", "", t.TempDir())
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: dir}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return archive
 }
 
-// validationPackage 只改真实 pack 产物的声明与构建信息，并同步归档发布清单。
+// validationPackage 只改真实 pack 产物的声明与构建信息。
 func validationPackage(t *testing.T, original, version string, missing []string, buildInfoChange string) string {
 	t.Helper()
 	file, err := os.Open(original)
@@ -1208,25 +1194,9 @@ func validationPackage(t *testing.T, original, version string, missing []string,
 	if err := compressed.Close(); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(filepath.Dir(original), "release.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var released release.Release
-	if err := json.Unmarshal(raw, &released); err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256(archive.Bytes())
-	released.Version, released.Assets[0].Size, released.Assets[0].SHA256 = version, int64(archive.Len()), hex.EncodeToString(digest[:])
-	raw, err = json.Marshal(released)
-	if err != nil {
-		t.Fatal(err)
-	}
 	dir := t.TempDir()
-	for name, content := range map[string][]byte{"package.tar.gz": archive.Bytes(), "release.json": raw} {
-		if err := os.WriteFile(filepath.Join(dir, name), content, 0600); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(filepath.Join(dir, "package.tar.gz"), archive.Bytes(), 0600); err != nil {
+		t.Fatal(err)
 	}
 	return filepath.Join(dir, "package.tar.gz")
 }
@@ -1767,7 +1737,7 @@ func init(){genimpl.Register("main",genimpl.Resources{})}
 func main(){p:=&platform{Adapter:example.New(),cores:map[string]adapter.Core{}};if err:=sdk.RunAdapter(p);err!=nil{slog.Error("fixture failed","error",err);os.Exit(1)}}
 `
 
-// writeTestPackage 把真实二进制与内层 manifest 打成签名安装包，密钥仅存在本次测试中。
+// writeTestPackage 把真实二进制与内层 manifest 打成独立安装归档。
 func writeTestPackage(dir, id, role, adapterID, source, version, executable, extra string, resources map[string][]byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -1826,18 +1796,8 @@ func writeTestPackage(dir, id, role, adapterID, source, version, executable, ext
 	if err := gz.Close(); err != nil {
 		return "", err
 	}
-	digest := sha256.Sum256(archive.Bytes())
-	pub := packageKey.Public().(ed25519.PublicKey)
-	r := release.Release{PluginID: id, Version: version, Source: source, PublisherKeyID: release.KeyID(pub), Assets: []release.Asset{{OS: platformOS, Arch: arch, URL: "https://example.invalid/package.tar.gz", Size: int64(archive.Len()), SHA256: hex.EncodeToString(digest[:])}}}
-	raw, err := json.Marshal(r)
-	if err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "package.tar.gz"), archive.Bytes(), 0600); err != nil {
 		return "", err
-	}
-	for name, data := range map[string][]byte{"package.tar.gz": archive.Bytes(), "release.json": raw,
-		"release.json.sig": []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(packageKey, raw))), "release.pub": []byte(base64.StdEncoding.EncodeToString(pub))} {
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-			return "", err
-		}
 	}
 	return filepath.Join(dir, "package.tar.gz"), nil
 }
@@ -1879,7 +1839,7 @@ func main(){
 // testManagementPluginData 经认证 API 修改运行中的受管数据，再由真实插件读取。
 func testManagementPluginData(t *testing.T) {
 	// 1. 复用动态构建和安装包工程，启动实际 Core、Adapter 与 SQLite 插件。
-	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/configdb"}, "https://example.invalid/configdb.tar.gz", "", t.TempDir())
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/configdb"}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

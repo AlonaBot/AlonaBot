@@ -2,20 +2,19 @@ package main
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
 
@@ -29,14 +28,7 @@ var components = []component{
 	{"alonabot-webui-admin", "webui", "github.com/AlonaBot/alonabot-webui"},
 }
 
-func componentAssetBase(opt options, c component, version string) string {
-	if opt.assetBase != "" {
-		return opt.assetBase
-	}
-	return "https://" + strings.TrimPrefix(c.source, "https://") + "/releases/download/v" + version
-}
-
-func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
+func verifyAssets(opt options, r *report) error {
 	if err := r.perform("installer", func() error {
 		raw, err := readRegular(filepath.Join(opt.candidate, "install.sh"))
 		if err != nil {
@@ -49,7 +41,7 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 	}); err != nil {
 		return err
 	}
-	publications := map[string]*release.Release{}
+	publications := map[string]*manifest.Manifest{}
 	if opt.bundle {
 		if err := r.perform("package-inventory", func() error {
 			entries, err := os.ReadDir(filepath.Join(opt.candidate, "packages"))
@@ -70,85 +62,62 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 		}); err != nil {
 			return err
 		}
-		// 1. 清单与公钥先验证，随后才读取和解包其声明的资产。
+		// 1. 每个平台只收录组件归档，身份与资源直接从包内读取。
 		for _, c := range components {
-			if err := r.perform("release/"+c.id, func() error {
-				dir := filepath.Join(opt.candidate, "packages", c.id)
-				raw, err := readRegular(filepath.Join(dir, "release.json"))
-				if err != nil {
-					return err
-				}
-				sig, err := readRegular(filepath.Join(dir, "release.json.sig"))
-				if err != nil {
-					return err
-				}
-				if len(sig) == 0 {
-					return errors.New("official release signature is empty")
-				}
-				pub, err := readRegular(filepath.Join(dir, "release.pub"))
-				if err != nil {
-					return err
-				}
-				decoded, err := release.DecodePublicKey(pub)
-				if err != nil {
-					return err
-				}
-				if !bytes.Equal(public, decoded) {
-					return errors.New("release.pub does not match the independently trusted public key")
-				}
-				publication, err := release.Verify(raw, sig, public)
-				if err != nil {
-					return err
-				}
-				if publication.PluginID != c.id || publication.Source != c.source {
-					return fmt.Errorf("release identity = %q from %q; want %q from %q", publication.PluginID, publication.Source, c.id, c.source)
-				}
-				if len(publication.Assets) < len(r.Platforms) {
-					return fmt.Errorf("release has %d platforms; want %d", len(publication.Assets), len(r.Platforms))
-				}
-				publications[c.id] = publication
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-		// 2. 每个独立组件包核对平台、签名描述的内容及构建资源。
-		for _, c := range components {
-			publication := publications[c.id]
 			index := len(r.Components)
-			r.Components = append(r.Components, componentResult{ID: c.id, Version: publication.Version, Source: publication.Source, Assets: []assetResult{}})
-			expectedFiles := []string{"release.json", "release.json.sig", "release.pub"}
+			r.Components = append(r.Components, componentResult{ID: c.id, Source: c.source, Assets: []assetResult{}})
+			var expectedFiles []string
 			for _, target := range r.Platforms {
 				goos, goarch, _ := strings.Cut(target, "/")
 				if err := r.perform("package/"+c.id+"/"+target, func() error {
-					asset, exists := publication.Asset(goos, goarch)
-					if !exists {
-						return fmt.Errorf("missing release asset for %s", target)
-					}
-					name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", c.id, publication.Version, goos, goarch)
-					base := componentAssetBase(opt, c, publication.Version)
-					if asset.URL != base+"/"+name {
-						return fmt.Errorf("asset URL = %q; want %q", asset.URL, base+"/"+name)
-					}
-					filename := filepath.Join(opt.candidate, "packages", c.id, name)
-					size, digest, err := archiveDigest(filename)
+					directory := filepath.Join(opt.candidate, "packages", c.id)
+					entries, err := os.ReadDir(directory)
 					if err != nil {
 						return err
 					}
-					if size != asset.Size || digest != asset.SHA256 {
-						return fmt.Errorf("asset size/digest = %d/%s; release declares %d/%s", size, digest, asset.Size, asset.SHA256)
+					publication := release.GitHubRelease{}
+					for _, entry := range entries {
+						if entry.Type().IsRegular() {
+							publication.Assets = append(publication.Assets, release.Download{Name: entry.Name()})
+						}
+					}
+					asset, err := publication.Select(goos, goarch)
+					if err != nil {
+						return err
+					}
+					filename := filepath.Join(directory, asset.Name)
+					info, err := os.Stat(filename)
+					if err != nil {
+						return err
 					}
 					destination := filepath.Join(opt.out, c.id+"-"+goos+"-"+goarch)
 					files, err := extractArchive(filename, destination)
 					if err != nil {
 						return err
 					}
-					resources, err := checkPackage(destination, files, c, publication.Version, goos, goarch)
+					raw, err := readRegular(filepath.Join(destination, "plugin.yaml"))
 					if err != nil {
 						return err
 					}
-					r.Components[index].Assets = append(r.Components[index].Assets, assetResult{target, filename, size, digest, resources})
-					expectedFiles = append(expectedFiles, name)
+					parsed, err := manifest.Parse(raw)
+					if err != nil {
+						return err
+					}
+					m := parsed.Manifest
+					if release.ArchiveName(m) != asset.Name {
+						return errors.New("archive name differs from package manifest")
+					}
+					if previous, ok := publications[c.id]; ok && previous.Version != m.Version {
+						return errors.New("component platform versions differ")
+					}
+					resources, err := checkPackage(destination, files, c, m.Version, goos, goarch)
+					if err != nil {
+						return err
+					}
+					publications[c.id] = m
+					r.Components[index].Version = m.Version
+					r.Components[index].Assets = append(r.Components[index].Assets, assetResult{target, filename, info.Size(), resources})
+					expectedFiles = append(expectedFiles, asset.Name)
 					return nil
 				}); err != nil {
 					return err
@@ -169,7 +138,7 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 			}
 		}
 	}
-	// 3. 核对归档摘要与 Core 身份；整合模式另外核对组件副本。
+	// 2. 核对归档摘要与 Core 身份；整合模式另外核对组件副本。
 	var sums map[string]string
 	if err := r.perform("SHA256SUMS", func() error {
 		var err error
@@ -214,16 +183,12 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 			if _, err := checkBuildInfo(core, goos, goarch); err != nil {
 				return err
 			}
-			values, err := linkedStrings(core, goos, officialKeySymbol, versionSymbol)
+			values, err := linkedStrings(core, goos, versionSymbol)
 			if err != nil {
 				return err
 			}
-			key, err := release.DecodePublicKey(values[officialKeySymbol])
-			if err != nil {
-				return err
-			}
-			if !bytes.Equal(key, public) || string(values[versionSymbol]) != opt.version {
-				return fmt.Errorf("Core linked key/version differs from trusted key/version %q", opt.version)
+			if string(values[versionSymbol]) != opt.version {
+				return fmt.Errorf("Core linked version differs from %q", opt.version)
 			}
 			for _, name := range []string{"LICENSE", "source.json"} {
 				raw, err := readRegular(filepath.Join(destination, rootName, name))
@@ -255,12 +220,9 @@ func verifyAssets(opt options, public ed25519.PublicKey, r *report) error {
 			expected := []string{rootName + "/" + coreName, rootName + "/LICENSE", rootName + "/source.json"}
 			if opt.bundle {
 				for _, c := range components {
-					asset, _ := publications[c.id].Asset(goos, goarch) // 独立包检查已验证该平台存在。
-					address, err := url.Parse(asset.URL)
-					if err != nil {
-						return err
-					}
-					for _, file := range []string{"release.json", "release.json.sig", "release.pub", filepath.Base(address.Path)} {
+					m := *publications[c.id]
+					m.OS, m.Arch = goos, goarch
+					for _, file := range []string{release.ArchiveName(&m)} {
 						rel := filepath.Join("packages", c.id, file)
 						outside, err := readRegular(filepath.Join(opt.candidate, rel))
 						if err != nil {

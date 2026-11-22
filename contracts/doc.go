@@ -7,7 +7,7 @@
 // 字段号与枚举值只能追加，删除时必须 reserved。
 //
 // testdata/frames/*.bin 是 golden 帧，internal/wire 的集成测试读取它们；
-// testdata/manifest 与 testdata/release 供本地测试使用，release.json 中的 publisher_key_id 是占位值。
+// testdata/manifest 供本地测试使用。
 package contracts
 
 //go:generate go run ./internal/protocgen

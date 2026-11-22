@@ -179,20 +179,17 @@ func testCommittedRouteSnapshot(t *testing.T) {
 	const id = "demo"
 	const configJSON = `{"extra":"route-snapshot-config-marker"}`
 	out := t.TempDir()
-	archive, err := pluginkit.Pack(ctx, generate.Options{Dir: "../../examples/plugins/lifecycle"}, "https://example.invalid/lifecycle.tar.gz", "", out)
+	archive, err := pluginkit.Pack(ctx, generate.Options{Dir: "../../examples/plugins/lifecycle"}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	releaseJSON, err := os.ReadFile(filepath.Join(out, "release.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	h := newWebUIHarness(t)
 	h.start(nil)
 	core := h.core
 	manager := manage.New(manage.Options{Store: core.store, Settings: core.assembly.settings, Packages: filepath.Join(h.dir, "packages"),
 		Limits: packages.NewLimits(core.values), Adapters: core.assembly.adapters, State: core.assembly.componentState})
-	if _, err := manager.Install(ctx, manage.InstallRequest{Archive: archive, ReleaseJSON: string(releaseJSON), Confirm: true}); err != nil {
+	if _, err := manager.Install(ctx, manage.InstallRequest{Archive: archive, Confirm: true}); err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(h.dir, "plugins", id)

@@ -3,18 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 
+	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
 
@@ -34,7 +33,7 @@ type packageState struct {
 }
 
 type runtimeCandidate struct {
-	publication        *release.Release
+	publication        *manifest.Manifest
 	directory, archive string
 }
 
@@ -54,14 +53,14 @@ func verifyLifecycle(opt options, r *report) (err error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), opt.runtimeTimeout)
 	defer cancel()
-	var initial, updated, wrongSource, wrongPublisher *runtimeCandidate
+	var initial, updated, wrongSource *runtimeCandidate
 	if err := r.perform("runtime/inputs", func() error {
 		for _, input := range []struct {
 			name, dir   string
 			destination **runtimeCandidate
 		}{
 			{"initial", opt.installCandidate, &initial}, {"updated", opt.updateCandidate, &updated},
-			{"wrong-source", opt.wrongSource, &wrongSource}, {"wrong-publisher", opt.wrongPublisher, &wrongPublisher},
+			{"wrong-source", opt.wrongSource, &wrongSource},
 		} {
 			candidate, err := prepareRuntimeCandidate(input.dir, filepath.Join(workspace, input.name))
 			if err != nil {
@@ -70,19 +69,12 @@ func verifyLifecycle(opt options, r *report) (err error) {
 			*input.destination = candidate
 		}
 		old, next := initial.publication, updated.publication
-		if old.PluginID != "alonabot-plugin-configdb" || next.PluginID != old.PluginID || next.Source != old.Source || next.PublisherKeyID != old.PublisherKeyID || compareSemVer(next.Version, old.Version) <= 0 {
-			return errors.New("initial/update must be signed configdb example releases with the same identity/source/publisher and a strictly increasing component SemVer")
-		}
-		if old.PublisherKeyID == r.Publisher {
-			return errors.New("third-party fixture must use a different publisher from the official bundle")
+		if old.ID != "alonabot-plugin-configdb" || next.ID != old.ID || next.Source != old.Source || compareSemVer(next.Version, old.Version) <= 0 {
+			return errors.New("initial/update must be configdb example packages with the same identity/source and a strictly increasing component SemVer")
 		}
 		other := wrongSource.publication
-		if other.PluginID != old.PluginID || other.Source == old.Source || other.PublisherKeyID != old.PublisherKeyID || other.Version != next.Version {
-			return errors.New("wrong-source release must match updated ID/version/publisher and differ in source")
-		}
-		other = wrongPublisher.publication
-		if other.PluginID != old.PluginID || other.Source != old.Source || other.PublisherKeyID == old.PublisherKeyID || other.Version != next.Version {
-			return errors.New("wrong-publisher release must match updated ID/version/source and differ in publisher")
+		if other.ID != old.ID || other.Source == old.Source || other.Version != next.Version {
+			return errors.New("wrong-source release must match updated ID/version and differ in source")
 		}
 		return nil
 	}); err != nil {
@@ -169,7 +161,7 @@ func verifyLifecycle(opt options, r *report) (err error) {
 		for _, expected := range r.Components {
 			item, ok := packages[expected.ID]
 			enabled := expected.ID == "alonabot-webui-admin"
-			if !ok || item.Version != expected.Version || item.Source != expected.Source || item.PublisherKeyID != r.Publisher || !item.Signed || item.Uninstalled || item.Enabled != enabled {
+			if !ok || item.Version != expected.Version || item.Source != expected.Source || item.Uninstalled || item.Enabled != enabled {
 				return fmt.Errorf("unexpected preinstalled state: %+v", item)
 			}
 			if enabled && (item.State != "Activated" || item.Active == "") || !enabled && (item.State != "Installed" || item.Active != "") {
@@ -181,7 +173,7 @@ func verifyLifecycle(opt options, r *report) (err error) {
 	}); err != nil {
 		return err
 	}
-	id := initial.publication.PluginID
+	id := initial.publication.ID
 	var active packageState
 	if err := r.perform("runtime/install-and-seed", func() error {
 		if _, err := host.cli("install", initial.args("install", id)...); err != nil {
@@ -206,26 +198,16 @@ func verifyLifecycle(opt options, r *report) (err error) {
 		return err
 	}
 	// 2. 每次拒绝均核对完整身份/Active 快照和真实 SQLite 内容。
-	badSignature := filepath.Join(workspace, "invalid-release.json.sig")
-	sig, err := os.ReadFile(filepath.Join(updated.directory, "release.json.sig"))
-	if err != nil {
-		return err
-	}
-	decoded, err := release.DecodeSignature(sig)
-	if err != nil {
-		return err
-	}
-	decoded[0] ^= 1
-	if err := os.WriteFile(badSignature, []byte(base64.StdEncoding.EncodeToString(decoded)), fileMode); err != nil {
+	badArchive := filepath.Join(workspace, "invalid-package.tar.gz")
+	if err := os.WriteFile(badArchive, []byte("invalid gzip archive"), fileMode); err != nil {
 		return err
 	}
 	for _, rejection := range []struct {
 		name, message string
 		args          []string
 	}{
-		{"bad-signature", "signature verification failed", append(updated.args("update", id), "--signature", badSignature)},
+		{"bad-archive", "archive is not valid gzip data", []string{"update", id, "--archive", badArchive, "--yes"}},
 		{"wrong-source", "candidate source differs from installed binding", wrongSource.args("update", id)},
-		{"wrong-publisher", "candidate publisher differs from installed binding", wrongPublisher.args("update", id)},
 	} {
 		if err := r.perform("runtime/reject-"+rejection.name, func() error {
 			return host.rejectUnchanged(rejection.name, rejection.message, rejection.args, active, r, true)
@@ -287,8 +269,7 @@ func verifyLifecycle(opt options, r *report) (err error) {
 		name, message string
 		candidate     *runtimeCandidate
 	}{
-		{"reinstall-wrong-source", "reinstallation source, publisher or identity differs from retained binding", wrongSource},
-		{"reinstall-wrong-publisher", "candidate publisher differs from installed binding", wrongPublisher},
+		{"reinstall-wrong-source", "reinstallation source or identity differs from retained binding", wrongSource},
 	} {
 		if err := r.perform("runtime/"+rejection.name, func() error {
 			return host.rejectUnchanged(rejection.name, rejection.message, rejection.candidate.args("install", id), active, r, false)
@@ -321,64 +302,49 @@ func prepareRuntimeCandidate(dir, destination string) (*runtimeCandidate, error)
 	if err := os.Mkdir(destination, directoryMode); err != nil {
 		return nil, err
 	}
-	metadata := map[string][]byte{}
-	for _, name := range []string{"release.json", "release.json.sig", "release.pub"} {
-		raw, err := readRegular(filepath.Join(dir, name))
-		if err != nil {
-			return nil, err
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	publication := release.GitHubRelease{}
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			publication.Assets = append(publication.Assets, release.Download{Name: entry.Name()})
 		}
-		metadata[name] = raw
-		if err := os.WriteFile(filepath.Join(destination, name), raw, fileMode); err != nil {
-			return nil, err
-		}
 	}
-	public, err := release.DecodePublicKey(metadata["release.pub"])
+	asset, err := publication.Select(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return nil, err
 	}
-	if len(metadata["release.json.sig"]) == 0 {
-		return nil, errors.New("runtime candidate must be signed")
-	}
-	publication, err := release.Verify(metadata["release.json"], metadata["release.json.sig"], public)
+	raw, err := readRegular(filepath.Join(dir, asset.Name))
 	if err != nil {
 		return nil, err
 	}
-	asset, ok := publication.Asset(runtime.GOOS, runtime.GOARCH)
-	if !ok {
-		return nil, errors.New("runtime candidate is missing the host platform")
-	}
-	name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", publication.PluginID, publication.Version, runtime.GOOS, runtime.GOARCH)
-	parsed, err := url.Parse(asset.URL)
-	if err != nil {
-		return nil, err
-	}
-	if filepath.Base(parsed.Path) != name {
-		return nil, fmt.Errorf("runtime asset URL basename must be %q", name)
-	}
-	raw, err := readRegular(filepath.Join(dir, name))
-	if err != nil {
-		return nil, err
-	}
-	archive := filepath.Join(destination, name)
+	archive := filepath.Join(destination, asset.Name)
 	if err := os.WriteFile(archive, raw, fileMode); err != nil {
 		return nil, err
-	}
-	size, digest, err := archiveDigest(archive)
-	if err != nil {
-		return nil, err
-	}
-	if size != asset.Size || digest != asset.SHA256 {
-		return nil, errors.New("runtime asset size/digest differs from signed release")
 	}
 	unpacked := filepath.Join(destination, "unpacked")
 	files, err := extractArchive(archive, unpacked)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := checkPackage(unpacked, files, component{publication.PluginID, "plugin", publication.Source}, publication.Version, runtime.GOOS, runtime.GOARCH); err != nil {
+	raw, err = readRegular(filepath.Join(unpacked, "plugin.yaml"))
+	if err != nil {
 		return nil, err
 	}
-	return &runtimeCandidate{publication, destination, archive}, nil
+	parsed, err := manifest.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	m := parsed.Manifest
+	if release.ArchiveName(m) != asset.Name {
+		return nil, errors.New("runtime asset name differs from package manifest")
+	}
+	if _, err := checkPackage(unpacked, files, component{m.ID, "plugin", m.Source}, m.Version, runtime.GOOS, runtime.GOARCH); err != nil {
+		return nil, err
+	}
+	return &runtimeCandidate{m, destination, archive}, nil
 }
 
 func (c *runtimeCandidate) args(action, id string) []string {
@@ -388,7 +354,7 @@ func (c *runtimeCandidate) args(action, id string) []string {
 	} else {
 		args = append(args, c.archive)
 	}
-	return append(args, "--release", filepath.Join(c.directory, "release.json"), "--signature", filepath.Join(c.directory, "release.json.sig"), "--public-key", filepath.Join(c.directory, "release.pub"), "--yes")
+	return append(args, "--yes")
 }
 
 func (h *runtimeHost) list(name string) (map[string]packageState, error) {
@@ -423,8 +389,8 @@ func (h *runtimeHost) snapshot(name, id string, r *report) (packageState, error)
 	return item, nil
 }
 
-func checkActive(item packageState, publication *release.Release) error {
-	if item.ID != publication.PluginID || item.Role != "plugin" || item.Version != publication.Version || item.Source != publication.Source || item.PublisherKeyID != publication.PublisherKeyID || !item.Signed || !item.Enabled || item.Uninstalled || item.State != "Activated" || item.Active == "" {
+func checkActive(item packageState, publication *manifest.Manifest) error {
+	if item.ID != publication.ID || item.Role != "plugin" || item.Version != publication.Version || item.Source != publication.Source || !item.Enabled || item.Uninstalled || item.State != "Activated" || item.Active == "" {
 		return fmt.Errorf("unexpected active package: %+v", item)
 	}
 	return nil
@@ -480,7 +446,7 @@ func (h *runtimeHost) checkDatabase(name, id string) error {
 	return nil
 }
 
-// compareSemVer 只接收 release.Verify 已验证的版本，忽略 build metadata。
+// compareSemVer 只接收 manifest.Parse 已验证的版本，忽略 build metadata。
 func compareSemVer(a, b string) int {
 	parts := func(value string) ([]string, string) {
 		value, _, _ = strings.Cut(value, "+")

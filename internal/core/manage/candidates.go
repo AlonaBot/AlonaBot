@@ -2,7 +2,6 @@ package manage
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,11 +10,9 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
-	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
@@ -81,7 +78,7 @@ type UpdateResult struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// Update 验证来源、公钥、pin 与降版影响，再移交暂存候选。
+// Update 验证来源、pin 与降版影响，再移交暂存候选。
 func (s *Service) Update(ctx context.Context, id string, req InstallRequest, manualMigrationApproved bool) (result UpdateResult, err error) {
 	defer finish(&err)
 	s.catalog.Lock()
@@ -126,15 +123,8 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest, man
 	if in.Role == state.RoleWebUI && in.Entrypoint != "" && m.Entrypoint == "" {
 		return result, precondition("updating a WebUI with an entrypoint to a static WebUI is not supported")
 	}
-	key := candidate.Release.PublisherKeyID
-	if err := checkPublisher(in.PublisherKeyID, key, req.Confirm); err != nil {
-		return result, err
-	}
 	if in.Pin != "" && m.Version != in.Pin {
 		return result, precondition("candidate version does not match pin: " + in.Pin)
-	}
-	if key == "" && !req.Confirm {
-		return result, &ErrNeedsConfirm{Affected: []string{"unsigned package: " + id}}
 	}
 	affected, err := s.affected(ctx, in, m.Version)
 	if err != nil {
@@ -166,32 +156,12 @@ func (s *Service) Update(ctx context.Context, id string, req InstallRequest, man
 		if previous.PrepareEffects == manifest.EffectsExternal || m.PrepareEffects == manifest.EffectsExternal {
 			return result, precondition("NEEDS_MANUAL_MIGRATION")
 		}
-		digest, err := hex.DecodeString(candidate.Asset.SHA256)
-		if err != nil {
-			return result, err
-		}
 		if _, err := candidate.MoveTo(s.opt.Packages); err != nil {
 			return result, err
 		}
-		return result, s.opt.Store.ReplaceProgram(ctx, id, m.Version, m.Entrypoint, key, digest)
+		return result, s.opt.Store.ReplaceProgram(ctx, id, m.Version, m.Entrypoint, "", candidate.Digest)
 	}
 	return result, s.opt.Candidates.Update(ctx, id, candidate, manualMigrationApproved)
-}
-
-func checkPublisher(bound, candidate string, confirm bool) error {
-	if bound == candidate {
-		return nil
-	}
-	if bound != "" {
-		return denied("candidate publisher differs from installed binding")
-	}
-	if official, ok := trust.Official(); ok && candidate == release.KeyID(official) {
-		return nil
-	}
-	if !confirm {
-		return &ErrNeedsConfirm{Affected: []string{"trust publisher: " + candidate}}
-	}
-	return nil
 }
 
 // Rollback 按目标保留代次检查依赖与丢弃写入的确认，再交给候选编排器。

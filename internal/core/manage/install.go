@@ -2,8 +2,7 @@ package manage
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,12 +22,12 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/trust"
 )
 
-// InstallRequest 指定本地归档及清单内容，或由 Core 下载的 GitHub 来源。
+// InstallRequest 指定本地归档，或由 Core 下载的 GitHub 来源。
 type InstallRequest struct {
-	Archive, ReleaseJSON, Signature string
-	PublicKey                       string // release.pub 的文件内容，标准 base64。
-	Source                          string // owner/repo；指定时本地文件字段须留空。
-	Replace, Confirm                bool
+	Archive          string
+	Source           string // GitHub 的 owner/repo；本地安装时留空。
+	ID               string // 自动预装时指定期望的组件身份。
+	Replace, Confirm bool
 }
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -51,16 +50,10 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	defer s.instances.Unlock()
 	unlock := s.lock(m.ID)
 	defer unlock()
-	key := candidate.Release.PublisherKeyID
-	// prepare 将未签名清单的公钥标识清空，安装记录只信任实际验证过的签名。
 	in := state.Install{PluginID: m.ID, Role: state.Role(m.Role), AdapterID: m.AdapterID, Source: m.Source,
-		Version: m.Version, PublisherKeyID: key, Entrypoint: m.Entrypoint}
+		Version: m.Version, Entrypoint: m.Entrypoint, BuildDigest: candidate.Digest}
 	if in.Source == "dev" {
 		return result, invalid("dev source is reserved for library components")
-	}
-	in.BuildDigest, err = hex.DecodeString(candidate.Asset.SHA256)
-	if err != nil {
-		return result, err
 	}
 	previous, err := s.opt.Store.GetInstall(ctx, m.ID)
 	if err == nil {
@@ -68,10 +61,7 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 			return result, exists("component is already installed: " + m.ID)
 		}
 		if previous.Source != in.Source || previous.Role != in.Role || previous.AdapterID != in.AdapterID {
-			return result, denied("reinstallation source, publisher or identity differs from retained binding")
-		}
-		if err := checkPublisher(previous.PublisherKeyID, key, req.Confirm); err != nil {
-			return result, err
+			return result, denied("reinstallation source or identity differs from retained binding")
 		}
 		if in.Role == state.RoleWebUI && in.Entrypoint == "" {
 			active, err := s.opt.Store.Active(ctx, in.PluginID)
@@ -91,12 +81,9 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	}
 	var replaced []string
 	var confirmation []string
-	trusted := false
-	if official, ok := trust.Official(); ok {
-		trusted = key == release.KeyID(official)
-	}
+	trusted := trust.MatchesSource(m.ID, m.Source)
 	for _, old := range installs {
-		if old.Source == in.Source && old.PublisherKeyID == in.PublisherKeyID {
+		if old.Source == in.Source {
 			trusted = true
 		}
 		if old.Uninstalled || old.Role != in.Role {
@@ -127,14 +114,8 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		}
 		confirmation = append(confirmation, affected...)
 	}
-	if in.PublisherKeyID == "" {
-		confirmation = append(confirmation, "unsigned package: "+m.ID)
-	}
 	if !trusted {
 		confirmation = append(confirmation, "trust source: "+in.Source)
-		if key != "" {
-			confirmation = append(confirmation, "trust publisher: "+key)
-		}
 	}
 	if len(confirmation) != 0 && !req.Confirm {
 		return result, &ErrNeedsConfirm{Affected: confirmation}
@@ -159,11 +140,6 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	if err != nil {
 		return result, err
 	}
-	if previous.Uninstalled && previous.PublisherKeyID != key {
-		if err := s.opt.Store.SetPublisherKeyID(ctx, m.ID, key); err != nil {
-			return result, errors.Join(err, os.RemoveAll(directory))
-		}
-	}
 	if err := s.opt.Store.AddInstall(ctx, in); err != nil {
 		return result, errors.Join(err, os.RemoveAll(directory))
 	}
@@ -182,13 +158,19 @@ func exists(message string) error {
 }
 
 func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Candidate, error) {
-	// 1. 下载只写临时文件；校验完成前不触碰任何已有组件。
-	if req.Source != "" && (req.Archive != "" || req.ReleaseJSON != "" || req.Signature != "" || req.PublicKey != "") {
-		return nil, invalid("source and local package fields are mutually exclusive")
+	// 1. 下载只写临时文件；预检完成前保留已有组件。
+	if req.Source != "" && req.Archive != "" {
+		return nil, invalid("source and local archive are mutually exclusive")
 	}
-	if req.Source == "" && (req.Archive == "" || req.ReleaseJSON == "") {
-		return nil, invalid("local archive and release.json are required")
+	if req.Source == "" && req.Archive == "" {
+		return nil, invalid("local archive or source is required")
 	}
+	staging := filepath.Join(filepath.Dir(s.opt.Packages), "staging")
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		return nil, err
+	}
+	input := packages.Input{ID: req.ID, OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: req.Archive}
+	var asset release.Download
 	if req.Source != "" {
 		if !repositoryName.MatchString(req.Source) {
 			return nil, invalid("source must be owner/repo")
@@ -198,72 +180,54 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 				return nil, invalid("source must be owner/repo")
 			}
 		}
-	}
-	staging := filepath.Join(filepath.Dir(s.opt.Packages), "staging")
-	if err := os.MkdirAll(staging, 0o700); err != nil {
-		return nil, err
-	}
-	if req.Source != "" {
-		base := strings.TrimRight(s.opt.ReleaseBaseURL, "/") + "/" + req.Source + "/releases/latest/download/"
-		raw, err := s.download(ctx, base+"release.json", false)
+		address := strings.TrimRight(s.opt.ReleaseBaseURL, "/") + "/repos/" + req.Source + "/releases/latest"
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 		if err != nil {
 			return nil, err
 		}
-		req.ReleaseJSON = string(raw)
-		sig, err := s.download(ctx, base+"release.json.sig", true)
+		request.Header.Set("Accept", "application/vnd.github+json")
+		response, err := s.opt.HTTPClient.Do(request)
 		if err != nil {
 			return nil, err
 		}
-		req.Signature = string(sig)
-		key, err := s.download(ctx, base+"release.pub", true)
-		if err != nil {
+		raw, readErr := io.ReadAll(response.Body)
+		if err := errors.Join(readErr, response.Body.Close()); err != nil {
 			return nil, err
 		}
-		req.PublicKey = string(key)
-	}
-	var key ed25519.PublicKey
-	if req.PublicKey != "" {
-		var err error
-		key, err = release.DecodePublicKey([]byte(req.PublicKey))
+		if response.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("download %s: %s: %s", address, response.Status, raw)
+		}
+		var publication release.GitHubRelease
+		if err := json.Unmarshal(raw, &publication); err != nil {
+			return nil, fmt.Errorf("parse GitHub release: %w", err)
+		}
+		if err := publication.Validate(req.Source); err != nil {
+			return nil, invalid(err.Error())
+		}
+		asset, err = publication.Select(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
+			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: err.Error()}
+		}
+		if err := asset.Validate(req.Source, publication.Tag); err != nil {
 			return nil, denied(err.Error())
 		}
-	}
-	r, err := release.Verify([]byte(req.ReleaseJSON), []byte(req.Signature), key)
-	if err != nil {
-		return nil, denied(err.Error())
-	}
-	if req.Source != "" && r.Source != "github.com/"+req.Source {
-		return nil, denied("release source differs from requested repository")
-	}
-	if req.Source != "" {
-		asset, ok := r.Asset("any", "any")
-		if !ok {
-			asset, ok = r.Asset(runtime.GOOS, runtime.GOARCH)
-		}
-		if !ok {
-			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_UNSUPPORTED, Message: "release has no asset for this platform"}
-		}
+		input.Source, input.Version = "github.com/"+req.Source, strings.TrimPrefix(publication.Tag, "v")
 		file, err := os.CreateTemp(staging, "download-*.tar.gz")
 		if err != nil {
 			return nil, err
 		}
-		req.Archive = file.Name()
-		defer os.Remove(req.Archive)
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
+		input.ArchivePath = file.Name()
+		defer os.Remove(input.ArchivePath)
+		request, err = http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
 		if err != nil {
-			file.Close()
-			return nil, err
+			return nil, errors.Join(err, file.Close())
 		}
-		response, err := s.opt.HTTPClient.Do(request)
+		response, err = s.opt.HTTPClient.Do(request)
 		if err != nil {
-			file.Close()
-			return nil, err
+			return nil, errors.Join(err, file.Close())
 		}
 		if response.StatusCode != http.StatusOK {
-			response.Body.Close()
-			file.Close()
-			return nil, fmt.Errorf("download archive: %s", response.Status)
+			return nil, errors.Join(fmt.Errorf("download archive: %s", response.Status), response.Body.Close(), file.Close())
 		}
 		n, copyErr := io.Copy(file, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
 		if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
@@ -272,37 +236,23 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 		if n > s.opt.Limits.MaxArchiveBytes {
 			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
 		}
+		if n != asset.Size {
+			return nil, invalid("archive size does not match the GitHub asset")
+		}
 	}
-	// 2. 同一预检同时覆盖本地与下载包；无签名只跳过真实性检查。
-	candidate, err := packages.Preflight(packages.Input{ReleaseJSON: []byte(req.ReleaseJSON), Signature: []byte(req.Signature), PublicKey: key, Source: r.Source,
-		OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: req.Archive}, staging, s.opt.Limits)
+	// 2. 本地与下载归档共用身份、平台和受控解压检查。
+	candidate, err := packages.Preflight(input, staging, s.opt.Limits)
 	if err != nil {
 		return nil, err
 	}
-	if req.Signature == "" {
-		candidate.Release.PublisherKeyID = ""
+	if req.Source != "" && release.ArchiveName(candidate.Manifest) != asset.Name {
+		return nil, errors.Join(invalid("archive name does not match the package manifest"), candidate.Discard())
+	}
+	if req.ID != "" && trust.Source(req.ID) != "" && !trust.MatchesSource(req.ID, candidate.Manifest.Source) {
+		return nil, errors.Join(denied("package source differs from the official component repository"), candidate.Discard())
 	}
 	for _, warning := range candidate.Warnings {
 		slog.Warn("package manifest warning", "plugin_id", candidate.Manifest.ID, "warning", warning)
 	}
 	return candidate, nil
-}
-
-func (s *Service) download(ctx context.Context, address string, optional bool) ([]byte, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := s.opt.HTTPClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	if optional && response.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download %s: %s", address, response.Status)
-	}
-	return io.ReadAll(response.Body)
 }
