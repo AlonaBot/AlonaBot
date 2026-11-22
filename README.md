@@ -31,8 +31,6 @@ English · [简体中文](README.zh-CN.md)
 - **Plugin development**: Chainable command and event registration, hot reload, ready-to-use SQLite storage, configuration declarations rendered automatically as WebUI forms, i18n, and a test suite backed by a real Core.
 - **Centralized operations**: Manage component updates, accounts and permissions, models, session settings and runtime logs through WebUI and CLI, with desktop and mobile support.
 
-> Note: Separate processes provide stability rather than a security sandbox. Administrators must still review the sources of components running locally. Library-mode components share Core's process; an unhandled background panic terminates the entire process.
-
 ## Official components
 
 | Component | Repository | Bundled deployment |
