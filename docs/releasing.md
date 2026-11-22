@@ -9,7 +9,7 @@ Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core�
 3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`，按[更新日志格式](../changelog/README.zh-CN.md)写入单版本标题和实际发行日期，执行 `go generate ./internal/core/manage` 更新 Core 管理 API 内嵌的双语原文。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`。
 4. 先将组件 SDK 固定到已验证的 Core 精确提交，待组件发布后再固定整合锁和 Core tag，避免相互引用尚未发布的版本。插件模板随后更新至正式 SDK tag。
 
-生成的 Release 正文英文在前、简体中文在后，自动去掉 HTML 编辑注释：
+生成的 Release 正文按 `English`、`简体中文` 分区，分类使用三级标题。生成器去掉源文件的版本标题与 HTML 编辑注释，版本由 Release 顶部的 `v<版本>` 展示：
 
 ```fish
 go run ./scripts/release-notes --version 0.1.0 > /tmp/alonabot-release-notes.md
@@ -71,7 +71,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 正式发布按以下顺序执行：
 
 1. 将组件 SDK 固定到已审查的 Core 精确提交；验证并合并五个组件的源码 PR。
-2. 在五组件仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包并只上传归档，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`。
+2. 在五组件仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包并只上传归档，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`，去掉各自的版本标题后按语言分区。
 3. 在主仓 `components.lock.json` 固定已发布组件版本，验证并合并后创建 Core `v<版本>` tag。Release 工作流构建五平台 Core 归档和双 Linux 平台内部整合归档，核对归档、组件身份及许可证并验收两种首次启动，再创建只包含 Core 归档的 Release 草稿。正文读取 `dist/core/release-notes.md`。
 4. 原生 amd64、arm64 runner 各自解压本次内部整合归档，通过 Dockerfile 的 `published` target 构建镜像并用发行 Compose 验收登录、默认组件、卷内凭证持久化和退出；通过后推送平台镜像并合并版本 tag 与 `latest`。
 5. 首次发布时，先在组织 Settings → Packages → Package creation 中允许 Public，再将 GHCR 包的 visibility 设置为 public。工作流匿名拉取两架构并验收公开 Compose 后公开 Release；随后更新 README、同步 dev，并将插件模板切到正式 SDK tag。
