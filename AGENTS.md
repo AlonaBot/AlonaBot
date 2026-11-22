@@ -4,11 +4,10 @@
 
 ## 开发入口
 
-- 环境与检查：[开发指南](docs/development.md)。
+- 环境与检查：[源码开发](docs/development.zh-CN.md)。
 - 模块与依赖方向：[架构地图](ARCHITECTURE.md)。
-- 命名、注释与测试：[编码规范](CONTRIBUTING.md)。
+- [贡献流程与编码规范](CONTRIBUTING.zh-CN.md)。
 - 公开行为：[插件指南](docs/plugin-guide.zh-CN.md)。
-- PR 与许可：[贡献流程](CONTRIBUTING.md)。
 - 打包与发布：[发行维护](docs/releasing.md)。
 
 ## 工作约定
