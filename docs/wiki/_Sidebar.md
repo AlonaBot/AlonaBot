@@ -1,0 +1,5 @@
+- [Home / 首页](https://github.com/AlonaBot/AlonaBot/wiki)
+- [Documentation / 完整文档](https://github.com/AlonaBot/AlonaBot/blob/main/docs/index.md)
+- [Discussions / 讨论区](https://github.com/AlonaBot/AlonaBot/discussions)
+- [Report an issue / 报告问题](https://github.com/AlonaBot/AlonaBot/issues/new/choose)
+- [Security reports / 安全报告](https://github.com/AlonaBot/AlonaBot/security/advisories/new)
