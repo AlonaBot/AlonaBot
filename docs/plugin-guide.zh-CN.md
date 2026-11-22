@@ -327,7 +327,7 @@ AlonaBot.onLocale(async function(locale) {
 
 Go 源文件可自由命名，入口由包级 `New` 及其签名决定；同包重复声明 `New` 会由 Go 编译器报告 `redeclared`。插件与 Agent 的 Schema 文件统一使用 `plugin_config_schema.json`，Adapter 继续使用 `adapter_config_schema.json`。
 
-升级时先停用旧组件，备份数据并升级 Core，再安装使用新 SDK 重新构建的组件包，最后启用。配置值、secret 引用与受管数据沿用已有存储；无需手动重建配置。停用的旧包仍可经管理 API 更新；直接启动旧包会记录明确错误。
+升级时先停用旧组件，备份数据并升级 Core，再安装使用新 SDK 重新构建的组件包，最后启用。配置值、secret 引用与受管数据沿用已有存储；无需手动重建配置。停用的旧包仍可经管理 API 更新。
 
 在 `plugin.yaml` 同目录编写 `plugin_config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [插件指南](plugin-guide.zh-CN.md)，例如：
 

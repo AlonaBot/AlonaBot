@@ -326,7 +326,7 @@ AlonaBot.onLocale(async function(locale) {
 
 Go source filenames are unrestricted: the package-level `New` and its signature define the entry point. Duplicate `New` declarations in one package produce Go's `redeclared` error. Plugins and Agents use `plugin_config_schema.json`; Adapters retain `adapter_config_schema.json`.
 
-For upgrades, disable old components, back up data and upgrade Core, update component packages rebuilt with the new SDK, then enable them. Configuration values, secret references and managed data retain their existing storage. Disabled old packages remain updateable through the management API; starting an old package records an explicit error.
+For upgrades, disable old components, back up data and upgrade Core, update component packages rebuilt with the new SDK, then enable them. Configuration values, secret references and managed data retain their existing storage. Disabled old packages remain updateable through the management API.
 
 Place plugin_config_schema.json beside plugin.yaml, declaring types/English source text by field key. alonabot build validates/embeds normalized JSON through overlays; check validates the same. For example:
 
