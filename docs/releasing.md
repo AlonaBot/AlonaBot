@@ -87,4 +87,4 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## Schema 文件名切换的发行准备
 
-本轮插件与 Agent 改用 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。先发行包含严格旧名检查的新 SDK/Core，再让五个官方组件固定该真实版本并重新构建。Agent 的 Schema、WebUI 的 Schema fixtures 和各组件双语升级说明须同步。新 SDK 发布前，`test`、`build`、`check` 可通过临时 `go.work` 将组件接到本地 Core。`pack` 会使用临时 `-modfile`；本地打包时复制组件源码到临时目录，在副本的 `go.mod` 添加指向本地 Core 的 `replace`，再执行 `env GOWORK=off alonabot pack <临时副本目录>`。组件源码保留已有真实 module 版本。组件发布后再更新 `components.lock.json`，整合归档沿用公开资产构建流程。用户先停用旧组件、升级 Core，再经管理端更新新包并启用；配置值和数据保留。
+本轮插件与 Agent 改用 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。先发行使用新 Schema 文件名的 SDK/Core，再让 Agent 和 WebUI 固定该真实版本并重新构建。Agent 的 Schema 与 WebUI 的 Schema fixtures 须同步。新 SDK 发布前，`test`、`build`、`check` 可通过临时 `go.work` 将组件接到本地 Core。`pack` 会使用临时 `-modfile`；本地打包时复制组件源码到临时目录，在副本的 `go.mod` 添加指向本地 Core 的 `replace`，再执行 `env GOWORK=off alonabot pack <临时副本目录>`。组件源码保留已有真实 module 版本。组件发布后再更新 `components.lock.json`，整合归档沿用公开资产构建流程。用户先停用旧组件、升级 Core，再经管理端更新新包并启用；配置值和数据保留。

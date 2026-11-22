@@ -324,7 +324,7 @@ AlonaBot.onLocale(async function(locale) {
 
 ## 7. Configuration and secrets
 
-Go source filenames are unrestricted: the package-level `New` and its signature define the entry point. Duplicate `New` declarations in one package produce Go's `redeclared` error. Plugins and Agents use `plugin_config_schema.json`; Adapters retain `adapter_config_schema.json`. A legacy `config_schema.json` produces an error naming the component and requiring a rename and rebuild, even when the new file also exists.
+Go source filenames are unrestricted: the package-level `New` and its signature define the entry point. Duplicate `New` declarations in one package produce Go's `redeclared` error. Plugins and Agents use `plugin_config_schema.json`; Adapters retain `adapter_config_schema.json`.
 
 For upgrades, disable old components, back up data and upgrade Core, update component packages rebuilt with the new SDK, then enable them. Configuration values, secret references and managed data retain their existing storage. Disabled old packages remain updateable through the management API; starting an old package records an explicit error.
 

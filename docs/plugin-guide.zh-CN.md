@@ -325,7 +325,7 @@ AlonaBot.onLocale(async function(locale) {
 
 ## 7. 配置与 secret
 
-Go 源文件可自由命名，入口由包级 `New` 及其签名决定；同包重复声明 `New` 会由 Go 编译器报告 `redeclared`。插件与 Agent 的 Schema 文件统一使用 `plugin_config_schema.json`，Adapter 继续使用 `adapter_config_schema.json`。历史 `config_schema.json` 会返回包含组件身份与改名要求的错误，即使同时存在新文件也须删除旧文件。
+Go 源文件可自由命名，入口由包级 `New` 及其签名决定；同包重复声明 `New` 会由 Go 编译器报告 `redeclared`。插件与 Agent 的 Schema 文件统一使用 `plugin_config_schema.json`，Adapter 继续使用 `adapter_config_schema.json`。
 
 升级时先停用旧组件，备份数据并升级 Core，再安装使用新 SDK 重新构建的组件包，最后启用。配置值、secret 引用与受管数据沿用已有存储；无需手动重建配置。停用的旧包仍可经管理 API 更新；直接启动旧包会记录明确错误。
 

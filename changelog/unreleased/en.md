@@ -1,6 +1,6 @@
 # Unreleased
 
-- Plugin and Agent configuration Schemas now use `plugin_config_schema.json`; `adapter_config_schema.json` is unchanged. Legacy `config_schema.json` produces a component-specific rename/rebuild error. Disable old components before upgrading Core, update packages rebuilt with the new SDK through the management API, then enable them. Existing configuration values, secrets and managed data are retained.
+- Plugin and Agent configuration Schemas now use `plugin_config_schema.json`; `adapter_config_schema.json` is unchanged. Disable old components before upgrading Core, update packages rebuilt with the new SDK through the management API, then enable them. Existing configuration values, secrets and managed data are retained.
 
 - Added live Adapter operation discovery, authenticated invocation APIs, the `sdk/debug` client and `adapter instance list/actions/call` CLI. Discovery uses real SDK interfaces, capabilities and platform actions; calls preserve partial payloads, errors and traces. Rebuild Adapters with the matching SDK to use the new catalog RPC.
 

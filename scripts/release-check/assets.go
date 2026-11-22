@@ -290,9 +290,6 @@ func readSums(filename string) (map[string]string, error) {
 }
 
 func checkPackage(dir string, files []string, c component, version, goos, goarch string) ([]string, error) {
-	if slices.Contains(files, "config_schema.json") {
-		return nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", c.id)
-	}
 	entrypoint := "component"
 	if goos == "windows" {
 		entrypoint += ".exe"

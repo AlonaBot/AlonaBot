@@ -50,11 +50,6 @@ func (a *assembly) profileSchemaAt(ctx context.Context, id, active string) (*con
 		if directoryErr != nil {
 			return nil, directoryErr
 		}
-		if _, legacyErr := os.Lstat(filepath.Join(directory, "config_schema.json")); legacyErr == nil {
-			return nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", id)
-		} else if !errors.Is(legacyErr, os.ErrNotExist) {
-			return nil, legacyErr
-		}
 		raw, err = os.ReadFile(filepath.Join(directory, "plugin_config_schema.json"))
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil

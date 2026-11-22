@@ -138,11 +138,6 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	m := parsed.Manifest
-	if _, err := os.Lstat(filepath.Join(dir, "config_schema.json")); err == nil {
-		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, fmt.Sprintf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", m.ID))
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
 	switch {
 	case in.ID != "" && m.ID != in.ID:
 		return nil, failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "manifest plugin ID does not match the requested component")

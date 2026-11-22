@@ -114,11 +114,6 @@ func webUIHasSource(ctx context.Context, options generate.Options) (bool, error)
 
 // projectResources 在工程文件系统边界检查打包资源，所有角色共用这份白名单。
 func projectResources(dir string, project *manifest.Manifest, process bool) (map[string][]byte, error) {
-	if _, err := os.Lstat(filepath.Join(dir, "config_schema.json")); err == nil {
-		return nil, fmt.Errorf("component %s: rename config_schema.json to plugin_config_schema.json and rebuild", project.ID)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
 	files := map[string][]byte{}
 	names := map[string]string{}
 	add := func(name string, info fs.FileInfo) error {

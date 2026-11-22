@@ -1357,11 +1357,6 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 
 func packageResources(dir string) (genresources.Resources, error) {
 	g := genresources.Resources{I18n: make(map[string][]byte)}
-	if _, err := os.Lstat(filepath.Join(dir, "config_schema.json")); err == nil {
-		return g, fmt.Errorf("component package %s: rename config_schema.json to plugin_config_schema.json and rebuild", dir)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return g, err
-	}
 	raw, err := os.ReadFile(filepath.Join(dir, "plugin_config_schema.json"))
 	if err == nil {
 		schema, problems := configschema.Parse(raw)
