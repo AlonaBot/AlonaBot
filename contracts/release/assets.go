@@ -2,6 +2,8 @@
 package release
 
 import (
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"path"
@@ -22,6 +24,8 @@ type Download struct {
 	Name string `json:"name"`
 	URL  string `json:"browser_download_url"`
 	Size int64  `json:"size"`
+	// Digest 是 Release API 给出的内容摘要，形如 sha256:<64 位十六进制>；较早上传的资产可能为空。
+	Digest string `json:"digest"`
 }
 
 // Validate 核对 Release 标签及页面所属仓库。
@@ -62,6 +66,23 @@ func (a Download) Validate(repo, tag string) error {
 		return fmt.Errorf("asset URL does not match repository %s and tag %s: %q", repo, tag, a.URL)
 	}
 	return nil
+}
+
+// MatchSHA256 核对下载内容的 SHA-256 与 Digest。Digest 为空时返回 false 与 nil，
+// 由调用方退回尺寸校验；其他算法、格式错误或摘要不符时返回错误。
+func (a Download) MatchSHA256(sum []byte) (bool, error) {
+	if a.Digest == "" {
+		return false, nil
+	}
+	want, found := strings.CutPrefix(a.Digest, "sha256:")
+	raw, err := hex.DecodeString(want)
+	if !found || err != nil || len(raw) != len(sum) {
+		return false, fmt.Errorf("unsupported asset digest %q", a.Digest)
+	}
+	if subtle.ConstantTimeCompare(raw, sum) != 1 {
+		return false, fmt.Errorf("asset %s does not match digest %s", a.Name, a.Digest)
+	}
+	return true, nil
 }
 
 // ArchiveName 返回组件归档的规范名称。

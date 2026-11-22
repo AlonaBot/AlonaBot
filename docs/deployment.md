@@ -150,6 +150,8 @@ All plugin-route responses, including Core errors, set `Content-Security-Policy:
 
 A configured `proxy` becomes Core/child `HTTP_PROXY`/`HTTPS_PROXY`; otherwise existing `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` pass through unchanged.
 
+`github_mirror` (default empty, meaning direct) is a prefix-style accelerator such as `https://ghfast.top/`. It applies only to files Core downloads from `github.com`: Release assets and source-build tarballs. The request URL is the prefix followed by the original URL, while Release metadata still comes from `api.github.com` and asset URLs must still point at `github.com`. A downloaded Release asset must match the size and the `digest` (`sha256:…`) from the Release API; assets uploaded before GitHub published digests have none, so Core checks only the size and logs one WARN. Source tarballs have no published digest, so a source build trusts the mirror. `go_download_base` (default `https://go.dev/dl/`, for example `https://golang.google.cn/dl/`) and `goproxy` (default `https://proxy.golang.org,direct`) are used only by source builds, see [Source builds](#source-builds). The prefixes must be http(s) URLs ending with `/`; changes apply to the next download without restarting. The WebUI reads and writes them with `GET`/`PUT /api/v1/core/downloads`.
+
 First startup persists `<data_dir>/admin_token` with mode 0600 and prints only management address/file path. Local WebUI displays the pending token; copy/save it and click “I've saved it”. Remote browsers can read it explicitly:
 ```fish
 alonabot admin-token show --data-dir ./data
@@ -209,6 +211,7 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | --- | --- |
 | Core identity and components | `GET /api/v1/core`, `GET /api/v1/packages` |
 | Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`); see [management types](../internal/core/manage/install.go) |
+| Download sources | `GET`/`PUT /api/v1/core/downloads`, `{"github_mirror":"","go_download_base":"https://go.dev/dl/","goproxy":"https://proxy.golang.org,direct"}`; PUT updates only the fields present, invalid values return 400 |
 | Enable, disable, restart, reload | `POST /api/v1/packages/{action}` with `{"id":"demo"}`; disable may require `confirm` |
 | Update | `POST /api/v1/packages/update`, `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |
 | Rollback | `POST /api/v1/packages/rollback`, `{"id":"demo","generation":"retained-generation","confirm":false}` |

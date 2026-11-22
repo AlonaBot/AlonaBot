@@ -2,6 +2,7 @@ package manage
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -153,6 +154,33 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	return result, err
 }
 
+// downloadGitHub 把 github.com 上的文件写入 file，返回字节数与 SHA-256。
+// 设置了 github_mirror 时实际请求「镜像前缀 + 原始 URL」；内容超过 INSTALL_MAX_ARCHIVE 时返回 RESOURCE_EXHAUSTED。
+func (s *Service) downloadGitHub(ctx context.Context, address string, file io.Writer) (int64, []byte, error) {
+	address = s.opt.Settings.Settings().GitHubMirror + address
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	response, err := s.opt.HTTPClient.Do(request)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return 0, nil, fmt.Errorf("download %s: %s", address, response.Status)
+	}
+	hash := sha256.New()
+	n, err := io.Copy(io.MultiWriter(file, hash), io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
+	if err != nil {
+		return n, nil, fmt.Errorf("download %s: %w", address, err)
+	}
+	if n > s.opt.Limits.MaxArchiveBytes {
+		return n, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
+	}
+	return n, hash.Sum(nil), nil
+}
+
 func exists(message string) error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, Message: message}
 }
@@ -218,26 +246,19 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 		}
 		input.ArchivePath = file.Name()
 		defer os.Remove(input.ArchivePath)
-		request, err = http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
-		if err != nil {
-			return nil, errors.Join(err, file.Close())
-		}
-		response, err = s.opt.HTTPClient.Do(request)
-		if err != nil {
-			return nil, errors.Join(err, file.Close())
-		}
-		if response.StatusCode != http.StatusOK {
-			return nil, errors.Join(fmt.Errorf("download archive: %s", response.Status), response.Body.Close(), file.Close())
-		}
-		n, copyErr := io.Copy(file, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
-		if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
+		n, sum, err := s.downloadGitHub(ctx, asset.URL, file)
+		if err := errors.Join(err, file.Close()); err != nil {
 			return nil, err
-		}
-		if n > s.opt.Limits.MaxArchiveBytes {
-			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
 		}
 		if n != asset.Size {
 			return nil, invalid("archive size does not match the GitHub asset")
+		}
+		verified, err := asset.MatchSHA256(sum)
+		if err != nil {
+			return nil, denied(err.Error())
+		}
+		if !verified {
+			slog.Warn("GitHub asset has no digest; verified size only", "source", req.Source, "asset", asset.Name)
 		}
 	}
 	// 2. 本地与下载归档共用身份、平台和受控解压检查。
