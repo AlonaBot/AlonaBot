@@ -11,12 +11,7 @@ go run ./cmd/alonabot check examples/plugins/echo
 go run ./cmd/alonabot build examples/plugins/echo --out /tmp/alonabot-echo
 ```
 
-Configure a Telegram instance in a temporary `data_dir` following the [development guide](../../../docs/development.md), then run:
-
-```fish
-git clone https://github.com/AlonaBot/alonabot-adapter-telegram.git ../alonabot-adapter-telegram
-go run ./cmd/alonabot run ../alonabot-adapter-telegram examples/plugins/echo examples/plugins/media --data-dir /tmp/alonabot-examples
-```
+For Telegram configuration and the shared echo/media startup command, see the [media example](../media/README.md).
 
 | Input | Behavior and API |
 | --- | --- |

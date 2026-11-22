@@ -2,7 +2,7 @@
 
 [English](deployment.md)
 
-本文面向运行 AlonaBot 的管理员，说明安装、认证、配置、组件管理与恢复。源码开发见[开发指南](development.zh-CN.md)，构建发行物见[发行维护](releasing.zh-CN.md)。
+本文面向运行 AlonaBot 的管理员，说明安装、认证、配置、组件管理与恢复。源码开发见[开发指南](development.zh-CN.md)，构建发行物见[发行维护](releasing.md)。
 
 ## 选择安装方式
 
@@ -189,7 +189,7 @@ alonabot sleep-policy my-plugin auto
 
 无参数返回全局设置与全部已安装 plugin/agent 的策略和运行状态；单 ID 返回对应对象。`auto` 删除覆盖，`never` 与正时长立即写回设置并生效。全局模式与时长通过[管理 API](deployment.zh-CN.md#管理-api) 的 `PUT /api/v1/core/sleep` 修改，两项必填。管理读取保持休眠；需要路由而尚无有效已提交快照时，策略查询返回 412 / `FAILED_PRECONDITION`，全局设置与 runtime 可独立读取。保存后的恢复失败保留实际错误；重新 GET 核对已保存设置。
 
-唤醒与调度的实现、测试入口见[架构地图](../ARCHITECTURE.zh-CN.md)；开发验证见[源码开发](development.zh-CN.md#验证改动)。
+唤醒与调度的实现、测试入口见[架构地图](../ARCHITECTURE.md)；开发验证见[源码开发](development.zh-CN.md#验证改动)。
 
 ## 备份与恢复
 

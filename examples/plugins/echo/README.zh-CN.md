@@ -11,12 +11,7 @@ go run ./cmd/alonabot check examples/plugins/echo
 go run ./cmd/alonabot build examples/plugins/echo --out /tmp/alonabot-echo
 ```
 
-按[开发指南](../../../docs/development.zh-CN.md)配置临时 `data_dir` 中的 Telegram 实例，再运行：
-
-```fish
-git clone https://github.com/AlonaBot/alonabot-adapter-telegram.git ../alonabot-adapter-telegram
-go run ./cmd/alonabot run ../alonabot-adapter-telegram examples/plugins/echo examples/plugins/media --data-dir /tmp/alonabot-examples
-```
+Telegram 配置与 echo/media 共用启动命令见 [media 示例](../media/README.zh-CN.md)。
 
 | 输入 | 行为与对应写法 |
 | --- | --- |

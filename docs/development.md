@@ -117,7 +117,6 @@ For page-kit changes run `go test -race -v ./sdk/page ./examples/plugins/showcas
 
 Cross-platform changes need actual runtime checks as well as cross-builds. Five targets: linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64. Record builds separately from real runs; current results are in [release notes](../changelog/v0.1.0/en.md#added). Use authorized test credentials for real Telegram/paid Provider checks; identify simulators in results.
 
-Commit only integration tests/protocol-number checks. Unit tests, temporary reproductions and local frontend tests use `*_local_test.go`, `*.local.test.ts`, `*.local.test.tsx` or `tmp/test/`; see [coding standards](coding-standards.md#test-submission-rules). PRs record test locations, commands, platform, inputs, results, reasons for skipped checks and added committed test lines.
 
 ## GitHub Actions
 
@@ -137,70 +136,7 @@ With an installed CLI, run `alonabot run` in the project directory. Console chat
 
 Development directories enable reload by default. Change source and send `/hello` again to observe new replies; `--reload=false` disables it.
 
-### Without a terminal: loopback Adapter and curl
-
-For HTTP message injection, use the repository's loopback example:
-
-```fish
-go build -o bin/alonabot ./cmd/alonabot
-set -gx DEVBOT_DATA (mktemp -d)
-set -gx DEVBOT_OUTPUT (mktemp)
-cp examples/devbot/core_config.example.json $DEVBOT_DATA/core_config.json
-printf 'DEVBOT_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_DATA $DEVBOT_OUTPUT
-bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVBOT_DATA --reload
-```
-
-In another terminal set the same `DEVBOT_DATA`/`DEVBOT_OUTPUT`. First startup persists the management token in `$DEVBOT_DATA/admin_token` with mode 0600 and prints only its location. Management CLI automatically reads it through `--data-dir $DEVBOT_DATA`. For manual HTTP below, explicitly read with `bin/alonabot admin-token show --data-dir $DEVBOT_DATA` and set `token` to that value:
-
-```fish
-curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
-  'http://127.0.0.1:7650/plugins/alonabot-adapter-devbot/inject?instance=one&text=%2Fhello'
-cat $DEVBOT_OUTPUT
-```
-
-Injection returns 204; after asynchronous send the file contains `Hello from devbot!`. See [devbot README](../examples/devbot/README.md) for full instance JSON, layout, authentication, source/translation/configuration changes and build-failure recovery. The example binds `adapters.devloop.package` to `alonabot-adapter-devbot`, instance `instances.one`, prefix `/`; both development components use real Deliver/Send pipelines.
-
-Marketplace IDs use hyphenated prefixes such as `alonabot-plugin-hello`; local IDs still allow underscores. See [publishing](plugin-guide.md#9-publishing) for rules.
-
-To check official help, first check out `alonabot-plugin-help` separately and run `bin/alonabot check <help project directory>`. For loopback trials, append its project to `run` directories and set injection `text` to `%2Fhelp` or `%2Fwhoami`.
-
-Build CLI (`go build -o bin/alonabot ./cmd/alonabot`), then create/check components:
-
-```fish
-bin/alonabot init ./alonabot-plugin-hello
-bin/alonabot build ./alonabot-plugin-hello
-bin/alonabot check ./alonabot-plugin-hello
-bin/alonabot test ./alonabot-plugin-hello
-bin/alonabot pack ./alonabot-plugin-hello
-```
-
-`init`, `build`, `check`, `test`, `pack` accept at most one positional directory, defaulting to current; old `--dir` reports unknown option. `init` requires an empty directory, failing before writes otherwise. `--id` defaults to the absolute target basename: `alonabot-plugin-hello` is a marketplace ID; `my_plugin` stays a local ID with a missing-prefix warning. Invalid directory names preserve original characters in the error and request explicit `--id`. Default role is plugin; `--role agent|adapter|webui` creates others. Adapter `--adapter-id` defaults to final component ID and can be overridden. Plugin/Agent export `New()` with a schema and an English example command directly replying `Hello AlonaBot`; add i18n yourself when needed. Adapter provides an instance schema; WebUI provides `assets/index.html`. Generated Go/plugin.yaml have no comments. Templates ignore `data/`/`bin/`; overlays supply production thin entry points. See [devbot](../examples/devbot/README.md) for library hosts.
-
-Inside an existing Go module, reuse its go.mod. External empty directories default the module to the directory name; override with `--module example.com/myplugin`. A release CLI requires SDK at its own module version and runs `go mod tidy` in the project, allowing immediate `run`. Dependency resolution failure keeps the project, exits unsuccessfully and prints manual recovery commands. Development `(devel)` builds (including local `+dirty` and automatic checkout pseudoversions) prompt `go get github.com/AlonaBot/AlonaBot@<version>` for the author to select. Change the example source in `plugin.yaml` before publishing.
-
-Run `alonabot run` in a component project with `plugin.yaml`, or provide one/more directories explicitly:
-
-```sh
-bin/alonabot run ./alonabot-plugin-hello ./myadapter --data-dir ./data --reload
-bin/alonabot run ./alonabot-plugin-hello ./mywebui --data-dir ./data --reload
-bin/alonabot run ./examples/plugins/lifecycle --stdio
-```
-
-Without directories, current `plugin.yaml` runs that project; otherwise installed records start Core. Manifest defines identity/role; project validation/process builds finish before starting components. Duplicate directories/IDs fail, as do process-component ID/`adapter_id` conflicts with installed packages.
-
-Builds reuse internal generation and `go build`, writing executables to `<data_dir>/dev/bin/`. Overlays supply resources/thin entry points without changing author source/module files. Plugin/Agent build their entry package; importable Adapter projects export `New()`, with generated entry point calling `sdk.RunAdapter(New())`.
-
-Supervisor runs development components separately, using TCP loopback by default. `--stdio` switches all Native separate processes for this run: development/installed components, candidates, restarts, reloads, recovery and wakes. `alonabot run --stdio` also starts installed components. Transport selection is run-local; static WebUI/in-process mechanisms remain. Generations are `dev:<component ID>`; configuration loads each time from `<data_dir>/plugins/<id>/config.json`, treating absence as an empty object, and prepared configuration is saved in the generation snapshot. Managed SQLite `dev.sqlite` persists there across restarts. Adapter instances come from `core_config.json`'s `adapters`. Development logging defaults to debug; explicit `log.sources` wins.
-
-Every `DEV_RELOAD_POLL`, `--reload` checks source, `//go:embed` resources, `go.mod`, `go.sum`, `plugin.yaml`, both configuration Schemas and `i18n/`, excluding data/vendor/testdata and dot/underscore-prefixed directories. Default 500ms; override with e.g. `--args DEV_RELOAD_POLL=1s`.
-
-Source/resource changes rebuild and restart only changed components after success. Compile failures keep diagnostics and old components running. Only `config.json` changes directly restart that component; one Adapter-instance change restarts only it, preserving binary bytes. `--reload=false` builds/runs once; no development directories means ordinary Core operation without polling.
-
-`--reload` also watches other `core_config.json` settings: `admins` immediately changes Core Admin, prefixes read shared current settings, `default_locale` affects new Sessions. Adapter `default_instance` changes immediately redirect sends without explicit instance; `log.level` immediately changes global logging, with explicit run `--log-level`/library `LogLevel` still taking priority. These preserve processes/instances. Combined settings/instance edits refresh settings first, then restart affected instances. Read failure logs errors and keeps old settings. CLI serializes refresh with management operations via `internal/app.Core.ReloadSettings(ctx)`.
-
-`role: webui` serves the manifest's `assets` directory directly as static root, overriding installed WebUI like `alonabot.WebUI(os.DirFS(<assets directory>))`. Only one WebUI directory is accepted; duplicates fail before starting any component. Development WebUI skips Admin API major-version checks. Static files are read per request, so edits appear immediately without builds/restarts/`--reload`.
-
-Attach debuggers to component PIDs for separate processes; use library mode below to debug Core/components together.
+See the [devbot tutorial](../examples/devbot/README.md) for loopback injection, configuration, hot reload and same-process debugging.
 
 ## Author tools
 

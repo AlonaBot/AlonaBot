@@ -1,14 +1,12 @@
-# Repeatable management and recovery scenarios
+# 可重复执行的管理与恢复场景
 
-[简体中文](README.zh-CN.md)
+这里的场景供 T-10 使用指定的二进制、临时 `data_dir` 和测试包验收正式管理流程、崩溃恢复与残存写入者。正式流程复用 [管理集成测试](../../tests/e2e/management_e2e_test.go) 的全部断言，残存场景复用 [恢复集成测试](../../tests/e2e/recover_e2e_test.go) 的 `started` 子项，额外恢复与门禁断言位于 [场景模板](recovery.go.tmpl)。临时 Go overlay 替换输入、增加取证；管理动作始终调用 `--alonabot` 指定的程序。
 
-These T-10 scenarios use specified binaries, temporary `data_dir` directories and test packages to verify the production management flow, crash recovery and surviving writers. The management flow reuses every assertion in the [management integration test](../../tests/e2e/management_e2e_test.go); the survivor scenario reuses `started` from the [recovery integration test](../../tests/e2e/recover_e2e_test.go). Additional recovery and admission assertions are in the [scenario template](recovery.go.tmpl). Temporary Go overlays replace inputs and collect evidence; management actions always invoke the program supplied by `--alonabot`.
+## 构建三版测试包并执行正式流程
 
-## Build three test package versions and run the management flow
+在待验收版本的仓库根目录使用项目要求的 Go 工具链和 `uv`。入口只使用 Python 标准库与仓库已有 Go 依赖。当前支持 macOS、Linux 等 Unix 平台，与原集成测试的 `unix` build tag 一致；其他平台的实际运行由 T-10 单独取证。
 
-Use the project's required Go toolchain and `uv` from the candidate repository root. The entry point uses only Python's standard library and existing Go dependencies. It currently supports Unix platforms such as macOS/Linux, matching the original integration test's `unix` build tag; T-10 records actual runs on other platforms separately.
-
-The following commands use fish. `artifacts` stores this run's independently built Core, fixture source, signed packages and raw logs. You can also replace `--alonabot` with the absolute path of the candidate Core.
+以下为 fish 命令。`artifacts` 存放本次独立构建的 Core、夹具源码、签名包与原始日志；也可以把 `--alonabot` 换成待验收 Core 的绝对路径。
 
 ```fish
 set artifacts (mktemp -d /tmp/alonabot-scenarios.XXXXXX)
@@ -24,24 +22,24 @@ uv run --no-project scripts/scenarios/run.py management \
     "$artifacts/packages/3.0.0/package.tar.gz"
 ```
 
-`build` reuses `recoveryFixtureSource` and `writeTestPackage` to compile real 1.0.0, 2.0.0 and 3.0.0 programs for `recovery` / `github.com/example/recovery`, adding the configuration schema, `/info` version/configuration endpoint and `OnReady` logs. All three packages use one temporary Ed25519 signing key. Each version directory contains `main.go`, `plugin`, `package.tar.gz`, `release.json`, `release.json.sig` and `release.pub`. The private key is used only in the build process's memory.
+`build` 复用现有 `recoveryFixtureSource` 和 `writeTestPackage`：为 `recovery` / `github.com/example/recovery` 分别编译实际的 1.0.0、2.0.0、3.0.0 程序，添加配置 schema、`/info` 版本与配置观测入口及 `OnReady` 日志。三版包由同一把临时 Ed25519 密钥签名；每个版本目录包含 `main.go`、`plugin`、`package.tar.gz`、`release.json`、`release.json.sig` 和 `release.pub`。私钥只在本次构建进程内存中使用。
 
-Alternative build outputs must provide the same identities, versions, public signing key, configuration fields and HTTP behavior, with release manifest, signature and public key beside each archive. `build --out` requires a new output directory; `management --data-dir` requires an existing empty temporary directory.
+传入其他构建产物时，三版包需提供上述相同身份、版本、签名公钥、配置字段和 HTTP 行为；每个归档旁保留对应的发行清单、签名和公钥。`build --out` 使用尚未存在的输出目录；`management --data-dir` 使用已存在的空临时目录。
 
-The management flow runs in this order:
+正式流程依次执行：
 
-1. install → enable; check initial Active, Session, actual program version, `label=initial` and initial SQLite value 1.
-2. Write DB=41 and edit `config.json`; confirm the old configuration remains in use until reload.
-3. restart keeps Active and replaces Session; CLI reload creates a new Active and independent DB, with configuration `reloaded`.
-4. update to 2.0.0; stop Core, issue a button in the real state database and verify it is valid, then resume Core.
-5. pin 2.0.0; rejection of update 3.0.0 preserves Active, Session and DB. Remove the pin, update successfully with the same package, then write DB=99.
-6. disable → default uninstall → reinstall from the same source → enable preserves generation, configuration and DB=99.
-7. Choose a 2.0.0 snapshot from the actual generations API retention list. Explicit rollback creates a new Active/Session and independent DB, restoring 2.0.0, `reloaded` and DB=41.
-8. Stop Core cleanly. Check persisted Active and the operation/before-and-after generations/DB paths of 5 committed Journal entries; use real button resolution to confirm the generation change invalidated the old button.
+1. install → enable；核对首个 Active、Session、实际程序版本、`label=initial` 与 SQLite 初值 1。
+2. 写入 DB=41，编辑 `config.json`；确认 reload 前仍使用旧配置。
+3. restart 保持 Active，换新 Session；CLI reload 创建新 Active 和独立 DB，配置变为 `reloaded`。
+4. update 到 2.0.0；停止 Core 后在真实状态库签发按钮并验证当时有效，再恢复 Core。
+5. pin 2.0.0；3.0.0 更新被拒绝时保留 Active、Session 和 DB；解除 pin 后同一包更新成功，再写入 DB=99。
+6. disable → 默认 uninstall → 同来源重装 → enable，保留代次、配置和 DB=99。
+7. 从 generations API 的实际保留列表选择 2.0.0 快照，显式 rollback 创建新 Active/Session 和独立 DB，恢复 2.0.0、`reloaded` 与 DB=41。
+8. 正常停止 Core，核对持久 Active、5 条 committed Journal 的操作/前后代次/DB 路径，并通过真实按钮解析服务确认旧按钮因代次变化失效。
 
-## Build recovery artifacts and run both fault scenarios
+## 构建恢复产物并执行两类故障场景
 
-Run these fish commands from the repository root. The CLI is a normal build; `--overlay-core` runs a temporary Core with exact checkpoints. `build-recovery` builds independent artifacts; runtime entry points consume the supplied binaries and packages.
+以下 fish 命令在仓库根目录运行。CLI 使用普通构建；`--overlay-core` 用于运行含精确检查点的临时 Core。`build-recovery` 独立构建产物，运行入口消费传入的二进制与包。
 
 ```fish
 set recovery_artifacts (mktemp -d /tmp/alonabot-recovery.XXXXXX)
@@ -66,48 +64,48 @@ uv run --no-project scripts/scenarios/run.py survivor \
     --recovery-package "$recovery_artifacts/fixtures/recovery/package.tar.gz"
 ```
 
-`build-recovery --out` also requires a new directory. Output includes `fault-core`, real `observed-plugin`, `probe`, `adapter`, their generated source and three signed packages under `recovery/`, `gateprobe/` and `adapter-package/`. Each package directory retains `package.tar.gz`, `release.json`, `release.json.sig` and `release.pub`, using this build's shared temporary Ed25519 key. `overlay.json` reuses the original recovery hooks; `fault-overlay.json` adds FIFO release and pre-binding checkpoints. All modified source mapped by the overlay remains in the output directory.
+`build-recovery --out` 同样接收尚未存在的目录。输出包含 `fault-core`、真实 `observed-plugin`、`probe`、`adapter`、对应生成源码，以及 `recovery/`、`gateprobe/`、`adapter-package/` 中的三个签名包。每个包目录保留 `package.tar.gz`、`release.json`、`release.json.sig`、`release.pub`，使用本次构建的同一把临时 Ed25519 密钥。`overlay.json` 复用原恢复钩子；`fault-overlay.json` 追加 FIFO 释放与绑定前检查点，其映射的修改源码全部保留在输出目录。
 
-Artifacts are built for the execution platform. Alternatives must use `recovery` identity `github.com/example/recovery`, version 1.0.0, `migration_mode: none`, `prepare_effects: managed_db`, SQLite `/value`, `starts`, `candidate-value`, `fail-ready` and observations of six request types. `gateprobe` provides `/service`, `/bus`, `attempts` and independent scheduled `clock`; the Adapter is `alonabot-adapter-fixture`, protocol `devloop`, instance `one`. The actual files retained in the build directory define the source and declarations.
+这些产物按执行平台构建。替换为其他产物时，`recovery` 身份为 `github.com/example/recovery`，版本 1.0.0、`migration_mode: none`、`prepare_effects: managed_db`；提供 SQLite `/value`、`starts`、`candidate-value`、`fail-ready` 和六类请求观测行为。`gateprobe` 提供 `/service`、`/bus`、`attempts` 与独立定时 `clock`；Adapter 为 `alonabot-adapter-fixture`，协议 `devloop`、实例 `one`。源码与声明以构建目录保留的实际文件为准。
 
-### Recovery checkpoints and assertions
+### 恢复入口的检查点与断言
 
-`recovery` creates seven independent run directories under `<data_dir>/`:
+`recovery` 依次在 `<data_dir>/` 下创建七个独立运行目录：
 
-| Subdirectory | Failure window | Recovery result |
+| 子目录 | 故障窗口 | 恢复结果 |
 | --- | --- | --- |
-| `prepared` | Kill Core after PREPARED, before commit | Old DB 41 remains; candidate DB 77 is removed; old Active returns with a new Session |
-| `committed` | Kill Core after successful CommitCandidate, before ACTIVATE | Only new Active resumes with DB=77; old DB 41 remains; committed resources stay referenced |
-| `first-prepared` | Kill Core after PREPARED on first enable | No old Active; remains inactive with HTTP 503; uncommitted candidate is reclaimed |
-| `ready` | Candidate OnReady fails after reading `fail-ready`, then kill Core | New Active/committed/Degraded remains; faulted restart still selects the new generation; removing the fault restores DB=77 |
-| `gates-prepared` | Candidate prepared, not committed | Request log stays unchanged until checkpoint release; all six entry points then run in the new PID |
-| `gates-committed` | Committed, before ACTIVATE | Same as above |
-| `gates-binding` | After ACTIVATED, before full Core business binding | Same as above |
+| `prepared` | PREPARED 后、提交前杀 Core | 旧库 41 保持；候选库 77 清理，旧 Active 用新 Session 恢复 |
+| `committed` | CommitCandidate 成功后、ACTIVATE 前杀 Core | 仅新 Active 恢复，DB=77；旧库 41 保持，已提交资源继续被引用 |
+| `first-prepared` | 首次 enable 的 PREPARED 后杀 Core | 无旧 Active，保持未激活与 HTTP 503，回收未提交候选 |
+| `ready` | 候选 OnReady 读取 `fail-ready` 后失败，再杀 Core | 新 Active/committed/Degraded 保持；带故障重启仍选新代次，移除故障后恢复 DB=77 |
+| `gates-prepared` | 候选已准备、尚未提交 | 检查点释放前请求日志保持，释放后六类入口均由新 PID 处理 |
+| `gates-committed` | 已提交、ACTIVATE 前 | 同上 |
+| `gates-binding` | ACTIVATED 后、Core 的完整业务绑定前 | 同上 |
 
-Core locates windows with `ALONABOT_TEST_CRASH_PHASE` and `ALONABOT_TEST_CHECKPOINT=<subdirectory>/checkpoint`. Crash cases kill Core after observing the marker; admission cases hold/release the exact window through `<subdirectory>/checkpoint.release` FIFO. Admission checks advance at least one task cycle through a real timer callback in a separate plugin alongside command/event/Service/Bus/HTTP requests. All six entry points are verified before/after normal binding. Logs record PID and entry-point type for every request; after handover only the new PID is accepted.
+Core 使用 `ALONABOT_TEST_CRASH_PHASE` 与 `ALONABOT_TEST_CHECKPOINT=<子目录>/checkpoint` 定位窗口。崩溃分项看到 marker 后杀 Core；门禁分项通过 `<子目录>/checkpoint.release` FIFO 精确保持和释放窗口。门禁以独立插件的真实定时回调推进至少一个任务周期，配合 command/event/Service/Bus/HTTP 请求；正常绑定前后都验证六类入口实际执行。日志逐条记录 PID 与入口类型，交接后只接受新 PID。
 
-After Core exits and releases runtime locks, recovery checks read the real state database: Journal OpID/Kind/ExpectedOld/NewGeneration/Phase/Session/DB paths, Active, generation references and resource files, plus read-only business SQLite queries. API responses, raw Core logs and plugin `starts`/`requests` files are preserved.
+恢复分项在 Core 退出、运行锁释放后读取真实状态库：记录 Journal 的 OpID/Kind/ExpectedOld/NewGeneration/Phase/Session/DB 路径，核对 Active、代次引用与资源文件，并只读查询业务 SQLite。API 响应、Core 原始日志、插件 `starts` 与 `requests` 文件保留。
 
-### Surviving writer shutdown and recovery
+### 残存写入者的退出与恢复
 
-`survivor` uses `<data_dir>/started/`. Hold the checkpoint after Journal started but before stopping the old process, then kill Core. A temporary SDK overlay writes `runtime-held` on disconnect and blocks on `hold-runtime` FIFO, keeping the old plugin's real `runtime.lock`. Restarted Core must be Degraded with unchanged Active/start count and DB=41. Terminate that scenario-owned old process, wait for the real lock release, then CLI restart must restore the same Active/DB. The uncommitted Journal becomes cleaned, the candidate directory is reclaimed and the new Session activates only once.
+`survivor` 使用 `<data_dir>/started/`。在 Journal started 后、停旧进程前持有检查点，杀 Core；临时 SDK overlay 在断链退出时写入 `runtime-held` 并阻塞于 `hold-runtime` FIFO，旧插件继续持有真实 `runtime.lock`。重启 Core 后要求 Degraded、Active 不变、启动计数不增、DB=41；随后终止该自建旧进程，等实际锁释放，再经 CLI restart 恢复相同 Active/DB。未提交 Journal 变为 cleaned，候选目录回收，新 Session 仅激活一次。
 
-Fault processes, FIFOs and system runtime locks use Unix APIs; the entry point supports macOS/Linux. T-10 records runs on other targets. Temporary Core/SDK checkpoints serve this scenario, with build/run locations recorded in evidence.
+故障进程、FIFO 与系统运行锁场景使用 Unix API，入口支持 macOS/Linux；其他目标平台的运行证据由 T-10 取证。临时 Core 与 SDK 检查点供本场景使用，构建和运行位置均写入证据。
 
-## Read execution evidence
+## 读取执行证据
 
-Success prints `PASS` and returns 0. Failure preserves full Go test output and returns its exit code. Cleanup terminates only scenario-owned processes; run directories and artifacts remain.
+成功时输出 `PASS`，退出码为 0。失败时保留完整 Go 测试输出并返回其退出码；场景清理仅终止自己启动的进程，运行目录与产物保留。
 
-| Location | Contents |
+| 位置 | 内容 |
 | --- | --- |
-| `<out>/scenario-evidence/` | Build commands, inputs/overlays and raw build output |
-| `<data_dir>/scenario-evidence/inputs.json` | Absolute paths to the specified CLI, overlay Core and packages; execution platform and actual Go command |
-| `<data_dir>/scenario-evidence/overlay.json`, `*_test.go` | Effective test entry point and helper source for inspecting replaced inputs and assertions |
-| `<data_dir>/scenario-evidence/go-test.log` | Full stdout/stderr and test results |
-| `<data_dir>/scenario-evidence/events.jsonl` | Management output, package/HTTP snapshots and raw Core logs; recovery also records subdirectories, survivor records old PID, start count and recovery Journal |
-| `<data_dir>/state.sqlite` or `<data_dir>/<subdirectory>/state.sqlite` | Persistent state, generations and resource references after Core exits; Journal/DB checks also appear in Go logs |
-| `plugins/recovery/` in each run directory | Configuration/business DB, `starts`, `requests`, crash checkpoints and survivor markers |
+| `<out>/scenario-evidence/` | 构建命令、输入与 overlay、构建原始输出 |
+| `<data_dir>/scenario-evidence/inputs.json` | 指定 CLI、overlay Core 与包的绝对路径、执行平台、实际 Go 命令 |
+| `<data_dir>/scenario-evidence/overlay.json`、`*_test.go` | 本次有效的测试入口与辅助源码，可检查输入替换及断言 |
+| `<data_dir>/scenario-evidence/go-test.log` | 完整 stdout/stderr 与测试结果 |
+| `<data_dir>/scenario-evidence/events.jsonl` | 管理输出、包与 HTTP 快照、Core 原始日志；恢复入口另记录子目录，残存入口记录旧 PID、启动计数与恢复 Journal |
+| `<data_dir>/state.sqlite` 或 `<data_dir>/<子目录>/state.sqlite` | Core 已退出后的持久状态、代次与资源引用；Journal 及 DB 核对结果同时保留在 Go 日志 |
+| 各运行目录的 `plugins/recovery/` | 配置与业务 DB、`starts`、`requests`、崩溃 checkpoint 及残存标记 |
 
-The CLI's local HTTP forwarder reuses integration-test helpers, changing only Host to Core's configured `base_url`. Requests still use real Bearer authentication and production management entry points. Button evidence uses the same state database after Core exits and the integration test's fixed route description.
+CLI 的本机 HTTP 转发器沿用集成测试辅助，只把 Host 改为 Core 配置的 `base_url`，请求仍经真实 Bearer 认证与正式管理入口。按钮取证在 Core 退出后使用同一状态库，沿用集成测试的固定路由描述。
 
-Source-anchor changes produce an explicit error; update the scenario entry point before rerunning. Temporary overlays retain original main-path assertions. This scenario's `TestMain` skips ordinary Core/fixture builds and uses temporary symbolic links to specified binaries.
+源码定位锚点变化时入口明确报错，更新场景入口后再运行。临时 overlay 保留原主路径断言，`TestMain` 在本场景中跳过常规 Core/夹具构建，使用指向指定二进制的临时符号链接。

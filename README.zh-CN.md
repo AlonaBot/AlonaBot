@@ -49,10 +49,10 @@
 | --- | --- |
 | 安装、配置、升级或备份机器人 | [安装与部署](docs/deployment.zh-CN.md) |
 | 编写插件、Adapter 或 Agent | [插件开发指南](docs/plugin-guide.zh-CN.md) |
-| 修改 Core、SDK 或 WebUI | [源码开发](docs/development.zh-CN.md) · [架构地图](ARCHITECTURE.zh-CN.md) |
+| 修改 Core、SDK 或 WebUI | [源码开发](docs/development.zh-CN.md) · [架构地图](ARCHITECTURE.md) |
 | 报告问题、提交修复或改善文档 | [贡献指南](CONTRIBUTING.zh-CN.md) |
 | 查询管理 API 与协议行为 | [管理 API](docs/deployment.zh-CN.md#管理-api) · [协议与会话](docs/development.zh-CN.md#协议与会话行为) |
-| 构建与核对发行物 | [发行维护](docs/releasing.zh-CN.md) |
+| 构建与核对发行物 | [发行维护](docs/releasing.md) |
 
 欢迎修复问题、改善跨平台行为、补充文档和开发社区组件。提交问题时附上版本、系统和复现步骤，日志与配置先脱敏；较大的改动请先通过 Issue 讨论。
 

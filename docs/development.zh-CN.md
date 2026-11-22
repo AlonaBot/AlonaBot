@@ -2,7 +2,7 @@
 
 [English](development.md)
 
-从源码运行一个插件，再按改动范围进入 Core、SDK、Adapter、Agent 或 WebUI。贡献流程见[贡献指南](../CONTRIBUTING.zh-CN.md)，模块与数据所有者见[架构地图](../ARCHITECTURE.zh-CN.md)。本文维护开发环境、命令和验证方法；部署操作见[安装与部署](deployment.zh-CN.md)。
+从源码运行一个插件，再按改动范围进入 Core、SDK、Adapter、Agent 或 WebUI。贡献流程见[贡献指南](../CONTRIBUTING.zh-CN.md)，模块与数据所有者见[架构地图](../ARCHITECTURE.md)。本文维护开发环境、命令和验证方法；部署操作见[安装与部署](deployment.zh-CN.md)。
 
 ## 准备环境
 
@@ -117,7 +117,6 @@ go test -race ./...
 
 跨平台修改同时核对真实运行与交叉构建。五个发行目标为 linux/amd64、linux/arm64、windows/amd64、darwin/amd64、darwin/arm64；构建结果与平台实跑结果分别记录，现有结果见[发布说明](../changelog/v0.1.0/zh-CN.md#added)。真实 Telegram 或付费 Provider 验证使用授权的测试凭据，模拟服务在验证结果中明确注明。
 
-仓库只提交集成测试及协议编号检查。单元测试、临时复现与局部前端测试使用 `*_local_test.go`、`*.local.test.ts`、`*.local.test.tsx` 或 `tmp/test/`；完整规则见[编码规范](coding-standards.zh-CN.md#测试提交规则)。PR 记录测试位置、命令、平台、输入条件、结果与未运行原因，以及提交测试新增行数。
 
 ## GitHub Actions
 
@@ -137,70 +136,7 @@ go test -race ./...
 
 有开发目录时缺省自动重载；修改源码后再输入 `/hello` 即可观察新回复。`--reload=false` 关闭重载。
 
-### 不经终端：回环 Adapter 与 curl
-
-需要通过 HTTP 注入消息时，使用仓库的回环示例：
-
-```fish
-go build -o bin/alonabot ./cmd/alonabot
-set -gx DEVBOT_DATA (mktemp -d)
-set -gx DEVBOT_OUTPUT (mktemp)
-cp examples/devbot/core_config.example.json $DEVBOT_DATA/core_config.json
-printf 'DEVBOT_DATA=%s\nDEVBOT_OUTPUT=%s\n' $DEVBOT_DATA $DEVBOT_OUTPUT
-bin/alonabot run examples/devbot/plugin examples/devbot/adapter --data-dir $DEVBOT_DATA --reload
-```
-
-另开终端，设置相同的 `DEVBOT_DATA`、`DEVBOT_OUTPUT`。首次启动将管理 token 以 0600 权限持久保存在 `$DEVBOT_DATA/admin_token`，启动只输出文件位置；管理 CLI 通过 `--data-dir $DEVBOT_DATA` 自动读取凭据。下面手工调用 HTTP API 时，先用 `bin/alonabot admin-token show --data-dir $DEVBOT_DATA` 显式读取 token，令 `token` 为该值后：
-
-```fish
-curl --fail-with-body -X POST -H "Authorization: Bearer $token" \
-  'http://127.0.0.1:7650/plugins/alonabot-adapter-devbot/inject?instance=one&text=%2Fhello'
-cat $DEVBOT_OUTPUT
-```
-
-注入返回 204，异步发送后文件内容为 `Hello from devbot!`。完整实例 JSON、目录结构、认证、源码／翻译／配置改动与编译失败恢复操作见 [devbot README](../examples/devbot/README.zh-CN.md)。样例把 `adapters.devloop.package` 绑定到 `alonabot-adapter-devbot`，实例在 `instances.one`，命令前缀为 `/`。两个开发组件沿用真实 Deliver／Send 流水线。
-
-组件市场 ID 使用连字符前缀，例如 `alonabot-plugin-hello`；本地 ID 仍允许下划线，规则见 [插件指南](plugin-guide.zh-CN.md)。
-
-验证官方 help 工程时先检出独立的 `alonabot-plugin-help` 仓库，执行 `bin/alonabot check <help 工程目录>`。使用回环 Adapter 试用时，在 `run` 的组件目录列表追加该工程目录，再把注入请求的 `text` 改为 `%2Fhelp` 或 `%2Fwhoami`。
-
-先构建 CLI（`go build -o bin/alonabot ./cmd/alonabot`），再创建与验证组件：
-
-```fish
-bin/alonabot init ./alonabot-plugin-hello
-bin/alonabot build ./alonabot-plugin-hello
-bin/alonabot check ./alonabot-plugin-hello
-bin/alonabot test ./alonabot-plugin-hello
-bin/alonabot pack ./alonabot-plugin-hello
-```
-
-`init`、`build`、`check`、`test`、`pack` 至多接受一个位置目录，省略时使用当前目录；旧的 `--dir` 会报未知参数。`init` 要求空目录，非空时在写入前报错。`--id` 缺省取目标目录绝对路径的目录名；例如 `alonabot-plugin-hello` 直接作为市场 ID，`my_plugin` 保持本地 ID 并输出缺市场前缀的警告。非法目录名会保留原字符并提示显式给出 `--id`。缺省角色为 plugin，`--role agent|adapter|webui` 创建对应工程；Adapter 的 `--adapter-id` 缺省等于最终组件 ID，可显式覆盖。插件与 Agent 导出 `New()`，包含一个直接回复 `Hello AlonaBot` 的英文示例命令与 schema；需要翻译时自行添加 i18n 目录；Adapter 提供实例 schema，WebUI 提供 `assets/index.html`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释。模板忽略 `data/` 与 `bin/`，正式薄入口通过 overlay 提供。库模式宿主参考 [devbot](../examples/devbot/README.zh-CN.md)。
-
-位于现有 Go module 中时复用该 module，保持其 go.mod；外部空目录的 module 缺省同为目录名，可用 `--module example.com/myplugin` 覆盖。发布版 CLI 用自身模块版本写 SDK require，并在生成的工程目录运行 `go mod tidy`，随后可直接 `run`。依赖解析失败时保留工程，命令以失败状态退出并显示手动补齐的命令。开发版 `(devel)`（含本地修改的 `+dirty` 构建，以及从仓库 checkout 构建时 Go 自动盖上的伪版本）会提示执行 `go get github.com/AlonaBot/AlonaBot@<version>`，由作者选定版本。发布前修改 `plugin.yaml` 中的示例 source。
-
-在包含 `plugin.yaml` 的组件工程中运行 `alonabot run`，或者明确给出一个或多个工程目录：
-
-```sh
-bin/alonabot run ./alonabot-plugin-hello ./myadapter --data-dir ./data --reload
-bin/alonabot run ./alonabot-plugin-hello ./mywebui --data-dir ./data --reload
-bin/alonabot run ./examples/plugins/lifecycle --stdio
-```
-
-未给目录时，当前目录含 `plugin.yaml` 就运行该工程；其他情况按安装记录启动 Core。组件身份与角色取自工程 manifest，完成工程检查与进程组件构建后才启动组件。重复目录、重复 ID 都会报错；进程组件的 ID 或 `adapter_id` 与已安装包冲突时也会报错。
-
-构建复用内部生成器与 `go build`，可执行文件写到 `<data_dir>/dev/bin/`，生成资源与薄入口通过 overlay 提供，作者目录中的源码和 module 文件保持原样。插件与 Agent 构建入口包；Adapter 工程导出 `New()` 并提供可导入的包，构建器为其生成调用 `sdk.RunAdapter(New())` 的薄入口。
-
-开发组件通过 supervisor 在独立进程中运行，缺省使用 TCP loopback，`--stdio` 切换本次全部 Native 独立进程的传输，覆盖开发组件、已安装组件及其候选、重启、重载、恢复和休眠唤醒。也可用 `alonabot run --stdio` 启动已安装组件；传输选择只作用于本次运行，纯静态 WebUI 与同进程组件沿用既有机制。组件固定使用 `dev:<组件 ID>` 代次，配置每次从 `<data_dir>/plugins/<id>/config.json` 读取，缺失时按空对象准备；准备后的配置保存在开发代次快照中。受管 SQLite 为同目录的 `dev.sqlite`，跨重启保留。Adapter 实例配置来自 `core_config.json` 的 `adapters`。开发日志缺省为 debug，显式 `log.sources` 设置优先。
-
-`--reload` 每 `DEV_RELOAD_POLL` 检查源码、`//go:embed` 资源、`go.mod`、`go.sum`、`plugin.yaml`、两个配置 Schema 和 `i18n/`，排除数据目录、vendor、testdata 及以 `.`、`_` 开头的目录。轮询间隔缺省为 500ms，例如 `--args DEV_RELOAD_POLL=1s` 可以覆盖。
-
-源码或资源变化后重新构建，成功时只重启变化的组件；编译失败保留编译器诊断，旧组件继续运行。只改组件 `config.json` 时直接重启该组件，只改 Adapter 的一个实例配置时只重启该实例，二进制保持原样。`--reload=false` 时构建并运行一次；没有开发目录时保持普通 Core 运行，停止轮询。
-
-`--reload` 也监视 `core_config.json` 的其他设置：`admins` 更新后立即改变 Core Admin 权限，命令前缀从共享设置读取当前值，`default_locale` 对之后建立的 Session 生效。修改 Adapter 的 `default_instance` 后，未指定实例的发送立即改选新的缺省实例；`log.level` 立即更新全局日志级别，本次运行显式给出的 `--log-level` 或库模式 `LogLevel` 选项持续优先。这些修改保持组件进程与实例运行；同时修改设置与开发 Adapter 实例时，先刷新设置，再重启变化的实例。重新读取失败时记录错误并保留旧设置。开发 CLI 经 `internal/app.Core.ReloadSettings(ctx)` 与其他管理操作串行刷新同一份设置。
-
-`role: webui` 的工程直接以 manifest 中 `assets` 指定的目录为静态根目录，覆盖已安装的 WebUI，等同于 `alonabot.WebUI(os.DirFS(<assets 目录>))`。一次运行只接受一个 WebUI 目录，重复时在启动任何组件前报错。开发 WebUI 按开发模式约定跳过 Admin API 主版本检查；静态文件按请求读取，修改后立即可见，无需构建或重启，也无需 `--reload`。
-
-独立进程调试时将调试器附加到组件 PID；需要在同一进程调试 Core 和组件时使用下文库模式。
+回环注入、配置、热重载与同进程调试见 [devbot 教程](../examples/devbot/README.zh-CN.md)。
 
 ## 作者工具
 

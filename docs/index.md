@@ -1,28 +1,14 @@
-# AlonaBot documentation
+# AlonaBot documentation / 文档
 
-[简体中文](index.zh-CN.md)
+| Task / 任务 | English | 简体中文 |
+| --- | --- | --- |
+| Install, configure and operate / 安装、配置与运维 | [Deployment](deployment.md) | [安装与部署](deployment.zh-CN.md) |
+| Develop components / 开发组件 | [Plugin guide](plugin-guide.md) | [插件开发指南](plugin-guide.zh-CN.md) |
+| Build, reload and test / 构建、热重载与测试 | [Development](development.md) | [源码开发](development.zh-CN.md) |
+| Run and debug devbot / 运行与调试 devbot | [Tutorial](../examples/devbot/README.md) | [教程](../examples/devbot/README.zh-CN.md) |
+| Contribute and follow coding rules / 贡献流程与编码规则 | [Contributing](../CONTRIBUTING.md) | [贡献指南](../CONTRIBUTING.zh-CN.md) |
+| Release contents, upgrades and limitations / 发行内容、升级与限制 | [Changelog](../changelog/README.md) | [更新日志](../changelog/README.zh-CN.md) |
 
-Choose a guide for the task you want to complete. The guides explain supported behavior with steps and examples you can use directly.
+[Runnable examples / 可运行示例](../examples/plugins): echo、lifecycle、showcase、configdb、media。
 
-## Run a bot
-
-- [Deployment](deployment.md): release archives, system services, Docker, management authentication, configuration, backups and diagnostics.
-- [v0.1.0 release notes](../changelog/v0.1.0/en.md): release contents, platform validation, upgrades and known limitations.
-
-## Develop components
-
-- [Plugin guide](plugin-guide.md): projects, commands, events, configuration, storage, model calls, lifecycle and publishing.
-- [Plugin tests](development.md#plugin-tests): inject messages through a real Core and check replies, tasks and LLM substitutes.
-- [Runnable examples](../examples/plugins): echo, lifecycle, showcase, configdb and media.
-- [Development bot](../examples/devbot/README.md): loopback Adapter, hot reload and debugging in the same process.
-
-## Contribute source changes
-
-- [Contributing](../CONTRIBUTING.md): Issues, dependency discussions, pull requests, reviews and delivery.
-- [Development](development.md): environment, builds, hot reload, WebUI, generation and verification.
-- [Coding standards](coding-standards.md): names, files, comments, logging and committed tests.
-- [Architecture](../ARCHITECTURE.md): module responsibilities, dependency directions and state ownership.
-
-## Maintain releases
-
-- [Release maintenance](releasing.md): release builds, test signatures, candidate checks and publishing steps.
+维护者入口：[架构地图](../ARCHITECTURE.md)、[发行维护](releasing.md)。
