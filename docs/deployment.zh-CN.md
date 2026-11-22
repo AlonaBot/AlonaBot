@@ -276,11 +276,11 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 官方 WebUI 将自己的数据保存在其受管 SQLite 中。下列后台路由均相对于 `/plugins/alonabot-webui-admin`，沿用管理认证与 CSRF，响应带 `Cache-Control: no-store`。组件安装与更新仍调用 Core 管理 API。
 
-使用 `GET /store?source=AlonaBot/plugin-store&role=plugin&q=&sort=stars&offset=0&limit=9&refresh=false`。`source` 必须为 `owner/repo`，显式指定非负 `offset` 与正整数 `limit`；role 为空或 plugin/adapter/agent/webui。响应包含 `source`、`fetched_at`、`stale`、`items`、`total` 与 `counts`（all 及四种角色）。items 包含 `repo,role,tags,id,name,version`，可选 `description,author,stars,icon_url`；stars 缺省表示未知，0 保持为 0。默认源为 `AlonaBot/plugin-store`；源列表在浏览器持久化，主动清空后保持空列表。
+使用 `GET /store?source=AlonaBot/plugin-store&mirror=auto&role=plugin&q=&sort=stars&offset=0&limit=9&refresh=false`。商店读取源仓库 `index` 分支上的 `store.json`，这是该仓库 CI 生成的快照（见 [plugin-store README](https://github.com/AlonaBot/plugin-store#readme)），不再逐条调用 GitHub API 或下载归档。`mirror` 选择读取线路：`auto`（缺省）同时请求 `https://raw.githubusercontent.com/<source>/index/store.json` 与 `https://cdn.jsdelivr.net/gh/<source>@index/store.json`，取先成功者；`github` 或 `jsdelivr` 只用对应地址；https 地址前缀拼在 raw 地址之前（GitHub 加速服务的用法）；其他值返回 400 / INVALID_ARGUMENT。仓库或角色不合法的条目被丢弃，非 `data:image/` 的图标被去掉。`source` 必须为 `owner/repo`，显式指定非负 `offset` 与正整数 `limit`；role 为空或 plugin/adapter/agent/webui。响应包含 `source`、`fetched_at`、`stale`、`items`、`total` 与 `counts`（all 及四种角色）。items 包含 `repo,role,tags,id,name,version`，可选 `description,author,stars,icon_url`；stars 缺省表示未知，0 保持为 0。默认源为 `AlonaBot/plugin-store`；源列表在浏览器持久化，主动清空后保持空列表。
 
 搜索对 name、description、repo、author 与空格连接的 tags 做不区分大小写的子串匹配，缺失值按空串处理。counts 在搜索后、role 筛选前计算，total 在角色筛选后计算。默认或空 `sort=stars` 将已知星标数降序排列，未知值随后；`sort=name` 按名称不区分大小写升序，同值保留索引顺序，其他排序值返回 400 / INVALID_ARGUMENT。WebUI 每页显示九张卡片，搜索、角色或排序变化后回到第一页。
 
-`refresh` 仅接受字面量 `true` 或 `false`，空值也返回 400 / INVALID_ARGUMENT。省略或 true 会刷新并持久化完整成功快照；false 且有成功快照时，在快照上搜索、计数、排序与分页，全程无远端请求；无快照时执行首次抓取。快照读取返回 `stale=false` 和原 `fetched_at`。进入商店、切换源及支持键盘的手动刷新使用 true，搜索、筛选、排序与分页使用 false。刷新失败保留成功快照和原时间，返回 `stale=true` 及完整错误；无快照的一般失败返回 500 / INTERNAL，源索引缺失返回 404 / SOURCE_INDEX_MISSING。
+`refresh` 仅接受字面量 `true` 或 `false`，空值也返回 400 / INVALID_ARGUMENT。省略或 true 会刷新并持久化完整成功快照；false 且有成功快照时，在快照上搜索、计数、排序与分页，全程无远端请求；无快照时执行首次抓取。快照读取返回 `stale=false` 和原 `fetched_at`。进入商店、切换源及支持键盘的手动刷新使用 true，搜索、筛选、排序与分页使用 false。刷新失败保留成功快照和原时间，返回 `stale=true` 及完整错误；无快照的一般失败返回 500 / INTERNAL，源仓库没有 `store.json` 时返回 404 / SOURCE_INDEX_MISSING。
 
 `GET /updates?repo=owner/repo` 每次查询刷新，返回 `repo,version,release_url,markdown,fetched_at,stale`。最新 Release 标签去掉前导 v 后须为 SemVer，Markdown 保留 Release 正文。latest Release 的 404 返回 404 / NO_RELEASE，由 WebUI 的 `getLatestRelease` 映射为 null。源与 Release 缓存按小写 source/repo 隔离。链接仅允许 HTTP/HTTPS/mailto，HTML 按文本显示。更新预览使用组件绑定来源，更新后说明来自已安装包内 changelog，已读版本只推进到实际展示的版本。
 
@@ -288,4 +288,4 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 源索引为 `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`，tags 可省略。检查后，用户填写标签，用检查所得规范 repo，在浏览器打开源仓库 `issues/new`，携带 `template=submit-plugin.yml` 以及经 URL 编码的 `repo`、`role`、`tags`、`release_url`，由浏览器提交 GitHub Issue。
 
-每个远端 HTTP 请求的期限为 20 秒，覆盖响应体；串行依赖请求总耗时可更长，聚合刷新响应调用方取消。初始 URL 与每次重定向均检查 HTTPS 主机和路径，只允许支持的 GitHub API/Release/CDN 地址。组件安全上限为：元数据 1 MiB、索引 4 MiB、归档 64 MiB、每轮展开 256 MiB（最多两轮）、单文件 128 MiB、每轮 2,048 条、保留的 manifest 256 KiB、保留的图标 1 MiB。超限保留 `exceeds ... bytes/entries` 错误并沿用同样的缓存规则。当前实现见 [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go)。
+每个远端 HTTP 请求的期限为 20 秒，覆盖响应体。`/store/check` 与 `/updates` 仍读取 GitHub API 与 Release 归档，初始 URL 与每次重定向均检查 HTTPS 主机和路径。安全上限为：商店快照 32 MiB（内联图标）、元数据 1 MiB、归档 64 MiB、每轮展开 256 MiB（最多两轮）、单文件 128 MiB、每轮 2,048 条、保留的 manifest 256 KiB、保留的图标 1 MiB。超限保留 `exceeds ... bytes/entries` 错误并沿用同样的缓存规则。当前实现见 [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go)。
