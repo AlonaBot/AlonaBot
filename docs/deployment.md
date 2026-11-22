@@ -60,15 +60,19 @@ Uninstall stops/unregisters the service, removes its definition/program/bundled 
 
 ## Container images
 
-Download the release Compose file, start the bundle and read the first-login token:
+Download the release Compose file and start the bundle:
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
   -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.2.0/docker-compose.yml
 docker compose up -d
+```
+
+Open `http://127.0.0.1:7650` in a browser on the host. The WebUI shows the one-time management token; save it and confirm to log in. The claim rules are described below. When managing from another machine or without a local browser, read the token and log in with it:
+```fish
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
-Open `http://127.0.0.1:7650` and log in with the token. Initial startup needs no TTY: Core writes `/data/admin_token`, retaining it after login for the local CLI. Images support `linux/amd64` and `linux/arm64`; compose chooses the host platform. Keep the pinned image version in compose aligned with the chosen Release.
+After logging in, install plugins and Adapters from the store or [from source](#source-builds), create account instances, then configure an LLM. Behind restricted networks, first set `github_mirror`, `go_download_base` and `goproxy`, see [Core settings and HTTP](#core-settings-and-http-entry-point). Initial startup needs no TTY: Core writes `/data/admin_token`, retaining it after login for the local CLI. Images support `linux/amd64` and `linux/arm64`; compose chooses the host platform. Keep the pinned image version in compose aligned with the chosen Release.
 
 The image runs as `10001:10001`. Its named volume mounts at `/data`, inheriting that image directory's ownership on first creation. For host bind mounts, grant UID/GID 10001 read/write/traversal access first; existing volumes need the same permissions. Retain the volume to keep configuration, state and component data.
 

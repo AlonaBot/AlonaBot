@@ -60,15 +60,19 @@ sh install.sh --uninstall
 
 ## 容器镜像
 
-下载发行的 Compose 文件，启动整合包并读出首次登录的 token：
+下载发行的 Compose 文件并启动整合包：
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
   -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.2.0/docker-compose.yml
 docker compose up -d
+```
+
+在宿主机浏览器打开 `http://127.0.0.1:7650`，WebUI 显示一次性管理 token，复制保存后确认即可登录；领取规则见下文。从其他机器管理或不便使用浏览器领取时，读出 token 后登录：
+```fish
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
-打开 `http://127.0.0.1:7650`，使用读出的 token 登录。首次启动无需 TTY，Core 将管理 token 写入 `/data/admin_token`，登录后保留该文件供本机 CLI 使用。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
+登录后在 WebUI 中从商店或[源码](#源码构建)安装插件与 Adapter，创建账号实例，再配置 LLM。国内网络可先在设置中填写 `github_mirror`、`go_download_base` 与 `goproxy`，见 [Core 设置与 HTTP 入口](#core-设置与-http-入口)。首次启动无需 TTY，Core 将管理 token 写入 `/data/admin_token`，登录后保留该文件供本机 CLI 使用。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
 
 镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
 
