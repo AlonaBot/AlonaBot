@@ -26,6 +26,7 @@ func execute(args []string) int {
 	var inputs []string
 	var values tune.Values
 	root := &cobra.Command{Use: "alonabot", Short: "Run and configure AlonaBot Core", SilenceErrors: true, SilenceUsage: true}
+	configureVersion(root)
 	root.Args = cobra.ArbitraryArgs
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringArrayVar(&inputs, "args", nil, "tuning overrides (KEY=VALUE,... or a text file; repeatable)")

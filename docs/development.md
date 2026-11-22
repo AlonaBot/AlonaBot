@@ -33,6 +33,29 @@ Enter `/ping` in the same terminal for `pong`; Ctrl-C stops normally. Parallel C
 
 The example marks `/ping` with `.Menu()` for automatic chat menus on supported Adapters; unmarked commands remain callable. See [command menus](plugin-guide.md#command-menus) for manual control.
 
+## Query the CLI version
+
+After building the CLI, run `bin/alonabot --version`. An ordinary source build prints:
+
+```text
+alonabot version dev
+https://github.com/AlonaBot/AlonaBot
+```
+
+Release builds inject the version and UTC build date through `-ldflags`; for example:
+
+```fish
+go build -ldflags '-X main.version=v0.2.0 -X main.buildDate=2026-11-22' -o bin/alonabot ./cmd/alonabot
+bin/alonabot --version
+```
+
+```text
+alonabot version 0.2.0 (2026-11-22)
+https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0
+```
+
+The version accepts an optional leading `v`; output omits it and Release links include it. An empty build date omits the parenthesized date. `--version` writes to stdout and exits with status 0 before parsing tuning parameters or starting Core. The distribution script injects both fields automatically and retains the existing Core API version injection.
+
 ## Dependency management
 
 Core uses versions locked in `go.mod`/`go.sum`; official components maintain their own modules/locks, and WebUI also has `package-lock.json`. Before adding dependencies or expanding linkage, explain necessity/alternatives and await maintainer approval. Approved uses of direct dependencies:
