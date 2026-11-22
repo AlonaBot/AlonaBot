@@ -39,6 +39,7 @@ type Plugin struct {
 	jobSubPlugins map[string]string
 	onStart       func(context.Context) error
 	onReady       func(context.Context) error
+	onSleep       func(context.Context) error
 	onStop        func(context.Context) error
 	onConfigLoad  config.Loader
 	callbacks     map[string]bool
@@ -104,6 +105,9 @@ func (p *Plugin) OnStart(fn func(context.Context) error) { p.callback("OnStart")
 // OnReady 登记 ACTIVATE 后、ACTIVATED 之前执行的回调。
 func (p *Plugin) OnReady(fn func(context.Context) error) { p.callback("OnReady"); p.onReady = fn }
 
+// OnSleep 登记 IDLE 停止时先于 OnStop 执行的回调，共享停止截止。
+func (p *Plugin) OnSleep(fn func(context.Context) error) { p.callback("OnSleep"); p.onSleep = fn }
+
 // OnStop 登记停止预算内执行的资源关闭回调。
 func (p *Plugin) OnStop(fn func(context.Context) error) { p.callback("OnStop"); p.onStop = fn }
 
@@ -148,32 +152,32 @@ func (r *Plugin) Group(name string) *CommandGroup { return r.scope.commands.Grou
 func (r *Plugin) Command(path ...string) *CommandBuilder { return r.scope.commands.Command(path...) }
 
 // Regex 开始登记 Go regexp 文本匹配。
-func (r *Plugin) Regex(expr string) *CommandBuilder {
+func (r *Plugin) Regex(expr string) *RegexBuilder {
 	return r.scope.commands.Regex(expr)
 }
 
 // Keyword 开始登记包含文本匹配。
-func (r *Plugin) Keyword(patterns ...string) *CommandBuilder {
+func (r *Plugin) Keyword(patterns ...string) *TextBuilder {
 	return r.scope.commands.Keyword(patterns...)
 }
 
 // StartsWith 开始登记开头文本匹配。
-func (r *Plugin) StartsWith(patterns ...string) *CommandBuilder {
+func (r *Plugin) StartsWith(patterns ...string) *TextBuilder {
 	return r.scope.commands.StartsWith(patterns...)
 }
 
 // EndsWith 开始登记结尾文本匹配。
-func (r *Plugin) EndsWith(patterns ...string) *CommandBuilder {
+func (r *Plugin) EndsWith(patterns ...string) *TextBuilder {
 	return r.scope.commands.EndsWith(patterns...)
 }
 
 // FullMatch 开始登记完整文本匹配。
-func (r *Plugin) FullMatch(patterns ...string) *CommandBuilder {
+func (r *Plugin) FullMatch(patterns ...string) *TextBuilder {
 	return r.scope.commands.FullMatch(patterns...)
 }
 
 // Raw 开始登记原始消息路由。
-func (r *Plugin) Raw() *CommandBuilder { return r.scope.commands.Raw() }
+func (r *Plugin) Raw() *RawBuilder { return r.scope.commands.Raw() }
 
 // On 开始登记事件路由。
 func (r *Plugin) On(eventType EventType) *EventBuilder {

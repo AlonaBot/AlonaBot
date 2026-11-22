@@ -703,7 +703,7 @@ func TestToolFieldNumbers(t *testing.T) {
 		names   []protoreflect.Name
 		kinds   []protoreflect.Kind
 	}{
-		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind}},
+		{&pb.ServiceSpec{}, []protoreflect.Name{"service_name", "access", "allowlist_plugin_ids", "encoding", "tool", "options_source", "reentrant", "delta_schema_id", "delta_schema_version"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BoolKind, protoreflect.BoolKind, protoreflect.StringKind, protoreflect.Uint32Kind}},
 		{&pb.ToolSpec{}, []protoreflect.Name{"description", "default_policy", "input_schema_json", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.EnumKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ToolInfo{}, []protoreflect.Name{"name", "description", "input_schema_json", "policy", "effect"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.EnumKind, protoreflect.EnumKind}},
 		{&pb.ToolListRequest{}, nil, nil},
@@ -814,7 +814,6 @@ func TestMessageSegmentFieldNumbers(t *testing.T) {
 		{&pb.ForwardItem{}, 4, "occurred_at_unix_ms", protoreflect.Int64Kind, false, ""},
 		{&pb.ReadNodesRequest{}, 1, "to", protoreflect.MessageKind, false, "alonabot.v1.Target"},
 		{&pb.ReadNodesRequest{}, 2, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
-		{&pb.AdapterOperationsRequest{}, 1, "instance_id", protoreflect.StringKind, false, ""},
 		{&pb.AdapterReadNodesRequest{}, 1, "instance_id", protoreflect.StringKind, false, ""},
 		{&pb.AdapterReadNodesRequest{}, 2, "target", protoreflect.MessageKind, false, "alonabot.v1.Target"},
 		{&pb.AdapterReadNodesRequest{}, 3, "segment", protoreflect.MessageKind, false, "alonabot.v1.ForwardSegment"},
@@ -1031,6 +1030,49 @@ func TestReadNodesResponseFieldNumbers(t *testing.T) {
 	field := fields.ByNumber(1)
 	if fields.Len() != 1 || field == nil || field.Name() != "items" || field.Kind() != protoreflect.MessageKind || !field.IsList() || field.Message().FullName() != "alonabot.v1.ForwardItem" {
 		t.Fatalf("ReadNodesResponse.items = %v", field)
+	}
+}
+
+// TestServiceTransportFieldNumbers 固定发现、流式关联及增量消息的线上字段号。
+func TestServiceTransportFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message proto.Message
+		names   []protoreflect.Name
+	}{
+		{&pb.ServiceDiscoverRequest{}, []protoreflect.Name{"input_schema_id", "input_schema_version", "output_schema_id", "output_schema_version"}},
+		{&pb.ServiceDescriptor{}, []protoreflect.Name{"target", "plugin_id", "route"}},
+		{&pb.ServiceDiscoverResponse{}, []protoreflect.Name{"services"}},
+		{&pb.ServiceStreamCallRequest{}, []protoreflect.Name{"target", "stream_id", "encoding", "schema_id", "schema_version", "payload"}},
+		{&pb.ServiceStreamDeltaRequest{}, []protoreflect.Name{"stream_id", "sequence", "encoding", "schema_id", "schema_version", "payload"}},
+		{&pb.ServiceStreamDeltaResponse{}, nil},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%T fields = %d", c.message, fields.Len())
+		}
+		for i, name := range c.names {
+			f := fields.ByNumber(protoreflect.FieldNumber(i + 1))
+			kind := protoreflect.StringKind
+			switch name {
+			case "input_schema_version", "output_schema_version", "schema_version":
+				kind = protoreflect.Uint32Kind
+			case "sequence":
+				kind = protoreflect.Uint64Kind
+			case "encoding":
+				kind = protoreflect.EnumKind
+			case "payload":
+				kind = protoreflect.BytesKind
+			case "route", "services":
+				kind = protoreflect.MessageKind
+			}
+			if f == nil || f.Name() != name || f.Kind() != kind || f.IsList() != (name == "services") {
+				t.Errorf("%T field %d = %v", c.message, i+1, f)
+			}
+		}
+	}
+	f := (&pb.ServiceInvocation{}).ProtoReflect().Descriptor().Fields().ByNumber(7)
+	if f == nil || f.Name() != "stream_id" || f.Kind() != protoreflect.StringKind {
+		t.Errorf("ServiceInvocation stream_id = %v", f)
 	}
 }
 

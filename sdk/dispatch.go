@@ -11,6 +11,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk/internal/convert"
+	"github.com/AlonaBot/AlonaBot/sdk/internal/registry"
 	"github.com/AlonaBot/AlonaBot/sdk/message"
 	"google.golang.org/protobuf/proto"
 )
@@ -46,6 +47,9 @@ func businessHandler(reg *registration) wire.Handler {
 			return reg.plugin.changeProfileOverrides(in)
 		}
 		ctx = context.WithValue(ctx, pluginContextKey{}, pluginScope{plugin: reg.plugin, subID: reg.subPlugins[in.Target]})
+		if in.Target == "sdk.service.stream.delta" && registry.StreamReceiver != nil {
+			return registry.StreamReceiver(ctx, in)
+		}
 		if response, ok := services(ctx, in); ok {
 			return response
 		}

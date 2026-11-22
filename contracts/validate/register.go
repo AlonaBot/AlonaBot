@@ -434,6 +434,9 @@ func registerService(route *pb.RouteDescriptor) error {
 	if route.GetInputSchemaId() == "" || route.GetInputSchemaVersion() == 0 || route.GetOutputSchemaId() == "" || route.GetOutputSchemaVersion() == 0 {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q is missing input or output schema ID or version", name)
 	}
+	if (service.GetDeltaSchemaId() == "") != (service.GetDeltaSchemaVersion() == 0) {
+		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has incomplete delta schema", name)
+	}
 	switch service.GetAccess() {
 	case pb.ServiceAccess_SERVICE_ACCESS_PRIVATE, pb.ServiceAccess_SERVICE_ACCESS_PUBLIC:
 		if len(service.GetAllowlistPluginIds()) != 0 {
@@ -444,7 +447,7 @@ func registerService(route *pb.RouteDescriptor) error {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has an empty allowlist", name)
 		}
 		for _, pluginID := range service.GetAllowlistPluginIds() {
-			if _, err := PluginID(pluginID); err != nil {
+			if _, err := PluginID(pluginID); err != nil && pluginID != "@agent" {
 				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service %q has invalid allowlist plugin ID: %v", name, err)
 			}
 		}

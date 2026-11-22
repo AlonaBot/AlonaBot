@@ -240,7 +240,7 @@ Adapter 公开 perm/event 包用 SDK builder 声明权限/事件；公开 action
 - `service.JSON`、`bus.Define` 与 `task.Define` 声明的类型参数必须是包级的具名非泛型类型，由生成器检查并给出带位置的诊断。JSON Service 与 Bus 事件的 schema_id 由类型决定，版本取类型的 `SchemaVersion() uint32`，没有该方法时为 1；改动类型后运行 `alonabot build`。切片与 map 接受 null，与 `encoding/json` 对 nil 的编码一致。
 - JSON Service 的输入不符合 Schema 时，调用方收到 INVALID_ARGUMENT 和固定文本 `invalid service input`，Handler 不被调用；输出不符合时调用方收到 INTERNAL，日志只记 `schema_id`；调用方的 `Call` 也按声明校验响应，不符合时返回 INTERNAL 与 `invalid service output for "<target>"`。校验详情可能带业务载荷，不写入响应和日志。
 - 通过 `tool.List(ctx)` 获取工具目录，`tool.Info.Effect` 返回声明的类别，策略按本次调用的可信默认 Target 所在会话选择配置文件；无 Target 或无父调用时使用 `default`。list、invoke 与 confirm 每次读取一次配置文件快照：插件关闭时为 deny，其余依次取配置文件覆盖、全局覆盖与工具声明缺省策略，确认操作无覆盖时为 confirm。工具与操作同名时分别匹配配置文件覆盖；管理更新从下一次操作生效，在途确认保留已接纳策略。用 `.Tool(description, tool.DefaultAllow)` 登记 JSON Service 工具，缺省需确认时使用 `tool.DefaultConfirm`。在 `.Tool(...)` 之后、`.Handle(...)` 之前可以接 `.Effect(tool.ReadOnly)`，另有 `tool.Write`、`tool.Destructive`；省略时为 `tool.Unspecified`。顺序或类别非法时收集注册报错；类别仅作提示，不改变策略。
-- 需要模型能力时调用 Agent 组件的 `llm.generate`：`sdk/llm` 提供请求与响应类型，完整请求通过 `agent.Generate(ctx, llm.Request{...})`（导入 `sdk/agent`）发送，一问一答使用 `llm.Ask(ctx, prompt)`。调用以 `@agent` 为目标，官方 Agent 被替换后也不用修改；请管理员把插件加入 `llm_service_allowed_plugins`；一次调用是一次非流式请求，期限受调用方约束。
+- `sdk/llm.Generate(ctx, llm.Request{...})` 向 `@agent/llm.generate` 发送结构化文本生成请求，管理员通过 `llm_service_allowed_plugins` 授予调用权限。`sdk/agent.Run` 使用独立的 `@agent/agent.run` 契约。流式入口要求协商传输能力，完整参数与运行状态见 [Agent API](agent-api.zh-CN.md)。
 - 在 Handler 或其延续调用中，`tool.Invoke(ctx, "plugin_id/service_name", args)` 按当前生效的工具策略调用工具（deny 返回 PERMISSION_DENIED；confirm 时 Core 先向当前会话发送带「允许」「拒绝」按钮的确认，展示实际参数，拒绝返回 PERMISSION_DENIED，超时返回 DEADLINE_EXCEEDED）；插件自行执行操作前用 `tool.Confirm(ctx, operation, summary, effect)` 请求许可，确认时展示插件给出的摘要，返回 nil 后可执行操作。无类别时传 `tool.Unspecified`，非法类别返回 INVALID_ARGUMENT。两者都需要父调用链；没有 Actor 时遇到确认返回 PERMISSION_DENIED，实例不支持按钮时返回 UNSUPPORTED。
 
 ### 插件页面
@@ -430,3 +430,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 `build`、`check`、`test`、`pack` 接受至多一个位置目录，省略时取当前目录，`--dir` 报未知参数。在组件目录运行 `go test ./...` 即可使用 plugintest。测试启动时按入口包现场扫描 manifest、Schema、i18n 和 Handler 参数名，并复用同一入口包的只读资源。作者的 `New()` 只创建插件并登记业务行为，工程里没有 `alonabot_gen.go`，也无需编写生成相关的代码或指令。
 
 独立组件运行 `alonabot build .`；通过根包 `alonabot.Run` 或 `alonabot.Start` 装配组件的 main 包运行 `alonabot build ./cmd/bot`，执行产物为 `cmd/bot/bin/bot`（Windows 加 `.exe`）。库模式构建会只读扫描依赖中的组件，包括模块缓存中的第三方组件，并将资源经 main 包的 overlay 编入。直接 Go 构建的程序在启动缺少资源的组件时会提示使用 `alonabot build` 或 `alonabot run`。库模式的公开选项与停止用法见[开发指南](development.zh-CN.md#库模式运行同一进程)；独立进程开发运行与热部署使用 `alonabot run --reload`。
+
+## Agent、流式服务与生命周期 API
+
+[完整参数、能力状态、八阶段钩子与 Goal 恢复契约](agent-api.zh-CN.md)。

@@ -295,6 +295,11 @@ message ServiceSpec {
   ToolSpec tool = 5;
   // 固定 Schema、仅 Core 与本组件可调用的配置选项来源。
   bool options_source = 6;
+  // 显式允许受控回调重入，须协商 service_reentrant@1。
+  bool reentrant = 7;
+  // 流式增量声明，须协商 service_stream@1。
+  string delta_schema_id = 8;
+  uint32 delta_schema_version = 9;
 }
 
 // ScheduleSpec 描述定时任务的专属描述；interval 与 cron 互斥，cron 固定五字段，timezone 为 IANA 名称，省略为 UTC。

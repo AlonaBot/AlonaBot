@@ -93,32 +93,32 @@ func (r *SubPlugin) Group(name string) *CommandGroup { return r.scope.commands.G
 func (r *SubPlugin) Command(path ...string) *CommandBuilder { return r.scope.commands.Command(path...) }
 
 // Regex 开始登记 Go regexp 文本匹配。
-func (r *SubPlugin) Regex(expr string) *CommandBuilder {
+func (r *SubPlugin) Regex(expr string) *RegexBuilder {
 	return r.scope.commands.Regex(expr)
 }
 
 // Keyword 开始登记包含文本匹配。
-func (r *SubPlugin) Keyword(patterns ...string) *CommandBuilder {
+func (r *SubPlugin) Keyword(patterns ...string) *TextBuilder {
 	return r.scope.commands.Keyword(patterns...)
 }
 
 // StartsWith 开始登记开头文本匹配。
-func (r *SubPlugin) StartsWith(patterns ...string) *CommandBuilder {
+func (r *SubPlugin) StartsWith(patterns ...string) *TextBuilder {
 	return r.scope.commands.StartsWith(patterns...)
 }
 
 // EndsWith 开始登记结尾文本匹配。
-func (r *SubPlugin) EndsWith(patterns ...string) *CommandBuilder {
+func (r *SubPlugin) EndsWith(patterns ...string) *TextBuilder {
 	return r.scope.commands.EndsWith(patterns...)
 }
 
 // FullMatch 开始登记完整文本匹配。
-func (r *SubPlugin) FullMatch(patterns ...string) *CommandBuilder {
+func (r *SubPlugin) FullMatch(patterns ...string) *TextBuilder {
 	return r.scope.commands.FullMatch(patterns...)
 }
 
 // Raw 开始登记原始消息路由。
-func (r *SubPlugin) Raw() *CommandBuilder { return r.scope.commands.Raw() }
+func (r *SubPlugin) Raw() *RawBuilder { return r.scope.commands.Raw() }
 
 // On 开始登记事件路由。
 func (r *SubPlugin) On(eventType EventType) *EventBuilder {

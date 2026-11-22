@@ -45,7 +45,7 @@ type CommandGroup struct {
 	parent     *CommandGroup
 	groups     map[string]*CommandGroup
 	permission *Permission
-	builders   []*CommandBuilder
+	builders   []*commandBuilder
 	prefix     []string          // 本分组的公共路径前缀
 	commands   []command         // 已收集的命令，按注册顺序排列
 	errs       []error           // 收集过程中发现的错误，由 collect 一并返回
@@ -95,37 +95,37 @@ func (r *CommandGroup) owner() *CommandGroup {
 
 // Command 开始构建相对于本组路径的命令。
 func (r *CommandGroup) Command(path ...string) *CommandBuilder {
-	return r.start(command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)
+	return &CommandBuilder{state: r.start(command{Path: append(slices.Clone(r.prefix), path...), spec: &pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_PATH}}, len(path) == 0)}
 }
 
 // Regex 开始构建 Go regexp 文本匹配。
-func (r *CommandGroup) Regex(expr string) *CommandBuilder {
-	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})
+func (r *CommandGroup) Regex(expr string) *RegexBuilder {
+	return &RegexBuilder{state: r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_REGEX, Regex: expr})}
 }
 
 // Keyword 开始构建包含文本匹配。
-func (r *CommandGroup) Keyword(patterns ...string) *CommandBuilder {
-	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) Keyword(patterns ...string) *TextBuilder {
+	return &TextBuilder{state: r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_KEYWORD, Patterns: slices.Clone(patterns)})}
 }
 
 // StartsWith 开始构建开头文本匹配。
-func (r *CommandGroup) StartsWith(patterns ...string) *CommandBuilder {
-	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) StartsWith(patterns ...string) *TextBuilder {
+	return &TextBuilder{state: r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_STARTSWITH, Patterns: slices.Clone(patterns)})}
 }
 
 // EndsWith 开始构建结尾文本匹配。
-func (r *CommandGroup) EndsWith(patterns ...string) *CommandBuilder {
-	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) EndsWith(patterns ...string) *TextBuilder {
+	return &TextBuilder{state: r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_ENDSWITH, Patterns: slices.Clone(patterns)})}
 }
 
 // FullMatch 开始构建完整文本匹配。
-func (r *CommandGroup) FullMatch(patterns ...string) *CommandBuilder {
-	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})
+func (r *CommandGroup) FullMatch(patterns ...string) *TextBuilder {
+	return &TextBuilder{state: r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_FULLMATCH, Patterns: slices.Clone(patterns)})}
 }
 
 // Raw 开始构建最后执行的原始消息路由。
-func (r *CommandGroup) Raw() *CommandBuilder {
-	return r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})
+func (r *CommandGroup) Raw() *RawBuilder {
+	return &RawBuilder{state: r.text(&pb.CommandSpec{Match: pb.CommandMatch_COMMAND_MATCH_RAW})}
 }
 
 // On 开始登记本命令组所属作用域的事件路由。
@@ -135,20 +135,20 @@ func (r *CommandGroup) On(eventType EventType) *EventBuilder {
 	return b
 }
 
-func (r *CommandGroup) text(spec *pb.CommandSpec) *CommandBuilder {
+func (r *CommandGroup) text(spec *pb.CommandSpec) *commandBuilder {
 	return r.start(command{spec: spec}, false)
 }
 
-func (r *CommandGroup) start(c command, invalid bool) *CommandBuilder {
+func (r *CommandGroup) start(c command, invalid bool) *commandBuilder {
 	r.plugin.checkRegistration()
 	c.subID = r.subID
-	b := &CommandBuilder{registry: r, command: c, invalid: invalid, options: routeOptions{usageMode: pb.UsageMode_USAGE_MODE_DEFAULT}}
+	b := &commandBuilder{registry: r, command: c, invalid: invalid, options: routeOptions{usageMode: pb.UsageMode_USAGE_MODE_DEFAULT}}
 	r.owner().builders = append(r.owner().builders, b)
 	return b
 }
 
-// CommandBuilder 收集一条路由；Handle 结束构建，Run 收集注册时统一验证。
-type CommandBuilder struct {
+// commandBuilder 收集一条路由；Handle 结束构建，Run 收集注册时统一验证。
+type commandBuilder struct {
 	registry    *CommandGroup
 	command     command
 	options     routeOptions
@@ -159,7 +159,7 @@ type CommandBuilder struct {
 	idSet       bool // 显式空 ID 仍交给注册校验拒绝。
 }
 
-func (b *CommandBuilder) touch() {
+func (b *commandBuilder) touch() {
 	b.registry.plugin.checkRegistration()
 	if b.handles != 0 {
 		b.afterHandle = true
@@ -167,7 +167,7 @@ func (b *CommandBuilder) touch() {
 }
 
 // ID 设置文本匹配或 Raw 路由的稳定身份。
-func (b *CommandBuilder) ID(routeID string) *CommandBuilder {
+func (b *commandBuilder) ID(routeID string) *commandBuilder {
 	b.touch()
 	b.command.routeID = routeID
 	b.idSet = true
@@ -175,14 +175,14 @@ func (b *CommandBuilder) ID(routeID string) *CommandBuilder {
 }
 
 // Alias 追加完整别名路径。
-func (b *CommandBuilder) Alias(path ...string) *CommandBuilder {
+func (b *commandBuilder) Alias(path ...string) *commandBuilder {
 	b.touch()
 	b.options.aliases = append(b.options.aliases, slices.Clone(path))
 	return b
 }
 
 // Args 设置参数名。
-func (b *CommandBuilder) Args(names ...string) *CommandBuilder {
+func (b *commandBuilder) Args(names ...string) *commandBuilder {
 	b.touch()
 	b.options.names = slices.Clone(names)
 	b.options.argsSet = true
@@ -190,17 +190,17 @@ func (b *CommandBuilder) Args(names ...string) *CommandBuilder {
 }
 
 // Optional 追加可选参数及默认值。
-func (b *CommandBuilder) Optional(name string, def ...string) *CommandBuilder {
+func (b *commandBuilder) Optional(name string, def ...string) *commandBuilder {
 	b.touch()
 	b.options.optional = append(b.options.optional, optionalArgument{name: name, defaults: slices.Clone(def)})
 	return b
 }
 
 // RawTail 保留末位参数原文。
-func (b *CommandBuilder) RawTail() *CommandBuilder { b.touch(); b.options.raw = true; return b }
+func (b *commandBuilder) RawTail() *commandBuilder { b.touch(); b.options.raw = true; return b }
 
 // Description 登记英文说明；空串表示未提供，其他语言按规范路径覆盖。
-func (b *CommandBuilder) Description(text string) *CommandBuilder {
+func (b *commandBuilder) Description(text string) *commandBuilder {
 	b.touch()
 	b.command.spec.Description = nil
 	if text != "" {
@@ -210,14 +210,14 @@ func (b *CommandBuilder) Description(text string) *CommandBuilder {
 }
 
 // Menu 将根路径命令显式加入平台菜单，处理器仍按原权限执行。
-func (b *CommandBuilder) Menu() *CommandBuilder {
+func (b *commandBuilder) Menu() *commandBuilder {
 	b.touch()
 	b.command.spec.Menu = true
 	return b
 }
 
 // UsageKey 设置 usage 文案键。
-func (b *CommandBuilder) UsageKey(key string) *CommandBuilder {
+func (b *commandBuilder) UsageKey(key string) *commandBuilder {
 	b.touch()
 	b.options.usageMode = pb.UsageMode_USAGE_MODE_CUSTOM
 	b.options.usageKey = key
@@ -225,7 +225,7 @@ func (b *CommandBuilder) UsageKey(key string) *CommandBuilder {
 }
 
 // Silent 关闭参数错误回复。
-func (b *CommandBuilder) Silent() *CommandBuilder {
+func (b *commandBuilder) Silent() *commandBuilder {
 	b.touch()
 	b.options.usageMode = pb.UsageMode_USAGE_MODE_SILENT
 	b.options.usageKey = ""
@@ -233,42 +233,42 @@ func (b *CommandBuilder) Silent() *CommandBuilder {
 }
 
 // IgnoreCase 启用 Unicode 大小写折叠。
-func (b *CommandBuilder) IgnoreCase() *CommandBuilder {
+func (b *commandBuilder) IgnoreCase() *commandBuilder {
 	b.touch()
 	b.options.ignoreCase = true
 	return b
 }
 
 // Priority 设置路由优先级。
-func (b *CommandBuilder) Priority(p int32) *CommandBuilder {
+func (b *commandBuilder) Priority(p int32) *commandBuilder {
 	b.touch()
 	b.options.priority = p
 	return b
 }
 
 // Permission 覆盖本路由权限。
-func (b *CommandBuilder) Permission(p Permission) *CommandBuilder {
+func (b *commandBuilder) Permission(p Permission) *commandBuilder {
 	b.touch()
 	b.permission = &p
 	return b
 }
 
 // Handle 结束路由构建，签名规则在 Run 收集注册时检查。
-func (b *CommandBuilder) Handle(handler any) {
+func (b *commandBuilder) Handle(handler any) {
 	b.registry.plugin.checkRegistration()
 	b.handles++
 	b.command.Handler = handler
 }
 
 // Rule 按调用与参数顺序追加条件，全部匹配后执行 Handler。
-func (b *CommandBuilder) Rule(rules ...Rule) *CommandBuilder {
+func (b *commandBuilder) Rule(rules ...Rule) *commandBuilder {
 	b.touch()
 	b.command.rules = append(b.command.rules, rules...)
 	return b
 }
 
 // Continue 让 Handler 整体在独立的延续调用中执行，原调用保持继续传播。
-func (b *CommandBuilder) Continue() *CommandBuilder {
+func (b *commandBuilder) Continue() *commandBuilder {
 	b.touch()
 	b.command.continuation = true
 	return b

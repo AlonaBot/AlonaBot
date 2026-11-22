@@ -1,0 +1,42 @@
+// 通用发现与有背压的流式服务；能力版本均为 1。
+syntax = "proto3";
+package alonabot.v1;
+import "alonabot/v1/envelope.proto";
+import "alonabot/v1/route.proto";
+option go_package = "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1";
+// ServiceDiscoverRequest 按 Schema 筛选当前身份可访问的有效注册快照。
+message ServiceDiscoverRequest {
+ string input_schema_id = 1;
+ uint32 input_schema_version = 2;
+ string output_schema_id = 3;
+ uint32 output_schema_version = 4;
+}
+// ServiceDescriptor 携带可被按需唤醒的完整服务声明。
+message ServiceDescriptor {
+ string target = 1;
+ string plugin_id = 2;
+ RouteDescriptor route = 3;
+}
+// ServiceDiscoverResponse 返回所有匹配服务。
+message ServiceDiscoverResponse { repeated ServiceDescriptor services = 1; }
+// ServiceStreamCallRequest 保持初始请求在途直至最终业务响应。
+message ServiceStreamCallRequest {
+ string target = 1;
+ string stream_id = 2;
+ PayloadEncoding encoding = 3;
+ string schema_id = 4;
+ uint32 schema_version = 5;
+ bytes payload = 6;
+}
+// ServiceStreamDeltaRequest 由提供方发往 core.service.stream.emit，Core 鉴权后转交 sdk.service.stream.delta。
+// stream_id 必须与认证 Session 的在途父调用匹配；接收方处理完成后响应 ACK，形成背压。
+message ServiceStreamDeltaRequest {
+ string stream_id = 1;
+ uint64 sequence = 2;
+ PayloadEncoding encoding = 3;
+ string schema_id = 4;
+ uint32 schema_version = 5;
+ bytes payload = 6;
+}
+// ServiceStreamDeltaResponse 确认本段已处理；处理失败通过 Envelope.error 返回。
+message ServiceStreamDeltaResponse {}
