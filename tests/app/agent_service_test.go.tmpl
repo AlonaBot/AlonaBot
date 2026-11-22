@@ -25,7 +25,6 @@ import (
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"github.com/AlonaBot/AlonaBot/sdk"
-	agentapi "github.com/AlonaBot/AlonaBot/sdk/agent"
 	"github.com/AlonaBot/AlonaBot/sdk/llm"
 	optionsapi "github.com/AlonaBot/AlonaBot/sdk/options"
 	serviceapi "github.com/AlonaBot/AlonaBot/sdk/service"
@@ -114,13 +113,13 @@ func TestAgentServices(t *testing.T) {
 			prompt := "  ask verbatim\n"
 			response, failure = callAgentService(t, core, serviceCallerID, serviceAsk, llm.Request{Messages: []llm.Message{{Role: "user", Text: prompt}}})
 			if failure != nil || response.Text != serviceText {
-				t.Fatalf("Ask = %+v, %v", response, failure)
+				t.Fatalf("Generate single message = %+v, %v", response, failure)
 			}
 			mu.Lock()
 			ask := requests[len(requests)-1]
 			mu.Unlock()
 			if !reflect.DeepEqual(ask["messages"], []any{map[string]any{"role": "user", "content": prompt}}) || ask["model"] != serviceModel || ask["max_tokens"] != float64(23) || ask["tools"] != nil {
-				t.Fatalf("Ask upstream = %+v", ask)
+				t.Fatalf("Generate single message upstream = %+v", ask)
 			}
 			for _, id := range []string{serviceAgentID, serviceCallerID, serviceDeniedID} {
 				entries, err := core.store.Conversations(t.Context(), id)
@@ -250,11 +249,11 @@ func startAgentServices(t *testing.T, configuration map[string]any) *Core {
 		p := sdk.NewPlugin()
 		genresources.Bind(p, agentServiceResources(t, id, "plugin"))
 		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+serviceGenerate)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
-			return agentapi.Generate(c.Context(), req)
+			return llm.Generate(c.Context(), req)
 		})
 		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+serviceAsk)).Handle(func(c *sdk.Context, req llm.Request) (llm.Response, error) {
-			text, err := llm.Ask(c.Context(), req.Messages[0].Text)
-			return llm.Response{Text: text}, err
+			response, err := llm.Generate(c.Context(), llm.Request{Messages: []llm.Message{{Role: "user", Text: req.Messages[0].Text}}})
+			return llm.Response{Text: response.Text}, err
 		})
 		serviceapi.Serve(p, serviceapi.JSON[llm.Request, llm.Response](id+"/"+servicePrivate)).Handle(func(c *sdk.Context, _ llm.Request) (llm.Response, error) {
 			_, err := serviceapi.JSON[optionsapi.Query, optionsapi.Page](serviceSource).Call(c.Context(), optionsapi.Query{Limit: 10})

@@ -76,15 +76,19 @@ const (
 
 // ServiceBuilder 保存收集前可修改的服务声明。
 type ServiceBuilder[C any, P interface{ Names() []string }] struct {
-	Scope        *Scope[C, P]
-	Name, Target string
-	Encoding     pb.PayloadEncoding
-	Access       Access
-	Allowlist    []string
-	Permission   P
-	Handles      int
-	AfterHandle  bool
-	Prepare      func() (Service[C], error)
+	Scope              *Scope[C, P]
+	Name, Target       string
+	Encoding           pb.PayloadEncoding
+	Access             Access
+	Allowlist          []string
+	Reentrant          bool
+	Priority           int32
+	DeltaSchemaID      string
+	DeltaSchemaVersion uint32
+	Permission         P
+	Handles            int
+	AfterHandle        bool
+	Prepare            func() (Service[C], error)
 }
 
 // Route 固定服务的 Schema、权限和访问规则。
@@ -100,9 +104,9 @@ func (b *ServiceBuilder[C, P]) Route(inputID, outputID string, inputVersion, out
 	}
 	return Service[C]{Plugin: b.Scope.Plugin, SubID: b.Scope.SubID, Descriptor: &pb.RouteDescriptor{
 		RouteId: "svc." + b.Name, Kind: pb.RouteKind_ROUTE_KIND_SERVICE, DefaultEnabled: true,
-		RequiredPermissions: b.Permission.Names(),
-		InputSchemaId:       inputID, InputSchemaVersion: inputVersion, OutputSchemaId: outputID, OutputSchemaVersion: outputVersion,
-		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: b.Name, Access: access, AllowlistPluginIds: b.Allowlist, Encoding: encoding}},
+		Priority: b.Priority, RequiredPermissions: b.Permission.Names(),
+		InputSchemaId: inputID, InputSchemaVersion: inputVersion, OutputSchemaId: outputID, OutputSchemaVersion: outputVersion,
+		Spec: &pb.RouteDescriptor_Service{Service: &pb.ServiceSpec{ServiceName: b.Name, Access: access, AllowlistPluginIds: b.Allowlist, Encoding: encoding, Reentrant: b.Reentrant, DeltaSchemaId: b.DeltaSchemaID, DeltaSchemaVersion: b.DeltaSchemaVersion}},
 	}, Invoke: invoke}
 }
 

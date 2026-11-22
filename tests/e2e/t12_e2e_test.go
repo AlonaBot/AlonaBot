@@ -394,7 +394,7 @@ func TestAgentPackage(t *testing.T) {
 	}
 	llmText, llmImages := agentPackageContents(t, requests[10])
 	if len(requests[10].Tools) != 0 || len(requests[10].Messages) != 1 || requests[10].Messages[0].Role != "user" || !reflect.DeepEqual(llmText, []string{"  original prompt\n"}) || len(llmImages) != 0 {
-		t.Errorf("llm.Ask request: %+v", requests[10])
+		t.Errorf("llm.Generate request: %+v", requests[10])
 	}
 	var fired, confirmations int
 	for _, request := range server.Requests() {

@@ -20,6 +20,7 @@ type activation struct {
 	l       launch
 	ack     *pb.HelloAck // 握手结果，提供 Session ID、协商版本与 Bootstrap
 	onReady func(context.Context) error
+	onSleep func(context.Context) error
 	onStop  func(context.Context) error
 	sess    *wire.Session // 激活后使用的 Session
 
@@ -84,7 +85,7 @@ func (a *activation) control(env *pb.Envelope) error {
 		a.readyMu.Lock()
 		a.ready.Store(false)
 		a.readyMu.Unlock()
-		go a.shutdown(time.UnixMilli(m.GetDeadlineUnixMs()))
+		go a.shutdown(time.UnixMilli(m.GetDeadlineUnixMs()), m.GetReason())
 		return nil
 	case *pb.Heartbeat:
 		return nil
@@ -157,15 +158,15 @@ func (a *activation) reportFailure(code pb.ErrorCode, safe string, cause error) 
 // onStopBudget 限制断链（未收到 STOPPING）时留给 OnStop 与资源关闭的时间。
 var onStopBudget = 4 * time.Second
 
-// shutdown 取消 lifetime、关闭 ready gate，然后用独立 context 在 deadline 前执行 OnStop（不复用已取消的
-// lifetime）；用户函数不响应 ctx 时 watchdog 到期即放弃等待。最后关闭 Session。只执行一次。
-func (a *activation) shutdown(deadline time.Time) {
+// shutdown 关闭 ready gate 并取消 lifetime，用独立 context 在停止截止前执行关闭回调。
+// IDLE 先执行 OnSleep，再执行 OnStop；看门狗使用同一截止，最后关闭 Session。只执行一次。
+func (a *activation) shutdown(deadline time.Time, reason pb.StopReason) {
 	a.shutdownOnce.Do(func() {
 		// 1. 关闭 ready gate 并取消 lifetime，不再接受新业务。
 		a.ready.Store(false)
 		a.stopLifetime()
 		go a.l.closeHTTP(deadline)
-		// 2. 用独立的截止 context 执行 OnStop，最多等到 deadline。
+		// 2. 关闭回调共享独立的截止 context，最多等到 deadline。
 		ctx, cancel := context.WithDeadline(a.l.runtime.ctx, deadline)
 		done := make(chan struct{})
 		if !a.l.runtime.beginCallback() {
@@ -177,22 +178,16 @@ func (a *activation) shutdown(deadline time.Time) {
 		go func() {
 			defer a.l.runtime.callbacks.Done()
 			defer close(done)
-			defer func() {
-				if p := recover(); p != nil {
-					logPanic(ctx, "OnStop", p)
-				}
-			}()
-			if a.onStop != nil {
-				if err := a.onStop(ctx); err != nil {
-					componentLogger(ctx).Error("OnStop failed", "err", err)
-				}
+			if reason == pb.StopReason_STOP_REASON_IDLE {
+				runStopCallback(ctx, "OnSleep", a.onSleep)
 			}
+			runStopCallback(ctx, "OnStop", a.onStop)
 		}()
 		timer := time.NewTimer(time.Until(deadline))
 		select {
 		case <-done:
 		case <-timer.C:
-			componentLogger(a.l.runtime.ctx).Warn("OnStop exceeded the stop deadline; giving up waiting")
+			componentLogger(a.l.runtime.ctx).Warn("lifecycle callbacks exceeded the stop deadline; giving up waiting")
 		}
 		timer.Stop()
 		cancel()
@@ -218,7 +213,7 @@ func serve(sess *wire.Session, a *activation) error {
 		<-a.finished
 		return nil
 	}
-	a.shutdown(time.Now().Add(onStopBudget))
+	a.shutdown(time.Now().Add(onStopBudget), pb.StopReason(0))
 	return fmt.Errorf("connection to Core lost: %w", sess.Err())
 }
 
@@ -247,7 +242,7 @@ func activate(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *re
 			err = errors.Join(err, l.runtime.database.Close())
 		}
 	}()
-	a := &activation{l: l, ack: ack, onReady: root.onReady, onStop: root.onStop, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
+	a := &activation{l: l, ack: ack, onReady: root.onReady, onSleep: root.onSleep, onStop: root.onStop, readyCh: make(chan struct{}), failErr: make(chan error, 1), finished: make(chan struct{})}
 	a.lifetime, a.stopLifetime = context.WithCancel(l.runtime.ctx)
 	limits := ack.GetBootstrap().GetSessionLimits()
 	a.sess = wire.New(conn, wire.Options{
@@ -291,4 +286,48 @@ func (a *activation) waitReady() error {
 	}
 	a.stopLifetime()
 	return fmt.Errorf("session closed before activation: %w", a.sess.Err())
+}
+
+// runStopCallback 隔离单个关闭回调的错误与 panic，让后续关闭继续执行。
+func runStopCallback(ctx context.Context, phase string, fn func(context.Context) error) {
+	defer func() {
+		if p := recover(); p != nil {
+			logPanic(ctx, phase, p)
+		}
+	}()
+	if fn != nil {
+		if err := fn(ctx); err != nil {
+			componentLogger(ctx).Error(phase+" failed", "err", err)
+		}
+	}
+}
+
+func checkServiceCapabilities(ack *pb.HelloAck, reg *registration) error {
+	for _, service := range reg.services {
+		required := []string{}
+		spec := service.Descriptor.GetService()
+		if spec.GetReentrant() {
+			required = append(required, "service_reentrant")
+		}
+		if spec.GetDeltaSchemaId() != "" {
+			required = append(required, "service_stream")
+		}
+		for _, id := range spec.GetAllowlistPluginIds() {
+			if id == "@agent" {
+				required = append(required, "service_role_access")
+			}
+		}
+		for _, name := range required {
+			supported := false
+			for _, capability := range ack.GetCapabilityIntersection() {
+				if capability.GetName() == name && capability.GetVersion() == 1 {
+					supported = true
+				}
+			}
+			if !supported {
+				return errcode.Unsupported.Errorf("protocol capability %s@1 is not negotiated", name)
+			}
+		}
+	}
+	return nil
 }

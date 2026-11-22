@@ -111,6 +111,7 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "service invocation does not match registered input")
 	}
 	// 2. 将父请求绑定到 Handler 有效期；恢复 panic 时记录完整堆栈。
+	ctx = registry.WithStreamID(ctx, request.GetStreamId())
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Context{plugin: service.Plugin.(*Plugin), subID: service.SubID, ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget()}
 	c.freezeProfile(request.GetContext())
@@ -129,16 +130,21 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 		}
 	}()
 	encoded, err := service.Invoke(c, request.GetPayload())
+	response = wire.Response{Payload: wire.Payload{Encoding: descriptor.GetService().GetEncoding(), SchemaID: descriptor.GetOutputSchemaId(), SchemaVersion: descriptor.GetOutputSchemaVersion(), Bytes: encoded}}
 	if err != nil {
+		failure := dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, "service returned an error")
 		var public *Error
 		if errors.As(err, &public) {
-			return dispatchError(pb.ErrorCode(public.Code), public.Message)
+			failure = dispatchError(pb.ErrorCode(public.Code), public.Message)
+		} else {
+			c.Logger().Error("service returned an error", "error", err)
 		}
-		c.Logger().Error("service returned an error", "error", err)
-		return dispatchError(pb.ErrorCode_ERROR_CODE_INTERNAL, "service returned an error")
+		response.Err = failure.Err
+		if encoded == nil {
+			response.Payload = wire.Payload{}
+		}
 	}
-	// 3. 成功响应始终带声明的输出 schema，空 Protobuf 消息仍有完整元数据。
-	return wire.Response{Payload: wire.Payload{Encoding: descriptor.GetService().GetEncoding(), SchemaID: descriptor.GetOutputSchemaId(), SchemaVersion: descriptor.GetOutputSchemaVersion(), Bytes: encoded}}
+	return response
 }
 
 func callService(ctx context.Context, session *wire.Session, target string, payload wire.Payload) (wire.Payload, error) {

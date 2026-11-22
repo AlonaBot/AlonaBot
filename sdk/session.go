@@ -94,7 +94,7 @@ func (cs closers) Close() error {
 }
 
 // sdkOffer 声明 SDK 一侧的协议版本与能力。
-var sdkOffer = validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor}
+var sdkOffer = validate.Offer{Major: validate.ProtocolMajor, Minor: validate.ProtocolMinor, Supported: []*pb.ProtocolCapability{{Name: "service_discover", Version: 1}, {Name: "service_role_access", Version: 1}, {Name: "service_reentrant", Version: 1}, {Name: "service_stream", Version: 1}}}
 
 // withWatchdog 在 d 内未完成时关闭连接，使阻塞的读写返回。返回的 stop 必须调用。
 func withWatchdog(conn *wire.Conn, d time.Duration) (stop func()) {
@@ -198,6 +198,9 @@ func buildRegister(reg *registration, configJSON string, configSchema []byte) *p
 // prepare 执行准备阶段：配置准备 → 迁移 → OnStart（各有独立预算）→ REGISTER → 等待 PREPARED。
 // 准备期不能发起业务 RPC。失败时已向 Core 报告 SESSION_ERROR 并关闭连接。
 func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *registration) (prepared *pb.Prepared, err error) {
+	if err := checkServiceCapabilities(ack, reg); err != nil {
+		return nil, err
+	}
 	sid, boot, minor := ack.GetSessionId(), ack.GetBootstrap(), ack.GetChosenMinor()
 	l.runtime.translations.Store(&translationSession{messages: reg.messages, defaultLocale: boot.GetDefaultLocale()})
 	limits := boot.GetPhaseLimits()

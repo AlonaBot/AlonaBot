@@ -188,6 +188,14 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			localFiles[s.files.Position(file.Pos()).Filename] = true
 		}
 	}
+	// 公开 Agent 封装隐藏了具体 Spec；导入封装时一并生成其固定公共契约。
+	for path, files := range s.syntax {
+		if path == sdkPath+"/llm" || path == sdkPath+"/agent" || path == sdkPath+"/agent/hook" || path == sdkPath+"/agent/goal" {
+			for _, file := range files {
+				localFiles[s.files.Position(file.Pos()).Filename] = true
+			}
+		}
+	}
 	// 声明值保留类型参数，用它们匹配依赖模块中的 JSON 与 Task 实例。
 	var referenced []types.Type
 	for expr, value := range importer.info.Types {
@@ -203,7 +211,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			}
 		}
 		named, ok := types.Unalias(value.Type).(*types.Named)
-		if ok && named.Obj().Pkg() != nil && (named.Obj().Pkg().Path() == sdkPath+"/service" && named.Obj().Name() == "Spec" || named.Obj().Pkg().Path() == sdkPath+"/task" && named.Obj().Name() == "Type") {
+		if ok && named.Obj().Pkg() != nil && (named.Obj().Pkg().Path() == sdkPath+"/service" && (named.Obj().Name() == "Spec" || named.Obj().Name() == "StreamSpec") || named.Obj().Pkg().Path() == sdkPath+"/task" && named.Obj().Name() == "Type") {
 			referenced = append(referenced, named)
 		}
 	}
@@ -215,11 +223,11 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 	for _, ident := range instances {
 		object := importer.info.Uses[ident]
 		fn, ok := object.(*types.Func)
-		if !ok || fn.Pkg() == nil || !(fn.Pkg().Path() == sdkPath+"/service" && slices.Contains([]string{"JSON", "Proto"}, fn.Name()) || fn.Pkg().Path() == sdkPath+"/bus" && fn.Name() == "Define" || fn.Pkg().Path() == sdkPath+"/task" && fn.Name() == "Define") {
+		if !ok || fn.Pkg() == nil || !(fn.Pkg().Path() == sdkPath+"/service" && slices.Contains([]string{"JSON", "Proto", "StreamJSON"}, fn.Name()) || fn.Pkg().Path() == sdkPath+"/bus" && fn.Name() == "Define" || fn.Pkg().Path() == sdkPath+"/task" && fn.Name() == "Define") {
 			continue
 		}
 		if !localFiles[s.files.Position(ident.Pos()).Filename] {
-			if fn.Name() != "JSON" && fn.Pkg().Path() != sdkPath+"/task" {
+			if fn.Name() != "JSON" && fn.Name() != "StreamJSON" && fn.Pkg().Path() != sdkPath+"/task" {
 				continue
 			}
 			result := importer.info.Instances[ident].Type.(*types.Signature).Results().At(0).Type()
@@ -228,6 +236,15 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 			}
 		}
 		args := importer.info.Instances[ident].TypeArgs
+		generic := false
+		for index := range args.Len() {
+			if _, ok := types.Unalias(args.At(index)).(*types.TypeParam); ok {
+				generic = true
+			}
+		}
+		if generic {
+			continue
+		} // 泛型转发由消费端具体的 Spec 或 StreamSpec 生成 Schema。
 		for index := range args.Len() {
 			typ := types.Unalias(args.At(index))
 			// Protobuf 的指针参数绑定包级消息类型，service.JSON 与 bus.Define 仍要求值类型。
@@ -248,7 +265,7 @@ func (s *scan) serviceSchemasFrom(importer *schemaImporter, paths []string) erro
 				continue
 			}
 			// 声明处共用类型检查，只有 JSON 声明需要生成 Schema。
-			if fn.Name() != "JSON" {
+			if fn.Name() != "JSON" && fn.Name() != "StreamJSON" {
 				continue
 			}
 			pkgPath := named.Obj().Pkg().Path()
@@ -301,6 +318,23 @@ type serviceBuilder struct {
 
 func (b *serviceBuilder) schema(typ types.Type, pos token.Pos) *jsonschema.Schema {
 	typ = types.Unalias(typ)
+	special := typ
+	if pointer, ok := special.(*types.Pointer); ok {
+		special = types.Unalias(pointer.Elem())
+	}
+	if named, ok := special.(*types.Named); ok && named.Obj().Pkg() != nil {
+		path, name := named.Obj().Pkg().Path(), named.Obj().Name()
+		// Go 的 RawMessage 可别名为 jsontext.Value，二者保留任意完整 JSON 值。
+		if path == "encoding/json" && name == "RawMessage" || path == "encoding/json/jsontext" && name == "Value" {
+			return &jsonschema.Schema{}
+		}
+		if path == "time" && name == "Time" {
+			if _, ok := typ.(*types.Pointer); ok {
+				return &jsonschema.Schema{Types: []string{"string", "null"}, Format: "date-time"}
+			}
+			return &jsonschema.Schema{Type: "string", Format: "date-time"}
+		}
+	}
 	for _, codec := range b.codecs {
 		if types.Implements(typ, codec.contract) || types.Implements(types.NewPointer(typ), codec.contract) {
 			b.scan.diagnostic(pos, fmt.Sprintf("service type %s implements %s", typ, codec.name))
@@ -461,7 +495,9 @@ func (b *serviceBuilder) exactBounds(schema *jsonschema.Schema, object map[strin
 	}
 	if properties, ok := object["properties"].(map[string]any); ok {
 		for key, child := range properties {
-			b.exactBounds(schema.Properties[key], child.(map[string]any))
+			if object, ok := child.(map[string]any); ok {
+				b.exactBounds(schema.Properties[key], object)
+			} // true Schema 表示任意 JSON，无整数边界。
 		}
 	}
 	if child, ok := object["items"].(map[string]any); ok {

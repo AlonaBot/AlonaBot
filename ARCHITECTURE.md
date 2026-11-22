@@ -17,7 +17,7 @@ Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用�
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） |
 | `internal/inproc/` | 库模式同进程组件的启动参数与运行入口（`internal/app` 构造参数；SDK 读取参数，并在 init 中登记入口） | 启动流程本身（归 sdk 与 `internal/app`） |
 | `internal/pluginkit/` | 开发 CLI 的构建与组件归档打包（plugin build/pack） | 安装与预检（归 `internal/core/packages`） |
-| `sdk/`（含 `sdk/message`、`sdk/sqlitedb`、`sdk/gormdb`、`sdk/llm`、`sdk/agent` 等子包） | 组件侧 API：根包只放插件对象、Context/Send、注册 builder、权限、生命周期 Hook 与运行入口，动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作、选项来源与命令目录按类别放在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`，根包与这些子包共用的注册状态在 `sdk/internal/registry`；runtime.lock；公开消息与事件 API 使用 `sdk/message` 的消息、事件、`SendResult` 与媒体类型，会话字符串、消息句柄与用户字符串是 string，由 `sdk/message` 的 `SID`/`ParseSID`、`Ref`/`ParseRef`、`UID`/`ParseUID` 拼接与拆分，错误使用 `sdk/errcode`；只供 CLI 注入的登记代码导入的资源登记入口 `sdk/genimpl`；受管 SQLite 的 `database/sql` 与 GORM 两个按需入口；`sdk/llm` 提供文本生成类型与 Ask，`sdk/agent` 提供以 `@agent` 为目标的 Generate | Core 状态库、管理凭证、其他插件 |
+| `sdk/`（含 `sdk/message`、`sdk/sqlitedb`、`sdk/gormdb`、`sdk/llm`、`sdk/agent` 等子包） | 组件侧 API：根包只放插件对象、Context/Send、注册 builder、权限、生命周期 Hook 与运行入口，动态任务、Service、Event Bus、按钮、媒体、会话历史、工具、平台动作、选项来源与命令目录按类别放在 `sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`，根包与这些子包共用的注册状态在 `sdk/internal/registry`；runtime.lock；公开消息与事件 API 使用 `sdk/message` 的消息、事件、`SendResult` 与媒体类型，会话字符串、消息句柄与用户字符串是 string，由 `sdk/message` 的 `SID`/`ParseSID`、`Ref`/`ParseRef`、`UID`/`ParseUID` 拼接与拆分，错误使用 `sdk/errcode`；只供 CLI 注入的登记代码导入的资源登记入口 `sdk/genimpl`；受管 SQLite 的 `database/sql` 与 GORM 两个按需入口；`sdk/llm` 提供 Generate/GenerateStream，`sdk/agent` 提供 Run/RunStream，`sdk/agent/hook` 与 `sdk/agent/goal` 提供钩子注册和持久目标契约 | Core 状态库、管理凭证、其他插件 |
 | `internal/core/` | 状态库与 core.lock、进程、RPC 编排、路由、权限、媒体、服务、调度、HTTP、配置、管理 | 平台协议细节（交 adapters）、插件进程内逻辑 |
 | `internal/app/` | Core 装配、候选与进程管理、同进程运行开发组件，以及只供开发 CLI 使用的独立进程开发组件、单组件重启与重新读取设置；放在 `internal/core` 之外，因为它要 import `sdk` | 库模式的公开接口（归根包）、业务逻辑 |
 | `internal/generate/` | 构建期与测试期的扫描器：扫描入口包、检查资源与注册入口，生成经 overlay 编入的资源登记与正式入口；CLI 构建与 plugintest 的现场扫描共用 | 运行时资源读取（归 SDK）、写作者目录 |
@@ -142,3 +142,5 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 ## 检查
 
 依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。Core 可执行文件与 SDK 根包能链接的第三方模块由审查时用 `go list -deps` 对照 [docs/development.md](docs/development.zh-CN.md) 的允许清单核对。
+
+`sdk/agent/hook` 与 `sdk/agent/goal` 可依赖 `sdk/agent`、`sdk/llm`、`sdk/service` 和根 `sdk`；根包通过 `sdk/internal/registry` 的回调与分类包共享运行态。Goal 的记录与调度归 Agent；通用增量关联与身份校验归 Core 通信层，当前能力状态见 [Agent API](docs/agent-api.zh-CN.md)。

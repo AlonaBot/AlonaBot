@@ -30,6 +30,7 @@ func New() *sdk.Plugin {
 	lifecycle := &Lifecycle{}
 	p.OnStart(lifecycle.OnStart)
 	p.OnReady(lifecycle.OnReady)
+	p.OnSleep(lifecycle.OnSleep)
 	p.OnStop(lifecycle.OnStop)
 	registerCommands(p)
 	registerHTTP(p)
@@ -47,6 +48,9 @@ func (*Lifecycle) OnReady(context.Context) error {
 	slog.Info("OnReady")
 	return nil
 }
+
+// OnSleep 记录 IDLE 休眠，随后 SDK 调用 OnStop。
+func (*Lifecycle) OnSleep(context.Context) error { slog.Info("OnSleep"); return nil }
 
 // OnStop 记录 OnStop。
 func (*Lifecycle) OnStop(context.Context) error {

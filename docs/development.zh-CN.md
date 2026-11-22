@@ -440,11 +440,11 @@ go test -race -count=2 ./plugintest/... ./examples/plugins/...
 
 ```go
 p.Command("llm").Handle(func(c *sdk.Context, prompt string) (message.Content, error) {
-    text, err := llm.Ask(c, prompt)
+    response, err := llm.Generate(c, llm.Request{Messages: []llm.Message{{Role: "user", Text: prompt}}})
     if err != nil {
         return nil, err
     }
-    return message.Text(text), nil
+    return message.Text(response.Text), nil
 })
 ```
 
@@ -470,7 +470,7 @@ func TestLLMReply(t *testing.T) {
                 return llm.Response{}, errcode.InvalidArgument.New("unexpected prompt")
             }
             return llm.Response{
-                Text: "fixed answer", Provider: "synthetic", Model: "test-model",
+                Text: "fixed answer", Model: "test-model",
                 InputTokens: nil, OutputTokens: nil,
             }, nil
         }))
@@ -515,3 +515,7 @@ Core→Adapter 的 `adapter.command.menu` 执行 set/get/delete；插件→Core 
 共用消息为 `CommandMenuRequest{instance_id=1, operation=2, menu=3}`、`CommandMenu{scope=1, language_code=2, commands=3}`、`CommandMenuScope{type=1, chat_id=2, user_id=3}`、`CommandMenuEntry{name=1, description=2}`、`CommandMenuResponse{commands=1, config=2, ready=3, last_error=4, positions=5}`、`CommandMenuPosition{scope=1, language_code=2, mode=3, owner_plugin_id=4}`，commands/positions 均 repeated。scope 类型为 default/chat/chat_administrators/chat_member，插件只开放后三种，thread 不进入 scope。
 
 `EventPayload.kind` 追加 command_menu_ready=13，string 字段为 adapter_id=1、adapter_instance_id=2、account_id=3、chat_id=4。Core 定向发送 `bot.command_menu_ready`，空 chat_id 表示实例手动就绪，非空表示聊天可用。Adapter 上报标准事件仍沿用原白名单。定义见 [Adapter 协议](../contracts/proto/alonabot/v1/adapter.proto)、[路由](../contracts/proto/alonabot/v1/route.proto)与[消息](../contracts/proto/alonabot/v1/message.proto)，生命周期与准入见[命令菜单](plugin-guide.zh-CN.md#命令菜单)。
+
+## Agent、流式服务与生命周期 API
+
+[完整参数、能力状态、八阶段钩子与 Goal 恢复契约](agent-api.zh-CN.md)。
