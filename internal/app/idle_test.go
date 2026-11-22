@@ -220,18 +220,15 @@ func startIdleProbe(t *testing.T, source, auditURL string, args ...string) (*web
 			t.Fatal(err)
 		}
 	}
-	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: project}, "https://example.invalid/idleprobe.tar.gz", "", out)
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: project}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	releaseJSON, err := os.ReadFile(filepath.Join(out, "release.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	h := newWebUIHarness(t)
 	h.start(nil)
 	manager := manage.New(manage.Options{Store: h.core.store, Settings: h.core.assembly.settings, Packages: filepath.Join(h.dir, "packages"), Limits: packages.NewLimits(h.core.values), Adapters: h.core.assembly.adapters, State: h.core.assembly.componentState})
-	if _, err := manager.Install(t.Context(), manage.InstallRequest{Archive: archive, ReleaseJSON: string(releaseJSON), Confirm: true}); err != nil {
+	if _, err := manager.Install(t.Context(), manage.InstallRequest{Archive: archive, Confirm: true}); err != nil {
 		t.Fatal(err)
 	}
 	h.stop()

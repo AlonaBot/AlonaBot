@@ -17,8 +17,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
 
 const (
@@ -30,10 +28,10 @@ const (
 )
 
 type options struct {
-	candidate, version, publicKey, out, platforms, assetBase       string
-	installCandidate, updateCandidate, wrongSource, wrongPublisher string
-	bundle                                                         bool
-	runtimeTimeout                                                 time.Duration // 调用者给出的整条功能联验截止时间。
+	candidate, version, out, platforms             string
+	installCandidate, updateCandidate, wrongSource string
+	bundle                                         bool
+	runtimeTimeout                                 time.Duration // 调用者给出的整条功能联验截止时间。
 }
 
 type report struct {
@@ -43,7 +41,6 @@ type report struct {
 	Candidate     string               `json:"candidate"`
 	Version       string               `json:"core_version"`
 	Platforms     []string             `json:"platforms"`
-	Publisher     string               `json:"trusted_publisher_key_id,omitempty"`
 	Checks        []check              `json:"checks"`
 	Components    []componentResult    `json:"components"`
 	Distributions []distributionResult `json:"distributions"`
@@ -67,8 +64,7 @@ type componentResult struct {
 type assetResult struct {
 	Platform          string   `json:"platform"`
 	Path              string   `json:"path"`
-	Size              int64    `json:"size"`   // 归档字节数。
-	SHA256            string   `json:"sha256"` // 整个归档的合同摘要。
+	Size              int64    `json:"size"` // 归档字节数。
 	EmbeddedResources []string `json:"embedded_resources"`
 }
 
@@ -92,15 +88,12 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 	flags.SetOutput(stderr)
 	flags.StringVar(&opt.candidate, "candidate", "", "dist candidate directory (required)")
 	flags.StringVar(&opt.version, "version", "", "Core archive version (required)")
-	flags.StringVar(&opt.publicKey, "public-key", "", "independently trusted base64 Ed25519 public key file (required)")
 	flags.StringVar(&opt.out, "out", "", "new evidence directory, outside candidate (required)")
 	flags.StringVar(&opt.platforms, "platforms", defaultPlatforms, "comma-separated OS/arch targets; must match the candidate")
-	flags.BoolVar(&opt.bundle, "bundle", false, "verify integrated archives containing signed WebUI and Agent packages")
-	flags.StringVar(&opt.assetBase, "asset-base", "", "expected https asset URL prefix (default: official download URL for version)")
-	flags.StringVar(&opt.installCandidate, "install-candidate", "", "signed configdb example package directory; enables host runtime checks")
-	flags.StringVar(&opt.updateCandidate, "update-candidate", "", "same-source, same-publisher package with a higher component SemVer")
-	flags.StringVar(&opt.wrongSource, "wrong-source-candidate", "", "valid signed package with the same ID and publisher but a different source")
-	flags.StringVar(&opt.wrongPublisher, "wrong-publisher-candidate", "", "valid signed package with the same ID and source but a different publisher")
+	flags.BoolVar(&opt.bundle, "bundle", false, "verify integrated archives containing WebUI and Agent packages")
+	flags.StringVar(&opt.installCandidate, "install-candidate", "", "configdb example package directory; enables host runtime checks")
+	flags.StringVar(&opt.updateCandidate, "update-candidate", "", "same-source package with a higher component SemVer")
+	flags.StringVar(&opt.wrongSource, "wrong-source-candidate", "", "valid package with the same ID but a different source")
 	flags.DurationVar(&opt.runtimeTimeout, "runtime-timeout", 0, "required overall deadline for runtime checks, including process shutdown (e.g. 2m)")
 	r := report{Scope: "asset-integrity", RuntimeChecks: "not_run", Status: "fail", Checks: []check{}, Components: []componentResult{}, Distributions: []distributionResult{}}
 	outCreated := false
@@ -135,12 +128,12 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || opt.candidate == "" || opt.version == "" || opt.publicKey == "" || opt.out == "" {
-		return errors.New("--candidate, --version, --public-key and --out are required; positional arguments are not accepted")
+	if flags.NArg() != 0 || opt.candidate == "" || opt.version == "" || opt.out == "" {
+		return errors.New("--candidate, --version and --out are required; positional arguments are not accepted")
 	}
-	runtimeRequested := opt.installCandidate != "" || opt.updateCandidate != "" || opt.wrongSource != "" || opt.wrongPublisher != "" || opt.runtimeTimeout != 0
-	if runtimeRequested && (opt.installCandidate == "" || opt.updateCandidate == "" || opt.wrongSource == "" || opt.wrongPublisher == "" || opt.runtimeTimeout <= 0) {
-		return errors.New("runtime checks require --install-candidate, --update-candidate, --wrong-source-candidate, --wrong-publisher-candidate and a positive --runtime-timeout")
+	runtimeRequested := opt.installCandidate != "" || opt.updateCandidate != "" || opt.wrongSource != "" || opt.runtimeTimeout != 0
+	if runtimeRequested && (opt.installCandidate == "" || opt.updateCandidate == "" || opt.wrongSource == "" || opt.runtimeTimeout <= 0) {
+		return errors.New("runtime checks require --install-candidate, --update-candidate, --wrong-source-candidate and a positive --runtime-timeout")
 	}
 	if strings.ContainsAny(opt.version, "/\\\x00 \t\r\n") || opt.version == "." || opt.version == ".." {
 		return errors.New("version must be a single path component")
@@ -198,17 +191,7 @@ func run(args []string, stdout, stderr io.Writer) (err error) {
 		return fmt.Errorf("create evidence directory: %w", err)
 	}
 	outCreated = true
-	raw, err := readRegular(opt.publicKey)
-	if err != nil {
-		return err
-	}
-	public, err := release.DecodePublicKey(raw)
-	if err != nil {
-		return err
-	}
-	r.Publisher = release.KeyID(public)
-	opt.assetBase = strings.TrimRight(opt.assetBase, "/")
-	if err := verifyAssets(opt, public, &r); err != nil {
+	if err := verifyAssets(opt, &r); err != nil {
 		return err
 	}
 	if runtimeRequested {

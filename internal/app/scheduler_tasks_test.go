@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
@@ -25,7 +24,6 @@ import (
 	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/httpproxy"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
@@ -315,13 +313,8 @@ func taskArchive(t *testing.T, id string) manage.InstallRequest {
 	if err := os.WriteFile(archivePath, archive.Bytes(), 0600); err != nil {
 		t.Fatal(err)
 	}
-	// 安装协议要求发布清单携带整个归档的摘要，供生产预检核对。
-	digest := sha256.Sum256(archive.Bytes())
-	raw, err := json.Marshal(release.Release{Source: source, PluginID: id, Version: "1.0.0", Assets: []release.Asset{{OS: runtime.GOOS, Arch: runtime.GOARCH, URL: "https://example.com/tasks.tar.gz", Size: int64(archive.Len()), SHA256: hex.EncodeToString(digest[:])}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return manage.InstallRequest{Archive: archivePath, ReleaseJSON: string(raw), Confirm: true}
+
+	return manage.InstallRequest{Archive: archivePath, Confirm: true}
 }
 
 func taskManager(h *pipelineHarness) *manage.Service {

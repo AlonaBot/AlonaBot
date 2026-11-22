@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
@@ -23,7 +22,6 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/adminauth"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
@@ -295,18 +293,12 @@ func (h *webUIHarness) bundle(id, role, icon string, major uint32) manage.Instal
 	if err := gz.Close(); err != nil {
 		h.t.Fatal(err)
 	}
-	// 安装清单要求整个归档的摘要，夹具只计算这一份必要值。
-	digest := sha256.Sum256(archive.Bytes())
-	r := release.Release{PluginID: id, Version: "1.0.0", Source: "github.com/example/" + id, Assets: []release.Asset{{OS: platformOS, Arch: arch, URL: "https://example.invalid/package.tar.gz", Size: int64(archive.Len()), SHA256: hex.EncodeToString(digest[:])}}}
-	raw, err := json.Marshal(r)
-	if err != nil {
-		h.t.Fatal(err)
-	}
+
 	name := filepath.Join(h.t.TempDir(), "package.tar.gz")
 	if err := os.WriteFile(name, archive.Bytes(), 0o600); err != nil {
 		h.t.Fatal(err)
 	}
-	return manage.InstallRequest{Archive: name, ReleaseJSON: string(raw), Confirm: true}
+	return manage.InstallRequest{Archive: name, Confirm: true}
 }
 
 func webUIIcon(ext string) string {

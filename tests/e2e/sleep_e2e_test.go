@@ -250,7 +250,7 @@ func sleepTestPackage(t *testing.T, id, source string) string {
 			t.Fatal(err)
 		}
 	}
-	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: project}, "https://example.invalid/sleepprobe.tar.gz", "", out)
+	archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: project}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

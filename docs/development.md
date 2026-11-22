@@ -199,16 +199,16 @@ bin/alonabot check ./alonabot-plugin-hello --goos linux --goarch amd64 --tags a,
 
 `test` builds a host component in a fresh temporary data directory, performs real handshake/preparation/registration/activation/shutdown, and reports commands/cleanup. Adapter has zero platform instances; WebUI checks static resource loading. Process Bootstrap supplies absolute `plugin_data/<id>/` under the temporary state root, removed at test end. Preparation/registration/stop/cleanup failure exits nonzero.
 
-`pack` scans/checks/builds per `--target`, creating `<id>-<version>-<os>-<arch>.tar.gz`; static WebUI creates one `<id>-<version>-any.tar.gz`, Go-entry WebUI builds per platform. Archives share one `release.json` listing all assets; `--out` defaults as for build. URLs join `--asset-base` and archive name. Omitted base derives `https://github.com/<owner>/<repo>/releases/download/v<version>` from `source: github.com/<owner>/<repo>`; other sources need explicit absolute https prefix retaining path with no query/fragment. Process `build-info` is `debug.BuildInfo.String()` text. Generated code/sidecars/archives share the validated scan snapshot and normalized schema; resources saved after scanning wait until the next build.
+`pack` scans/checks/builds per `--target`, creating `<id>-<version>-<os>-<arch>.tar.gz`; static WebUI creates one `<id>-<version>-any.tar.gz`, Go-entry WebUI builds per platform. `pack` outputs component archives only; `--out` defaults as for build. Upload these archives to the Release; GitHub supplies source archives. Process `build-info` is `debug.BuildInfo.String()` text. Generated code/sidecars/archives share the validated scan snapshot and normalized schema; resources saved after scanning wait until the next build.
 
 When configuration `example` fields reference images, `check`/`build`/`pack` validate both schemas' references/image signatures; referenced images enter build output/archive with the snapshot. See [reply examples](plugin-guide.md#reply-examples-for-configuration-fields).
 
 ```fish
 bin/alonabot pack ./alonabot-plugin-hello --target linux/amd64 --target linux/arm64 \
-  --asset-base https://example.com/releases/v0.1.0 --key ./release.key --out ./dist
+  --out ./dist
 ```
 
-Optional `--key` reads a standard base64 64-byte Ed25519 private key, allowing surrounding whitespace. It signs exact final merged-manifest bytes once and writes standard-base64 `release.json.sig`/`release.pub`. Omission creates unsigned releases and removes stale output signatures/keys. Key/signing failures return directly. Keep private keys, runtime configuration and data outside packaged resources.
+Installation reads `plugin.yaml` inside the archive. Online installation selects platform assets through the GitHub Release API. Keep runtime configuration and data outside packaged resources.
 
 ## Library mode: one process
 

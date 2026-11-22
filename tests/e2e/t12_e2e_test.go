@@ -14,7 +14,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/alonabot-adapter-telegram/telegramtest"
 )
 
@@ -419,7 +417,7 @@ func packAgentComponent(t *testing.T, project, id string) string {
 		t.Fatalf("unexpected generated source: %v", err)
 	}
 	out := t.TempDir()
-	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", project, "--asset-base", "https://example.invalid", "--out", out)
+	command := exec.Command(filepath.Join(binDir, "alonabot"), "pack", project, "--out", out)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("pack %s: %v\n%s", project, err, output)
 	} else {
@@ -433,22 +431,27 @@ func packAgentComponent(t *testing.T, project, id string) string {
 
 func packedComponentArchive(t *testing.T, out, id string) string {
 	t.Helper()
-	publication, err := release.Verify(developmentRead(t, filepath.Join(out, "release.json")), nil, nil)
+	entries, err := os.ReadDir(out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if publication.PluginID != id {
-		t.Fatalf("packaged plugin ID: got %q want %q", publication.PluginID, id)
+	var archives []string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), id+"-") && strings.HasSuffix(entry.Name(), "-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz") {
+			archives = append(archives, filepath.Join(out, entry.Name()))
+		}
 	}
-	asset, ok := publication.Asset(runtime.GOOS, runtime.GOARCH)
-	if !ok {
-		t.Fatalf("package has no asset for %s/%s", runtime.GOOS, runtime.GOARCH)
+	if len(archives) != 1 {
+		t.Fatalf("expected one archive for %s: %v", id, archives)
 	}
-	address, err := url.Parse(asset.URL)
+	declaration, err := manifest.Parse(agentPackageFiles(t, archives[0])["plugin.yaml"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(out, filepath.Base(address.Path))
+	if declaration.Manifest.ID != id {
+		t.Fatalf("packaged plugin ID: got %q want %q", declaration.Manifest.ID, id)
+	}
+	return archives[0]
 }
 
 func agentPackageFiles(t *testing.T, archive string) map[string][]byte {

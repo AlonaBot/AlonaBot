@@ -52,7 +52,7 @@ type Options struct {
 	Packages               string                                                             // 不可变程序包目录，其父目录是 Core data_dir。
 	BundledPackages        string                                                             // 可执行文件同目录 packages/ 的绝对路径；空串表示没有内置候选。
 	Limits                 packages.Limits
-	ReleaseBaseURL         string                                                      // 缺省 https://github.com，测试可指向回环服务。
+	ReleaseBaseURL         string                                                      // 缺省 https://api.github.com，测试可指向回环服务。
 	HTTPClient             *http.Client                                                // nil 使用 http.DefaultClient。
 	Development            map[string]*manifest.Manifest                               // 由库模式登记的只读工程身份。
 	DevelopmentConfig      func(id string) (json.RawMessage, map[string][]byte, error) // 读取当前开发资源；返回值只读。
@@ -86,7 +86,7 @@ type Service struct {
 // New 创建复用 Core 装配资源的管理服务。
 func New(opt Options) *Service {
 	if opt.ReleaseBaseURL == "" {
-		opt.ReleaseBaseURL = "https://github.com"
+		opt.ReleaseBaseURL = "https://api.github.com"
 	}
 	if opt.HTTPClient == nil {
 		opt.HTTPClient = http.DefaultClient

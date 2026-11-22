@@ -1,12 +1,9 @@
-// dist 命令构建五平台 Core 归档，整合模式另收录已验签的官方组件。
+// dist 命令构建五平台 Core 归档，整合模式另收录官方组件。
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -21,15 +18,16 @@ import (
 	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/release"
+	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/releasenotes"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
 const (
-	defaultPlatforms  = "linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64"
-	officialKeySymbol = "github.com/AlonaBot/AlonaBot/internal/core/trust.officialKey"
-	versionSymbol     = "github.com/AlonaBot/AlonaBot/internal/app.releaseVersion"
-	fileMode          = 0o644
-	directoryMode     = 0o755
+	defaultPlatforms = "linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64"
+	versionSymbol    = "github.com/AlonaBot/AlonaBot/internal/app.releaseVersion"
+	fileMode         = 0o644
+	directoryMode    = 0o755
 )
 
 const webuiDir = "webui"
@@ -49,8 +47,8 @@ type componentSource struct {
 }
 
 type options struct {
-	version, publicKey, out, platforms string
-	bundle                             bool
+	version, out, platforms string
+	bundle                  bool
 }
 
 func main() {
@@ -64,17 +62,16 @@ func run(ctx context.Context, args []string) (err error) {
 	var opt options
 	flags := flag.NewFlagSet("dist", flag.ContinueOnError)
 	flags.StringVar(&opt.version, "version", "", "Core release version (required)")
-	flags.StringVar(&opt.publicKey, "public-key", "", "trusted base64 Ed25519 public key file (required)")
 	flags.StringVar(&opt.out, "out", "", "output directory (required)")
 	flags.StringVar(&opt.platforms, "platforms", defaultPlatforms, "comma-separated OS/arch targets")
-	flags.BoolVar(&opt.bundle, "bundle", false, "include signed WebUI and Agent packages for the integrated image")
+	flags.BoolVar(&opt.bundle, "bundle", false, "include WebUI and Agent packages for the integrated image")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || opt.version == "" || opt.publicKey == "" || opt.out == "" {
-		return errors.New("--version, --public-key and --out are required; positional arguments are not accepted")
+	if flags.NArg() != 0 || opt.version == "" || opt.out == "" {
+		return errors.New("--version and --out are required; positional arguments are not accepted")
 	}
-	// 1. 构建前检查目标与可信公钥。
+	// 1. 构建前检查版本与目标。
 	if strings.ContainsAny(opt.version, "/\\\x00 \t\n") || opt.version == "." || opt.version == ".." {
 		return errors.New("version must be a single path component")
 	}
@@ -88,14 +85,6 @@ func run(ctx context.Context, args []string) (err error) {
 			return fmt.Errorf("duplicate platform %q", target)
 		}
 	}
-	raw, err := os.ReadFile(opt.publicKey)
-	if err != nil {
-		return err
-	}
-	public, err := release.DecodePublicKey(raw)
-	if err != nil {
-		return err
-	}
 	out, err := filepath.Abs(opt.out)
 	if err != nil {
 		return err
@@ -106,7 +95,7 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 
-	// 2. Core 归档独立构建；整合模式才读取组件锁和公开签名资产。
+	// 2. Core 归档独立构建；整合模式才读取组件锁和公开组件资产。
 	var lock map[string]componentSource
 	if opt.bundle {
 		rawLock, err := os.ReadFile("components.lock.json")
@@ -129,7 +118,7 @@ func run(ctx context.Context, args []string) (err error) {
 		if err := os.MkdirAll(root, directoryMode); err != nil {
 			return err
 		}
-		if err := buildCore(ctx, filepath.Join(root, executableName(goos)), goos, goarch, opt.version, public); err != nil {
+		if err := buildCore(ctx, filepath.Join(root, executableName(goos)), goos, goarch, opt.version); err != nil {
 			return err
 		}
 		if err := copyFile("LICENSE", filepath.Join(root, "LICENSE"), fileMode); err != nil {
@@ -151,14 +140,14 @@ func run(ctx context.Context, args []string) (err error) {
 	if err := os.MkdirAll(out, directoryMode); err != nil {
 		return err
 	}
-	// 3. 原样收录组件清单与平台包，公开安装和预装使用同一份资产。
+	// 3. 原样收录组件平台包，公开安装和预装使用同一份资产。
 	if opt.bundle {
 		for _, component := range components {
 			source := lock[component.dir]
 			if source.Module == "" || source.Version == "" {
 				return fmt.Errorf("missing component lock for %s", component.dir)
 			}
-			if err := collectComponent(ctx, component, source.Module, source.Version, out, targets, roots, public); err != nil {
+			if err := collectComponent(ctx, component, source.Module, source.Version, out, targets, roots); err != nil {
 				return fmt.Errorf("collect %s: %w", component.id, err)
 			}
 		}
@@ -204,8 +193,8 @@ func run(ctx context.Context, args []string) (err error) {
 	return os.WriteFile(filepath.Join(out, "release-notes.md"), notes, fileMode)
 }
 
-func buildCore(ctx context.Context, output, goos, goarch, version string, public ed25519.PublicKey) error {
-	link := "-X " + officialKeySymbol + "=" + base64.StdEncoding.EncodeToString(public) + " -X " + versionSymbol + "=" + version
+func buildCore(ctx context.Context, output, goos, goarch, version string) error {
+	link := "-X " + versionSymbol + "=" + version
 	_, err := command(ctx, ".", []string{"CGO_ENABLED=0", "GOOS=" + goos, "GOARCH=" + goarch},
 		"go", "build", "-trimpath", "-buildvcs=false", "-ldflags", link, "-o", output, "./cmd/alonabot")
 	return err
@@ -229,72 +218,44 @@ func command(ctx context.Context, dir string, env []string, name string, args ..
 	return output, nil
 }
 
-// collectComponent 先验签发布清单，再校验下载包的完整性并复制到发行树。
-func collectComponent(ctx context.Context, component component, source, version, out string, targets []string, roots map[string]string, public ed25519.PublicKey) error {
+// collectComponent 核对锁定版本的包内身份与平台，再原样收录到发行树。
+func collectComponent(ctx context.Context, component component, source, version, out string, targets []string, roots map[string]string) error {
 	directory := filepath.Join(out, "packages", component.id)
 	if err := os.MkdirAll(directory, directoryMode); err != nil {
 		return err
 	}
-	base := "https://" + source + "/releases/download/" + version
-	metadata := make(map[string][]byte)
-	for _, name := range []string{"release.json", "release.json.sig", "release.pub"} {
-		var err error
-		metadata[name], err = download(ctx, base+"/"+name)
-		if err != nil {
-			return err
-		}
-	}
-	key, err := release.DecodePublicKey(metadata["release.pub"])
+	staging, err := os.MkdirTemp("", "alonabot-collect-*")
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(key, public) {
-		return errors.New("component public key differs from trusted official key")
-	}
-	if len(metadata["release.json.sig"]) == 0 {
-		return errors.New("official release signature is empty")
-	}
-	publication, err := release.Verify(metadata["release.json"], metadata["release.json.sig"], public)
-	if err != nil {
-		return err
-	}
-	if publication.PluginID != component.id || publication.Source != source || publication.Version != strings.TrimPrefix(version, "v") {
-		return fmt.Errorf("component identity differs from lock: %s %s %s", publication.PluginID, publication.Source, publication.Version)
-	}
-	for name, raw := range metadata {
-		if err := os.WriteFile(filepath.Join(directory, name), raw, fileMode); err != nil {
-			return err
-		}
-	}
+	defer os.RemoveAll(staging)
 	for _, target := range targets {
 		goos, goarch, _ := strings.Cut(target, "/")
-		asset, ok := publication.Asset(goos, goarch)
-		if !ok {
-			return fmt.Errorf("release has no asset for %s", target)
-		}
-		name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", component.id, publication.Version, goos, goarch)
-		if asset.URL != base+"/"+name {
-			return fmt.Errorf("unexpected official asset URL %q", asset.URL)
-		}
-		raw, err := download(ctx, asset.URL)
+		name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", component.id, strings.TrimPrefix(version, "v"), goos, goarch)
+		raw, err := download(ctx, "https://"+source+"/releases/download/"+version+"/"+name)
 		if err != nil {
 			return err
 		}
-		digest := sha256.Sum256(raw)
-		if int64(len(raw)) != asset.Size || fmt.Sprintf("%x", digest) != asset.SHA256 {
-			return fmt.Errorf("asset integrity mismatch: %s", name)
-		}
-		if err := os.WriteFile(filepath.Join(directory, name), raw, fileMode); err != nil {
+		archive := filepath.Join(staging, name)
+		if err := os.WriteFile(archive, raw, fileMode); err != nil {
 			return err
 		}
-		destination := filepath.Join(roots[target], "packages", component.id)
-		if err := os.MkdirAll(destination, directoryMode); err != nil {
+		candidate, err := packages.Preflight(packages.Input{ID: component.id, Version: strings.TrimPrefix(version, "v"), Source: source, OS: goos, Arch: goarch, ArchivePath: archive}, staging, packages.NewLimits(tune.Defaults()))
+		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(destination, name), raw, fileMode); err != nil {
+		expected := release.ArchiveName(candidate.Manifest)
+		if err := candidate.Discard(); err != nil {
 			return err
 		}
-		for name, raw := range metadata {
+		if expected != name {
+			return fmt.Errorf("component archive name %q differs from manifest %q", name, expected)
+		}
+		for _, root := range []string{out, roots[target]} {
+			destination := filepath.Join(root, "packages", component.id)
+			if err := os.MkdirAll(destination, directoryMode); err != nil {
+				return err
+			}
 			if err := os.WriteFile(filepath.Join(destination, name), raw, fileMode); err != nil {
 				return err
 			}

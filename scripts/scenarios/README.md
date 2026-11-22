@@ -22,7 +22,7 @@ uv run --no-project scripts/scenarios/run.py management \
     "$artifacts/packages/3.0.0/package.tar.gz"
 ```
 
-`build` 复用现有 `recoveryFixtureSource` 和 `writeTestPackage`：为 `recovery` / `github.com/example/recovery` 分别编译实际的 1.0.0、2.0.0、3.0.0 程序，添加配置 schema、`/info` 版本与配置观测入口及 `OnReady` 日志。三版包由同一把临时 Ed25519 密钥签名；每个版本目录包含 `main.go`、`plugin`、`package.tar.gz`、`release.json`、`release.json.sig` 和 `release.pub`。私钥只在本次构建进程内存中使用。
+`build` 复用现有 `recoveryFixtureSource` 和 `writeTestPackage`：为 `recovery` / `github.com/example/recovery` 分别编译实际的 1.0.0、2.0.0、3.0.0 程序，添加配置 schema、`/info` 版本与配置观测入口及 `OnReady` 日志。每个版本目录包含 `main.go`、`plugin` 与独立安装归档 `package.tar.gz`。
 
 传入其他构建产物时，三版包需提供上述相同身份、版本、签名公钥、配置字段和 HTTP 行为；每个归档旁保留对应的发行清单、签名和公钥。`build --out` 使用尚未存在的输出目录；`management --data-dir` 使用已存在的空临时目录。
 
@@ -64,7 +64,7 @@ uv run --no-project scripts/scenarios/run.py survivor \
     --recovery-package "$recovery_artifacts/fixtures/recovery/package.tar.gz"
 ```
 
-`build-recovery --out` 同样接收尚未存在的目录。输出包含 `fault-core`、真实 `observed-plugin`、`probe`、`adapter`、对应生成源码，以及 `recovery/`、`gateprobe/`、`adapter-package/` 中的三个签名包。每个包目录保留 `package.tar.gz`、`release.json`、`release.json.sig`、`release.pub`，使用本次构建的同一把临时 Ed25519 密钥。`overlay.json` 复用原恢复钩子；`fault-overlay.json` 追加 FIFO 释放与绑定前检查点，其映射的修改源码全部保留在输出目录。
+`build-recovery --out` 同样接收尚未存在的目录。输出包含 `fault-core`、真实 `observed-plugin`、`probe`、`adapter`、对应生成源码，以及 `recovery/`、`gateprobe/`、`adapter-package/` 中的三个安装包。每个包目录保留 `package.tar.gz`。`overlay.json` 复用原恢复钩子；`fault-overlay.json` 追加 FIFO 释放与绑定前检查点，其映射的修改源码全部保留在输出目录。
 
 这些产物按执行平台构建。替换为其他产物时，`recovery` 身份为 `github.com/example/recovery`，版本 1.0.0、`migration_mode: none`、`prepare_effects: managed_db`；提供 SQLite `/value`、`starts`、`candidate-value`、`fail-ready` 和六类请求观测行为。`gateprobe` 提供 `/service`、`/bus`、`attempts` 与独立定时 `clock`；Adapter 为 `alonabot-adapter-fixture`，协议 `devloop`、实例 `one`。源码与声明以构建目录保留的实际文件为准。
 

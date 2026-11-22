@@ -39,6 +39,13 @@ func TestCrossComponentEndToEnd(t *testing.T) {
 	}
 }
 
+func createCrossTelegramInstance(t *testing.T, c *core, dir, instance, token, apiURL string) {
+	t.Helper()
+	config := filepath.Join(t.TempDir(), "telegram.json")
+	developmentWrite(t, config, fmt.Sprintf(`{"token":%q,"api_base_url":%q,"proxy_mode":"none"}`, token, apiURL))
+	c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-telegram", instance, "--config", config)
+}
+
 func testCrossCapabilityPackages(t *testing.T, transport string) {
 	projects := []struct{ directory, id string }{
 		{componentDirectories["telegram"], "alonabot-adapter-telegram"},
@@ -53,7 +60,6 @@ func testCrossCapabilityPackages(t *testing.T, transport string) {
 	server := telegramtest.NewServer(t, "capability-token")
 	server.SetMe(101, "capability_bot")
 	dir := t.TempDir()
-	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"capability_bot","instances":{"capability_bot":{"token":"capability-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
 	if transport == "stdio" {
 		args = append(args, "--stdio")
@@ -63,6 +69,7 @@ func testCrossCapabilityPackages(t *testing.T, transport string) {
 		c.management(t, dir, "", "install", archives[i], "--yes")
 		c.management(t, dir, "", "enable", project.id)
 	}
+	createCrossTelegramInstance(t, c, dir, "capability_bot", "capability-token", server.URL())
 	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
 	// 无配置、无数据库的命令插件与文本匹配插件分别产生真实回复。
 	for i, item := range []struct{ input, want string }{{"/ping", "pong"}, {"roll 3d8", "Rolling 3d8."}} {
@@ -104,7 +111,7 @@ func testCrossCapabilityPackages(t *testing.T, transport string) {
 
 func testCrossDatabasePackages(t *testing.T, transport, tag string) {
 	out := t.TempDir()
-	arguments := []string{"pack", "../../examples/plugins/configdb", "--asset-base", "https://example.invalid", "--out", out}
+	arguments := []string{"pack", "../../examples/plugins/configdb", "--out", out}
 	if tag == "configdb_gorm" {
 		arguments = append(arguments, "--tags", tag)
 	}
@@ -117,7 +124,6 @@ func testCrossDatabasePackages(t *testing.T, transport, tag string) {
 	server := telegramtest.NewServer(t, "database-token")
 	server.SetMe(101, "database_bot")
 	dir := t.TempDir()
-	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"database_bot","instances":{"database_bot":{"token":"database-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	configFile := filepath.Join(dir, "plugins", id, "config.json")
 	developmentWrite(t, configFile, `{"greeting":["First","value"],"count":"invalid","enabled":false,"unknown":41}`)
 	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
@@ -129,6 +135,7 @@ func testCrossDatabasePackages(t *testing.T, transport, tag string) {
 		c.management(t, dir, "", "install", item.archive, "--yes")
 		c.management(t, dir, "", "enable", item.id)
 	}
+	createCrossTelegramInstance(t, c, dir, "database_bot", "database-token", server.URL())
 	first := findPackage(t, c, dir, id).Active
 	status, raw := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/plugins/"+id+"/config")
 	var snapshot struct {
@@ -281,7 +288,6 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 	}))
 	defer provider.Close()
 	dir := t.TempDir()
-	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"cross_bot","instances":{"cross_bot":{"token":"cross-component-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	developmentWrite(t, filepath.Join(dir, "plugins", agentPackageID, "config.json"), fmt.Sprintf(`{"providers":[{"custom":{"name":"cross","protocol":"openai-compatible","base_url":%q,"api_key":"cross-test-key"}}],"models":[{"name":"cross","provider":"cross","model":"cross-model","type":"chat","max_tokens":128}],"chat_model":"cross"}`, provider.URL))
 	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json"}
 	if transport == "stdio" {
@@ -393,6 +399,7 @@ func testCrossComponentPackages(t *testing.T, transport string) {
 			t.Fatalf("enabled package: %+v", items[i])
 		}
 	}
+	createCrossTelegramInstance(t, c, dir, "cross_bot", "cross-component-token", server.URL())
 	telegramEventually(t, c, func() bool { return server.Calls("getUpdates") > 0 })
 	sequence := 0
 	send := func(text, want string) {
@@ -603,7 +610,6 @@ func testCrossPermissionPackages(t *testing.T, transport string) {
 	server := telegramtest.NewServer(t, "boundary-token")
 	server.SetMe(101, "boundary_bot")
 	dir := t.TempDir()
-	developmentWrite(t, filepath.Join(dir, "core_config.json"), fmt.Sprintf(`{"adapters":{"telegram":{"package":"alonabot-adapter-telegram","default_instance":"boundary_bot","instances":{"boundary_bot":{"token":"boundary-token","api_base_url":%q,"proxy_mode":"none"}}}}}`, server.URL()))
 	args := []string{"--listen", "127.0.0.1:0", "--log-format", "json", "--log-level", "debug"}
 	if transport == "stdio" {
 		args = append(args, "--stdio")
@@ -613,6 +619,7 @@ func testCrossPermissionPackages(t *testing.T, transport string) {
 		c.management(t, dir, "", "install", archives[i], "--yes")
 		c.management(t, dir, "", "enable", project.id)
 	}
+	createCrossTelegramInstance(t, c, dir, "boundary_bot", "boundary-token", server.URL())
 	put := func(path, body string) {
 		t.Helper()
 		if status, raw := fixtureHTTP(t, c, dir, http.MethodPut, path, body); status != http.StatusOK {

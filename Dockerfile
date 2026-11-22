@@ -1,4 +1,4 @@
-# 源码构建只需要 Go 与可信公钥，组件从公开签名 Release 获取。
+# 源码构建使用 Go，组件归档从公开 Release 获取。
 FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm@sha256:8d48e12ec56735e9358640898b9d9b9fcca110612ed8a5567438c0a1baa24e66 AS build
 WORKDIR /src
 ENV CGO_ENABLED=0
@@ -7,7 +7,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
 RUN : "${VERSION:?VERSION is required}" && \
-    go run ./scripts/dist --bundle --version "$VERSION" --public-key .github/release.pub --out /dist --platforms "$TARGETOS/$TARGETARCH" && \
+    go run ./scripts/dist --bundle --version "$VERSION" --out /dist --platforms "$TARGETOS/$TARGETARCH" && \
     mkdir /image && \
     tar -xzf "/dist/alonabot-$VERSION-$TARGETOS-$TARGETARCH.tar.gz" -C /image --strip-components=1 && \
     mkdir /image/data

@@ -16,7 +16,7 @@ func TestPreflightFileModes(t *testing.T) {
 	p := newPackage(t, validEntries(
 		testEntry{name: "data.txt", typeflag: tar.TypeReg, mode: 0o666, body: "data"},
 		testEntry{name: "setuid", typeflag: tar.TypeReg, mode: 0o4755, body: "x"},
-	), nil)
+	))
 	c, err := Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)

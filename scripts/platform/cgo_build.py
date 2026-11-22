@@ -2,7 +2,6 @@
 
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import io
 import json
 import os
@@ -106,11 +105,6 @@ arch: {goarch}
                 header = tarfile.TarInfo(name)
                 header.size, header.mode = len(raw), 0o700 if name.startswith("bin/") else 0o600
                 package.addfile(header, io.BytesIO(raw))
-        # 仅计算安装契约强制要求的归档完整性字段。
-        asset = {"os": goos, "arch": goarch, "url": "https://example.invalid/" + archive.name, "size": archive.stat().st_size,
-                 "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()}
-        release = {"publisher_key_id": "", "source": "github.com/AlonaBot/AlonaBot", "plugin_id": "platform-cgo", "version": "0.1.0", "assets": [asset]}
-        (out / "release.json").write_text(json.dumps(release, indent=2) + "\n")
     finally:
         (out / "build.json").write_text(json.dumps(record, indent=2) + "\n")
     print(out / "build.json")

@@ -64,7 +64,7 @@ func (s *Store) SetPin(ctx context.Context, id, version string) error {
 	})
 }
 
-// SetPublisherKeyID 保存管理服务已确认并验证的发布者指纹。
+// SetPublisherKeyID 写入历史发布者指纹；空串清除记录。
 func (s *Store) SetPublisherKeyID(ctx context.Context, id, key string) error {
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		result := tx.Model(&installation{}).Where(clause.Eq{Column: clause.PrimaryColumn, Value: id}).Update("publisher_key_id", key)

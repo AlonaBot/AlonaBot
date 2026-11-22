@@ -1,70 +1,83 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
+	"compress/gzip"
+	"debug/buildinfo"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 )
 
-// TestCollectPublishedComponent 经 HTTPS、真实签名与文件系统核对公开资产收录和篡改拒绝。
+// TestCollectPublishedComponent 经 HTTPS 与真实文件系统核对组件归档收录及坏包拒绝。
 func TestCollectPublishedComponent(t *testing.T) {
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := map[string][]byte{}
+	var archive []byte
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, exists := files[filepath.Base(r.URL.Path)]
-		if !exists {
+		if !strings.HasSuffix(r.URL.Path, ".tar.gz") {
+			t.Errorf("unexpected metadata request: %s", r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write(raw)
+		_, _ = w.Write(archive)
 	}))
 	t.Cleanup(server.Close)
 	previous := http.DefaultClient
 	http.DefaultClient = server.Client()
 	t.Cleanup(func() { http.DefaultClient = previous })
 	source := strings.TrimPrefix(server.URL, "https://")
-	name := "alonabot-agent-official-0.1.0-linux-amd64.tar.gz"
-	archive := []byte("published component archive")
-	digest := sha256.Sum256(archive)
-	publication := release.Release{PublisherKeyID: release.KeyID(public), Source: source, PluginID: "alonabot-agent-official", Version: "0.1.0", Assets: []release.Asset{{OS: "linux", Arch: "amd64", URL: server.URL + "/releases/download/v0.1.0/" + name, Size: int64(len(archive)), SHA256: fmt.Sprintf("%x", digest)}}}
-	files["release.json"], err = json.Marshal(publication)
+	binary, err := os.ReadFile(os.Args[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	files["release.json.sig"] = []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(private, files["release.json"])))
-	files["release.pub"] = []byte(base64.StdEncoding.EncodeToString(public))
-	files[name] = archive
-	root := t.TempDir()
-	out := t.TempDir()
-	component := component{"agent", "alonabot-agent-official"}
-	if err := collectComponent(t.Context(), component, source, "v0.1.0", out, []string{"linux/amd64"}, map[string]string{"linux/amd64": root}, public); err != nil {
+	info, err := buildinfo.ReadFile(os.Args[0])
+	if err != nil {
 		t.Fatal(err)
 	}
-	for name, expected := range files {
-		for _, dir := range []string{root, out} {
-			raw, err := os.ReadFile(filepath.Join(dir, "packages", component.id, name))
-			if err != nil || !bytes.Equal(raw, expected) {
-				t.Fatalf("collected %s: %v", name, err)
-			}
+	var content bytes.Buffer
+	gz := gzip.NewWriter(&content)
+	writer := tar.NewWriter(gz)
+	manifest := fmt.Sprintf("manifest_version: 1\nid: alonabot-agent-official\nname: Agent\nversion: 0.1.0\nrole: agent\nsource: %s\nos: %s\narch: %s\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: component\nmigration_mode: none\nprepare_effects: none\n", source, runtime.GOOS, runtime.GOARCH)
+	for name, raw := range map[string][]byte{"plugin.yaml": []byte(manifest), "component": binary, "build-info": []byte(info.String())} {
+		if err := writer.WriteHeader(&tar.Header{Name: name, Mode: 0700, Size: int64(len(raw))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writer.Write(raw); err != nil {
+			t.Fatal(err)
 		}
 	}
-	files[name] = []byte("tampered component archive")
-	if err := collectComponent(t.Context(), component, source, "v0.1.0", t.TempDir(), []string{"linux/amd64"}, map[string]string{"linux/amd64": t.TempDir()}, public); err == nil || !strings.Contains(err.Error(), "integrity mismatch") {
-		t.Fatalf("tampered asset: %v", err)
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive = content.Bytes()
+	root, out := t.TempDir(), t.TempDir()
+	component := component{"agent", "alonabot-agent-official"}
+	target := runtime.GOOS + "/" + runtime.GOARCH
+	if err := collectComponent(t.Context(), component, source, "v0.1.0", out, []string{target}, map[string]string{target: root}); err != nil {
+		t.Fatal(err)
+	}
+	name := fmt.Sprintf("%s-0.1.0-%s-%s.tar.gz", component.id, runtime.GOOS, runtime.GOARCH)
+	for _, dir := range []string{root, out} {
+		directory := filepath.Join(dir, "packages", component.id)
+		entries, err := os.ReadDir(directory)
+		if err != nil || len(entries) != 1 {
+			t.Fatalf("asset inventory: %v %v", entries, err)
+		}
+		raw, err := os.ReadFile(filepath.Join(directory, name))
+		if err != nil || !bytes.Equal(raw, archive) {
+			t.Fatalf("collected archive: %v", err)
+		}
+	}
+	archive = []byte("invalid archive")
+	if err := collectComponent(t.Context(), component, source, "v0.1.0", t.TempDir(), []string{target}, map[string]string{target: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "gzip") {
+		t.Fatalf("invalid archive: %v", err)
 	}
 }

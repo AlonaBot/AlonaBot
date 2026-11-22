@@ -4,9 +4,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"go/parser"
 	"go/token"
@@ -23,7 +20,6 @@ import (
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
-	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
@@ -166,43 +162,24 @@ func TestHello(t *testing.T) {
 			}
 		}
 	}
-	pub, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyPath := filepath.Join(t.TempDir(), "release.key")
-	developmentWrite(t, keyPath, base64.StdEncoding.EncodeToString(key))
 	out := filepath.Join(dir, "bin")
 	other := "linux/amd64"
 	if other == runtime.GOOS+"/"+runtime.GOARCH {
 		other = "windows/amd64"
 	}
-	cli("pack", "--target", runtime.GOOS+"/"+runtime.GOARCH, "--target", other, "--key", keyPath)
+	cli("pack", "--target", runtime.GOOS+"/"+runtime.GOARCH, "--target", other)
 	noGenerated()
-	raw := developmentRead(t, filepath.Join(out, "release.json"))
-	sig := developmentRead(t, filepath.Join(out, "release.json.sig"))
-	publication, err := release.Verify(raw, sig, pub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if publication.PublisherKeyID != release.KeyID(pub) {
-		t.Fatal("publisher identity mismatch")
-	}
-	if len(publication.Assets) != 2 {
-		t.Fatalf("assets: %+v", publication.Assets)
-	}
 	for _, target := range []string{runtime.GOOS + "/" + runtime.GOARCH, other} {
 		goos, goarch, _ := strings.Cut(target, "/")
-		asset, ok := publication.Asset(goos, goarch)
-		name := id + "-0.1.0-" + goos + "-" + goarch + ".tar.gz"
-		want := "https://github.com/CHANGE-ME/CHANGE-ME/releases/download/v0.1.0/" + name
-		if !ok || asset.URL != want {
-			t.Fatalf("asset %s: %+v want %s", target, asset, want)
+		developmentRead(t, filepath.Join(out, id+"-0.1.0-"+goos+"-"+goarch+".tar.gz"))
+	}
+	for _, name := range []string{"release.json", "release.json.sig", "release.pub"} {
+		if _, err := os.Stat(filepath.Join(out, name)); !os.IsNotExist(err) {
+			t.Fatalf("unexpected release asset %s: %v", name, err)
 		}
-		developmentRead(t, filepath.Join(out, name))
 	}
 	archive := filepath.Join(out, id+"-0.1.0-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
-	candidate, err := packages.Preflight(packages.Input{ReleaseJSON: raw, Signature: sig, PublicKey: pub, Source: "github.com/CHANGE-ME/CHANGE-ME", OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: archive}, t.TempDir(), packages.NewLimits(tune.Defaults()))
+	candidate, err := packages.Preflight(packages.Input{Source: "github.com/CHANGE-ME/CHANGE-ME", OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: archive}, t.TempDir(), packages.NewLimits(tune.Defaults()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +287,7 @@ func main() {
 // TestPluginStorageCLI 通过真实 Core 与 configdb 进程验证插件存储的生命周期。
 func TestPluginStorageCLI(t *testing.T) {
 	t.Run("kv-and-data-dir", func(t *testing.T) {
-		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/configdb"}, "https://example.invalid/configdb.tar.gz", "", t.TempDir())
+		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/configdb"}, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}

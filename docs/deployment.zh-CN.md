@@ -83,10 +83,10 @@ alonabot run --data-dir ./data
 
 `run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，从所选 `--data-dir` 自动读取持久凭据并直连本机 listen，Host 沿用 base_url；本机连接地址可用 `--admin-url` 覆盖：
 ```fish
-alonabot install pkg.tar.gz --yes             # release.json、签名和公钥缺省取归档同目录
+alonabot install pkg.tar.gz --yes             # 直接安装本地归档
 alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
 alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
-alonabot install --source owner/repo --yes      # 从 GitHub Release 下载 release.json、可选的 .sig 与 release.pub
+alonabot install --source owner/repo --yes      # 从 GitHub Release API 选择平台归档
 alonabot install --source AlonaBot/alonabot-webui --yes
 alonabot enable alonabot-webui-admin
 alonabot install --source AlonaBot/alonabot-agent --yes
@@ -100,9 +100,9 @@ alonabot adapter instance create alonabot-adapter-telegram primary --config inst
 alonabot admin add telegram:123456
 ```
 
-`install` 的位置参数为已存在的普通文件时使用该归档，其他值按组件 ID 查找可执行文件旁的 `packages/<组件 ID>/`；缺失时列出可用的官方组件 ID。不带位置参数时，当前目录为作者工程便搜索 `bin/`，其他情况搜索当前目录；也检查直接包子目录的清单。按 `release.json` 选择本机平台资产，静态 WebUI 使用 `any/any`，恰好一个候选才安装；零个或多个时列出搜索目录和候选后退出。发现阶段只读，安装经管理 API 完成。
+`install` 的位置参数为已存在的普通文件时使用该归档，其他值按组件 ID 查找可执行文件旁的 `packages/<组件 ID>/`；缺失时列出可用的官方组件 ID。不带位置参数时，当前目录为作者工程便搜索 `bin/`，其他情况搜索当前目录；也检查直接包子目录。按归档名选择本机平台资产，静态 WebUI 使用 `any/any`，恰好一个候选才安装；零个或多个时列出搜索目录和候选后退出。发现阶段只读，安装经管理 API 完成。
 
-`--archive` 仍可显式指定归档；`--release`、`--signature` 与 `--public-key` 分别覆盖元数据文件。签名和公钥未指定时取 release.json 同目录的 `release.json.sig` 与 `release.pub`。位置参数、`--archive` 和 `--source` 互斥；`--source` 与本地元数据选项也互斥。来源与签名确认、归档预检及 `--yes`、`--replace` 沿用管理服务。
+`--archive` 可显式指定归档。位置参数、`--archive` 和 `--source` 互斥；来源确认、归档预检及 `--yes`、`--replace` 沿用管理服务。浏览器上传安装或更新同样只需归档文件。历史 Release 清理旁车后，旧 Core 的在线安装与更新需要先升级至采用此流程的版本，发布顺序见[发行维护](releasing.md)。
 
 help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
 
@@ -206,7 +206,7 @@ alonabot sleep-policy my-plugin auto
 | 操作 | 端点与请求 |
 | --- | --- |
 | Core 身份与组件 | `GET /api/v1/core`、`GET /api/v1/packages` |
-| 安装 | `POST /api/v1/packages/install`，使用导出 `InstallRequest` 字段 `Archive`、`ReleaseJSON`、`Signature`、`PublicKey`、`Source`、`Confirm`、`Replace`，见[管理类型](../internal/core/manage/install.go) |
+| 安装 | `POST /api/v1/packages/install`，使用导出 `InstallRequest` 字段 `Archive`、`Source`、`ID`、`Confirm`、`Replace`，见[管理类型](../internal/core/manage/install.go) |
 | 启用、停用、重启、重载 | `POST /api/v1/packages/{action}`，`{"id":"demo"}`；disable 可能要求 `confirm` |
 | 更新 | `POST /api/v1/packages/update`，`{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |
 | 回退 | `POST /api/v1/packages/rollback`，`{"id":"demo","generation":"retained-generation","confirm":false}` |
@@ -223,6 +223,10 @@ alonabot sleep-policy my-plugin auto
 | 会话 | `GET /api/v1/plugins/{id}/conversations` 返回摘要；`DELETE /api/v1/plugins/{id}/conversations/{key}` 清除完整不透明键 |
 | 插件数据 | `/api/v1/plugins/{id}/data/` 下的 tables/rows、kv、files、export、clear，见[数据处理器](../internal/core/manage/data_api.go) |
 | 诊断包 | `POST /api/v1/diagnostics`，缺省 `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}`，返回 no-store ZIP |
+
+本地 JSON 安装提供 Core 主机上的 `Archive` 路径，身份和来源取自归档内 `plugin.yaml`；在线安装只提供 `Source: "owner/repo"`，Core 从最新 Release API 选择平台归档。可选 `ID` 约束期望身份。首次来源信任和同类替换按需确认；后续更新与保留记录重装继续核对来源和身份。`Package.PublisherKeyID`、`Package.Signed` 保留历史记录含义；新安装及成功更新或重装后分别为空和 false。
+
+浏览器对 install/update 端点发送 `multipart/form-data`：必填一个文件 part `archive`；可选文本 `confirm=true|false`；仅 install 可带 `replace=true|false`，仅 update 必填文本 `id`。文件 part 带 `filename`，文本 part 省略；未知或重复 part、缺文件或更新 ID、错误布尔值和截断请求返回 400 / INVALID_ARGUMENT。认证先于上传解析；归档流式写入独占临时目录，沿用安装大小与预检限制，调用完成后清理。确认响应为 409 与完整 `affected`，确认后重新上传归档并带 `confirm=true`。预检在修改旧组件前完成，来源绑定不符返回 403 / PERMISSION_DENIED；更新沿用身份、pin 与依赖检查并保留用户数据。
 
 Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时秘密用 `{"$secret_set":true}` 遮盖；只在需要修改处提交新明文，勿提交掩码或 Core 秘密引用。reload 建立独立受管 SQLite 候选代次，restart 保持 Active；提交后的 OnReady 失败保留新 Active 并进入 Degraded。`GET /api/v1/plugins/{id}/generations` 列出保留代次。开发组件的 update/rollback/uninstall 为 412。
 
@@ -252,7 +256,7 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 `GET /updates?repo=owner/repo` 每次查询刷新，返回 `repo,version,release_url,markdown,fetched_at,stale`。最新 Release 标签去掉前导 v 后须为 SemVer，Markdown 保留 Release 正文。latest Release 的 404 返回 404 / NO_RELEASE，由 WebUI 的 `getLatestRelease` 映射为 null。源与 Release 缓存按小写 source/repo 隔离。链接仅允许 HTTP/HTTPS/mailto，HTML 按文本显示。更新预览使用组件绑定来源，更新后说明来自已安装包内 changelog，已读版本只推进到实际展示的版本。
 
-收录时，`GET /store/check?repo=owner/repo` 读取最新 Release、release.json 及其首个平台归档，保留持久缓存原状；核对仓库及 Release URL、SemVer、release 结构/版本/来源和包内 manifest 的 ID/版本/来源一致。返回 `repo,role,id,name,version,release_url`，可选 description/author，及保持顺序的 manifest `warnings`（空数组也返回）。响应 repo 取已验证 release Source 去掉 `github.com/` 后的规范大小写。签名、公钥、归档长度与摘要完整性由 Core 安装预检校验。仅 latest Release 的 404 映射为 NO_RELEASE；坏资产 404 及其他失败返回 500 / INTERNAL，保留实际错误。
+收录时，`GET /store/check?repo=owner/repo` 读取最新 Release API 及其首个平台归档，保留持久缓存原状；核对仓库、Release 与资产 URL、标签 SemVer、资产名称和长度，以及包内 manifest 的 ID、版本与来源。返回 `repo,role,id,name,version,release_url`，可选 description/author，及保持顺序的 manifest `warnings`（空数组也返回）。响应 repo 取已验证 manifest Source 去掉 `github.com/` 后的规范大小写。Core 安装预检继续检查平台、build-info、资源及归档完整性。仅 latest Release 的 404 映射为 NO_RELEASE；坏资产 404 及其他失败返回 500 / INTERNAL，保留实际错误。
 
 源索引为 `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`，tags 可省略。检查后，用户填写标签，用检查所得规范 repo，在浏览器打开源仓库 `issues/new`，携带 `template=submit-plugin.yml` 以及经 URL 编码的 `repo`、`role`、`tags`、`release_url`，由浏览器提交 GitHub Issue。
 

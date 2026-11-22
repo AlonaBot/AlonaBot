@@ -60,7 +60,7 @@ func (s *Service) readUpload(r *http.Request, directory string, update bool) (re
 	}
 	seen := make(map[string]bool)
 	for {
-		// NextRawPart 保留文件原始字节，避免按 Content-Transfer-Encoding 改写签名材料。
+		// NextRawPart 保留文件原始字节，避免按 Content-Transfer-Encoding 改写归档内容。
 		part, err := reader.NextRawPart()
 		if err == io.EOF {
 			break
@@ -76,8 +76,8 @@ func (s *Service) readUpload(r *http.Request, directory string, update bool) (re
 			return request, id, invalid("part must have a form-data disposition")
 		}
 		name := parameters["name"]
-		file := name == "archive" || name == "release" || name == "signature"
-		text := name == "public_key" || name == "confirm" || (!update && name == "replace") || (update && name == "id")
+		file := name == "archive"
+		text := name == "confirm" || (!update && name == "replace") || (update && name == "id")
 		if !file && !text {
 			return request, id, invalid("unknown multipart part: " + name)
 		}
@@ -101,12 +101,6 @@ func (s *Service) readUpload(r *http.Request, directory string, update bool) (re
 		}
 		value := string(raw)
 		switch name {
-		case "release":
-			request.ReleaseJSON = value
-		case "signature":
-			request.Signature = value
-		case "public_key":
-			request.PublicKey = value
 		case "id":
 			id = value
 		case "confirm", "replace":
@@ -120,8 +114,8 @@ func (s *Service) readUpload(r *http.Request, directory string, update bool) (re
 			}
 		}
 	}
-	if !seen["archive"] || !seen["release"] || (update && id == "") {
-		return request, id, invalid("archive, release and an update id are required")
+	if !seen["archive"] || (update && id == "") {
+		return request, id, invalid("archive and an update id are required")
 	}
 	return request, id, nil
 }

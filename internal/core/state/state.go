@@ -308,14 +308,14 @@ type Install struct {
 	Entrypoint     string `gorm:"column:entrypoint"`           // 入口可执行文件的路径
 	BuildDigest    []byte `gorm:"column:build_digest"`         // 安装时已验证的归档摘要，经启动上下文交给 SDK 回显
 	Version        string `gorm:"column:version"`
-	PublisherKeyID string `gorm:"column:publisher_key_id"` // 无签名时为空串。
+	PublisherKeyID string `gorm:"column:publisher_key_id"` // 历史发布者指纹；新安装与成功更新或重装后为空串。
 	Pin            string `gorm:"column:pin"`              // 空串表示允许所有版本。
 	Uninstalled    bool   `gorm:"column:uninstalled"`      // 保留数据与来源绑定的已卸载记录。
 }
 
 // AddInstall 登记安装记录，install_seq 按登记顺序递增（first-wins 的依据）。
 // Role 必须明确指定；Adapter 按 adapter_id 唯一，Agent 与 WebUI 各自全局唯一。
-// 同来源、同发布者的已卸载记录可以重装，保留启用状态行与代次并刷新安装顺序。
+// 同来源、同身份的已卸载记录可以重装，保留启用状态行与代次并刷新安装顺序。
 func (s *Store) AddInstall(ctx context.Context, in Install) error {
 	// 1. 校验安装角色与 Adapter 的必填身份。
 	if in.Role != RolePlugin && in.Role != RoleAdapter && in.Role != RoleAgent && in.Role != RoleWebUI {
@@ -337,7 +337,7 @@ func (s *Store) AddInstall(ctx context.Context, in Install) error {
 				if !row.Uninstalled {
 					return fmt.Errorf("component %s is already installed", in.PluginID)
 				}
-				if row.Source != in.Source || row.PublisherKeyID != in.PublisherKeyID || row.Role != in.Role || row.AdapterID != in.AdapterID {
+				if row.Source != in.Source || row.Role != in.Role || row.AdapterID != in.AdapterID {
 					return fmt.Errorf("component %s installation binding differs", in.PluginID)
 				}
 				previous = row
