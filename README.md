@@ -58,4 +58,4 @@ Contributions to fixes, platform support, documentation and community components
 
 ## License
 
-AlonaBot and the official components use the [MIT License](LICENSE). Plugin templates also use MIT.
+AlonaBot and the official components use the [MIT License](LICENSE).

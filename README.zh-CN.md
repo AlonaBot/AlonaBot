@@ -58,4 +58,4 @@
 
 ## 许可证
 
-AlonaBot 与官方组件采用 [MIT License](LICENSE)。插件模板同样采用 MIT。
+AlonaBot 与官方组件采用 [MIT License](LICENSE)。
