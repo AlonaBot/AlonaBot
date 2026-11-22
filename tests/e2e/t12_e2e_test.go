@@ -75,7 +75,7 @@ func TestAgentPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := parsed.Manifest
-	if m.ID != agentPackageID || m.Role != "agent" || m.Source != "github.com/AlonaBot/alonabot-agent" || m.Version != "0.1.0" || m.OS != runtime.GOOS || m.Arch != runtime.GOARCH || m.MigrationMode != manifest.MigrationVersioned || m.PrepareEffects != manifest.EffectsManagedDB {
+	if m.ID != agentPackageID || m.Role != "agent" || m.Source != "github.com/AlonaBot/alonabot-agent" || m.Version != strings.TrimPrefix(componentLock["agent"].Version, "v") || m.OS != runtime.GOOS || m.Arch != runtime.GOARCH || m.MigrationMode != manifest.MigrationVersioned || m.PrepareEffects != manifest.EffectsManagedDB {
 		t.Fatalf("packaged manifest: %+v", m)
 	}
 	for _, name := range []string{m.Entrypoint, "build-info", "config_schema.json", "i18n/en-US.json", "i18n/zh-CN.json", m.Icon} {
@@ -170,7 +170,7 @@ func TestAgentPackage(t *testing.T) {
 	c.management(t, dir, "", "admin", "add", "telegram:88")
 	c.management(t, dir, "", "install", agentArchive, "--yes")
 	installed := findPackage(t, c, dir, agentPackageID)
-	if installed.State != "Installed" || installed.Enabled || installed.Active != "" || installed.Signed || installed.Role != "agent" || installed.Version != "0.1.0" || installed.Source != m.Source {
+	if installed.State != "Installed" || installed.Enabled || installed.Active != "" || installed.Signed || installed.Role != "agent" || installed.Version != m.Version || installed.Source != m.Source {
 		t.Fatalf("installed Agent: %+v", installed)
 	}
 	writeConfig := func(persona string) {

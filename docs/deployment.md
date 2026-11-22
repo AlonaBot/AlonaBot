@@ -6,7 +6,7 @@ This guide covers installation, authentication, configuration, component managem
 
 ## Choose an installation method
 
-Download official assets from [v0.1.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.1.0). Five-platform archives and `install.sh` provide Core only; Docker Compose bundles Core, WebUI and Agent. Install Adapters and help as needed. See [release notes](../changelog/v0.1.0/en.md) for actual platform runs and known limitations.
+Download official assets from [v0.2.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0). Five-platform archives and `install.sh` provide Core only; Docker Compose bundles Core, WebUI and Agent. Install Adapters and help as needed. See [release notes](../changelog/v0.2.0/en.md) for actual platform runs and known limitations.
 
 | Method | Use case |
 | --- | --- |
@@ -63,7 +63,7 @@ Uninstall stops/unregisters the service, removes its definition/program/bundled 
 Download the release Compose file, start the bundle and read the first-login token:
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.1.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.2.0/docker-compose.yml
 docker compose up -d
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```

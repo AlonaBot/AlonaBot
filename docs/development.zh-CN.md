@@ -498,7 +498,7 @@ go test -race -count=2 ./plugintest/...
 
 ## 协议与会话行为
 
-组件协议版本 **1.0** 与产品版本 **0.1.0** 独立。当前消息类型与字段号由 [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1) 定义，[wire 运行时](../internal/wire) 实现分帧与 Session 调用。修改 `.proto` 源文件后重新生成 Go 产物。保留已发布的字段号与枚举值；删除的名称和编号须 reserved，已有字段类型保持兼容。[协议编号检查](../contracts/wirespec_test.go) 保护这些标识。
+组件协议版本 **1.0** 与产品版本 **0.2.0** 独立。当前消息类型与字段号由 [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1) 定义，[wire 运行时](../internal/wire) 实现分帧与 Session 调用。修改 `.proto` 源文件后重新生成 Go 产物。保留已发布的字段号与枚举值；删除的名称和编号须 reserved，已有字段类型保持兼容。[协议编号检查](../contracts/wirespec_test.go) 保护这些标识。
 
 TCP 与 stdio 均使用四字节无符号大端长度，后接 Protobuf Envelope。长度不含前缀，须为 1～4,194,304 字节。零长度、超限、截断或无法解码的帧使 Session 失败，读取端不猜测下一帧边界。每条连接只有一个 writer。Core 持有回环 TCP listener（`127.0.0.1:0`）直到结束。每次启动组件创建新 Session 与 32 字节 secret；认证恒时核对 secret，并核对身份、digest 和协议版本。stdio 的 stdin/stdout 传输协议帧，stderr 输出日志。Bootstrap 中的秘密、配置、数据库及 HTTP 凭据须留在日志之外。
 

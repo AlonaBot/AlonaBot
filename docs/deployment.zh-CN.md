@@ -6,7 +6,7 @@
 
 ## 选择安装方式
 
-从 [v0.1.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.1.0) 下载正式资产。五平台归档与 `install.sh` 提供纯 Core；Docker Compose 提供 Core、WebUI 与 Agent 整合包。Adapter 和 help 插件按需安装。具体平台实跑与已知限制见[发布说明](../changelog/v0.1.0/zh-CN.md)。
+从 [v0.2.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0) 下载正式资产。五平台归档与 `install.sh` 提供纯 Core；Docker Compose 提供 Core、WebUI 与 Agent 整合包。Adapter 和 help 插件按需安装。具体平台实跑与已知限制见[发布说明](../changelog/v0.2.0/zh-CN.md)。
 
 | 方式 | 适用场景 |
 | --- | --- |
@@ -63,7 +63,7 @@ sh install.sh --uninstall
 下载发行的 Compose 文件，启动整合包并读出首次登录的 token：
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.1.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.2.0/docker-compose.yml
 docker compose up -d
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
