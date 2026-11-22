@@ -4,10 +4,10 @@ cloud.google.com/go/auth/oauth2adapt v0.2.3 h1:MlxF+Pd3OmSudg/b1yZ5lJwoXCEaeedAg
 cloud.google.com/go/auth/oauth2adapt v0.2.3/go.mod h1:tMQXOfZzFuNuUxOypHlQEXgdfX5cuhwU+ffUuXRJE8I=
 cloud.google.com/go/compute/metadata v0.5.0 h1:Zr0eK8JbFv6+Wi4ilXAR8FJ3wyNdpxHKJNPos6LTZOY=
 cloud.google.com/go/compute/metadata v0.5.0/go.mod h1:aHnloV2TPI38yx4s9+wAZhHykWvVCfu7hQbF+9CWoiY=
-github.com/AlonaBot/alonabot-adapter-telegram v0.1.0 h1:ZTRM7ZwQG4nuviL0822zFqriGQNF+JQjYJFTTTz8z2c=
-github.com/AlonaBot/alonabot-adapter-telegram v0.1.0/go.mod h1:X0Ya5lF1vCRIv/T2UyYu+Bo3E39F4VTirHo/ONqByO0=
-github.com/AlonaBot/alonabot-agent v0.1.0 h1:EZbaSoDyyE2LA6BbnAcpBR37XL4xOu5uwnGqM/vHNow=
-github.com/AlonaBot/alonabot-agent v0.1.0/go.mod h1:00F6g1C5/vPfZOdyy/3unnSIr+vmNhLCdd326r15Vf0=
+github.com/AlonaBot/alonabot-adapter-telegram v0.2.0 h1:bCozDC6KBbE2Nc2xhP5Ch03wjw230nL62gb4LdVLSy4=
+github.com/AlonaBot/alonabot-adapter-telegram v0.2.0/go.mod h1:nxCZ4ci/rHGzL7FigZJQkdtK9nVc7Qb2k5gOAKIm6Wc=
+github.com/AlonaBot/alonabot-agent v0.2.0 h1:u69P8fXGzjze1tTU1+M+UWQ+7kwQIzi/dEUhDDNXAj8=
+github.com/AlonaBot/alonabot-agent v0.2.0/go.mod h1:gaoEQFRyzzncnp3B9aNDcg+vuiH2tzDUnEI8GVWHLTc=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3 h1:qgnWTiWs1G7AqcKZegFvkJD1bmXJcaDU3uC0ELSgZ5U=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3/go.mod h1:XtxD48QPInqoj+GMlcRlXHEYsoOxFnP6w2JgIZ9rDS4=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.13.0 h1:Terj1CMW4+NY5CpWjSRkqLoxh2DkYDdv/FH2z0897Uc=

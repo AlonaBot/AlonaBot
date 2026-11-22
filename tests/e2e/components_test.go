@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 )
 
-var componentDirectories = map[string]string{}
+var (
+	componentDirectories = map[string]string{}
+	componentLock        map[string]struct{ Module, Version string }
+)
 
 // loadComponentDirectories 使用发行锁的精确版本，避免整合测试隐式读取邻接 checkout。
 func loadComponentDirectories() {
@@ -18,11 +21,10 @@ func loadComponentDirectories() {
 	if err != nil {
 		panic(err)
 	}
-	var lock map[string]struct{ Module, Version string }
-	if err := json.Unmarshal(raw, &lock); err != nil {
+	if err := json.Unmarshal(raw, &componentLock); err != nil {
 		panic(err)
 	}
-	for name, source := range lock {
+	for name, source := range componentLock {
 		output, err := exec.Command("go", "mod", "download", "-json", source.Module+"@"+source.Version).CombinedOutput()
 		if err != nil {
 			panic(fmt.Sprintf("download %s: %v\n%s", name, err, output))
