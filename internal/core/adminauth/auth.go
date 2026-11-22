@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	sessionLifetime   = 8 * time.Hour // 固定管理会话期限。
+	sessionLifetime   = 8 * time.Hour       // 固定管理会话期限。
+	rememberLifetime  = 30 * 24 * time.Hour // 登录时选择「保持登录」的会话期限。
 	adminCookie       = "alonabot_admin"
 	secureAdminCookie = "__Host-" + adminCookie
 	csrfHeader        = "X-Alonabot-CSRF"
@@ -158,7 +159,8 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Token string `json:"token"`
+		Token    string `json:"token"`
+		Remember bool   `json:"remember"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&input); err != nil {
@@ -189,14 +191,21 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 
 	// 2. 固定期限和代次随会话持久化，成功后才向浏览器发出 Cookie。
 	now := a.now()
-	session := state.AdminSession{SessionID: randomToken(), CSRFToken: randomToken(), AuthGeneration: credential.AuthGeneration, ExpiresAt: now.Add(sessionLifetime).UnixMilli()}
+	// 保持登录时会话更长且 Cookie 持久；否则 Cookie 随浏览器关闭失效，服务端仍按固定期限过期。
+	lifetime := sessionLifetime
+	if input.Remember {
+		lifetime = rememberLifetime
+	}
+	session := state.AdminSession{SessionID: randomToken(), CSRFToken: randomToken(), AuthGeneration: credential.AuthGeneration, ExpiresAt: now.Add(lifetime).UnixMilli()}
 	if err := a.store.CreateAdminSession(r.Context(), session, now.UnixMilli()); err != nil {
 		a.loginFailed(r)
 		a.respondError(w, err)
 		return
 	}
 	cookie := a.cookie(session.SessionID)
-	cookie.Expires = time.UnixMilli(session.ExpiresAt)
+	if input.Remember {
+		cookie.Expires = time.UnixMilli(session.ExpiresAt)
+	}
 	http.SetCookie(w, cookie)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(struct {
