@@ -1,34 +1,40 @@
-# 检查空白错误及产品 Go 代码；编译矩阵不替代目标平台运行验收。
+# PR 运行轻量检查；手动运行与发布并行执行完整验证。
 name: Quality gate
 
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Source ref to validate
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.event.pull_request.number || github.ref }}
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || inputs.ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
   repository:
-    name: Repository
+    name: Repository checks
     runs-on: ubuntu-latest
     outputs:
-      has_go: ${{ steps.sources.outputs.has_go }}
-      has_release: ${{ steps.sources.outputs.has_release }}
+      has_go: ${{ steps.scope.outputs.has_go }}
+      has_tests: ${{ steps.scope.outputs.has_tests }}
+      has_ci: ${{ steps.scope.outputs.has_ci }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - name: 检查 main 文件范围
+      - name: Check main file scope
         if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
         shell: bash
         run: |
@@ -38,61 +44,136 @@ jobs:
           while IFS= read -r -d '' path; do
             case "$path" in
               .agents/*|.claude/*|.codex/*|.serena/*|.playwright-cli/*|docs/goals/*|docs/execution-order.md|docs/benchmarks.md|spec/*|goal-[0-9]*/*|delegation-skills-workspace/*|experiments/*)
-                printf 'main 包含个人维护资料：%q\n' "$path"
+                printf 'Main contains personal maintenance files: %q\n' "$path"
                 rejected=1
                 ;;
             esac
           done < "$RUNNER_TEMP/main-paths"
           exit "$rejected"
-      - name: 检查空白错误
-        run: git diff --check
-      - name: 按改动范围选择 Go 检查
-        id: sources
+      - name: Check whitespace
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git diff --check "$BASE_SHA" HEAD
+          else
+            git show --format= --check HEAD
+          fi
+      - name: Determine check scope
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = workflow_dispatch ]; then
-            echo 'has_go=true' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git diff --name-only -z "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths"
+
+          git diff --name-only -z "$BASE_SHA" "$GITHUB_SHA" > "$RUNNER_TEMP/changed-paths"
           has_go=false
-          has_release=false
+          has_tests=false
+          has_ci=false
+
           while IFS= read -r -d '' path; do
             case "$path" in
-              internal/pluginkit/*|scripts/dist/*|scripts/release-check/*|scripts/release-smoke.py|Dockerfile|.github/workflows/release.yml) has_release=true ;;
-              *_test.go|tests/*|scripts/*) ;;
-              go.mod|go.sum|*.go|*.proto) has_go=true ;;
+              internal/pluginkit/*|scripts/dist/*|scripts/release-check/*|scripts/release-smoke.py|Dockerfile|.github/workflows/release.yml) has_go=true ;;
+            esac
+            case "$path" in
+              tests/*) has_tests=true ;;
+              scripts/integration.py|scripts/platform/*|.github/workflows/*) has_ci=true; has_go=true ;;
+            esac
+            case "$path" in
+              tests/*) ;;
+              go.mod|go.sum|*.go|*.proto|contracts/*) has_go=true ;;
             esac
           done < "$RUNNER_TEMP/changed-paths"
-          echo "has_go=$has_go" >> "$GITHUB_OUTPUT"
-          echo "has_release=$has_release" >> "$GITHUB_OUTPUT"
-          if [ "$has_go" = false ]; then
-            echo '本次采用受影响范围检查，跳过 Go 全仓检查。' >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "has_go=$has_go"
+            echo "has_tests=$has_tests"
+            echo "has_ci=$has_ci"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$has_go" = false ] && [ "$has_tests" = false ]; then
+            echo 'No code checks are required for this change.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  go:
-    name: Go quality
+  pr-checks:
+    name: PR checks
     needs: repository
-    if: needs.repository.outputs.has_go == 'true'
+    if: >-
+      github.event_name == 'pull_request' &&
+      (needs.repository.outputs.has_go == 'true' ||
+       needs.repository.outputs.has_tests == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        if: needs.repository.outputs.has_go == 'true' || needs.repository.outputs.has_tests == 'true'
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        if: needs.repository.outputs.has_tests == 'true'
         with:
           node-version: '26.5.1'
-      - name: 准备整合测试工具
+      - name: Install test tools
+        if: needs.repository.outputs.has_tests == 'true' || needs.repository.outputs.has_ci == 'true'
         run: pipx install uv==0.11.11
-      - name: 检查产品 Go 格式
+      - name: Prepare affected package list
+        id: affected
+        if: needs.repository.outputs.has_go == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/root-test-packages"
+          : > "$RUNNER_TEMP/root-test-dirs"
+          root_all=false
+
+          git diff --name-only -z "$BASE_SHA" "$GITHUB_SHA" > "$RUNNER_TEMP/affected-paths"
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              tests/*) ;;
+              go.mod|go.sum) root_all=true ;;
+              *.go)
+                directory="${path%/*}"
+                [ "$directory" = "$path" ] && directory=.
+                printf '%s\n' "$directory" >> "$RUNNER_TEMP/root-test-dirs"
+                ;;
+              *.proto) printf '%s\n' contracts >> "$RUNNER_TEMP/root-test-dirs" ;;
+            esac
+            case "$path" in
+              contracts/*) printf '%s\n' contracts >> "$RUNNER_TEMP/root-test-dirs" ;;
+            esac
+          done < "$RUNNER_TEMP/affected-paths"
+
+          if [ "$root_all" = true ]; then
+            printf './...\n' > "$RUNNER_TEMP/root-test-packages"
+          elif [ -s "$RUNNER_TEMP/root-test-dirs" ]; then
+            sort -u "$RUNNER_TEMP/root-test-dirs" | while IFS= read -r directory; do
+              # 删除整个包时跳过空目录，其余构建错误由 go test 原样报告。
+              if compgen -G "$directory/*.go" > /dev/null; then
+                printf './%s\n' "$directory" >> "$RUNNER_TEMP/root-test-packages"
+              fi
+            done
+          fi
+
+          if [ -s "$RUNNER_TEMP/root-test-packages" ]; then
+            echo 'root_tests=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'root_tests=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check Go formatting
+        if: needs.repository.outputs.has_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -101,14 +182,13 @@ jobs:
             printf '%s\n' "$unformatted"
             exit 1
           fi
-      - name: 检查 Protobuf 生成一致性
-        if: hashFiles('contracts/doc.go') != ''
+      - name: Check Protobuf generation
+        if: needs.repository.outputs.has_go == 'true' && hashFiles('contracts/doc.go') != ''
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          # 与生成器约定一致，固定 protoc；只从官方发布下载。
           gh release download v36.0 --repo protocolbuffers/protobuf \
             --pattern protoc-36.0-linux-x86_64.zip --dir "$RUNNER_TEMP/protoc"
           unzip -q "$RUNNER_TEMP/protoc/protoc-36.0-linux-x86_64.zip" -d "$RUNNER_TEMP/protoc"
@@ -116,42 +196,167 @@ jobs:
           go generate ./...
           git diff --exit-code -- contracts
           test -z "$(git ls-files --others --exclude-standard -- contracts)"
-      - name: 静态检查
+      - name: Run static analysis
+        if: needs.repository.outputs.has_go == 'true'
         run: go vet ./...
-      - name: 测试并检查数据竞争
-        env:
-          CGO_ENABLED: '1'
-        # 串行测试包，并限制测试内嵌套构建的并发，避免 OOM。
-        run: GOMAXPROCS=2 go test -p 1 -race ./...
-      - name: 跨组件整合测试
-        env:
-          CGO_ENABLED: '1'
-        run: GOMAXPROCS=2 uv run --no-project python scripts/integration.py --race
-      - name: 五目标平台 pure-Go 构建
+      - name: Run affected root package tests
+        if: needs.repository.outputs.has_go == 'true' && steps.affected.outputs.root_tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
-            echo "构建 $target"
-            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build ./...
-          done
+          mapfile -t packages < "$RUNNER_TEMP/root-test-packages"
+          GOMAXPROCS=2 go test -p 1 "${packages[@]}"
+      - name: Run tests module
+        if: needs.repository.outputs.has_tests == 'true'
+        working-directory: tests
+        env:
+          CGO_ENABLED: '1'
+        run: GOMAXPROCS=2 go test -p 1 -timeout 30m ./...
+      - name: Build Go packages
+        if: needs.repository.outputs.has_go == 'true'
+        run: go build ./...
+      - name: Validate CI scripts
+        if: needs.repository.outputs.has_ci == 'true' && hashFiles('scripts/integration.py') != ''
+        run: uv run --no-project python -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/integration.py').read_text())"
 
-  release-tools:
-    name: Release tools
+  race-tests:
+    name: Race tests
     needs: repository
-    if: needs.repository.outputs.has_release == 'true'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
-          cache: false
-      - run: go test ./internal/pluginkit ./scripts/dist ./scripts/release-check
-      - run: python3 -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/release-smoke.py').read_text())"
-      - working-directory: tests
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+      - name: Check Go formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted=$(git ls-files -z -- '*.go' | xargs -0 gofmt -l)
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Check Protobuf generation
+        if: hashFiles('contracts/doc.go') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download v36.0 --repo protocolbuffers/protobuf \
+            --pattern protoc-36.0-linux-x86_64.zip --dir "$RUNNER_TEMP/protoc"
+          unzip -q "$RUNNER_TEMP/protoc/protoc-36.0-linux-x86_64.zip" -d "$RUNNER_TEMP/protoc"
+          export PATH="$RUNNER_TEMP/protoc/bin:$PATH"
+          go generate ./...
+          git diff --exit-code -- contracts
+          test -z "$(git ls-files --others --exclude-standard -- contracts)"
+      - name: Run static analysis
+        run: go vet ./...
+      - name: Run race tests
+        env:
+          CGO_ENABLED: '1'
+        run: GOMAXPROCS=2 go test -p 1 -race ./...
+      - name: Report failure
+        if: failure()
+        run: echo 'Race tests failed. See the failed step logs for complete output.' >> "$GITHUB_STEP_SUMMARY"
+
+  integration-tests:
+    name: Integration tests
+    needs: repository
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '26.5.1'
+      - name: Install integration tools
+        run: pipx install uv==0.11.11
+      - name: Run cross-component integration tests
+        env:
+          CGO_ENABLED: '1'
+        run: GOMAXPROCS=2 uv run --no-project python scripts/integration.py --race
+      - name: Report failure
+        if: failure()
+        run: echo 'Integration tests failed. See the failed step logs for complete output.' >> "$GITHUB_STEP_SUMMARY"
+
+  platform-builds:
+    name: Platform builds
+    needs: repository
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+      - name: Build supported platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
+            echo "Building $target"
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build ./...
+          done
+      - name: Report failure
+        if: failure()
+        run: echo 'Platform builds failed. See the failed step logs for complete output.' >> "$GITHUB_STEP_SUMMARY"
+
+  release-tools:
+    name: Release tools
+    needs: repository
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+      - name: Install release tools
+        run: pipx install uv==0.11.11
+      - name: Test release packages
+        run: go test ./internal/pluginkit ./scripts/dist ./scripts/release-check
+      - name: Validate release smoke script
+        run: uv run --no-project python -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/release-smoke.py').read_text())"
+      - name: Test Agent package
+        working-directory: tests
         run: go test ./agent
-      - working-directory: tests
+      - name: Compile release end-to-end tests
+        working-directory: tests
         run: go test -c -o /tmp/release-e2e.test ./e2e
+      - name: Report failure
+        if: failure()
+        run: echo 'Release tools failed. See the failed step logs for complete output.' >> "$GITHUB_STEP_SUMMARY"

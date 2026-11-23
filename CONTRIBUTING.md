@@ -38,11 +38,11 @@ Create a focused branch from the latest main. Fork contributors should first syn
 4. Review the diff for scope and necessary adjacent changes. Exclude credentials, personal task records, runtime data and temporary tests.
 5. Wait for checks on the current head and maintainer review. Make requested corrections and run affected verification.
 
-After confirming scope, implementation, verification and deferred items, the maintainer squash-merges and checks main. Contributors deliver through PRs; maintainers control official versions, signatures and releases.
+After confirming scope, implementation, verification and deferred items, the maintainer squash-merges and verifies the merged result on main. Contributors deliver through PRs; maintainers control official versions, signatures and releases.
 
 ## CI and review
 
-- [Quality gate](.github/workflows/ci.yml) checks whitespace and allowed main paths. Go, protocol or dependency changes additionally run formatting, generation consistency, vet, race tests and five-target pure-Go builds. Authors verify frontend changes following the development guide.
+- [Quality gate](.github/workflows/ci.yml) checks whitespace and allowed main paths. PRs with Go, protocol or CI changes run formatting, generation consistency, vet, affected-package ordinary tests and a Go build; changes under `tests/` run that module's ordinary tests. Only manual runs and releases run race tests, cross-component integration tests, five-target pure-Go builds and release-tool checks in parallel. Authors verify frontend changes following the development guide.
 - [PR metadata](.github/workflows/pr-metadata.yml) checks the title, required description and checklist of open non-draft PRs. Maintainers review their actual contents.
 - GitHub automation handles path labels, assignment and review requests. Metadata workflows keep code separate from secrets.
 - main contains the product, current conventions and public engineering documentation. CI rejects personal Agent configuration, coordination records and historical implementation or acceptance artifacts.
