@@ -3,9 +3,9 @@ module github.com/AlonaBot/AlonaBot/tests
 go 1.27.1
 
 require (
-	github.com/AlonaBot/AlonaBot v0.1.2-0.20261122021903-2dbbded7184f
-	github.com/AlonaBot/alonabot-adapter-telegram v0.2.0
-	github.com/AlonaBot/alonabot-agent v0.2.1-0.20261122111930-6a68f8aa7083
+	github.com/AlonaBot/AlonaBot v0.2.1-0.20261123105642-25a0f851099f
+	github.com/AlonaBot/alonabot-adapter-telegram v0.3.0
+	github.com/AlonaBot/alonabot-agent v0.3.0
 	github.com/modelcontextprotocol/go-sdk v1.3.1
 	google.golang.org/protobuf v1.36.12
 )

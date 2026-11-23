@@ -45,13 +45,13 @@ https://github.com/AlonaBot/AlonaBot
 Release builds inject the version and UTC build date through `-ldflags`; for example:
 
 ```fish
-go build -ldflags '-X main.version=v0.2.0 -X main.buildDate=2026-11-22' -o bin/alonabot ./cmd/alonabot
+go build -ldflags '-X main.version=v0.3.0 -X main.buildDate=2026-11-23' -o bin/alonabot ./cmd/alonabot
 bin/alonabot --version
 ```
 
 ```text
-alonabot version 0.2.0 (2026-11-22)
-https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0
+alonabot version 0.3.0 (2026-11-23)
+https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0
 ```
 
 The version accepts an optional leading `v`; output omits it and Release links include it. An empty build date omits the parenthesized date. `--version` writes to stdout and exits with status 0 before parsing tuning parameters or starting Core. The distribution script injects both fields automatically and retains the existing Core API version injection.
@@ -692,7 +692,7 @@ The local integration test [plugintest/debug_test.go](../plugintest/debug_test.g
 
 ## Protocol and session behavior
 
-Component protocol version **1.0** is independent of product version **0.2.0**. The current message types and field numbers are defined in [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1); the [wire runtime](../internal/wire) implements framing and Session calls. Change `.proto` sources and regenerate Go output. Preserve published field numbers and enum values; reserve removed names/numbers and keep existing field types. [Protocol-number checks](../contracts/wirespec_test.go) protect these identities.
+Component protocol version **1.0** is independent of product version **0.3.0**. The current message types and field numbers are defined in [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1); the [wire runtime](../internal/wire) implements framing and Session calls. Change `.proto` sources and regenerate Go output. Preserve published field numbers and enum values; reserve removed names/numbers and keep existing field types. [Protocol-number checks](../contracts/wirespec_test.go) protect these identities.
 
 TCP and stdio both encode a four-byte unsigned big-endian length followed by a Protobuf Envelope. The length excludes its prefix and must be 1–4,194,304 bytes. Zero, oversized, truncated or undecodable frames fail the Session; readers do not guess the next boundary. Each connection has one writer. Core holds its loopback TCP listener (`127.0.0.1:0`) until termination. Each component start receives a new Session and 32-byte secret; authentication verifies the secret in constant time plus identity, digest and protocol version. With stdio, stdin/stdout carry protocol frames and stderr carries logs. Keep Bootstrap secrets, configuration, database and HTTP credentials out of logs.
 
