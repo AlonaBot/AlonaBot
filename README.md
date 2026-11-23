@@ -12,7 +12,7 @@ English · [简体中文](README.zh-CN.md)
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27.1"></a>
   <a href="https://github.com/AlonaBot/AlonaBot/releases/latest"><img src="https://img.shields.io/github/v/release/AlonaBot/AlonaBot?style=flat-square&amp;color=22B8CF" alt="Release"></a>
   <a href="https://hits.sh/github.com/AlonaBot/AlonaBot/"><img src="https://hits.sh/github.com/AlonaBot/AlonaBot.svg?style=flat-square&amp;label=Views&amp;color=22B8CF" alt="Views"></a>
-  <a href="https://qm.qq.com/q/YD36YEiCqI"><img src="https://img.shields.io/badge/QQ-Group-12B7F5?style=flat-square" alt="QQ Group"></a>
+  <a href="https://qm.qq.com/q/YD36YEiCqI"><img src="https://img.shields.io/badge/QQ-Group-12B7F5?style=flat-square&amp;logo=qq&amp;logoColor=white" alt="QQ Group"></a>
 </p>
 
 <p align="center">A lightweight, cross-platform chatbot framework in Go.<br>Install the components you need to build your bot.</p>
