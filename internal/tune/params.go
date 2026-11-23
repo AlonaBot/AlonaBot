@@ -59,6 +59,10 @@ type Values struct {
 	InstallDownloadTimeout time.Duration
 	InstallMaxReleaseJSON  int64 // 字节
 	InstallMaxHTTPError    int64 // 字节
+	BuildMemorySoftLimit   int64 // 每个受管 Go 进程的软上限，单位为字节。
+	BuildGOGC              int   // 受管 Go 进程的 GC 目标百分比。
+	BuildMemoryWarnBelow   int64 // 源码构建可用内存警告阈值，单位为字节。
+	BuildStallInterval     time.Duration
 }
 
 const maxOptionsPage = 200 // 配置选项单页的固定上限。
@@ -143,6 +147,10 @@ var parameters = []parameter{
 	param("INSTALL_DOWNLOAD_TIMEOUT", durationUnit, 5*time.Minute, true, "> 0", "docs/deployment.md#component-download-mirrors", func(v *Values) *time.Duration { return &v.InstallDownloadTimeout }),
 	param("INSTALL_MAX_RELEASE_JSON", bytesUnit, int64(4<<20), true, "> 0", "docs/deployment.md#component-download-mirrors", func(v *Values) *int64 { return &v.InstallMaxReleaseJSON }),
 	param("INSTALL_MAX_HTTP_ERROR", bytesUnit, int64(4<<10), true, "> 0", "docs/deployment.md#component-download-mirrors", func(v *Values) *int64 { return &v.InstallMaxHTTPError }),
+	param("BUILD_MEMORY_SOFT_LIMIT", bytesUnit, int64(768<<20), true, "> 0", "docs/deployment.md#source-builds", func(v *Values) *int64 { return &v.BuildMemorySoftLimit }),
+	param("BUILD_GOGC", integerUnit, 50, true, "> 0", "docs/deployment.md#source-builds", func(v *Values) *int { return &v.BuildGOGC }),
+	param("BUILD_MEMORY_WARN_BELOW", bytesUnit, int64(1536<<20), true, "> 0", "docs/deployment.md#source-builds", func(v *Values) *int64 { return &v.BuildMemoryWarnBelow }),
+	param("BUILD_STALL_INTERVAL", durationUnit, time.Minute, true, "> 0", "docs/deployment.md#source-builds", func(v *Values) *time.Duration { return &v.BuildStallInterval }),
 	param("DEV_RELOAD_POLL", durationUnit, time.Duration(500*time.Millisecond), true, "> 0", "internal/tune/params.go", func(v *Values) *time.Duration { return &v.DevReloadPoll }),
 	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "internal/tune/params.go", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
 	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "internal/tune/params.go", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),

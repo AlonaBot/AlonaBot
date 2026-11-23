@@ -1093,8 +1093,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 			a.router.RemoveRouteSnapshot(id)
 		}
 	}
-	// 无旧 Active 的静态 WebUI 转进程时，原启用状态决定是否装配业务入口。
-	if kind != journal.KindFirstInstall && (!record.WasEnabled || !record.WasRunning && record.ExpectedOld != "") {
+	if !r.KeepRunning() {
 		// 提交只切换权威代次；先停止候选，之后显式 enable 才建立业务 Session。
 		if stopErr := c.stopComponent(running, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
 			return running, errors.Join(err, stopErr)

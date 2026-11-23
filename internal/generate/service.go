@@ -54,7 +54,11 @@ func (i *schemaImporter) Import(path string) (*types.Package, error) {
 	return pkg, nil
 }
 
-func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImporter, error) {
+func (s *scan) schemaImporter(ctx context.Context, toolchain Toolchain, list *exec.Cmd) (*schemaImporter, error) {
+	toolchain.Go = list.Path
+	if len(toolchain.Env) == 0 {
+		toolchain.Stderr = nil // 保留开发命令仅在错误中返回此阶段诊断的行为。
+	}
 	// 1. 在相同 GOOS/GOARCH、tags 与 overlay 下取得依赖构建视图和目标位宽。
 	external := map[string]bool{"encoding": true, "encoding/json": true}
 	if s.adapterProject {
@@ -80,11 +84,10 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 	slices.Sort(paths)
 	args := append(slices.Clone(list.Args[1:len(list.Args)-1]), "-export", "-compiled")
 	args = append(args, paths...)
-	command := exec.CommandContext(ctx, list.Path, args...)
-	command.Dir, command.Env = list.Dir, list.Env
 	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	output, err := command.Output()
+	command := toolchain.Command(ctx, list.Dir, &stderr, args...)
+	command.Env = list.Env
+	output, err := toolchain.Output(ctx, command, &stderr)
 	if err != nil {
 		return nil, fmt.Errorf("go list schema imports: %w\n%s", err, stderr.String())
 	}
@@ -117,11 +120,17 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 			s.syntax[pkg.ImportPath] = append(s.syntax[pkg.ImportPath], file)
 		}
 	}
-	command = exec.CommandContext(ctx, list.Path, "env", "GOARCH")
-	command.Dir, command.Env = list.Dir, list.Env
-	output, err = command.CombinedOutput()
+	stderr.Reset()
+	command = toolchain.Command(ctx, list.Dir, &stderr, "env", "GOARCH")
+	command.Env = list.Env
+	if len(toolchain.Env) == 0 {
+		command.Stderr = nil
+		output, err = command.CombinedOutput()
+	} else {
+		output, err = toolchain.Output(ctx, command, &stderr)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("go env GOARCH: %w\n%s", err, output)
+		return nil, fmt.Errorf("go env GOARCH: %w\n%s%s", err, output, stderr.String())
 	}
 	i := &schemaImporter{
 		info: &types.Info{
@@ -143,13 +152,13 @@ func (s *scan) schemaImporter(ctx context.Context, list *exec.Cmd) (*schemaImpor
 const serviceSchemaDraft = "https://json-schema.org/draft/2020-12/schema"
 
 // schemas 共用构建视图检查函数体，为本模块及其引用的 JSON 声明生成 Service Schema。
-func (s *scan) schemas(ctx context.Context, list *exec.Cmd) error {
+func (s *scan) schemas(ctx context.Context, toolchain Toolchain, list *exec.Cmd) error {
 	paths := make([]string, 0, len(s.syntax))
 	for path := range s.syntax {
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
-	importer, err := s.schemaImporter(ctx, list)
+	importer, err := s.schemaImporter(ctx, toolchain, list)
 	if err != nil {
 		return err
 	}

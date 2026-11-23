@@ -87,7 +87,9 @@ func (s *Service) goToolchain(ctx context.Context, log io.Writer) (generate.Tool
 	// 2. 缓存与临时目录全部放在 data_dir 下：scratch 镜像没有 /tmp，也不读取宿主的 Go 环境。
 	cache := filepath.Join(data, cacheDirectory)
 	paths := map[string]string{"GOCACHE": "go-build", "GOMODCACHE": "mod", "GOTMPDIR": "tmp", "HOME": "home"}
-	env := []string{"GOROOT=", "GOPATH=", "GOENV=off", "GOWORK=off", "GOFLAGS=-modcacherw", "GOTOOLCHAIN=auto", "CGO_ENABLED=0",
+	v := s.opt.Tuning
+	env := []string{"GOROOT=", "GOPATH=", "GOENV=off", "GOWORK=off", "GOFLAGS=-modcacherw -p=1", "GOTOOLCHAIN=auto", "CGO_ENABLED=0",
+		fmt.Sprintf("GOMEMLIMIT=%dB", v.BuildMemorySoftLimit), fmt.Sprintf("GOGC=%d", v.BuildGOGC),
 		"GOPROXY=" + s.opt.Settings.Settings().GoProxy, "TMPDIR=" + filepath.Join(cache, "tmp")}
 	for name, directory := range paths {
 		path := filepath.Join(cache, directory)
@@ -96,7 +98,7 @@ func (s *Service) goToolchain(ctx context.Context, log io.Writer) (generate.Tool
 		}
 		env = append(env, name+"="+path)
 	}
-	return generate.Toolchain{Go: filepath.Join(root, "bin", "go"), Env: env, Stderr: log}, nil
+	return generate.Toolchain{Go: filepath.Join(root, "bin", "go"), Env: env, Stderr: log, StallInterval: v.BuildStallInterval}, nil
 }
 
 // downloadGo 按下载目录的 JSON 列表核对大小与 SHA-256，解压后替换 data_dir/toolchain/go。

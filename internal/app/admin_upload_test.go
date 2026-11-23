@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
+	"github.com/AlonaBot/AlonaBot/internal/core/state"
 )
 
 // TestAdminSessionAndUploads 经真实 Core、SQLite、插件进程与文件系统验证浏览器管理流程。
@@ -161,6 +162,23 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	adminDatabase(t, h, before.Active, "1.0.0")
 	adminDatabase(t, h, after.Active, "1.1.0")
 	t.Log("V-40/V-47 API: real Core Listener, SQLite, plugin processes; 409 replay, rejected uploads preserve old state, successful 1.1.0 update preserves user data through a migrated database copy, upload cleanup passed")
+
+	// 让旧包的磁盘 Schema 与二进制声明不符，使真实 REGISTER 在原代次恢复时失败。
+	schemaPath := filepath.Join(filepath.Dir(h.manifestPath("upload_demo")), "plugin_config_schema.json")
+	if err := os.WriteFile(schemaPath, []byte(`{"marker":{"type":"string","description":"Fixture option"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.expect("POST", "/api/v1/packages/restart", map[string]string{"id": "upload_demo"}, true, 500, "registered config schema hash differs from Bootstrap")
+	failed := adminInstalled(t, h)
+	if !failed.Enabled || failed.State != "Degraded" || failed.RuntimeState != string(state.RuntimeFailed) || failed.Active != after.Active {
+		t.Fatalf("old registration failure did not leave the enabled generation degraded: %+v", failed)
+	}
+	upload("update", adminBundle(t, h, "1.2.0"), "", 200, updateResponse)
+	recovered := adminInstalled(t, h)
+	caller, bound := h.core.assembly.router.Caller("upload_demo")
+	if !recovered.Enabled || recovered.Version != "1.2.0" || recovered.State != "Activated" || recovered.RuntimeState != string(state.RuntimeActive) || recovered.Active == failed.Active || !bound || caller.GenerationID != recovered.Active {
+		t.Fatalf("replacement generation did not stay active: %+v caller=%+v bound=%v", recovered, caller, bound)
+	}
 }
 
 func adminDatabase(t *testing.T, h *webUIHarness, generation, version string) {

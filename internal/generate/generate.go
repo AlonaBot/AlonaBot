@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/generated"
 )
@@ -47,9 +48,10 @@ type Options struct {
 
 // Toolchain 指定运行 go 命令的可执行文件、构建环境与日志输出。
 type Toolchain struct {
-	Go     string    // go 可执行文件路径；空串从 PATH 查找。
-	Env    []string  // 非空时仅继承 PATH 和代理变量，同名变量以这里为准。
-	Stderr io.Writer // 非空时同时接收 go 命令的标准错误，例如构建日志。
+	Go            string        // go 可执行文件路径；空串从 PATH 查找。
+	Env           []string      // 非空时仅继承 PATH 和代理变量，并启用受管构建监控。
+	Stderr        io.Writer     // 非空时同时接收 go 命令的标准错误与受管构建提示。
+	StallInterval time.Duration // 受管 Go 命令的无输出提示间隔。
 }
 
 // Command 构造在 dir 中运行的 go 命令，标准错误写入 stderr 并按需复制到 Stderr。
@@ -189,7 +191,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 	if opt.CGOEnabled != "" {
 		cmd.Env = append(cmd.Env, "CGO_ENABLED="+opt.CGOEnabled)
 	}
-	output, err := cmd.Output()
+	output, err := opt.Toolchain.Output(ctx, cmd, &stderr)
 	if err != nil {
 		return nil, fmt.Errorf("go list: %w\n%s", err, stderr.String())
 	}
@@ -270,7 +272,7 @@ func Scan(ctx context.Context, opt Options) (*Result, error) {
 		return nil, err
 	}
 	if len(s.result.Diagnostics) == 0 {
-		if err := s.schemas(ctx, cmd); err != nil {
+		if err := s.schemas(ctx, opt.Toolchain, cmd); err != nil {
 			return nil, err
 		}
 	}

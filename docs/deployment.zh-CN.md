@@ -122,7 +122,7 @@ help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字�
 
 1. Core 经 `github_api_base` 将 `Ref`（分支、标签或提交；空串为默认分支）解析为提交，下载 `https://github.com/<owner>/<repo>/archive/<提交>.tar.gz`，解压到 `<data_dir>/staging`。配置了 `github_download_prefix` 就经该前缀下载。GitHub 未公开源码 tarball 的摘要；使用前缀时，构建任务日志会警告源码经前缀获取、内容未经摘要校验。请使用可信的下载镜像。
 2. 按需下载与 Core 构建版本相同的 Go 发行版到 `<data_dir>/toolchain/go`：从 `go_download_base` 的 JSON 列表（`?mode=json&include=all`，`go.dev/dl/` 与 `golang.google.cn/dl/` 都提供）读取大小与 SHA-256 并核对。
-3. 按 `alonabot plugin pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验。`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，因此 scratch 镜像也能构建。Go 子进程只从 Core 继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`，Go 设置由构建显式指定（`GOENV=off`、`GOWORK=off`）。
+3. 按 `alonabot pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验。`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，因此 scratch 镜像也能构建。Go 子进程只从 Core 继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`，Go 设置由构建显式指定（`GOENV=off`、`GOWORK=off`）。
 4. 归档照常经过安装预检、来源信任与同类替换确认，来源绑定为 `github.com/<owner>/<repo>`。`Ref` 是 SemVer 标签时版本取标签，并核对 `plugin.yaml` 的版本；其他提交的版本是 `plugin.yaml` 的版本加 `+<12 位提交>`，例如 `0.2.0+4769d92b0a8f`。
 
 更新使用 `POST /api/v1/packages/update` 的 `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`，省略 `Source` 时构建已绑定的来源。
@@ -130,6 +130,12 @@ help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字�
 构建作为后台任务运行，请求立即返回 202 与 `{"task_id":"…"}`。`GET /api/v1/tasks/{id}` 返回 `{"id","action":"install|update","status":"running|succeeded|failed","created_at","finished_at","log","result"}`；`log` 包含各步骤与 go 命令的完整标准错误，成功时 `result` 与同步端点的结果相同。失败时 `http_status` 与 `error` 与同步端点的错误响应一致：需要确认时为 409 与 `{"affected":[…]}`，确认后带 `Confirm: true` 重新提交，构建缓存使重建更快。`GET /api/v1/tasks` 列出任务（不含 `log`），`DELETE /api/v1/tasks/{id}` 取消运行中的任务或删除已结束的记录。同一时间只运行一个构建，其余任务在日志中提示等待；任务只保存在内存中，Core 重启后消失，停机时取消运行中的构建。
 
 `GET /api/v1/core/build-environment` 返回 `{"go_version":"go1.27.1","toolchain_bytes":0,"cache_bytes":0}`，未下载工具链时 `go_version` 为空串。`DELETE /api/v1/core/build-environment?part=toolchain|cache` 删除工具链或缓存，省略 `part` 时两者都删除并返回新的占用；构建运行中返回 412。工具链约占 250 MiB，缓存随构建增长。
+
+只依赖 AlonaBot SDK 的普通插件构建很轻（实测几百 MiB、十几秒）；依赖较大的组件（例如带 LLM SDK 的 Agent）建议预留约 **2 GiB 可用内存**，扣除 Core 和其他负载的占用。Core 串行编译；Linux 上可用内存偏低时，构建日志会提示，任务继续运行。小内存机器优先从 Release 安装，或在另一台机器运行 `alonabot pack --target <os>/<arch>`，再上传适配 Core 平台的归档。
+
+任务日志提示依赖下载可能受阻时，在系统设置中将 `goproxy` 改为可达的镜像，例如 `https://goproxy.cn,direct`，或设置网络代理 `proxy` 后重启 Core。`goproxy` 修改从下一次构建生效，详见 [Go 下载与代理设置](#core-设置与-http-入口)。静默提示只追加日志，构建继续运行。
+
+用 `alonabot tune list` 查看启动调优项：`BUILD_MEMORY_SOFT_LIMIT`（每个 Go 进程 768 MiB）、`BUILD_GOGC`（50）、`BUILD_MEMORY_WARN_BELOW`（1536 MiB，仅 Linux）和 `BUILD_STALL_INTERVAL`（60s）。这些参数仅作用于 Core 的受管工具链。
 
 源码构建不支持 cgo，也不支持私有仓库与私有模块：Core 不向 GitHub 或模块代理发送凭据，也没有 `GOPRIVATE`/`GONOSUMDB` 设置。镜像不含 git，`goproxy` 中的 `direct` 回退在容器内不可用，依赖须能经代理取得。module 须位于仓库根目录，源码不能含符号链接。Windows 主机与以开发版 Go 构建的 Core 尚不支持源码构建。
 
