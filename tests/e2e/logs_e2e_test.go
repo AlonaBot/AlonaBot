@@ -32,7 +32,7 @@ func TestLogManagement(t *testing.T) {
 	if output, err := exec.Command("go", "build", "-o", binary, source).CombinedOutput(); err != nil {
 		t.Fatalf("build log fixture: %v\n%s", err, output)
 	}
-	archive, err := writeTestPackage(fixture, "log-fixture", "plugin", "", "github.com/example/log-fixture", "1.0.0", binary, "", map[string][]byte{"config_schema.json": []byte(logFixtureSchema)})
+	archive, err := writeTestPackage(fixture, "log-fixture", "plugin", "", "github.com/example/log-fixture", "1.0.0", binary, "", map[string][]byte{"plugin_config_schema.json": []byte(logFixtureSchema)})
 	if err != nil {
 		t.Fatal(err)
 	}

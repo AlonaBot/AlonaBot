@@ -67,18 +67,20 @@ curl --fail --location --proto '=https' --proto-redir '=https' \
 docker compose up -d
 ```
 
-在宿主机浏览器打开 `http://127.0.0.1:7650`，WebUI 显示一次性管理 token，复制保存后确认即可登录；领取规则见下文。从其他机器管理或不便使用浏览器领取时，读出 token 后登录：
+在宿主机浏览器打开 `http://127.0.0.1:7650`，WebUI 显示一次性管理 token，复制保存后确认即可登录。宿主机没有浏览器时，按下文建立 SSH 隧道，保持端口绑定回环地址并完成确认。需要手动登录时，可用以下命令读取令牌：
 ```fish
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
-登录后在 WebUI 中从商店或[源码](#源码构建)安装插件与 Adapter，创建账号实例，再配置 LLM。国内网络可先在设置中填写 `github_mirror`、`go_download_base` 与 `goproxy`，见 [Core 设置与 HTTP 入口](#core-设置与-http-入口)。首次启动无需 TTY，Core 将管理 token 写入 `/data/admin_token`，登录后保留该文件供本机 CLI 使用。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
+登录后在 WebUI 中从商店或[源码](#源码构建)安装插件与 Adapter，创建账号实例，再配置 LLM。受限网络可先配置 [GitHub 下载镜像](#组件下载镜像)；源码构建还可配置 [Go 下载设置](#core-设置与-http-入口)。首次启动无需 TTY，Core 将管理 token 写入 `/data/admin_token`，登录后保留该文件供本机 CLI 使用。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
 
 镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
 
 端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
 
-首次领取接口 `POST /api/auth/bootstrap` 只接受本机直连。宿主机经发布端口访问容器时，容器看到的来源是网桥的默认网关，因此 `ALONABOT_CONTAINER=1` 时 Core 额外接受 `/proc/net/route` 中的 IPv4 默认网关地址；Host 与 Origin 仍须是 `base_url` 的本机地址，请求不能带 `Forwarded`、`X-Forwarded-*` 或 `X-Real-IP`，令牌经 WebUI 确认后接口不再返回令牌。端口若发布到 `0.0.0.0` 或其他非回环地址，局域网乃至公网的连接同样经网关到达容器，任何能访问该端口的人都可以在你确认之前领取首次令牌并取得完整管理权限；这时先用 `docker compose exec alonabot alonabot admin-token show --data-dir /data` 读出令牌登录确认，或保持只发布到 `127.0.0.1`。
+先保持宿主端口绑定 `127.0.0.1`，在本机完成首次令牌确认后，再改为绑定 `0.0.0.0` 或其他非回环地址。Docker 的 `userland-proxy` 可能让局域网请求也显示为网关来源；确认前，能访问该端口的人可能领取令牌并取得完整管理权限。
+
+首次领取接口 `POST /api/auth/bootstrap` 接受本机直连。`ALONABOT_CONTAINER=1` 时，也接受经 Docker 网桥访问、来源为 `/proc/net/route` 中 IPv4 默认网关的请求。Host 与 Origin 仍须匹配 `base_url` 的本机地址；带 `Forwarded`、`X-Forwarded-*` 或 `X-Real-IP` 的请求会被拒绝。确认后接口停止返回令牌。
 
 按需安装 Adapter 后，在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
 
@@ -118,9 +120,9 @@ help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字�
 
 安装请求带 `Build: true` 时，Core 不下载 Release 资产，而是从源码构建，例如 `POST /api/v1/packages/install` 的 `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.2.0","Confirm":true}`：
 
-1. 经 GitHub API 把 `Ref`（分支、标签或提交；空串为默认分支）解析为提交，经 `github_mirror` 下载 `https://github.com/<owner>/<repo>/archive/<提交>.tar.gz`，解压到 `<data_dir>/staging`。源码 tarball 没有公开摘要，内容信任 GitHub 或所设镜像。
+1. Core 经 `github_api_base` 将 `Ref`（分支、标签或提交；空串为默认分支）解析为提交，下载 `https://github.com/<owner>/<repo>/archive/<提交>.tar.gz`，解压到 `<data_dir>/staging`。配置了 `github_download_prefix` 就经该前缀下载。GitHub 未公开源码 tarball 的摘要；使用前缀时，构建任务日志会警告源码经前缀获取、内容未经摘要校验。请使用可信的下载镜像。
 2. 按需下载与 Core 构建版本相同的 Go 发行版到 `<data_dir>/toolchain/go`：从 `go_download_base` 的 JSON 列表（`?mode=json&include=all`，`go.dev/dl/` 与 `golang.google.cn/dl/` 都提供）读取大小与 SHA-256 并核对。
-3. 按 `alonabot plugin pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验；`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，不读取宿主的 Go 环境（`GOENV=off`、`GOWORK=off`），因此 scratch 镜像也能构建。
+3. 按 `alonabot plugin pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验。`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，因此 scratch 镜像也能构建。Go 子进程只从 Core 继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`，Go 设置由构建显式指定（`GOENV=off`、`GOWORK=off`）。
 4. 归档照常经过安装预检、来源信任与同类替换确认，来源绑定为 `github.com/<owner>/<repo>`。`Ref` 是 SemVer 标签时版本取标签，并核对 `plugin.yaml` 的版本；其他提交的版本是 `plugin.yaml` 的版本加 `+<12 位提交>`，例如 `0.2.0+4769d92b0a8f`。
 
 更新使用 `POST /api/v1/packages/update` 的 `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`，省略 `Source` 时构建已绑定的来源。
@@ -171,7 +173,7 @@ Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HT
 
 设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 
-`github_mirror`（缺省为空，表示直连）是前缀式加速地址，例如 `https://ghfast.top/`，只作用于 Core 从 `github.com` 下载的文件：Release 资产与源码构建的 tarball。实际请求地址为前缀加原始 URL；Release 元数据仍取自 `api.github.com`，资产 URL 仍须指向 `github.com`。下载的 Release 资产须与 Release API 给出的大小和 `digest`（`sha256:…`）一致；GitHub 开始提供摘要之前上传的资产没有 digest，此时只核对大小并记录一条 WARN。源码 tarball 没有公开摘要，源码构建因此信任所设镜像。`go_download_base`（缺省 `https://go.dev/dl/`，可填 `https://golang.google.cn/dl/`）与 `goproxy`（缺省 `https://proxy.golang.org,direct`）只用于源码构建，见[源码构建](#源码构建)。前缀须是以 `/` 结尾的 https 地址；修改从下一次下载生效，无需重启。WebUI 经 `GET`/`PUT /api/v1/core/downloads` 读写这三项以及网络代理 `proxy`；`proxy` 在 Core 启动时写入进程环境，修改后要重启 Core 才生效。
+`go_download_base`（缺省 `https://go.dev/dl/`，可填 `https://golang.google.cn/dl/`）与 `goproxy`（缺省 `https://proxy.golang.org,direct`）只用于[源码构建](#源码构建)。`go_download_base` 须使用以 `/` 结尾的 HTTPS 地址；两项修改均从下一次下载生效，无需重启。`GET`/`PUT /api/v1/core/downloads` 读写这两项以及网络代理 `proxy`；修改 `proxy` 后要重启 Core。GitHub API 与归档地址见[组件下载镜像](#组件下载镜像)。
 
 首次启动统一以 0600 权限持久保存 `<data_dir>/admin_token`，仅输出管理地址和文件路径。本机 WebUI 自动展示待确认的 token；复制保存后点击“我已保存”。远程浏览器可显式读取：
 ```fish
@@ -234,7 +236,7 @@ alonabot sleep-policy my-plugin auto
 | 安装 | `POST /api/v1/packages/install`，使用导出 `InstallRequest` 字段 `Archive`、`Source`、`ID`、`Confirm`、`Replace`、`Build`、`Ref`，见[管理类型](../internal/core/manage/install.go)；`Build` 返回 202 与任务 ID，见[源码构建](#源码构建) |
 | 后台任务 | `GET /api/v1/tasks`、`GET`/`DELETE /api/v1/tasks/{id}` |
 | 构建环境 | `GET`/`DELETE /api/v1/core/build-environment`，DELETE 可带 `?part=toolchain\|cache` |
-| 下载来源 | `GET`/`PUT /api/v1/core/downloads`，`{"github_mirror":"","go_download_base":"https://go.dev/dl/","goproxy":"https://proxy.golang.org,direct","proxy":""}`；PUT 只更新给出的字段，非法值返回 400 |
+| Go 下载与网络代理 | `GET`/`PUT /api/v1/core/downloads`，`{"go_download_base":"https://go.dev/dl/","goproxy":"https://proxy.golang.org,direct","proxy":""}`；PUT 只更新给出的字段，非法值返回 400 |
 | 启用、停用、重启、重载 | `POST /api/v1/packages/{action}`，`{"id":"demo"}`；disable 可能要求 `confirm` |
 | 更新 | `POST /api/v1/packages/update`，`{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |
 | 回退 | `POST /api/v1/packages/rollback`，`{"id":"demo","generation":"retained-generation","confirm":false}` |
@@ -268,7 +270,7 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。包列表的 `Name`、`Description`、`Author` 取自包内 `plugin.yaml`，读不到时省略。插件页面在包的 `pages` 中列出，经 `/plugins/{id}` 在 WebUI 沙箱打开，见[页面套件](plugin-guide.zh-CN.md#插件页面)。
 
-官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/updates?repo=owner/repo`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go)。
+官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go)。
 
 完整现行路由和请求/响应类型由[管理包](../internal/core/manage)维护，[管理集成测试](../tests/e2e/manage_e2e_test.go)通过真实 Core 验证。
 
@@ -282,10 +284,40 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 `refresh` 仅接受字面量 `true` 或 `false`，空值也返回 400 / INVALID_ARGUMENT。省略或 true 会刷新并持久化完整成功快照；false 且有成功快照时，在快照上搜索、计数、排序与分页，全程无远端请求；无快照时执行首次抓取。快照读取返回 `stale=false` 和原 `fetched_at`。进入商店、切换源及支持键盘的手动刷新使用 true，搜索、筛选、排序与分页使用 false。刷新失败保留成功快照和原时间，返回 `stale=true` 及完整错误；无快照的一般失败返回 500 / INTERNAL，源仓库没有 `store.json` 时返回 404 / SOURCE_INDEX_MISSING。
 
-`GET /updates?repo=owner/repo` 每次查询刷新，返回 `repo,version,release_url,markdown,fetched_at,stale`。最新 Release 标签去掉前导 v 后须为 SemVer，Markdown 保留 Release 正文。latest Release 的 404 返回 404 / NO_RELEASE，由 WebUI 的 `getLatestRelease` 映射为 null。源与 Release 缓存按小写 source/repo 隔离。链接仅允许 HTTP/HTTPS/mailto，HTML 按文本显示。更新预览使用组件绑定来源，更新后说明来自已安装包内 changelog，已读版本只推进到实际展示的版本。
+安装和更新使用的版本检查与 Release 预览通过 Core 的 `GET /api/v1/core/github/release?source=owner/repo` 查询，返回 `repo,version,release_url,markdown,fetched_at`。它与安装共用 GitHub 镜像设置、HTTP 客户端及原始仓库和标签校验，查询失败完整脱敏返回，不使用旧快照。latest Release 的 404 返回 404 / NOT_FOUND，由 WebUI 的 `getLatestRelease` 映射为 null。链接仅允许 HTTP/HTTPS/mailto，HTML 按文本显示。更新预览使用组件绑定来源，更新后说明来自已安装包内 changelog，已读版本只推进到实际展示的版本。
 
 收录时，`GET /store/check?repo=owner/repo` 读取最新 Release API 及其首个平台归档，保留持久缓存原状；核对仓库、Release 与资产 URL、标签 SemVer、资产名称和长度，以及包内 manifest 的 ID、版本与来源。返回 `repo,role,id,name,version,release_url`，可选 description/author，及保持顺序的 manifest `warnings`（空数组也返回）。响应 repo 取已验证 manifest Source 去掉 `github.com/` 后的规范大小写。Core 安装预检继续检查平台、build-info、资源及归档完整性。仅 latest Release 的 404 映射为 NO_RELEASE；坏资产 404 及其他失败返回 500 / INTERNAL，保留实际错误。
 
 源索引为 `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`，tags 可省略。检查后，用户填写标签，用检查所得规范 repo，在浏览器打开源仓库 `issues/new`，携带 `template=submit-plugin.yml` 以及经 URL 编码的 `repo`、`role`、`tags`、`release_url`，由浏览器提交 GitHub Issue。
 
-每个远端 HTTP 请求的期限为 20 秒，覆盖响应体。`/store/check` 与 `/updates` 仍读取 GitHub API 与 Release 归档，初始 URL 与每次重定向均检查 HTTPS 主机和路径。安全上限为：商店快照 32 MiB（内联图标）、元数据 1 MiB、归档 64 MiB、每轮展开 256 MiB（最多两轮）、单文件 128 MiB、每轮 2,048 条、保留的 manifest 256 KiB、保留的图标 1 MiB。超限保留 `exceeds ... bytes/entries` 错误并沿用同样的缓存规则。当前实现见 [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go)。
+WebUI 商店每个远端 HTTP 请求的期限为 20 秒，覆盖响应体；串行请求的总耗时可更长，刷新响应调用方取消。`/store/check` 读取 GitHub API 与 Release 归档，初始 URL 与每次重定向均检查 HTTPS 主机和路径。安全上限为：商店快照 32 MiB（含内联图标）、元数据 1 MiB、归档 64 MiB、每轮展开 256 MiB（最多两轮）、单文件 128 MiB、每轮 2,048 条、保留的 manifest 256 KiB、保留的图标 1 MiB。超限保留 `exceeds ... bytes/entries` 错误并沿用同样的缓存规则。当前实现见 [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go)。
+
+## 组件下载镜像
+
+Core 的 `core_config.json` 可独立保存 GitHub API 基址与归档下载前缀，WebUI 的「设置 → 组件下载」读写同一份设置。保存后对下一次安装或更新生效。
+
+```json
+{
+  "github_api_base": "https://api-mirror.example",
+  "github_download_prefix": "https://proxy.example/"
+}
+```
+
+两个值缺省均为空：API 使用 `https://api.github.com`，归档使用原始资产 URL。下载地址严格按「前缀 + 原始 URL」拼接，例如 `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`；填写前缀时保留所需的末尾斜线。两个地址及重定向均使用 HTTPS。API 基址可含路径，须省略查询参数；两个地址均省略用户凭据与 fragment。下载前缀允许查询参数形式，例如 `https://proxy.example/?url=`。
+
+从 Release 安装和更新时，Core 使用 Release API 返回的 SHA-256 摘要核验归档。`github_api_base` 决定摘要的信任根，只应填可信的 GitHub API 反向代理。旧资产缺少摘要时，清空下载前缀再试；直连原资产会校验大小并记一条警告。源码 tarball 见[源码构建](#源码构建)。
+
+CLI 可逐字段覆盖本次操作，覆盖值保留在当前请求中：
+
+```fish
+alonabot install --source AlonaBot/alonabot-agent --github-api-base https://api-mirror.example --github-download-prefix https://proxy.example/ --yes
+alonabot update alonabot-agent-official --github-api-base https://api-mirror.example --github-download-prefix https://proxy.example/ --yes
+# 本次直连归档，API 继续沿用持久设置
+alonabot update alonabot-agent-official --github-download-prefix '' --yes
+```
+
+管理 API 使用认证后的 `GET/PUT /api/v1/core/github` 读写两个持久字段，PUT 须同时提供两个字符串。安装请求的 `github_api_base`、`github_download_prefix` 可选，更新请求放在 `install` 对象内；省略沿用设置，显式空串恢复对应官方地址。Core 先核对原始 GitHub Release 与资产的仓库、标签和地址，再转换访问 URL；下载后核对归档摘要、包身份、平台、版本与 build-info。错误及诊断设置省略下载前缀的查询串，跨主机重定向移除 `Referer`。下载无自动重试或地址回退。
+
+`INSTALL_DOWNLOAD_TIMEOUT` 默认每个 GitHub 请求 5 分钟，覆盖重定向和响应体读取；`INSTALL_MAX_RELEASE_JSON` 默认限制 GitHub API 响应为 4 MiB，也适用于源码引用解析；`INSTALL_MAX_ARCHIVE` 同时限制 Release 资产与源码 tarball；`INSTALL_MAX_HTTP_ERROR` 默认保留非 200 响应体的前 4 KiB。用 `alonabot tune list` 查看生效值。
+
+商店的索引发现与收录检查仍使用所选源的 GitHub 索引及展示快照，其独立抓取规则见上文；首次浏览商店需要索引源可达。按仓库直接安装、已安装组件的更新检查及确认预览直接调用 Core，随后安装或更新也使用同一份镜像设置。

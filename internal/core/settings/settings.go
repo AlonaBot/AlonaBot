@@ -75,19 +75,20 @@ type Settings struct {
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
 	}
-	LogSources      map[string]string
-	Proxy           string
-	GitHubMirror    string // 前缀式加速地址，拼在 GitHub 下载 URL 之前；空串表示直连。
-	GoDownloadBase  string // Go 发行版目录，以 / 结尾。
-	GoProxy         string // 源码构建使用的 GOPROXY。
-	Admins          []Admin
-	CommandPrefixes []string
-	Reply           Reply
-	Sleep           Sleep
-	DefaultLocale   string
-	Adapters        map[string]AdapterSettings
-	Corrections     []configschema.Correction // Core 设置的运行校正，原值不写日志。
-	Unknown         []string                  // Core 声明之外的 JSON 路径。
+	LogSources           map[string]string
+	Proxy                string
+	GitHubAPIBase        string
+	GitHubDownloadPrefix string
+	GoDownloadBase       string // Go 发行版目录，以 / 结尾。
+	GoProxy              string // 源码构建使用的 GOPROXY。
+	Admins               []Admin
+	CommandPrefixes      []string
+	Reply                Reply
+	Sleep                Sleep
+	DefaultLocale        string
+	Adapters             map[string]AdapterSettings
+	Corrections          []configschema.Correction // Core 设置的运行校正，原值不写日志。
+	Unknown              []string                  // Core 声明之外的 JSON 路径。
 }
 
 // File 持有设置文档及当前有效快照；方法可并发调用。
@@ -200,7 +201,8 @@ func defaultDocument() ([]byte, error) {
 	content, err := json.MarshalIndent(map[string]any{
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
-		"github_mirror": s.GitHubMirror, "go_download_base": s.GoDownloadBase, "goproxy": s.GoProxy,
+		"github_api_base": s.GitHubAPIBase, "github_download_prefix": s.GitHubDownloadPrefix,
+		"go_download_base": s.GoDownloadBase, "goproxy": s.GoProxy,
 		"command_prefixes": s.CommandPrefixes, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
 		"sleep": map[string]any{"mode": s.Sleep.Mode, "idle_timeout": s.Sleep.IdleTimeout.String(), "plugins": s.Sleep.Plugins},
@@ -297,8 +299,8 @@ func readCorrectedMapping(root, defaults *node, fields map[string]configField, p
 		before := *s
 		if err := readValue(field.value, name, s); err != nil {
 			*s = before
-			if name == "adapters" {
-				return err // 实例结构与名称由实例准备路径处理。
+			if name == "adapters" || name == "github_api_base" || name == "github_download_prefix" {
+				return err // 实例目录和下载地址的错误交回调用方。
 			}
 			resetCoreNode(field.value, defaults, name, s)
 		}
@@ -391,7 +393,7 @@ func readValue(n *node, key string, s *Settings) error {
 		s.LogFile.MaxAgeDays = days
 		return nil
 	case "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale",
-		"github_mirror", "go_download_base", "goproxy":
+		"github_api_base", "github_download_prefix", "go_download_base", "goproxy":
 		value, err := n.text()
 		if err != nil {
 			return err
@@ -598,6 +600,15 @@ func readString(value, key string, s *Settings) error {
 		} else {
 			s.LogFile.MaxTotal = size
 		}
+	case "github_api_base", "github_download_prefix":
+		if err := ValidateGitHubEndpoint(value, key == "github_download_prefix"); err != nil {
+			return err
+		}
+		if key == "github_api_base" {
+			s.GitHubAPIBase = value
+		} else {
+			s.GitHubDownloadPrefix = value
+		}
 	case "default_locale":
 		if value == "" {
 			return errors.New("must not be empty")
@@ -625,13 +636,6 @@ func readString(value, key string, s *Settings) error {
 			}
 		}
 		s.Proxy = value
-	case "github_mirror":
-		if value != "" {
-			if err := ValidateURLPrefix(value); err != nil {
-				return err
-			}
-		}
-		s.GitHubMirror = value
 	case "go_download_base":
 		if err := ValidateURLPrefix(value); err != nil {
 			return err
@@ -646,14 +650,13 @@ func readString(value, key string, s *Settings) error {
 	return nil
 }
 
-// ValidateURLPrefix 校验 github_mirror 与 go_download_base 的前缀式地址：
-// https、主机名有效、以 / 结尾，不带查询、片段或认证信息，直接与目标路径拼接。
-// 源码 tarball 没有摘要，Go 发行版的摘要与归档来自同一前缀，因此不接受明文 http。
 // ValidateProxy 校验 proxy 设置：空串表示直连，否则为 http、https 或 socks5 地址。
 func ValidateProxy(value string) error {
 	return readString(value, "proxy", &Settings{})
 }
 
+// ValidateURLPrefix 校验 go_download_base：HTTPS、有效主机、以 / 结尾，且没有查询、片段或认证信息。
+// Go 发行版的摘要与归档来自同一地址，因此要求 HTTPS。
 func ValidateURLPrefix(value string) error {
 	u, err := baseURL(value)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/schedule"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/clock"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -33,7 +34,9 @@ const (
 
 // Options 配置必填状态库、任务上限、调用期限与触发计算使用的时钟。
 type Options struct {
-	Store            *state.Store // 与生产装配共用的 Core 状态库。
+	OnRun            func(runID, traceID string, explicit bool) // 调用插件前发布运行与 trace 归属。
+	Clock            clock.Clock                                // nil 使用真实时钟；测试同时替换当前时间与所有定时器。
+	Store            *state.Store                               // 与生产装配共用的 Core 状态库。
 	TasksPerPlugin   int
 	TaskPayloadBytes int64 // 参数 JSON 字节上限。
 	TaskConcurrency  int
@@ -52,6 +55,7 @@ type JobStats struct {
 // Scheduler 并发安全地安排定时器、占用运行槽并记录任务统计。
 // mu 串行化状态库操作、timer、服务和生命周期；IPC 在锁外执行。
 type Scheduler struct {
+	onRun        func(string, string, bool)
 	mu           sync.Mutex // 保护 plugins、注册定时器、jobState 与 jobRun
 	store        *state.Store
 	maxTasks     int
@@ -59,6 +63,7 @@ type Scheduler struct {
 	concurrency  int
 	jobTimeout   time.Duration
 	ensureActive func(context.Context, string, int64) (func(), error)
+	clock        clock.Clock
 	now          func() time.Time
 	plugins      map[string]*pluginJobs
 	closed       bool
@@ -87,7 +92,7 @@ type registeredJob struct {
 	jobID       string
 	description string // 保留声明的触发规则，供管理列表展示。
 	trigger     schedule.Trigger
-	timer       *time.Timer // 由 Scheduler.mu 保护，每次只安排一个未来 tick
+	timer       clock.Timer // 由 Scheduler.mu 保护，每次只安排一个未来 tick
 	saved       state.Job
 	next        time.Time
 	state       *jobState // Attach 替换注册时仍共享同一 plugin_id/job_id 的运行槽
@@ -110,10 +115,15 @@ type jobRun struct {
 
 // New 创建独立的 Scheduler。
 func New(opt Options) *Scheduler {
+	if opt.Clock == nil {
+		opt.Clock = clock.Real{}
+	} else {
+		opt.Now = opt.Clock.Now
+	}
 	if opt.Now == nil {
 		opt.Now = time.Now
 	}
-	return &Scheduler{store: opt.Store, maxTasks: opt.TasksPerPlugin, payloadBytes: opt.TaskPayloadBytes, concurrency: opt.TaskConcurrency, jobTimeout: opt.JobTimeout, ensureActive: opt.EnsureActive, now: opt.Now, plugins: make(map[string]*pluginJobs)}
+	return &Scheduler{onRun: opt.OnRun, clock: opt.Clock, store: opt.Store, maxTasks: opt.TasksPerPlugin, payloadBytes: opt.TaskPayloadBytes, concurrency: opt.TaskConcurrency, jobTimeout: opt.JobTimeout, ensureActive: opt.EnsureActive, now: opt.Now, plugins: make(map[string]*pluginJobs)}
 }
 
 // Attach 为已通过 REGISTER 校验的路由绑定 Session；正常休眠保留已接纳项与未来定时器。
@@ -360,7 +370,7 @@ func (s *Scheduler) arm(pluginID string, reg *registration, job *registeredJob, 
 	next := job.trigger.Next(job.saved.Anchor, now)
 	job.next = next
 	if !next.IsZero() {
-		job.timer = time.AfterFunc(next.Sub(now), func() { s.tick(pluginID, reg, job, next) })
+		job.timer = s.clock.AfterFunc(next.Sub(now), func() { s.tick(pluginID, reg, job, next) })
 	}
 }
 
@@ -417,6 +427,9 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 	rand.Read(trace)
 	rand.Read(runBytes)
 	runID := hex.EncodeToString(runBytes)
+	if s.onRun != nil {
+		s.onRun(runID, hex.EncodeToString(trace), run.completed != nil)
+	}
 	request := scheduledRequest(job, scheduledAt, now, hex.EncodeToString(trace), runID, task)
 	event := request.Event
 	encoded, err := proto.Marshal(request)
@@ -429,7 +442,8 @@ func (s *Scheduler) call(ctx context.Context, pluginID string, reg *registration
 		if task != nil {
 			deadline = now.Add(s.jobTimeout)
 		}
-		ctx, cancel := context.WithDeadline(ctx, deadline)
+		ctx, cancel := clock.WithDeadline(ctx, s.clock, deadline)
+		deadline, _ = ctx.Deadline()
 		defer cancel()
 		var plugin router.Plugin
 		var release func()
@@ -515,3 +529,6 @@ func logResponse(pluginID, routeID, runID, traceID string, response wire.Respons
 	}
 	logger.Debug("scheduled handler completed", "outcome", outcome)
 }
+
+// Now 返回调度计划与定时器共用的当前时间。
+func (s *Scheduler) Now() time.Time { return s.now() }

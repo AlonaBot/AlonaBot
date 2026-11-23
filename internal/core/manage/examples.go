@@ -88,7 +88,7 @@ func (s *Service) exampleContent(ctx context.Context, id, name string) (*staticF
 	}
 	defer root.Close()
 	// 2. schema 决定可读取的图片白名单，打开后的文件句柄保持到响应结束。
-	schemaFile, err := openStaticFile(root.FS(), "config_schema.json")
+	schemaFile, err := openStaticFile(root.FS(), "plugin_config_schema.json")
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, errStaticNotFound
 	}

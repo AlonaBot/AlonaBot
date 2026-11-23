@@ -189,7 +189,7 @@ func TestDevelopmentReload(t *testing.T) {
 	}
 	developmentWrite(t, filepath.Join(dataDir, "plugins", "hello", "config.json"), `{}`)
 	developmentReply(t, c, dataDir, "changed:default")
-	developmentWrite(t, filepath.Join(plugin, "config_schema.json"), `{"text":{"type":"string","default":"schema"}}`)
+	developmentWrite(t, filepath.Join(plugin, "plugin_config_schema.json"), `{"text":{"type":"string","default":"schema"}}`)
 	developmentReply(t, c, dataDir, "changed:schema")
 	if bytes.Equal(before, developmentRead(t, binary)) {
 		t.Fatal("schema change did not rebuild executable")
@@ -225,7 +225,7 @@ func developmentFixture(t *testing.T) (string, string, string) {
 		developmentWrite(t, filepath.Join(project.dir, "plugin.yaml"), manifest)
 		developmentWrite(t, filepath.Join(project.dir, "main.go"), project.source)
 		if project.role == "plugin" {
-			developmentWrite(t, filepath.Join(project.dir, "config_schema.json"), `{"text":{"type":"string","default":"default"}}`)
+			developmentWrite(t, filepath.Join(project.dir, "plugin_config_schema.json"), `{"text":{"type":"string","default":"default"}}`)
 		}
 		command := exec.CommandContext(t.Context(), "go", "mod", "tidy")
 		command.Dir = project.dir

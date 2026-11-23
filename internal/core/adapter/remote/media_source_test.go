@@ -150,7 +150,8 @@ func TestMediaSources(t *testing.T) {
 	if result := send(sourceTarget, &pb.MediaSource{Source: &pb.MediaSource_InlineBase64{InlineBase64: inline}}); !reflect.DeepEqual(result.PlatformMessageIds, []string{"inline", inline}) {
 		t.Fatalf("inline changed: %v", result)
 	}
-	id := mediaStore.RegisterIncoming("source", "platform-file", proto.Uint64(11), proto.String("application/octet-stream"))
+	instance, _ := registry.Get("source")
+	id := mediaStore.RegisterIncoming(instance, &pb.IncomingMedia{Token: "platform-file", Size: proto.Uint64(11), Mime: proto.String("application/octet-stream")})
 	incoming := mediaStore.IssueIncoming(id, consumer, []*pb.Target{sourceTarget, otherTarget})
 	if result := send(sourceTarget, &pb.MediaSource{Source: &pb.MediaSource_IncomingRef{IncomingRef: incoming}}); !reflect.DeepEqual(result.PlatformMessageIds, []string{"platform", "platform-file", "application/octet-stream"}) {
 		t.Fatalf("platform source changed: %v", result)

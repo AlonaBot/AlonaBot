@@ -20,7 +20,7 @@ func (entry *instance) Delete(ctx context.Context, target *pb.Target, platformMe
 	if !running {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
 	}
-	request, err := payload(&pb.AdapterDeleteRequest{InstanceId: entry.id, Target: target, PlatformMessageIds: platformMessageIDs})
+	request, err := payload(&pb.AdapterDeleteRequest{InstanceId: entry.id, InstanceGeneration: entry.generation, Target: target, PlatformMessageIds: platformMessageIDs})
 	if err != nil {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
 	}

@@ -63,7 +63,7 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return editRejected(target, safe)
 	}
 	// 4. 校验实例身份绑定与显式声明的编辑能力。
-	instance, ok := s.adapters.Get(target.GetAdapterInstanceId())
+	instance, ok := s.adapters.Resolve(ctx, target.GetAdapterInstanceId())
 	if !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}
@@ -107,6 +107,9 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	// 7. 执行唯一一次编辑，观察 Hook 的结果不改变平台回执与错误。
 	result, safe := editor.Edit(ctx, target, request.PlatformMessageId, request.Chain)
+	if s.observe != nil {
+		s.observe(in.TraceID, "edit", target, request.Chain, result, safe)
+	}
 	if s.hooks != nil {
 		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, result, safe, invocation)
 	}

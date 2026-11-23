@@ -1,14 +1,13 @@
 package manage
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,12 +24,14 @@ import (
 
 // InstallRequest 指定本地归档，或由 Core 下载的 GitHub 来源。
 type InstallRequest struct {
-	Archive          string
-	Source           string // GitHub 的 owner/repo；本地安装时留空。
-	ID               string // 自动预装时指定期望的组件身份。
-	Replace, Confirm bool
-	Build            bool   // 从 Source 的源码构建，而不是下载最新 Release 资产。
-	Ref              string // 构建的分支、标签或提交；空串为默认分支。仅用于 Build。
+	GitHubAPIBase        *string `json:"github_api_base,omitempty"`        // nil 沿用 Core 设置，空串使用官方 API。
+	GitHubDownloadPrefix *string `json:"github_download_prefix,omitempty"` // nil 沿用 Core 设置，空串直连原资产。
+	Archive              string
+	Source               string // GitHub 的 owner/repo；本地安装时留空。
+	ID                   string // 自动预装时指定期望的组件身份。
+	Replace, Confirm     bool
+	Build                bool   // 从 Source 的源码构建，而不是下载最新 Release 资产。
+	Ref                  string // 构建的分支、标签或提交；空串为默认分支。仅用于 Build。
 
 	built *builtSource // Install 与 Update 在取得目录锁之前完成的构建产物。
 	log   io.Writer    // 源码构建日志；nil 时丢弃。
@@ -166,33 +167,6 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	return result, err
 }
 
-// downloadGitHub 把 github.com 上的文件写入 file，返回字节数与 SHA-256。
-// 设置了 github_mirror 时实际请求「镜像前缀 + 原始 URL」；内容超过 INSTALL_MAX_ARCHIVE 时返回 RESOURCE_EXHAUSTED。
-func (s *Service) downloadGitHub(ctx context.Context, address string, file io.Writer) (int64, []byte, error) {
-	address = s.opt.Settings.Settings().GitHubMirror + address
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-	if err != nil {
-		return 0, nil, err
-	}
-	response, err := s.opt.HTTPClient.Do(request)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return 0, nil, fmt.Errorf("download %s: %s", address, response.Status)
-	}
-	hash := sha256.New()
-	n, err := io.Copy(io.MultiWriter(file, hash), io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
-	if err != nil {
-		return n, nil, fmt.Errorf("download %s: %w", address, err)
-	}
-	if n > s.opt.Limits.MaxArchiveBytes {
-		return n, nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
-	}
-	return n, hash.Sum(nil), nil
-}
-
 func (req InstallRequest) buildLog() io.Writer {
 	if req.log == nil {
 		return io.Discard
@@ -216,7 +190,19 @@ func exists(message string) error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, Message: message}
 }
 
-func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Candidate, error) {
+func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.Candidate, err error) {
+	var apiBase, downloadPrefix string
+	if req.built == nil {
+		apiBase, downloadPrefix, err = s.githubEndpoints(req)
+	}
+	defer func() {
+		if req.Source != "" && err != nil {
+			err = downloadFailure{cause: err, prefix: downloadPrefix}
+		}
+	}()
+	if err != nil {
+		return nil, err
+	}
 	// 1. 下载只写临时文件；预检完成前保留已有组件。
 	if req.Source != "" && req.Archive != "" {
 		return nil, invalid("source and local archive are mutually exclusive")
@@ -236,32 +222,9 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 	if req.built != nil {
 		input.ArchivePath, input.Source, input.Version = req.built.archive, "github.com/"+req.Source, req.built.version
 	} else if req.Source != "" {
-		if err := checkRepository(req.Source); err != nil {
-			return nil, err
-		}
-		address := strings.TrimRight(s.opt.ReleaseBaseURL, "/") + "/repos/" + req.Source + "/releases/latest"
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+		publication, err := s.githubRelease(ctx, req.Source, apiBase)
 		if err != nil {
 			return nil, err
-		}
-		request.Header.Set("Accept", "application/vnd.github+json")
-		response, err := s.opt.HTTPClient.Do(request)
-		if err != nil {
-			return nil, err
-		}
-		raw, readErr := io.ReadAll(response.Body)
-		if err := errors.Join(readErr, response.Body.Close()); err != nil {
-			return nil, err
-		}
-		if response.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("download %s: %s: %s", address, response.Status, raw)
-		}
-		var publication release.GitHubRelease
-		if err := json.Unmarshal(raw, &publication); err != nil {
-			return nil, fmt.Errorf("parse GitHub release: %w", err)
-		}
-		if err := publication.Validate(req.Source); err != nil {
-			return nil, invalid(err.Error())
 		}
 		asset, err = publication.Select(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
@@ -270,27 +233,12 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 		if err := asset.Validate(req.Source, publication.Tag); err != nil {
 			return nil, denied(err.Error())
 		}
-		input.Source, input.Version = "github.com/"+req.Source, strings.TrimPrefix(publication.Tag, "v")
-		file, err := os.CreateTemp(staging, "download-*.tar.gz")
+		input.ArchivePath, err = s.downloadArchive(ctx, staging, downloadPrefix, asset)
 		if err != nil {
 			return nil, err
 		}
-		input.ArchivePath = file.Name()
 		defer os.Remove(input.ArchivePath)
-		n, sum, err := s.downloadGitHub(ctx, asset.URL, file)
-		if err := errors.Join(err, file.Close()); err != nil {
-			return nil, err
-		}
-		if n != asset.Size {
-			return nil, invalid("archive size does not match the GitHub asset")
-		}
-		verified, err := asset.MatchSHA256(sum)
-		if err != nil {
-			return nil, denied(err.Error())
-		}
-		if !verified {
-			slog.Warn("GitHub asset has no digest; verified size only", "source", req.Source, "asset", asset.Name)
-		}
+		input.Source, input.Version = "github.com/"+req.Source, strings.TrimPrefix(publication.Tag, "v")
 	}
 	// 2. 本地与下载归档共用身份、平台和受控解压检查。
 	candidate, err := packages.Preflight(input, staging, s.opt.Limits)
@@ -307,4 +255,52 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (*packages.Ca
 		slog.Warn("package manifest warning", "plugin_id", candidate.Manifest.ID, "warning", warning)
 	}
 	return candidate, nil
+}
+
+func (s *Service) downloadArchive(ctx context.Context, staging, prefix string, asset release.Download) (_ string, err error) {
+	// 1. 摘要由已选 API 基址提供；镜像只能提供与该摘要一致的归档。
+	var expected []byte
+	if asset.Digest == "" {
+		if prefix != "" {
+			return "", denied("GitHub asset has no digest; clear the download prefix and try again")
+		}
+	} else {
+		algorithm, digest, _ := strings.Cut(asset.Digest, ":")
+		if algorithm != "sha256" {
+			return "", denied("unsupported GitHub asset digest algorithm")
+		}
+		expected, err = hex.DecodeString(digest)
+		if err != nil || len(expected) != sha256.Size {
+			return "", denied("invalid GitHub asset digest")
+		}
+	}
+	// 2. 在同一请求期限内下载、验证并关闭归档，失败时清理暂存文件。
+	file, err := os.CreateTemp(staging, "download-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.Remove(file.Name()))
+		}
+	}()
+	digest := sha256.New()
+	var dest io.Writer = file
+	if expected != nil {
+		dest = io.MultiWriter(file, digest)
+	}
+	n, err := s.copyGitHubArchive(ctx, prefix, asset.URL, dest)
+	if err := errors.Join(err, file.Close()); err != nil {
+		return "", err
+	}
+	if expected != nil && !bytes.Equal(expected, digest.Sum(nil)) {
+		return "", denied("archive digest does not match the GitHub asset")
+	}
+	if n != asset.Size {
+		return "", invalid("archive size does not match the GitHub asset")
+	}
+	if expected == nil {
+		slog.Warn("GitHub asset has no digest; verified archive size only", "url", asset.URL)
+	}
+	return file.Name(), nil
 }

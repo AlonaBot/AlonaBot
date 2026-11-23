@@ -185,7 +185,7 @@ func Preflight(in Input, stagingRoot string, lim Limits) (*Candidate, error) {
 }
 
 func checkExampleImages(dir string) error {
-	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+	for _, schemaName := range []string{"plugin_config_schema.json", "adapter_config_schema.json"} {
 		raw, err := os.ReadFile(filepath.Join(dir, schemaName))
 		if errors.Is(err, os.ErrNotExist) {
 			continue

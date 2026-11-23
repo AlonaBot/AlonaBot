@@ -16,7 +16,7 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`config_schema.json` 提供配置 Schema。plugin/agent 模板显式标记 `.Menu()`，直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
+在同一个终端输入 `/hello`，预期回复 `Hello AlonaBot`。修改源码后自动重载；Ctrl-C 停止。生成的 `New() *sdk.Plugin` 是组件入口，`plugin.yaml` 声明身份与来源，`plugin_config_schema.json` 提供配置 Schema。plugin/agent 模板显式标记 `.Menu()`，直接用 `c.Reply("Hello AlonaBot")` 回复，按需自行添加 `i18n/<locale>.json`。各角色生成的 Go 文件和 `plugin.yaml` 均无注释；发布前将 `source` 改为组件仓库。
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
@@ -50,7 +50,7 @@ bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot
 - 同代次 `RESUME` 复用原 generation、配置与业务 DB，SELF/VERSIONED 数据库迁移回调跳过，原迁移模式与账本保持；首次激活、更新与回退仍按迁移规则执行。配置继续执行 `OnConfigLoad`、补值/校正与 required 校验，完整结果须与原快照一致。
 - 受管 SQLite 在 reload 与 update 时使用独立候选副本，准备失败会回到旧数据。框架外的文件与外部数据库不在这个保证内。
 - 大数据放在磁盘上：索引、缓存、向量放进受管 SQLite 或 `sdk.PluginDataDir(ctx)` 中的文件，不整份载入内存；内存缓存必须有上限。
-- 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护。Core 不创建、不备份外部数据库。
+- 需要 PostgreSQL、MySQL 等外部数据库时自带驱动，连接参数做成在 `plugin_config_schema.json` 中声明 `"secret": true` 的配置项（§7），由管理员填写。迁移或 OnStart 会写外部数据库时，manifest 声明 `prepare_effects=external`，此后已有安装的更新需要管理员进入维护。Core 不创建、不备份外部数据库。
 - 简单状态用 `sdk/kv`：数据放在受管 SQLite 的保留表 `_alonabot_kv` 中，与业务表一起随代次复制、回退和清理。链接 KV 会链接 SQLite，构建工具据此推导 `prepare_effects=managed_db`，保留表的初始化独立于插件迁移 ID。
 - 插件自己的文件写到 `sdk.PluginDataDir(ctx)` 返回的数据目录；它跨 restart 保留，不随代次回退。只卸载与 disable 保留文件，`uninstall --purge-data` 和 `--purge` 在确认对象中列出目录并删除。
 
@@ -325,7 +325,11 @@ AlonaBot.onLocale(async function(locale) {
 
 ## 7. 配置与 secret
 
-在 `plugin.yaml` 同目录编写 `config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [插件指南](plugin-guide.zh-CN.md)，例如：
+Go 源文件可自由命名，入口由包级 `New` 及其签名决定；同包重复声明 `New` 会由 Go 编译器报告 `redeclared`。插件与 Agent 的 Schema 文件统一使用 `plugin_config_schema.json`，Adapter 继续使用 `adapter_config_schema.json`。
+
+升级时先停用旧组件，备份数据并升级 Core，再安装使用新 SDK 重新构建的组件包，最后启用。配置值、secret 引用与受管数据沿用已有存储；无需手动重建配置。停用的旧包仍可经管理 API 更新。
+
+在 `plugin.yaml` 同目录编写 `plugin_config_schema.json`，按字段键声明类型与英文源文案。运行 `alonabot build` 检查声明并把规范 JSON 经 overlay 编入程序；`alonabot check` 执行同样的检查。声明格式见 [插件指南](plugin-guide.zh-CN.md)，例如：
 
 ```json
 {
@@ -340,7 +344,7 @@ AlonaBot.onLocale(async function(locale) {
 - 回调之后，SDK 给缺失或 `null` 的字段补 `default` 或类型零值，递归校正对象、列表与模板；类型不符时先无损转换，取值超出 options、slider 或数字范围时恢复默认值，失效的 template_list 元素被移除。每次转换、恢复和移除都记录路径、原因与原值，secret 字段省略原值；校正后 required 仍未满足时准备失败。未知键和数字精度保留。
 - `GET /api/v1/plugins/{id}/config` 的 `corrections` 返回 Active 代次的校正记录，`unknown` 列出无效配置路径。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除所列无效键并写入 Pending，随后调用 reload 生效。普通 restart 保持同一配置快照，回调或校正改变结果时返回 `FAILED_PRECONDITION`。
 
-插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。基础配置取值对象在同一 Session 内保持不变，`c.Config()` 冻结本次调用的配置文件视图；两者均可并发读取，集合 getter 返回可独立修改的副本。
+插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `plugin_config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。基础配置取值对象在同一 Session 内保持不变，`c.Config()` 冻结本次调用的配置文件视图；两者均可并发读取，集合 getter 返回可独立修改的副本。
 
 给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 已合并当前会话的有效覆盖，返回整个插件的只读配置；同一 Context 的视图保持不变。Rule、Service、Hook 与延续构造 Context 时同样冻结视图，覆盖更新从 SDK 接收之后开始的调用生效。`p.Config()`、`s.Config()`、OnStart 与后台读取保持基础配置。
 
@@ -403,7 +407,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 翻译写在 `i18n/<locale>.json` 的 `config.<字段>.example` 下。沿用源 `example` 的对象或数组形状、源 `reply` 的字符串或片段数组形状；按位置覆盖 `input`、`reply` 字符串、片段的 `text` 或 `alt`。缺项沿用源文案，跳过数组中间一项时填 `{}`。`check`、`build` 和 `pack` 会核对覆盖键、文案类型、源形状、片段位置与占位符引用。
 
-上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [管理 API](deployment.zh-CN.md#管理-api)。
+上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `plugin_config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [管理 API](deployment.zh-CN.md#管理-api)。
 
 ## 8. 测试
 

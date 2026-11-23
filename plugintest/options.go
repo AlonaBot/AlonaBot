@@ -14,14 +14,19 @@ import (
 type Option func(*options)
 
 type options struct {
-	t            testing.TB
-	plugins      []*sdk.Plugin
-	configs      map[*sdk.Plugin]string
-	admins       []string
-	allowed      map[*sdk.Plugin][]string
-	capabilities []string
-	descriptor   adapter.Descriptor
-	llmHandler   func(context.Context, llm.Request) (llm.Response, error)
+	clock          *Clock
+	instances      []InstanceConfig
+	defaults       map[string]string
+	behavior       Behavior
+	t              testing.TB
+	plugins        []*sdk.Plugin
+	configs        map[*sdk.Plugin]string
+	admins         []string
+	platformAdmins []string
+	allowed        map[*sdk.Plugin][]string
+	capabilities   []string
+	descriptor     adapter.Descriptor
+	llmHandler     func(context.Context, llm.Request) (llm.Response, error)
 }
 
 // LLM 登记经真实 Agent Service 调用的生成替身；多次设置时最后一个生效。
@@ -81,4 +86,9 @@ func Adapter(id string, declarations ...any) Option {
 			}
 		}
 	}
+}
+
+// AdminOn 将用户登记为指定平台的 Core Admin。
+func AdminOn(adapterID, userID string) Option {
+	return func(o *options) { o.platformAdmins = append(o.platformAdmins, adapterID+":"+userID) }
 }

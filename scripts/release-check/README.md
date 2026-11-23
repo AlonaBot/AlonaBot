@@ -29,7 +29,7 @@ go build -o /tmp/alonabot-release-check ./scripts/release-check
 1. 从 WebUI 与 Agent 的平台归档读取 manifest，核对组件 ID、版本和绑定来源。来源分别为 `github.com/AlonaBot/alonabot-webui` 与 `github.com/AlonaBot/alonabot-agent`。
 2. 核对每个目标包的规范文件名，安全解包后读取入口的实际 Go build-info，要求包内 `build-info` 与其逐字一致，平台相符且 CGO 关闭。包目录只包含各目标归档。
 3. 按 `pack` 的稳定输出核对包内 manifest 的 ID、版本、来源、角色、平台、入口和格式版本记录；检查二进制中作者 manifest 的共有身份记录。二进制内嵌作者 manifest，包内 manifest 增加了构建字段。此处针对正式 `dist/pack` 格式进行静态核对，完整 YAML、Schema 语义和运行时资源登记由候选 CLI 的安装、启用与握手验收。
-4. 对包内存在的 `config_schema.json`、`adapter_config_schema.json` 和直属 `i18n/*.json` 检查 JSON 格式及二进制中的确切资源字节；在 JSON 中列出实际检查的资源。Schema 使用 `pack` 已规范化的原文。
+4. 对包内存在的 `plugin_config_schema.json`、`adapter_config_schema.json` 和直属 `i18n/*.json` 检查 JSON 格式及二进制中的确切资源字节；在 JSON 中列出实际检查的资源。Schema 使用 `pack` 已规范化的原文。
 5. 逐一检查 `SHA256SUMS` 中的发行归档，核对 Core 的实际目标、CGO 设置与版本；核对 `source.json` 的来源和版本。纯 Core 归档仅含可执行文件、`LICENSE`、`source.json`，且来源记录没有组件；整合模式的组件归档须与外部组件目录中的文件逐字一致。两种模式的归档文件清单均须与预期相同。
 
 解包只接受普通文件和目录，拒绝路径穿越、链接、重复条目、大小写冲突和文件/目录冲突。Linux/macOS 入口须带执行位。`install.sh` 须为非空普通文件；其功能、固定版本 compose 与镜像由发布候选联验覆盖。

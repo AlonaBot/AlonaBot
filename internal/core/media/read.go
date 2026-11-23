@@ -32,6 +32,38 @@ func (s *Store) read(ctx context.Context, c router.Caller, in *wire.Inbound) wir
 	if err := decode(in, request); err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err)
 	}
+	return s.readChunk(ctx, c, request)
+}
+
+// ReadDebugIncoming 为经管理认证的单次读取签发令牌，复用入站对象的取件和读取检查。
+func (s *Store) ReadDebugIncoming(ctx context.Context, c router.Caller, instance adapter.Instance, request *pb.AdapterMediaReadRequest) wire.Response {
+	s.mu.Lock()
+	s.sweep()
+	object := s.incoming[request.FileId]
+	if object == nil || object.source.instance != instance {
+		s.mu.Unlock()
+		return failure(pb.ErrorCode_ERROR_CODE_NOT_FOUND, errors.New("incoming media object not found for this adapter instance"))
+	}
+	current, ok := s.readers.Resolve(ctx, instance.InstanceID())
+	if !ok || current != instance {
+		s.mu.Unlock()
+		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, errors.New("media source adapter instance is no longer running"))
+	}
+	access := s.issueIncoming(object, c, nil)
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.incomingTokens, access.Token)
+		if _, charged := object.charges[c.SessionKey]; charged {
+			s.uncharge(object, c.SessionKey)
+		}
+		s.sweepIncoming()
+	}()
+	return s.readChunk(ctx, c, &pb.ReadRequest{Token: access.Token, Offset: request.Offset, Length: request.Length})
+}
+
+func (s *Store) readChunk(ctx context.Context, c router.Caller, request *pb.ReadRequest) wire.Response {
 	if request.Length == 0 || request.Length > wire.MaxMediaChunk {
 		return failure(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, errors.New("invalid media read length"))
 	}

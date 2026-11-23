@@ -25,6 +25,9 @@ type Caller struct {
 	SessionKey   string // 每次启动唯一，资源所有权按本次 Session 绑定
 }
 
+// DebugCallerID 标识经管理认证创建的调试调用者。
+const DebugCallerID = "@debug"
+
 // NewCaller 为插件的本次启动生成 16 字节随机值的十六进制 SessionKey。
 func NewCaller(pluginID, generationID string) Caller {
 	key := make([]byte, sessionKeyBytes)

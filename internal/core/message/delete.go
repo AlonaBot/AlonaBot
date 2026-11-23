@@ -62,7 +62,7 @@ func (s *Service) Delete(ctx context.Context, caller router.Caller, in *wire.Inb
 	if safe := s.policy.CheckSend(ctx, caller.PluginID, invocation, target); safe != nil {
 		return wire.Response{Err: safe}
 	}
-	instance, ok := s.adapters.Get(target.GetAdapterInstanceId())
+	instance, ok := s.adapters.Resolve(ctx, target.GetAdapterInstanceId())
 	if !ok {
 		return reject(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}

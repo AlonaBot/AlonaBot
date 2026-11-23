@@ -98,6 +98,12 @@ func defaultFields(object *node, path string) map[string]any {
 			}
 			declaration["slider"] = map[string]any{"min": min, "max": json.Number("9223372036854775807")}
 		}
+		if name == "github_api_base" {
+			declaration["description"] = "GitHub Release API base and trust root for archive digests. Use only a trusted HTTPS GitHub API proxy; empty uses the official API."
+		}
+		if name == "github_download_prefix" {
+			declaration["description"] = "Prefix prepended verbatim to the original GitHub archive URL; empty downloads directly."
+		}
 		if name == "proxy" {
 			declaration["secret"] = true // 代理 URL 可以携带认证材料。
 			delete(declaration, "default")

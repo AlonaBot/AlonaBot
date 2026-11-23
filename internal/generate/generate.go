@@ -3,7 +3,7 @@
 // 命令、文本匹配与事件登记在插件对象上。
 // 入口包按调用方 module 的构建列表解析，支持模块缓存中的第三方组件。
 // 扫描遵守 GOOS/GOARCH 和 build tags，仅收集入口所属 module，排除 vendor 与测试文件。
-// 配置从 config_schema.json 检查并嵌入，翻译覆盖按声明核对。
+// 配置从 plugin_config_schema.json 检查并嵌入，翻译覆盖按声明核对。
 // 工程 plugin.yaml 声明 Adapter 时按入口包登记身份与实例 Schema；旧实例声明目录仍只检查。
 // JSON Service 类型经 go/types 检查生成 Schema。
 // 构建入口的 i18n/*.json 按声明检查并将原文嵌入生成代码。
@@ -45,15 +45,15 @@ type Options struct {
 	Toolchain                 Toolchain         // 零值使用 PATH 中的 go 与当前进程环境。
 }
 
-// Toolchain 指定运行 go 命令的可执行文件、追加环境与日志输出。
+// Toolchain 指定运行 go 命令的可执行文件、构建环境与日志输出。
 type Toolchain struct {
 	Go     string    // go 可执行文件路径；空串从 PATH 查找。
-	Env    []string  // 追加在当前进程环境之后，同名变量以这里为准。
+	Env    []string  // 非空时仅继承 PATH 和代理变量，同名变量以这里为准。
 	Stderr io.Writer // 非空时同时接收 go 命令的标准错误，例如构建日志。
 }
 
 // Command 构造在 dir 中运行的 go 命令，标准错误写入 stderr 并按需复制到 Stderr。
-// 环境连同 PWD 一起匹配 dir，避免继承调用进程的路径别名。
+// 开发命令沿用进程环境，并将 PWD 与 dir 对齐。
 func (t Toolchain) Command(ctx context.Context, dir string, stderr *bytes.Buffer, args ...string) *exec.Cmd {
 	name := t.Go
 	if name == "" {
@@ -61,7 +61,16 @@ func (t Toolchain) Command(ctx context.Context, dir string, stderr *bytes.Buffer
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	cmd.Env = append(cmd.Environ(), t.Env...)
+	if len(t.Env) == 0 {
+		cmd.Env = cmd.Environ()
+	} else {
+		for _, name := range []string{"PATH", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"} {
+			if value, exists := os.LookupEnv(name); exists {
+				cmd.Env = append(cmd.Env, name+"="+value)
+			}
+		}
+		cmd.Env = append(cmd.Env, t.Env...)
+	}
 	cmd.Stderr = stderr
 	if t.Stderr != nil {
 		cmd.Stderr = io.MultiWriter(stderr, t.Stderr)
@@ -80,7 +89,7 @@ type Result struct {
 	PluginConstructor string              // 插件的导入路径.New；Adapter 或只有实例声明时为空。
 	AdapterType       string              // Adapter 的导入路径.具体类型名；插件或只有实例声明时为空。
 	HTTP              bool                // 入口工程在所选目标下登记 HTTP 路由；构建据此向包内 required_capabilities 写入 http_listener。
-	ConfigSchema      []byte              // config_schema.json 的规范 JSON；没有该文件时为 nil
+	ConfigSchema      []byte              // plugin_config_schema.json 的规范 JSON；没有该文件时为 nil
 	Source            []byte              // 完整 gofmt 源码；有诊断或只有实例声明时为 nil。
 	Generated         generated.Resources // 本次扫描取得的全部只读资源。
 	Diagnostics       []Diagnostic

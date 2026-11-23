@@ -62,7 +62,7 @@ type Spec struct {
 	GenerationID string // 要激活的代次
 	// Bootstrap 携带 generation_id 与候选配置等；阶段预算由 host 填写。
 	Bootstrap       *pb.Bootstrap
-	ConfigSchema    []byte            // 当前安装包 config_schema.json 的规范 JSON；没有配置时为 nil
+	ConfigSchema    []byte            // 当前安装包 plugin_config_schema.json 的规范 JSON；没有配置时为 nil
 	I18n            map[string][]byte // 当前包 i18n/*.json 原文；无资源时为 nil
 	DefaultLocale   string            // 本次 Session 的 Core 默认语言；空值使用 en-US
 	Secrets         *secret.Store     // nil 时绑定本次 Launch 使用的状态库

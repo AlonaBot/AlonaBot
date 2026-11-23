@@ -19,13 +19,16 @@ def main():
     # 托管 runner 的端到端包已超过 Go 缺省的 10 分钟总期限，包含组件冷构建。
     flags = ['-p', '1', '-timeout', '30m'] + (['-race'] if args.race else [])
     subprocess.run(['go', 'test', *flags, '-run', args.run, './...'], cwd=root / 'tests', env=environment, check=True)
-    lock = json.loads((root / 'components.lock.json').read_text())['agent']
+    agent = subprocess.check_output(
+        ['go', 'list', '-m', '-f', '{{.Path}}@{{.Version}}', 'github.com/AlonaBot/alonabot-agent'],
+        cwd=root / 'tests', env=environment, text=True,
+    ).strip()
     with tempfile.TemporaryDirectory(prefix='alonabot-integration-') as directory:
         directory = Path(directory)
         modfile = directory / 'integration.mod'
         shutil.copyfile(root / 'go.mod', modfile)
         shutil.copyfile(root / 'go.sum', modfile.with_suffix('.sum'))
-        subprocess.run(['go', 'mod', 'edit', '-modfile', str(modfile), '-require', lock['module'] + '@' + lock['version']], cwd=root, check=True)
+        subprocess.run(['go', 'mod', 'edit', '-modfile', str(modfile), '-require', agent], cwd=root, check=True)
         overlay = directory / 'overlay.json'
         overlay.write_text(json.dumps({'Replace': {str(root / 'internal/app/agent_service_test.go'): str(root / 'tests/app/agent_service_test.go.tmpl')}}))
         # 临时 module 图只用于当前构建，独立 fixture 的子命令沿用各自 go.mod。

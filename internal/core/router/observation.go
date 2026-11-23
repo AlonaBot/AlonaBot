@@ -1,6 +1,8 @@
 package router
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"slices"
 
@@ -10,16 +12,26 @@ import (
 
 // Outcome 记录一次实际调用的 Handler 结果，Err 为 nil 表示成功。
 type Outcome struct {
+	TraceID           string
 	PluginID, RouteID string
 	Err               *pb.ErrorInfo
 	Waiting           bool
 }
 
-// Dispatch 汇总事件到结束或首次等待时的 Handler 结果。
+// Diagnostic 记录 Handler 调用前的失败，Phase 区分准入和参数解析。
+type Diagnostic struct {
+	Phase, TraceID, PluginID, RouteID string
+	Err                               *pb.ErrorInfo
+}
+
+// Dispatch 汇总事件到结束或首次等待时的 Handler 结果与调用前诊断。
 type Dispatch struct {
+	Started                   bool
+	TraceIDs                  []string
 	InstanceID, SourceEventID string
 	Waiting                   bool
 	Outcomes                  []Outcome
+	Diagnostics               []Diagnostic
 }
 
 // dispatchState 的 pending 包含普通链和已登记的延续；全部字段由 Router.mu 保护。
@@ -33,8 +45,27 @@ type dispatchState struct {
 
 type dispatchCall struct{ state *dispatchState }
 
+func (r *Router) recordDiagnostic(state *dispatchState, c candidate, trace []byte, phase string, failure *pb.ErrorInfo) {
+	if state == nil {
+		return
+	}
+	if len(trace) == 0 {
+		trace = make([]byte, traceIDBytes)
+		rand.Read(trace)
+	}
+	id := hex.EncodeToString(trace)
+	r.mu.Lock()
+	state.result.TraceIDs = append(state.result.TraceIDs, id)
+	state.result.Diagnostics = append(state.result.Diagnostics, Diagnostic{Phase: phase, TraceID: id, PluginID: c.pluginID, RouteID: c.route.GetRouteId(), Err: failure})
+	r.mu.Unlock()
+	r.publishDispatch(Dispatch{Started: true, InstanceID: state.result.InstanceID, SourceEventID: state.result.SourceEventID, TraceIDs: []string{id}})
+}
+
 func (r *Router) observe(event *trustedEvent) {
-	if r.dispatched == nil {
+	r.mu.Lock()
+	observing := r.dispatched != nil || len(r.debugEvents) > 0
+	r.mu.Unlock()
+	if !observing {
 		return
 	}
 	ev := event.retained
@@ -53,6 +84,12 @@ func (r *Router) observeInvocation(inv *Invocation, state *dispatchState) {
 	}
 	call := &dispatchCall{state: state}
 	inv.dispatch = call
+	trace := hex.EncodeToString(inv.TraceID)
+	r.mu.Lock()
+	state.result.TraceIDs = append(state.result.TraceIDs, trace)
+	r.mu.Unlock()
+	r.publishDispatch(Dispatch{Started: true, InstanceID: state.result.InstanceID, SourceEventID: state.result.SourceEventID, TraceIDs: []string{trace}})
+
 	inv.OnContinuation = func() func() {
 		r.mu.Lock()
 		call.state.pending++ // 登记与原调用结束交接前保留，防止普通链提前完成。
@@ -66,20 +103,32 @@ func (r *Router) observeInvocation(inv *Invocation, state *dispatchState) {
 	}
 	inv.OnWait = func() {
 		r.mu.Lock()
+		if call.state == nil {
+			r.mu.Unlock()
+			return
+		}
 		if !call.state.done {
-			call.state.result.Outcomes = append(call.state.result.Outcomes, Outcome{PluginID: inv.PluginID, RouteID: inv.RouteID, Waiting: true})
+			call.state.result.Outcomes = append(call.state.result.Outcomes, Outcome{TraceID: trace, PluginID: inv.PluginID, RouteID: inv.RouteID, Waiting: true})
 		}
 		result, notify := r.finishDispatchLocked(call.state, true)
 		r.mu.Unlock()
 		if notify {
-			r.dispatched(result)
+			r.publishDispatch(result)
 		}
 	}
 	inv.OnWaitMatch = func(ev *pb.Event) {
 		r.mu.Lock()
-		defer r.mu.Unlock()
+
 		call.state = r.dispatches[ev.GetEventId()]
-		call.state.pending++ // 在等待结果交给 SDK 前，将恢复调用纳入新事件。
+		if call.state == nil {
+			r.mu.Unlock()
+			return
+		}
+		call.state.result.TraceIDs = append(call.state.result.TraceIDs, trace)
+		call.state.pending++ // 在交付等待结果前纳入新事件。
+		started := Dispatch{Started: true, InstanceID: call.state.result.InstanceID, SourceEventID: call.state.result.SourceEventID, TraceIDs: []string{trace}}
+		r.mu.Unlock()
+		r.publishDispatch(started)
 	}
 }
 
@@ -89,12 +138,7 @@ func (r *Router) recordOutcome(inv *Invocation, response wire.Response, err erro
 	}
 	failure := response.Err
 	if err != nil {
-		var callError *wire.CallError
-		if errors.As(err, &callError) {
-			failure = callError.ErrorInfo
-		} else {
-			failure = &pb.ErrorInfo{Code: wire.CodeOf(err), SafeMessage: err.Error()}
-		}
+		failure = invocationError(err)
 	} else if failure == nil {
 		if _, err := decodeOutcome(response.Payload); err != nil {
 			failure = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
@@ -103,9 +147,17 @@ func (r *Router) recordOutcome(inv *Invocation, response wire.Response, err erro
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	state := inv.dispatch.state
-	if !state.done {
-		state.result.Outcomes = append(state.result.Outcomes, Outcome{PluginID: inv.PluginID, RouteID: inv.RouteID, Err: failure})
+	if state != nil && !state.done {
+		state.result.Outcomes = append(state.result.Outcomes, Outcome{TraceID: hex.EncodeToString(inv.TraceID), PluginID: inv.PluginID, RouteID: inv.RouteID, Err: failure})
 	}
+}
+
+func invocationError(err error) *pb.ErrorInfo {
+	var callError *wire.CallError
+	if errors.As(err, &callError) {
+		return callError.ErrorInfo
+	}
+	return &pb.ErrorInfo{Code: wire.CodeOf(err), SafeMessage: err.Error()}
 }
 
 func (r *Router) completeDispatch(state *dispatchState) {
@@ -121,7 +173,7 @@ func (r *Router) completeDispatch(state *dispatchState) {
 	}
 	r.mu.Unlock()
 	if notify {
-		r.dispatched(result)
+		r.publishDispatch(result)
 	}
 }
 
@@ -135,5 +187,7 @@ func (r *Router) finishDispatchLocked(state *dispatchState, waiting bool) (Dispa
 	result := state.result
 	result.Waiting = waiting
 	result.Outcomes = slices.Clone(result.Outcomes)
+	result.Diagnostics = slices.Clone(result.Diagnostics)
+	result.TraceIDs = slices.Clone(result.TraceIDs)
 	return result, true
 }

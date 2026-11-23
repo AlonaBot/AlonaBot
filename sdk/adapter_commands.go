@@ -17,14 +17,10 @@ func (r *adapterRuntime) commandMenu(ctx context.Context, in *wire.Inbound) wire
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	r.mu.Lock()
-	entry := r.instances[request.InstanceId]
-	if entry == nil {
+	entry, safe := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+	if safe != nil {
 		r.mu.Unlock()
-		return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-	}
-	if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-		r.mu.Unlock()
-		return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		return wire.Response{Err: safe}
 	}
 	core := entry.core
 	r.mu.Unlock()

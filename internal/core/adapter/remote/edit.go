@@ -21,7 +21,7 @@ func (entry *instance) Edit(ctx context.Context, target *pb.Target, platformMess
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
 	}
 	// 2. 编码请求并提交唯一一次编辑调用。
-	request, err := payload(&pb.AdapterEditRequest{InstanceId: entry.id, Target: target, PlatformMessageId: platformMessageID, Chain: chain})
+	request, err := payload(&pb.AdapterEditRequest{InstanceId: entry.id, InstanceGeneration: entry.generation, Target: target, PlatformMessageId: platformMessageID, Chain: chain})
 	if err != nil {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
 	}

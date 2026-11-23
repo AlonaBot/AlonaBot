@@ -94,6 +94,7 @@ func managementCommands(code *int) []*cobra.Command {
 		}}
 		instance.AddCommand(command)
 	}
+	adapterDebugCommands(adapter, instance, adapterOptions, code)
 	adapter.AddCommand(instance)
 	commands := []*cobra.Command{list, admin, adapter, profileCommand(code), sleepPolicyCommand(code)}
 	for _, action := range []string{"install", "enable", "disable", "restart", "uninstall", "pin", "reload", "update", "rollback"} {
@@ -104,6 +105,7 @@ func managementCommands(code *int) []*cobra.Command {
 		options.flags(command)
 		command.Flags().BoolVar(&yes, "yes", false, "confirm the operation and its affected objects")
 		if action == "install" || action == "update" {
+			installMirrorFlags(command)
 			command.Flags().StringVar(&source, "source", "", "GitHub repository owner/repo")
 			command.Flags().StringVar(&archive, "archive", "", "local package archive")
 			if action == "install" {
@@ -182,6 +184,7 @@ func managementCommands(code *int) []*cobra.Command {
 					return err
 				}
 				candidate.Confirm, candidate.Replace, candidate.ID = yes, replace, expectedID
+				applyInstallMirrorFlags(cmd, &candidate)
 				if action == "install" {
 					body = candidate
 				} else {

@@ -43,7 +43,7 @@ func TestT09ManagementFlow(t *testing.T) {
 		}
 		manifest := fmt.Sprintf("manifest_version: 1\nid: %s\nname: Management Fixture\nversion: %s\nsource: %s\nrole: plugin\nprotocol_min_major: 1\nprotocol_max_major: 1\nrequired_capabilities: []\nentrypoint: bin/component\nmigration_mode: none\nprepare_effects: managed_db\nos: %s\narch: %s\n", id, version, source, runtime.GOOS, runtime.GOARCH)
 		archive, err := writeTestPackage(dir, id, "plugin", "", source, version, executable, "", map[string][]byte{
-			"plugin.yaml": []byte(manifest), "config_schema.json": []byte(schema),
+			"plugin.yaml": []byte(manifest), "plugin_config_schema.json": []byte(schema),
 		})
 		if err != nil {
 			t.Fatal(err)

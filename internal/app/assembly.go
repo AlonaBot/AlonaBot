@@ -22,6 +22,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
+	"github.com/AlonaBot/AlonaBot/internal/clock"
 	coreadapter "github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter/remote"
 	"github.com/AlonaBot/AlonaBot/internal/core/broker"
@@ -283,7 +284,11 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	var messages *message.Service
 	var hooks *hook.Runner
 	// 延续调用的 Manager 先于 Router 创建，回调在调用时才读取 a.router。
-	continuations := continuation.New(continuation.Options{Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming, AcquireActivity: a.acquireActivity,
+	var runtimeClock clock.Clock = clock.Real{}
+	if harness := inproc.HarnessFor(dir); harness != nil && harness.Now != nil {
+		runtimeClock = harnessClock{harness}
+	}
+	continuations := continuation.New(continuation.Options{Clock: runtimeClock, Max: v.ContinuationMax, Timeout: v.ContinuationTimeout, Prepare: a.media.PrepareIncoming, AcquireActivity: a.acquireActivity,
 		Caller: func(id string) (router.Caller, bool) { return a.router.Caller(id) },
 		Call: func(ctx context.Context, inv *router.Invocation, parent uint64, deadline time.Time) (wire.Response, error) {
 			return a.router.CallContinuation(ctx, inv, parent, deadline)
@@ -291,9 +296,12 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	var dispatched func(router.Dispatch)
 	if harness := inproc.HarnessFor(dir); harness != nil && harness.Dispatched != nil {
 		dispatched = func(d router.Dispatch) {
-			result := inproc.Dispatch{InstanceID: d.InstanceID, SourceEventID: d.SourceEventID, Waiting: d.Waiting}
+			result := inproc.Dispatch{Started: d.Started, TraceIDs: d.TraceIDs, InstanceID: d.InstanceID, SourceEventID: d.SourceEventID, Waiting: d.Waiting}
 			for _, outcome := range d.Outcomes {
-				result.Outcomes = append(result.Outcomes, inproc.Outcome{PluginID: outcome.PluginID, RouteID: outcome.RouteID, ErrorCode: int32(outcome.Err.GetCode()), SafeMessage: outcome.Err.GetSafeMessage(), Waiting: outcome.Waiting})
+				result.Outcomes = append(result.Outcomes, inproc.Outcome{TraceID: outcome.TraceID, PluginID: outcome.PluginID, RouteID: outcome.RouteID, ErrorCode: int32(outcome.Err.GetCode()), SafeMessage: outcome.Err.GetSafeMessage(), Waiting: outcome.Waiting})
+			}
+			for _, diagnostic := range d.Diagnostics {
+				result.Diagnostics = append(result.Diagnostics, inproc.Diagnostic{Phase: diagnostic.Phase, TraceID: diagnostic.TraceID, PluginID: diagnostic.PluginID, RouteID: diagnostic.RouteID, ErrorCode: int32(diagnostic.Err.GetCode()), SafeMessage: diagnostic.Err.GetSafeMessage()})
 			}
 			harness.Dispatched(result)
 		}
@@ -310,6 +318,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	a.router.RegisterCommandList(a.mux)
 	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
+	messages.SetObserver(a.router.ObserveReply)
 	messages.SetReply(a.replySettings)
 	messages.SetIncomingChain(a.media.PrepareIncomingChain)
 	a.messages = messages
@@ -356,7 +365,11 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		}
 		return instances, nil
 	}})
-	a.scheduler = scheduler.New(scheduler.Options{JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency, EnsureActive: a.ensureActive})
+	var onRun func(string, string, bool)
+	if harness := inproc.HarnessFor(dir); harness != nil {
+		onRun = harness.Scheduled
+	}
+	a.scheduler = scheduler.New(scheduler.Options{OnRun: onRun, Clock: runtimeClock, JobTimeout: v.JobTimeout, Store: store, TasksPerPlugin: v.TasksPerPlugin, TaskPayloadBytes: v.TaskPayloadBytes, TaskConcurrency: v.TaskConcurrency, EnsureActive: a.ensureActive})
 	a.scheduler.Services(a.mux, a.router.PluginFor)
 	if harness := inproc.HarnessFor(dir); harness != nil {
 		completed := func(pluginID, routeID string, notify func(inproc.Dispatch)) func(string, wire.Response, error) {
@@ -415,7 +428,7 @@ func (a *assembly) optionSchema(componentID string, kind coreoptions.SchemaKind)
 	switch kind {
 	case coreoptions.ConfigSchema:
 		schema = current.config
-		filename = "config_schema.json"
+		filename = "plugin_config_schema.json"
 	case coreoptions.AdapterInstanceSchema:
 		schema = current.adapter
 		filename = "adapter_config_schema.json"
@@ -467,7 +480,7 @@ func optionSchemas(resources genresources.Resources) (componentOptionSchemas, er
 		name   string
 		raw    []byte
 		schema **configschema.Schema
-	}{{"config_schema.json", resources.ConfigSchema, &result.config}, {"adapter_config_schema.json", resources.AdapterConfigSchema, &result.adapter}} {
+	}{{"plugin_config_schema.json", resources.ConfigSchema, &result.config}, {"adapter_config_schema.json", resources.AdapterConfigSchema, &result.adapter}} {
 		if len(entry.raw) == 0 {
 			continue
 		}
@@ -601,7 +614,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 		if r.instance.HTTPListener != nil {
 			a.http.Bind(r.id, r.instance.GenerationID, r.instance.HTTPListener, r.instance.HTTPProxyToken, r.instance.Routes, r.install.Role)
 		}
-		if err := a.scheduler.Attach(ctx, plugin, time.Now()); err != nil {
+		if err := a.scheduler.Attach(ctx, plugin, a.scheduler.Now()); err != nil {
 			a.detach(r)
 			return fmt.Errorf("attach scheduler: %w", err)
 		}
@@ -1344,7 +1357,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 
 func packageResources(dir string) (genresources.Resources, error) {
 	g := genresources.Resources{I18n: make(map[string][]byte)}
-	raw, err := os.ReadFile(filepath.Join(dir, "config_schema.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, "plugin_config_schema.json"))
 	if err == nil {
 		schema, problems := configschema.Parse(raw)
 		if len(problems) != 0 {
@@ -1449,3 +1462,9 @@ func (c *Core) developmentConfig(id string) (json.RawMessage, map[string][]byte,
 	}
 	return nil, nil, fmt.Errorf("component %s is not a development component", id)
 }
+
+type harnessClock struct{ h *inproc.Harness }
+
+func (c harnessClock) Now() time.Time                                  { return c.h.Now() }
+func (c harnessClock) AfterFunc(d time.Duration, f func()) clock.Timer { return c.h.AfterFunc(d, f) }
+func (c harnessClock) NewTimer(d time.Duration) clock.Timer            { return c.h.NewTimer(d) }

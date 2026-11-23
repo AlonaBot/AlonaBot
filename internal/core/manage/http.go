@@ -26,6 +26,7 @@ func (e *ErrNeedsConfirm) Error() string {
 func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	mux := http.NewServeMux()
 	s.configRoutes(mux, auth)
+	s.debugRoutes(mux)
 	s.accessRoutes(mux)
 	s.policyRoutes(mux)
 	s.optionRoutes(mux)

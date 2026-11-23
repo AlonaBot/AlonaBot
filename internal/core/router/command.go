@@ -79,7 +79,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 					continue
 				}
 				route.names = entry.Names
-				if !r.commandAllowed(&route.candidate, ev) {
+				if !r.commandAllowed(&route.candidate, ev, event.dispatch) {
 					return false
 				}
 				tail := strings.TrimPrefix(head, prefix)
@@ -141,7 +141,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 				}
 			}
 		}
-		if matched && r.commandAllowed(&route.candidate, ev) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandAllowed(&route.candidate, ev, event.dispatch) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}

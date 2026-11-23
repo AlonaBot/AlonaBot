@@ -29,6 +29,7 @@ var escapeChat = strings.NewReplacer("%", "%25", "#", "%23")
 var unescapeChat = strings.NewReplacer("%25", "%", "%23", "#")
 
 func (s *Service) settingsRoutes(mux *http.ServeMux) {
+	s.githubRoutes(mux)
 	mux.HandleFunc("GET /api/v1/core/settings/corrections", func(w http.ResponseWriter, r *http.Request) {
 		current := s.opt.Settings.Settings()
 		w.Header().Set("Cache-Control", "no-store")
@@ -90,7 +91,7 @@ func (s *Service) settingsRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/v1/core/downloads", func(w http.ResponseWriter, r *http.Request) {
 		current := s.opt.Settings.Settings()
-		respond(w, downloadSettings{&current.GitHubMirror, &current.GoDownloadBase, &current.GoProxy, &current.Proxy}, nil)
+		respond(w, downloadSettings{&current.GoDownloadBase, &current.GoProxy, &current.Proxy}, nil)
 	})
 	mux.HandleFunc("PUT /api/v1/core/downloads", func(w http.ResponseWriter, r *http.Request) {
 		var request downloadSettings
@@ -116,10 +117,9 @@ func (s *Service) settingsRoutes(mux *http.ServeMux) {
 	}
 }
 
-// downloadSettings 是网络代理、GitHub 镜像与源码构建下载来源；PUT 时省略或为 null 的字段保持原值。
+// downloadSettings 是网络代理与源码构建的 Go 下载来源；PUT 时省略或为 null 的字段保持原值。
 // proxy 在 Core 启动时写入进程环境，修改后重启 Core 才生效。
 type downloadSettings struct {
-	GitHubMirror   *string `json:"github_mirror"`
 	GoDownloadBase *string `json:"go_download_base"`
 	GoProxy        *string `json:"goproxy"`
 	Proxy          *string `json:"proxy"`
@@ -131,12 +131,6 @@ func (s *Service) updateDownloads(request downloadSettings) error {
 		value *string
 		check func(string) error
 	}{
-		{"github_mirror", request.GitHubMirror, func(v string) error {
-			if v == "" {
-				return nil
-			}
-			return settings.ValidateURLPrefix(v)
-		}},
 		{"go_download_base", request.GoDownloadBase, settings.ValidateURLPrefix},
 		{"goproxy", request.GoProxy, settings.ValidateGoProxy},
 		{"proxy", request.Proxy, settings.ValidateProxy},

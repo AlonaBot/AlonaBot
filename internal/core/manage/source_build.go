@@ -40,7 +40,7 @@ func (b *builtSource) remove() error { return os.RemoveAll(b.dir) }
 // buildSource 下载 GitHub 源码 tarball，并用按需下载的 Go 工具链为本机平台打包。
 // 标签构建的版本取标签，并由预检核对 plugin.yaml；其他提交的版本为 plugin.yaml 的版本加
 // 「+<12 位提交>」的 build metadata。构建之间串行执行。
-func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Writer) (built *builtSource, err error) {
+func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Writer) (_ *builtSource, err error) {
 	// 1. 校验请求并解析提交；标签按 GitHub 的 tag ref 判断。
 	if req.Archive != "" || req.Source == "" {
 		return nil, invalid("source builds require source and no local archive")
@@ -55,14 +55,23 @@ func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Wr
 	if !refName.MatchString(ref) || strings.Contains(ref, "..") {
 		return nil, invalid("invalid ref")
 	}
+	apiBase, prefix, err := s.githubEndpoints(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			err = downloadFailure{cause: err, prefix: prefix}
+		}
+	}()
 	if !s.builds.TryLock() {
 		fmt.Fprintln(log, "waiting for another source build")
 		s.builds.Lock()
 	}
 	defer s.builds.Unlock()
-	api := strings.TrimRight(s.opt.ReleaseBaseURL, "/") + "/repos/" + req.Source
+	api := strings.TrimRight(apiBase, "/") + "/repos/" + req.Source
 	fmt.Fprintf(log, "resolve %s@%s\n", req.Source, ref)
-	commit, err := s.readAPI(ctx, api+"/commits/"+ref, "application/vnd.github.sha")
+	commit, _, err := s.readGitHubAPI(ctx, api+"/commits/"+ref, "application/vnd.github.sha")
 	if err != nil {
 		return nil, err
 	}
@@ -71,13 +80,13 @@ func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Wr
 	}
 	version := ""
 	if tag := strings.TrimPrefix(req.Ref, "v"); req.Ref != "" && manifest.ValidVersion(tag) {
-		if _, err := s.readAPI(ctx, api+"/git/ref/tags/"+req.Ref, "application/vnd.github+json"); err == nil {
+		if _, status, err := s.readGitHubAPI(ctx, api+"/git/ref/tags/"+req.Ref, "application/vnd.github+json"); err == nil {
 			version = tag
-		} else if !errors.Is(err, errNotFound) {
+		} else if status != http.StatusNotFound {
 			return nil, err
 		}
 	}
-	// 2. 经 github_mirror 下载并解压源码；GitHub 不公布源码 tarball 的摘要，内容由镜像决定。
+	// 2. 下载并解压源码；GitHub 不公布源码 tarball 的摘要。
 	staging := filepath.Join(s.dataDirectory(), "staging")
 	if err := os.MkdirAll(staging, 0o700); err != nil {
 		return nil, err
@@ -86,7 +95,7 @@ func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Wr
 	if err != nil {
 		return nil, err
 	}
-	built = &builtSource{dir: dir}
+	built := &builtSource{dir: dir}
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, built.remove())
@@ -98,8 +107,11 @@ func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Wr
 		return nil, err
 	}
 	address := "https://github.com/" + req.Source + "/archive/" + string(commit) + ".tar.gz"
-	fmt.Fprintf(log, "download %s\n", s.opt.Settings.Settings().GitHubMirror+address)
-	_, _, err = s.downloadGitHub(ctx, address, file)
+	fmt.Fprintf(log, "download %s\n", address)
+	if prefix != "" {
+		fmt.Fprintln(log, "WARNING: Source archive is fetched through the GitHub download prefix without digest verification.")
+	}
+	_, err = s.copyGitHubArchive(ctx, prefix, address, file)
 	if err := errors.Join(err, file.Close()); err != nil {
 		return nil, err
 	}
@@ -125,32 +137,6 @@ func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Wr
 	built.version = version
 	fmt.Fprintf(log, "packed %s\n", filepath.Base(built.archive))
 	return built, nil
-}
-
-var errNotFound = errors.New("not found")
-
-// readAPI 读取 GitHub API 的完整响应体；404 返回包装 errNotFound 的错误。
-func (s *Service) readAPI(ctx context.Context, address, accept string) ([]byte, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Accept", accept)
-	response, err := s.opt.HTTPClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	raw, readErr := io.ReadAll(response.Body)
-	if err := errors.Join(readErr, response.Body.Close()); err != nil {
-		return nil, err
-	}
-	switch response.StatusCode {
-	case http.StatusOK:
-		return raw, nil
-	case http.StatusNotFound:
-		return nil, fmt.Errorf("%s: %w", address, errNotFound)
-	}
-	return nil, fmt.Errorf("download %s: %s: %s", address, response.Status, raw)
 }
 
 // stampCommit 把 plugin.yaml 的 version 改为「原版本（去掉 build metadata）+commit」，返回新版本。

@@ -1,1 +1,7 @@
 # Unreleased
+
+- Plugin and Agent configuration Schemas now use `plugin_config_schema.json`; `adapter_config_schema.json` is unchanged. Disable old components before upgrading Core, update packages rebuilt with the new SDK through the management API, then enable them. Existing configuration values, secrets and managed data are retained.
+
+- Added live Adapter operation discovery, authenticated invocation APIs, the `sdk/debug` client and `adapter instance list/actions/call` CLI. Discovery uses real SDK interfaces, capabilities and platform actions; calls preserve partial payloads, errors and traces. Rebuild Adapters with the matching SDK to use the new catalog RPC.
+
+- Extended plugintest with multiple Adapters/accounts, configurable platform outcomes and complete call records, authorized media reads, asynchronous Submit/Wait with trace ownership, and a shared manual Scheduler/continuation clock. Connect injects standard events through management authentication and collects real routes, replies and errors; closing a client leaves Core running. Standard debug operations use the `sdk/` prefix; platform Action names are preserved. Outcomes retain actual Handler results; Diagnostics separately exposes argument parsing and admission failures with phase and trace. Capability selection is independent for each instance on the same platform.

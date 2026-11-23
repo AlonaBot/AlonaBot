@@ -243,8 +243,8 @@ func sleepTestPackage(t *testing.T, id, source string) string {
 	}
 	for name, body := range map[string][]byte{
 		"go.mod": module, "go.sum": sum, "main.go": []byte(source),
-		"plugin.yaml":        []byte("id: " + id + "\nname: Sleep probe\nversion: 1.0.0\nsource: github.com/example/" + id + "\nrole: plugin\nsleep_capable: true\n"),
-		"config_schema.json": []byte(`{"marker":{"type":"string","default":"keep-original"}}`),
+		"plugin.yaml":               []byte("id: " + id + "\nname: Sleep probe\nversion: 1.0.0\nsource: github.com/example/" + id + "\nrole: plugin\nsleep_capable: true\n"),
+		"plugin_config_schema.json": []byte(`{"marker":{"type":"string","default":"keep-original"}}`),
 	} {
 		if err := os.WriteFile(filepath.Join(project, name), body, 0o600); err != nil {
 			t.Fatal(err)

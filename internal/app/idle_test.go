@@ -212,9 +212,9 @@ func startIdleProbe(t *testing.T, source, auditURL string, args ...string) (*web
 	}
 	for name, body := range map[string][]byte{
 		"go.mod": module, "go.sum": sum,
-		"plugin.yaml":        []byte("id: wakeprobe\nname: Idle probe\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/wakeprobe\nrole: plugin\nsleep_capable: true\n"),
-		"config_schema.json": []byte(`{"marker":{"type":"string","default":"keep-original"}}`),
-		"main.go":            []byte(strings.ReplaceAll(source, "AUDIT_URL", auditURL)),
+		"plugin.yaml":               []byte("id: wakeprobe\nname: Idle probe\nversion: 0.1.0\nauthor: AlonaBot\nsource: github.com/AlonaBot/wakeprobe\nrole: plugin\nsleep_capable: true\n"),
+		"plugin_config_schema.json": []byte(`{"marker":{"type":"string","default":"keep-original"}}`),
+		"main.go":                   []byte(strings.ReplaceAll(source, "AUDIT_URL", auditURL)),
 	} {
 		if err := os.WriteFile(filepath.Join(project, name), body, 0600); err != nil {
 			t.Fatal(err)

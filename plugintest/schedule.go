@@ -7,6 +7,8 @@ import (
 	"github.com/AlonaBot/AlonaBot/sdk"
 )
 
+const scheduledSourcePrefix = "@job:"
+
 // Trigger 立即运行已激活插件的静态任务，返回本次 RPC 完成通知前的发送与结果。
 func (h *Harness) Trigger(p *sdk.Plugin, jobID string) Result {
 	h.t.Helper()
@@ -33,17 +35,14 @@ func (h *Harness) trigger(p *sdk.Plugin, run func(context.Context, string, func(
 	if !ok {
 		h.t.Fatal("trigger requires a plugin registered with this Harness")
 	}
-	h.mu.Lock()
-	start := len(h.sends)
-	h.mu.Unlock()
 	var notification dispatchResult
 	completed := func(d inproc.Dispatch) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		notification = dispatchResult{dispatch: d, end: len(h.sends)}
+		notification = dispatchResult{dispatch: d}
 	}
 	if err := run(h.ctx, pluginID, completed); err != nil {
 		h.t.Fatalf("trigger scheduled handler: %v", err)
 	}
-	return h.result(start, notification)
+	return h.result(notification)
 }

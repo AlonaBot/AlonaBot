@@ -67,7 +67,7 @@ examples/devbot/
 ├── plugin/
 │   ├── plugin.go                 # New、hello 命令与普通消息回声
 │   ├── plugin.yaml               # alonabot-plugin-devbot
-│   ├── config_schema.json        # greetings；启动时读取首项 text
+│   ├── plugin_config_schema.json        # greetings；启动时读取首项 text
 │   ├── startup.sql               # startup 表
 │   ├── i18n/{en-US,zh-CN}.json
 │   └── .gitignore                # data/
