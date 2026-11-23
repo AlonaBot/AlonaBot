@@ -42,7 +42,7 @@ go run ./scripts/dist --version 0.1.0 --out ./dist
 
 ## 构建容器镜像
 
-发布工作流将五平台 Core 归档写入 `dist/core`，将 Linux amd64/arm64 内部整合归档写入 `dist/bundle`，分别检查完整性和首次启动。公开 Release 只上传 `dist/core` 中的五份归档。两个原生架构 runner 从 `dist/bundle` 的对应归档构建 `published` target。源码构建仍可通过根 Dockerfile 的默认 target 调用 dist：
+发布工作流先对选定 tag 并行运行完整 race、跨组件整合、五平台构建与发行工具检查，通过后将五平台 Core 归档写入 `dist/core`，将 Linux amd64/arm64 内部整合归档写入 `dist/bundle`，分别检查完整性和首次启动。公开 Release 只上传 `dist/core` 中的五份归档。两个原生架构 runner 从 `dist/bundle` 的对应归档构建 `published` target。源码构建仍可通过根 Dockerfile 的默认 target 调用 dist：
 
 ```fish
 set version 0.1.0

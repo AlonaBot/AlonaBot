@@ -130,12 +130,13 @@ go vet ./internal/core/router
 go test -race ./internal/core/router
 ```
 
-合并前 CI 的 Go 检查包括 `go vet ./...`、race 测试与五目标 pure-Go 构建；GitHub-hosted runner 串行测试包，命令以[工作流](../.github/workflows/ci.yml)为准。WebUI 独立仓的 CI 另执行前端类型检查与构建。手动需要完整检查时执行：
+PR 的 Go CI 包括格式、生成一致性、`go vet ./...`、受影响包的普通测试和 `go build ./...`，完整 race 与跨组件测试留给合并后的门禁。推送到 `main` 和手动触发时执行完整门禁；race 测试、跨组件整合测试、平台构建和发行检查拆成独立 job 并行运行。命令以[工作流](../.github/workflows/ci.yml)为准。WebUI 独立仓的 CI 另执行前端类型检查与构建。手动需要完整检查时执行：
 
 ```fish
 go build ./...
 go vet ./...
 go test -race ./...
+uv run --no-project python scripts/integration.py --race
 ```
 
 改变插件页面套件时，运行 `go test -race -v ./sdk/page ./examples/plugins/showcase` 和 `node --check sdk/page/kit.js`，并在 WebUI 的 iframe 中检查关键交互、语言与主题。文档修改检查链接、锚点、代码块和实际命令。
@@ -145,7 +146,11 @@ go test -race ./...
 
 ## GitHub Actions
 
-[Quality gate](../.github/workflows/ci.yml)在 main push、目标为 main 的 PR 和手动触发时运行。Repository job 检查空白与 main 的文件范围；Go job 检查格式、生成一致性、vet、race 和五平台构建。main 路径检查排除个人维护资料，产品中的技能功能和测试工具照常保留。
+[Quality gate](../.github/workflows/ci.yml)在目标为 main 的 PR、main push 和手动触发时运行；Release 工作流在构建与发布产物前调用同一门禁。`Repository checks` 检查空白与 main 的文件范围，纯文档 PR 在此结束。
+
+Go 或 CI 改动的 `PR checks` 执行格式、生成一致性、vet 和根 module 构建。普通测试覆盖改动 Go 文件所在的根 module 包；`contracts/` 改动增加协议测试，根 `go.mod`/`go.sum` 改动运行根 module 的全量普通测试，已删除的包跳过。`tests/` 改动运行测试 module 的普通测试，沿用串行执行与 30 分钟包期限。
+
+main push、手动触发和发布在仓库检查后并行运行 `Race tests`、`Integration tests`、`Platform builds` 与 `Release tools`；发布检查使用对应发行 tag。所有 Go job 按根 `go.sum` 与 `tests/go.sum` 启用依赖和构建缓存；完整 job 的失败摘要使用英文，并保留各步骤的完整日志。PR 成功记录轻量检查，race、整合与平台构建证据分别取自对应完整 job。main 路径检查排除个人维护资料，产品中的技能功能和测试工具照常保留。
 
 [PR metadata](../.github/workflows/pr-metadata.yml)验证非草稿 PR 的说明；triage 和 auto-assign 只处理 GitHub 元数据，不执行 PR 代码。代码检查使用只读权限，不接触生产 secret。分支保护另由维护者配置。
 
