@@ -45,13 +45,13 @@ https://github.com/AlonaBot/AlonaBot
 发布构建通过 `-ldflags` 注入版本号和 UTC 构建日期，例如：
 
 ```fish
-go build -ldflags '-X main.version=v0.2.0 -X main.buildDate=2026-11-22' -o bin/alonabot ./cmd/alonabot
+go build -ldflags '-X main.version=v0.3.0 -X main.buildDate=2026-11-23' -o bin/alonabot ./cmd/alonabot
 bin/alonabot --version
 ```
 
 ```text
-alonabot version 0.2.0 (2026-11-22)
-https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0
+alonabot version 0.3.0 (2026-11-23)
+https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0
 ```
 
 版本号可带或省略前导 `v`，显示时统一省略，Release 地址统一带 `v`。未注入日期时省略括号日期。`--version` 向 stdout 输出并以退出码 0 结束，在调优参数解析和 Core 启动之前返回。发行脚本自动注入版本号与日期，同时保留现有 Core 管理 API 的版本注入。
@@ -692,7 +692,7 @@ if diagnostic.Phase != plugintest.PhaseArguments || errcode.Of(diagnostic.Err) !
 
 ## 协议与会话行为
 
-组件协议版本 **1.0** 与产品版本 **0.2.0** 独立。当前消息类型与字段号由 [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1) 定义，[wire 运行时](../internal/wire) 实现分帧与 Session 调用。修改 `.proto` 源文件后重新生成 Go 产物。保留已发布的字段号与枚举值；删除的名称和编号须 reserved，已有字段类型保持兼容。[协议编号检查](../contracts/wirespec_test.go) 保护这些标识。
+组件协议版本 **1.0** 与产品版本 **0.3.0** 独立。当前消息类型与字段号由 [contracts/proto/alonabot/v1](../contracts/proto/alonabot/v1) 定义，[wire 运行时](../internal/wire) 实现分帧与 Session 调用。修改 `.proto` 源文件后重新生成 Go 产物。保留已发布的字段号与枚举值；删除的名称和编号须 reserved，已有字段类型保持兼容。[协议编号检查](../contracts/wirespec_test.go) 保护这些标识。
 
 TCP 与 stdio 均使用四字节无符号大端长度，后接 Protobuf Envelope。长度不含前缀，须为 1～4,194,304 字节。零长度、超限、截断或无法解码的帧使 Session 失败，读取端不猜测下一帧边界。每条连接只有一个 writer。Core 持有回环 TCP listener（`127.0.0.1:0`）直到结束。每次启动组件创建新 Session 与 32 字节 secret；认证恒时核对 secret，并核对身份、digest 和协议版本。stdio 的 stdin/stdout 传输协议帧，stderr 输出日志。Bootstrap 中的秘密、配置、数据库及 HTTP 凭据须留在日志之外。
 

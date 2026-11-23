@@ -1,27 +1,27 @@
 {
   "help": {
     "module": "github.com/AlonaBot/alonabot-plugin-help",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "id": "alonabot-plugin-help-official"
   },
   "telegram": {
     "module": "github.com/AlonaBot/alonabot-adapter-telegram",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "id": "alonabot-adapter-telegram"
   },
   "onebot11": {
     "module": "github.com/AlonaBot/alonabot-adapter-onebot11",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "id": "alonabot-adapter-onebot11"
   },
   "agent": {
     "module": "github.com/AlonaBot/alonabot-agent",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "id": "alonabot-agent-official"
   },
   "webui": {
     "module": "github.com/AlonaBot/alonabot-webui",
-    "version": "v0.2.0",
+    "version": "v0.3.0",
     "id": "alonabot-webui-admin"
   }
 }

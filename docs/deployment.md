@@ -6,7 +6,7 @@ This guide covers installation, authentication, configuration, component managem
 
 ## Choose an installation method
 
-Download official assets from [v0.2.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0). Five-platform archives and `install.sh` provide Core only; Docker Compose bundles Core, WebUI and Agent. Install Adapters and help as needed. See [release notes](../changelog/v0.2.0/en.md) for actual platform runs and known limitations.
+Download official assets from [v0.3.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0). Five-platform archives and `install.sh` provide Core only; Docker Compose bundles Core, WebUI and Agent. Install Adapters and help as needed. See [release notes](../changelog/v0.3.0/en.md) for actual platform runs and known limitations.
 
 | Method | Use case |
 | --- | --- |
@@ -63,7 +63,7 @@ Uninstall stops/unregisters the service, removes its definition/program/bundled 
 Download the release Compose file and start the bundle:
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.2.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.0/docker-compose.yml
 docker compose up -d
 ```
 
@@ -118,12 +118,12 @@ See [management API usage](#management-api) for endpoints and configuration read
 
 ### Source builds
 
-With `Build: true`, Core builds from source instead of downloading a Release asset, for example `POST /api/v1/packages/install` with `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.2.0","Confirm":true}`:
+With `Build: true`, Core builds from source instead of downloading a Release asset, for example `POST /api/v1/packages/install` with `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.3.0","Confirm":true}`:
 
 1. Core resolves `Ref` (branch, tag or commit; empty means the default branch) through `github_api_base`, downloads `https://github.com/<owner>/<repo>/archive/<commit>.tar.gz` using `github_download_prefix` when configured, and unpacks it under `<data_dir>/staging`. GitHub publishes no digest for source tarballs. When a prefix is used, the task log warns that the archive came through the prefix without digest verification. Use a trusted download mirror.
 2. Core downloads the Go release Core itself was built with into `<data_dir>/toolchain/go` when missing, checking size and SHA-256 against the JSON listing of `go_download_base` (`?mode=json&include=all`, served by both `go.dev/dl/` and `golang.google.cn/dl/`).
 3. The project is packed for Core's platform like `alonabot pack`: `CGO_ENABLED=0`, `GOTOOLCHAIN=auto`, modules come from `goproxy` and are verified by GOSUMDB (default `sum.golang.org`). `GOCACHE`, `GOMODCACHE`, `GOTMPDIR`, `TMPDIR` and `HOME` all live under `<data_dir>/cache`, so the scratch image can build. The Go subprocess inherits only `PATH`, `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` from Core, with its Go settings set explicitly (`GOENV=off`, `GOWORK=off`).
-4. The archive then goes through the usual install preflight, source trust and same-kind replacement confirmation, bound to source `github.com/<owner>/<repo>`. When `Ref` is a SemVer tag the version is the tag and must match `plugin.yaml`; any other commit gets the `plugin.yaml` version plus `+<12-character commit>`, for example `0.2.0+4769d92b0a8f`.
+4. The archive then goes through the usual install preflight, source trust and same-kind replacement confirmation, bound to source `github.com/<owner>/<repo>`. When `Ref` is a SemVer tag the version is the tag and must match `plugin.yaml`; any other commit gets the `plugin.yaml` version plus `+<12-character commit>`, for example `0.3.0+4769d92b0a8f`.
 
 Updates use `POST /api/v1/packages/update` with `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`; without `Source` the bound source is built.
 
