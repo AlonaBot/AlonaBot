@@ -105,8 +105,10 @@ message RouteDescriptor {
   }
   // 触发者满足其中任一权限即可；空集合不要求 Actor。
   repeated string required_permissions = 17;
-  // HTTP 路由的英文页面标题；非空表示插件页面。
+  // HTTP 路由的英文页面标题；非空表示组件页面。
   string page_title = 19;
+  // 空串表示普通页面；instance_config 表示 Adapter 账号配置页面。
+  string page_purpose = 20;
 }
 
 // HandlerMode 列出 Handler 的签名形态。

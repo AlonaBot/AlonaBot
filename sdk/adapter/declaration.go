@@ -35,12 +35,25 @@ const AuthPlatformToken HTTPAuth = 1
 // AuthStatic 公开提供 GET 与 HEAD 静态资源，无需管理会话或平台凭证。
 const AuthStatic HTTPAuth = 2
 
+// PagePurpose 指定 WebUI 打开页面的场景；零值表示普通页面。
+type PagePurpose string
+
+// PageInstanceConfig 声明在添加或编辑 Adapter 账号时打开的页面。
+const PageInstanceConfig PagePurpose = "instance_config"
+
+// PageDescriptor 声明 HTTP 路由的页面标题与用途。
+type PageDescriptor struct {
+	Title   string // 缺少翻译时显示的英文标题。
+	Purpose PagePurpose
+}
+
 // HTTPRoute 声明 SDK 托管的 HTTP 路由。
 type HTTPRoute struct {
 	Method  string
 	Path    string
 	Auth    HTTPAuth
 	Handler http.Handler
+	Page    *PageDescriptor // 非 nil 时登记页面；账号配置页面要求 GET 和零值 Auth。
 }
 
 // Descriptor 保存 Adapter 的能力、片段、权限、事件与动作声明。

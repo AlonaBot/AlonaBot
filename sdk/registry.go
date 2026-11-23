@@ -459,9 +459,10 @@ var (
 
 // httpRoute 记录一条插件 HTTP 路由；path 相对于 /plugins/{id}，端口由 SDK 托管（D-25）。
 type httpRoute struct {
-	Method    string // 大写的 HTTP 方法
-	Path      string // 插件相对路径，以 / 开头且为规范形式
-	PageTitle string // 非空时声明页面的英文标题。
+	Method      string // 大写的 HTTP 方法
+	Path        string // 插件相对路径，以 / 开头且为规范形式
+	PageTitle   string // 非空时声明页面的英文标题。
+	PagePurpose string // Adapter 页面用途；空串表示普通页面。
 	// Handler 处理请求。
 	Handler http.Handler
 	// Public 为 true 时无需 Core 会话即可访问。
@@ -549,7 +550,7 @@ func (r *httpRegistry) collectRoutesNow() {
 			continue
 		}
 		directory := route.Path[:strings.LastIndexByte(route.Path, '/')+1]
-		for _, filename := range []string{"kit.css", "kit.js"} {
+		for _, filename := range []string{"kit.css", "kit.js", "qrcode.js"} {
 			resourcePath := directory + filename
 			if slices.ContainsFunc(r.routes, func(existing httpRoute) bool {
 				return existing.Method == http.MethodGet && existing.Path == resourcePath

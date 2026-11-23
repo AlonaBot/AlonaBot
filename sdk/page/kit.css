@@ -6,6 +6,9 @@
   --ab-surface-2: #F4F7FA;
   --ab-line: #DFE5EC;
   --ab-text: #1F2A44;
+  /* 二维码固定深色模块配白底：部分扫码器无法识别反色码。 */
+  --ab-qr-ink: #000;
+  --ab-qr-paper: #fff;
   --ab-text-muted: #5E6B82;
   --ab-accent: #0E7C92;
   --ab-accent-soft: #E2F5F8;
