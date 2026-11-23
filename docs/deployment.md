@@ -254,6 +254,14 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Plugin data | `/api/v1/plugins/{id}/data/`: tables/rows, kv, files, export and clear; see [data handlers](../internal/core/manage/data_api.go) |
 | Diagnostics | `POST /api/v1/diagnostics`, `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}` defaults; returns ZIP with no-store |
 
+### Profile session access
+
+Set session access under the profile's Platform and Messages settings. Core selects the session's assigned profile, the instance default, or `default`, in that order. `all` (the default) allows every session. `allow` admits only listed sessions; an empty list denies all. `deny` blocks only listed sessions; an empty list allows all. Blocked sessions skip command, Agent, and plugin event handling, and Core rejects sends to them. Existing global deny rules continue to apply at their usual checks; either policy can reject an operation.
+
+Use `GET`/`PUT /api/v1/profiles/{id}/session-access` to read or replace the mode and list, for example `{"mode":"allow","sessions":[{"instance":"main","session":"telegram:-100123#42"}]}`. Entries pair an instance with a full session ID; chats and topics match separately. Submit up to 1,000 entries; the first occurrence of each pair is retained. Omitting `sessions` or passing an empty array clears the list. In `all` mode Core saves the list without applying it.
+
+### Other management conventions
+
 Local JSON installation provides an `Archive` path on the Core host; identity and source come from the archive’s `plugin.yaml`. Online installation provides only `Source: "owner/repo"`; Core selects a platform archive through the latest Release API. Optional `ID` constrains the expected identity. First source trust and same-kind replacement require confirmation when applicable. Updates and reinstalls with retained records preserve source and identity binding. `Package.PublisherKeyID` and `Package.Signed` retain their historical meaning; new installs and successful updates or reinstalls set them to empty and false.
 
 Browsers send `multipart/form-data` to the install/update endpoints: one required file part `archive`, optional text `confirm=true|false`, install-only text `replace=true|false`, and update-only required text `id`. File parts have `filename`; text parts omit it. Unknown or duplicate parts, missing archives/update IDs, invalid booleans and truncated requests return 400 / INVALID_ARGUMENT. Authentication precedes parsing. Archives stream into exclusive temporary directories under existing installation limits and preflight checks; cleanup follows the service call. Confirmation returns 409 with all `affected` objects; resend the archive with `confirm=true` after approval. Preflight precedes changes to existing components. Source binding failures return 403 / PERMISSION_DENIED; updates retain identity, pin and dependency checks and preserve user data.

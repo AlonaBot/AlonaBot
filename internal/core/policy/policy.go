@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"google.golang.org/protobuf/proto"
@@ -29,6 +30,18 @@ type Policy struct {
 // New 创建使用指定状态库的策略，初始管理员列表为空。
 func New(store *state.Store) *Policy { return &Policy{store: store} }
 
+// CheckSessionAccess 按目标实际使用的配置文件检查会话访问权限。
+func (p *Policy) CheckSessionAccess(ctx context.Context, target *pb.Target) *pb.ErrorInfo {
+	denied, err := profile.SessionDenied(ctx, p.store, target)
+	if err != nil {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read profile session access: " + err.Error()}
+	}
+	if denied {
+		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "target session is denied by its profile"}
+	}
+	return nil
+}
+
 // CheckSend 先拒绝被禁止的会话，再按原始完整 Target 或当前实例许可准入。
 // target 由发送服务选定；查询失败返回 INTERNAL，缺少许可返回 PERMISSION_DENIED。
 func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Invocation, target *pb.Target) *pb.ErrorInfo {
@@ -39,6 +52,9 @@ func (p *Policy) CheckSend(ctx context.Context, pluginID string, inv *router.Inv
 	}
 	if denied {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "target chat is globally denied"}
+	}
+	if failure := p.CheckSessionAccess(ctx, target); failure != nil {
+		return failure
 	}
 	// 2. 原目标回复豁免实例许可，thread_id 也参与完整目标比较。
 	if inv != nil && inv.PluginID == pluginID && proto.Equal(target, inv.DefaultTarget) {

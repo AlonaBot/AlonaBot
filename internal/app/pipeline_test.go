@@ -172,7 +172,7 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 			c.StopPropagation()
 			return pipelineObserve("stopped", "cmd.stop", c)
 		})
-	case "hooks", "trusted", "buttons", "scheduled", "button-attack", "job-attack":
+	case "hooks", "trusted", "buttons", "scheduled", "button-attack", "job-attack", "session-access":
 		pipelineHookPlugin(p, mode)
 
 	case "wait", "control", "policy":

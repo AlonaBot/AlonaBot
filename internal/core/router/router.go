@@ -83,8 +83,9 @@ func (p *instancePlugin) SendEvent(ctx context.Context, target string, ev *pb.Bu
 	return p.instance.Session.SendEvent(ctx, target, ev)
 }
 
-// CommandPolicy 提供命令准入与 Core 管理员身份判定。
+// CommandPolicy 提供会话及命令准入与 Core 管理员身份判定。
 type CommandPolicy interface {
+	CheckSessionAccess(ctx context.Context, target *pb.Target) *pb.ErrorInfo
 	CheckCommand(ctx context.Context, pluginID string, route *pb.RouteDescriptor, actor *pb.Actor, target *pb.Target) *pb.ErrorInfo
 	IsAdmin(ctx context.Context, adapterID string, actor *pb.Actor) (bool, error)
 }
@@ -301,6 +302,16 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 
 func (r *Router) dispatch(event *trustedEvent) {
 	ev := event.retained
+	if r.policy != nil {
+		if failure := r.policy.CheckSessionAccess(r.ctx, ev.GetTarget()); failure != nil {
+			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+				r.metrics.Add("", "event", "denied")
+			} else {
+				slog.Warn("event session admission failed", "event_id", ev.GetEventId(), "error", failure.GetSafeMessage())
+			}
+			return
+		}
+	}
 	if event.recipient != "" {
 		candidates := r.candidates(ev)
 		candidates = slices.DeleteFunc(candidates, func(c candidate) bool { return c.pluginID != event.recipient })

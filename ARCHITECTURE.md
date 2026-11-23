@@ -52,6 +52,8 @@ S-06.1 的 `manage.Options.SleepPolicy` 由 app 注入只读策略：复用 `idl
 
 `profile.Service.EffectivePlatform(id string) (prefixes []string, reply settings.Reply, err error)` 按键合并当前 default 与覆盖，保留显式零值。`internal/app` 向 Router 注入 `Options.Prefixes func(context.Context, *pb.Target) ([]string, error)`，派发使用完整 Target，菜单使用实例身份与 chat 选择聊天的配置文件，话题共用 chat 菜单；同时经 `message.Service.SetReply(resolve func(context.Context, *pb.Target) (settings.Reply, error))` 注入回复读取。message 在 Hook 前改写回复并复检；可信消息根通过 `Invocation.Root` 在手动发送、自动回复、Service 派生与延续间共享首条标记，根结束时清理。Edit 修饰按 Caller Session、完整 Target 与选定物理消息 ID 的已确认片段关联；`internal/app` 在 Session 退出时调用 `message.Service.Release(router.Caller)`，配置读取中的准备及迟到回执随之失效。
 
+会话访问设置由状态库 `profile_session_access` 按配置文件保存；准入在一次状态库快照中读指派和访问设置，复用配置文件指派的优先顺序。Router 在事件派发前检查，命令、发信和工具确认复用 Core 策略；全局禁止的现有判断保持不变。
+
 `manage.Options.NotifyProfileOverrides func(context.Context, string) error` 由 `internal/app` 装配，读取新快照并向当前在线 Session 下发有效覆盖全集，失败关闭原 Session 并返回实际错误；离线插件在下次 Bootstrap 接收。候选 Bootstrap 按候选 schema 筛选覆盖集合。`contracts/configschema.Schema.ApplyProfile(raw json.RawMessage, overrides map[string]json.RawMessage) (json.RawMessage, error)` 提供字段路径替换，`sdk/config.Values.WithOverrides(overrides map[string]json.RawMessage) (Values, error)` 建立独立只读视图并保留子路径。SDK 原子发布集合，每次 Context 构造冻结视图，`c.Config()` 返回整个插件的调用配置，`p.Config()` 与 `s.Config()` 保持基础配置。
 
 配置回复示例沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `plugin_config_schema.json` 引用的图片。

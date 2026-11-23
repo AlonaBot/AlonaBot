@@ -13,6 +13,15 @@ import (
 var escapeSession = strings.NewReplacer("%", "%25", "#", "%23")
 var unescapeSession = strings.NewReplacer("%25", "%", "%23", "#")
 
+// TargetSession 返回配置文件指派及访问列表共用的完整会话字符串。
+func TargetSession(target *pb.Target) string {
+	session := target.GetAdapterId() + ":" + escapeSession.Replace(target.GetChatId())
+	if target.ThreadId != nil {
+		session += "#" + escapeSession.Replace(target.GetThreadId())
+	}
+	return session
+}
+
 // Assignment 表示一个会话的显式指定。
 type Assignment struct {
 	Instance string `json:"instance"`

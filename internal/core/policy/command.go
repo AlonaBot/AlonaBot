@@ -166,6 +166,9 @@ func (p *Policy) CheckCommand(ctx context.Context, pluginID string, route *pb.Ro
 	if denied {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, SafeMessage: "command is globally denied"}
 	}
+	if failure := p.CheckSessionAccess(ctx, target); failure != nil {
+		return failure
+	}
 
 	// 2. 与菜单共用同一份继承计算，命令派发保留全局禁止快照。
 	enabled, permissions := commandState(rows, route)

@@ -229,7 +229,18 @@ func (r *Router) menuOwnerAllowed(ctx context.Context, worker *commandSync, plug
 		return false, err
 	}
 	denied, err := r.menuStore.HasGlobalDeny(ctx, state.GlobalDeny{Kind: "chat", AdapterID: target.AdapterId, SubjectID: chatID})
-	return !denied, err
+	if err != nil || denied {
+		return false, err
+	}
+	if r.policy != nil {
+		if failure := r.policy.CheckSessionAccess(ctx, target); failure != nil {
+			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+				return false, nil
+			}
+			return false, &wire.CallError{ErrorInfo: failure}
+		}
+	}
+	return true, nil
 }
 
 func menuTarget(worker *commandSync, chatID string) *pb.Target {
