@@ -1,12 +1,10 @@
-# PR 运行轻量检查；main、手动运行与发布并行执行完整验证。
+# PR 运行轻量检查；手动运行与发布并行执行完整验证。
 name: Quality gate
 
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
     inputs:

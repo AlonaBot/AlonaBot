@@ -130,7 +130,7 @@ go vet ./internal/core/router
 go test -race ./internal/core/router
 ```
 
-PR Go CI runs formatting, generation, `go vet ./...`, affected-package tests and `go build ./...`. It does not run the full race or cross-component suites. Pushes to `main` and manual dispatch run the complete gate; race tests, cross-component integration tests, platform builds and release checks run as separate jobs. [The workflow](../.github/workflows/ci.yml) is authoritative. WebUI's separate CI also type-checks/builds the frontend. For a full manual check:
+PR Go CI runs formatting, generation, `go vet ./...`, affected-package tests and `go build ./...`. Manual dispatch and releases run the complete gate; race tests, cross-component integration tests, platform builds and release checks run as separate jobs. [The workflow](../.github/workflows/ci.yml) is authoritative. WebUI's separate CI also type-checks/builds the frontend. For a full manual check:
 
 ```fish
 go build ./...
@@ -146,11 +146,11 @@ Cross-platform changes need actual runtime checks as well as cross-builds. Five 
 
 ## GitHub Actions
 
-[Quality gate](../.github/workflows/ci.yml) runs on PRs targeting main, main pushes and manual dispatch, and is called by the Release workflow before building or publishing artifacts. `Repository checks` checks whitespace and main file scope. Documentation-only PRs finish there.
+[Quality gate](../.github/workflows/ci.yml) runs on PRs targeting main and manual dispatch, and is called by the Release workflow before building or publishing artifacts. Pushes to main do not trigger this workflow. `Repository checks` checks whitespace and main file scope. Documentation-only PRs finish there.
 
 `PR checks` runs formatting, generation, vet and a root-module build for Go or CI changes. Ordinary tests cover the root packages containing changed Go files; changes under `contracts/` also run protocol tests. Dependency changes (`go.mod`/`go.sum`) run all root-module ordinary tests. Deleted packages are omitted. Changes under `tests/` run the `tests` module without race detection, retaining its existing serial execution and 30-minute package timeout.
 
-Main pushes, manual dispatch and releases run `Race tests`, `Integration tests`, `Platform builds` and `Release tools` in parallel after repository checks. Release checks use the exact release tag. All Go jobs cache dependencies and build results with both `go.sum` and `tests/go.sum`; full jobs report failures in English and retain the complete step logs. PR success records the light checks; record race, integration and platform results from the corresponding full jobs. Main path checks exclude personal maintenance records while retaining product skills and test tools.
+Manual dispatch and releases run `Race tests`, `Integration tests`, `Platform builds` and `Release tools` in parallel after repository checks. Release checks use the exact release tag. All Go jobs cache dependencies and build results with both `go.sum` and `tests/go.sum`; full jobs report failures in English and retain the complete step logs. PR success records the light checks; record race, integration and platform results from the corresponding full jobs. Main path checks exclude personal maintenance records while retaining product skills and test tools.
 
 [PR metadata](../.github/workflows/pr-metadata.yml) validates nondraft PR descriptions. Triage/auto-assign only change GitHub metadata and never execute PR code. Code checks have read-only permissions without production secrets; maintainers configure branch protection separately.
 
