@@ -1,4 +1,5 @@
 // alonabot 命令通过根包装配 Core，经管理 HTTP API 操作组件。
+// --version 输出构建版本、可选日期与仓库或 Release 地址。
 package main
 
 import "os"

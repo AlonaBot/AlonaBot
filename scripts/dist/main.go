@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/release"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
@@ -194,7 +195,8 @@ func run(ctx context.Context, args []string) (err error) {
 }
 
 func buildCore(ctx context.Context, output, goos, goarch, version string) error {
-	link := "-X " + versionSymbol + "=" + version
+	link := "-X " + versionSymbol + "=" + version + " -X main.version=" + version +
+		" -X main.buildDate=" + time.Now().UTC().Format(time.DateOnly)
 	_, err := command(ctx, ".", []string{"CGO_ENABLED=0", "GOOS=" + goos, "GOARCH=" + goarch},
 		"go", "build", "-trimpath", "-buildvcs=false", "-ldflags", link, "-o", output, "./cmd/alonabot")
 	return err

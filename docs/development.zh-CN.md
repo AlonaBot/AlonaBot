@@ -33,6 +33,29 @@ bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 
 示例的 `/ping` 已显式调用 `.Menu()`，支持菜单的 Adapter 自动按聊天发布；未标记命令仍可调用。手动接管见[命令菜单](plugin-guide.zh-CN.md#命令菜单)。
 
+## 查询 CLI 版本
+
+构建 CLI 后运行 `bin/alonabot --version`。普通源码构建输出两行：
+
+```text
+alonabot version dev
+https://github.com/AlonaBot/AlonaBot
+```
+
+发布构建通过 `-ldflags` 注入版本号和 UTC 构建日期，例如：
+
+```fish
+go build -ldflags '-X main.version=v0.2.0 -X main.buildDate=2026-11-22' -o bin/alonabot ./cmd/alonabot
+bin/alonabot --version
+```
+
+```text
+alonabot version 0.2.0 (2026-11-22)
+https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0
+```
+
+版本号可带或省略前导 `v`，显示时统一省略，Release 地址统一带 `v`。未注入日期时省略括号日期。`--version` 向 stdout 输出并以退出码 0 结束，在调优参数解析和 Core 启动之前返回。发行脚本自动注入版本号与日期，同时保留现有 Core 管理 API 的版本注入。
+
 ## 依赖管理
 
 Core 使用 `go.mod`、`go.sum` 中的锁定版本；官方组件各自维护 module 与锁文件，WebUI 另有 `package-lock.json`。新增依赖或扩大链接范围前，说明必要性和替代方案，等待维护者批准。当前直接依赖的允许用途如下：
