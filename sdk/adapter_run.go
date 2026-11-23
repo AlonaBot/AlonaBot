@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -77,8 +78,26 @@ func runAdapter(a adapter.Adapter, l launch) (err error) {
 	defer func() { err = errors.Join(err, l.runtime.close()) }()
 	// Adapter 没有插件对象；借一个只收集 HTTP 路由的对象复用同一套声明校验。
 	routes := NewPlugin()
+	hasInstanceConfig := false
 	for _, route := range descriptor.HTTP {
 		builder := routes.http.Route(route.Method, route.Path)
+		if page := route.Page; page != nil {
+			switch page.Purpose {
+			case "":
+			case adapter.PageInstanceConfig:
+				if strings.TrimSpace(page.Title) == "" || route.Method != http.MethodGet || route.Auth != 0 {
+					return fmt.Errorf("adapter route %q: instance_config page requires a title, GET, and Core session authentication", route.Path)
+				}
+				if hasInstanceConfig {
+					return errors.New("an adapter can declare only one instance_config page")
+				}
+				hasInstanceConfig = true
+			default:
+				return fmt.Errorf("adapter route %q has unknown page purpose %q", route.Path, page.Purpose)
+			}
+			builder.Page(page.Title)
+			builder.route.PagePurpose = string(page.Purpose)
+		}
 		switch route.Auth {
 		case 0:
 		case adapter.AuthPlatformToken:

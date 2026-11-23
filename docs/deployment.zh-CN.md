@@ -282,7 +282,7 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 认证后 `GET /api/v1/core/changelog` 返回 `{"locale":"en-US","entries":[{"version":"0.1.0","markdown":"…"}]}`。来源为正式 `changelog/v<SemVer>/{en,zh-CN}.md`，排除 unreleased，en 映射 en-US；按 `Accept-Language` 精确或主语言匹配，缺省或未匹配回退英文。条目按 SemVer 倒序，版本无 `v`，未知日期省略 `date`，保留 Markdown。`GET /api/v1/packages/{id}/changelog` 读取安装包：单文件 CHANGELOG.md 排除 Unreleased，locale 为 en-US；目录形式逐版本按偏好语言精确、规范标签、主语言匹配，最终回退 en-US.md，同级取文件名字典序最小者。未安装或 dev 组件为 404；无正式条目返回 en-US 与空 entries。
 
-认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。包列表的 `Name`、`Description`、`Author` 取自包内 `plugin.yaml`，读不到时省略。插件页面在包的 `pages` 中列出，经 `/plugins/{id}` 在 WebUI 沙箱打开，见[页面套件](plugin-guide.zh-CN.md#插件页面)。
+认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。包列表的 `Name`、`Description`、`Author` 取自包内 `plugin.yaml`，读不到时省略。组件页面在包的 `pages` 中列出，包含 `path`、`title`，账号配置页面另带 `purpose: "instance_config"`。WebUI 经 `/plugins/{id}` 在沙箱打开页面，账号配置页面在添加或编辑账号的对话框里打开。见[页面套件](plugin-guide.zh-CN.md#插件页面)与[账号配置页面](plugin-guide.zh-CN.md#adapter-账号配置页面)。
 
 官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go)。
 

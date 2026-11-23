@@ -1,4 +1,4 @@
-// Package page 提供插件页面的前端套件静态资源（kit.css 与 kit.js）服务。
+// Package page 提供组件页面的前端套件静态资源。
 //
 // 插件通过 [Handler] 将套件静态资源挂载在自身的 HTTP 路由下；
 // 插件页面引用后即可自动与 WebUI postMessage 桥对接，跟随设计令牌、
@@ -23,6 +23,9 @@ var kitCSS []byte
 //go:embed kit.js
 var kitJS []byte
 
+//go:embed qrcode.js
+var qrCodeJS []byte
+
 const (
 	coreModule        = "github.com/AlonaBot/AlonaBot"
 	defaultSDKVersion = "(devel)"
@@ -34,6 +37,7 @@ const (
 	headerIfNoneMatch = "If-None-Match"
 	filenameKitCSS    = "kit.css"
 	filenameKitJS     = "kit.js"
+	filenameQRCodeJS  = "qrcode.js"
 )
 
 var getSDKVersion = sync.OnceValue(detectSDKVersion)
@@ -60,8 +64,8 @@ func detectSDKVersion() string {
 	return defaultSDKVersion
 }
 
-// Handler 返回响应 kit.css 与 kit.js 静态资源的 HTTP 处理函数。
-// 只响应路径末段为 kit.css 与 kit.js 的 GET 请求，其余均响应 404；
+// Handler 返回响应 kit.css、kit.js 与 qrcode.js 静态资源的 HTTP 处理函数。
+// 只响应路径末段匹配资源名的 GET 请求，其余均响应 404；
 // 响应带有正确的 Content-Type 以及基于 SDK 版本的 ETag 头。
 func Handler() http.Handler {
 	etag := fmt.Sprintf("%q", getSDKVersion())
@@ -84,6 +88,9 @@ func Handler() http.Handler {
 			contentType = contentTypeCSS
 		case filenameKitJS:
 			content = kitJS
+			contentType = contentTypeJS
+		case filenameQRCodeJS:
+			content = qrCodeJS
 			contentType = contentTypeJS
 		default:
 			http.NotFound(w, r)

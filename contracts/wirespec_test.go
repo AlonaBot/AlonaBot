@@ -913,6 +913,14 @@ func TestPageTitleFieldNumber(t *testing.T) {
 	}
 }
 
+// TestPagePurposeFieldNumber 固定 HTTP 页面用途的字段编号与类型。
+func TestPagePurposeFieldNumber(t *testing.T) {
+	field := (&pb.RouteDescriptor{}).ProtoReflect().Descriptor().Fields().ByNumber(20)
+	if field == nil || field.Name() != "page_purpose" || field.Kind() != protoreflect.StringKind || field.IsList() || field.HasPresence() || field.ContainingOneof() != nil {
+		t.Fatalf("RouteDescriptor field 20 should be string page_purpose, got %v", field)
+	}
+}
+
 // TestCommandListFieldNumbers 固定命令列表及其复用字段的编号、类型、列表与 presence。
 func TestCommandListFieldNumbers(t *testing.T) {
 	for _, tc := range []struct {

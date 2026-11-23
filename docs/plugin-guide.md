@@ -246,7 +246,7 @@ Adapter public perm/event packages declare permissions/events using SDK builders
 ### Plugin pages
 
 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` lists a page. Page precedes Handle/HandleFunc with English title; `{"pages":{"/subs/":"订阅"}}` in i18n/zh-CN.json translates it. Core exposes active pages/titles through component listings.
-WebUI hosts sandbox iframes/postMessage bridge. Page automatically registers public AuthStatic GET kit.css/kit.js beside the page. Relative imports provide shared styles/theme/locale and ⌘K/Ctrl+K global search. WebUI draws the first row (plugin/tabs/search); omit duplicate title/search bars inside pages.
+WebUI hosts sandboxed iframes and the `postMessage` bridge. `.Page(title)` registers `kit.css`, `kit.js`, and `qrcode.js` beside the page as public AuthStatic GET routes. Relative imports provide shared styles/theme/locale and ⌘K/Ctrl+K global search. WebUI draws the first row (plugin/tabs/search); omit duplicate title/search bars inside pages.
 
 Official Agent's five pages live in [pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) and pages/: personas/MCP/skills/memory/user tasks use component HTML/CSS/JS, titles in pages, text in messages and bridged component management routes. Memory pages paginate full conversations/manage notes/profiles; Core conversation summaries/clear use [management endpoints](deployment.md#management-api).
 
@@ -303,6 +303,7 @@ kit.js injects window.AlonaBot globally:
 
 - **request(method,path,body?)** calls this plugin's routes through WebUI. Objects send as JSON. Promise results include status/ok (2xx)/headers/body (UTF-8)/data (parsed JSON or text)/original body_base64, with text()/json() aliases for body/data. Bridge errors reject; HTTP errors remain inspectable results.
 - **t(key,args?) → Promise<string>** sends translate with key/optional string arguments on every call and returns bridge text unchanged. Current UI locale formats {name}; unknown keys return key, missing arguments retain placeholders. Bridge failure rejects; standalone pages resolve to key.
+- **Account configuration:** `getConfigContext()` and `completeConfig({patch})` send `config.context` and `config.complete` respectively. See [Adapter account configuration pages](#adapter-account-configuration-pages).
 - **onTheme(fn)** subscribes fn(theme,tokens), immediately delivers current state and returns unsubscribe.
 - **onLocale(fn)** subscribes fn(locale), immediately delivers current locale and returns unsubscribe; rerender by awaiting t in the callback.
 - **Shortcuts** capture ⌘K on macOS/Ctrl+K elsewhere and forward mod+k for global search.
@@ -321,6 +322,46 @@ AlonaBot.onLocale(async function(locale) {
   }
 });
 ```
+
+### Adapter account configuration pages
+
+When adding or editing an account, WebUI can open an Adapter page in the configuration dialog for QR login, an authorization redirect, or token validation. Register a GET route in `adapter.Descriptor.HTTP` and leave `Auth` at its zero value to require a management session. Each Adapter may declare one account configuration page, with a required `Title`.
+
+```go
+return &adapter.Descriptor{
+    AdapterID: "example",
+    HTTP: []adapter.HTTPRoute{{
+        Method: http.MethodGet,
+        Path: "/account/",
+        Handler: http.HandlerFunc(serveAccountPage),
+        Page: &adapter.PageDescriptor{Title: "Connect account", Purpose: adapter.PageInstanceConfig},
+    }},
+}
+```
+
+Core takes the title from `RouteDescriptor.page_title` and publishes `{"path":"/account/","title":"Connect account","purpose":"instance_config"}` in the component listing's `pages` array. An empty `page_purpose` means a regular page; the listing omits `purpose` in that case.
+
+After loading `kit.js`, call the `alonabot.plugin` bridge:
+
+| Method | op | Request arguments | Success result |
+| --- | --- | --- | --- |
+| `AlonaBot.getConfigContext()` | `config.context` | `{}` | `{mode: "create" \| "edit", instance_id: string, config: object, schema: object}` |
+| `AlonaBot.completeConfig({patch})` | `config.complete` | `{patch: object}` | `{}` |
+
+`config` is the current form configuration with secrets redacted; `schema` is the Adapter instance configuration schema. WebUI merges the patch into the form using RFC 7396, and the user saves it in the dialog. Omitted fields keep their values; `null` removes a field. Supply new or replacement secrets in plaintext, omit a secret field to retain its value, and never submit `$secret_set` markers. When the host has no account configuration context, both calls reject with an `Error` with `code: "FAILED_PRECONDITION"`.
+
+The initial flow covers logins that produce long-lived static credentials. The Adapter keeps credentials that need runtime refresh in its own component storage, keyed by instance ID; configuration stores only the account identifier. In `create` mode, `instance_id` is a draft name: never persist data under it. Generate a random ID in the Adapter for each login task. Keep re-login in component HTTP routes so it works while the instance is stopped. Use short polling at about two-second intervals to check status.
+
+For QR login, load `qrcode.js` separately after `kit.js` from the same directory:
+
+```html
+<link rel="stylesheet" href="kit.css">
+<div id="login-code" role="img" aria-label="Login QR code"></div>
+<script src="kit.js"></script>
+<script src="qrcode.js"></script>
+```
+
+Once the platform returns the login text, call `AlonaBot.renderQRCode(document.getElementById('login-code'), loginURL, {size: 256})`. It encodes UTF-8 bytes, selects the version automatically, uses level M error correction, and replaces the container contents with a themed SVG.
 
 ## 7. Configuration and secrets
 

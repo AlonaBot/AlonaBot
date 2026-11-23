@@ -247,7 +247,7 @@ Adapter 公开 perm/event 包用 SDK builder 声明权限/事件；公开 action
 
 用 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` 将 HTTP 路由列为插件页面。`.Page` 写在 `Handle` 或 `HandleFunc` 前，参数为英文源标题；在 `i18n/zh-CN.json` 写入 `{"pages":{"/subs/":"订阅"}}` 即可覆盖该路径的标题。Core 在路由运行期间通过组件列表返回页面和标题（[管理 API](deployment.zh-CN.md#管理-api)）。
 
-插件页面的沙箱 iframe 宿主与 `postMessage` 桥由 T-09.9 接入（[管理 API](deployment.zh-CN.md#管理-api)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css` 与 `kit.js` 两条 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+WebUI 提供沙箱 iframe 与 `postMessage` 桥（[管理 API](deployment.zh-CN.md#管理-api)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css`、`kit.js` 和 `qrcode.js` 的 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
 官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、记忆与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[管理 API](deployment.zh-CN.md#管理-api)）。记忆页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [管理 API](deployment.zh-CN.md#管理-api) 的管理入口。
 
@@ -304,6 +304,7 @@ func New() *sdk.Plugin {
 
 - **`request(method, path, body?)`**：经 WebUI 桥请求当前插件自己的 HTTP 路由。对象正文按 JSON 发送。Promise 返回的对象包含 `status`、`ok`（HTTP 2xx）、`headers`、`body`（UTF-8 文本）、`data`（解析成功的 JSON 或原文本）和原始 `body_base64`，也可调用 `text()` 或 `json()` 分别取得 `body` 或 `data`。桥错误会拒绝 Promise，HTTP 错误状态可从返回对象读取。
 - **`t(key, args?) → Promise<string>`**：每次经桥发送 `translate`，传递 `key` 与可选的字符串参数对象 `args`，原样返回桥响应文案。桥按当前界面语言取插件文案并格式化 `{name}` 占位符；未知键返回键名，缺参数保留占位符。桥错误使 Promise 拒绝，独立打开时 Promise 返回键名。
+- **账号配置**：`getConfigContext()` 与 `completeConfig({patch})` 分别发送 `config.context` 与 `config.complete`，见下文[账号配置页面](#adapter-账号配置页面)。
 - **`onTheme(fn)`**：监听主题与令牌变化，回调签名 `fn(theme, tokens)`，注册时立即交付当前状态，返回取消订阅函数。
 - **`onLocale(fn)`**：监听界面语言变化，回调签名 `fn(locale)`，注册时立即交付当前语言，返回取消订阅函数；页面在回调里重新 `await t(...)` 渲染。
 - **快捷键转发**：页面内捕获 ⌘K（macOS）与 Ctrl+K（其他系统），自动向 WebUI 转发 `mod+k` 打开全局搜索。
@@ -322,6 +323,46 @@ AlonaBot.onLocale(async function(locale) {
   }
 });
 ```
+
+### Adapter 账号配置页面
+
+添加或编辑账号时，WebUI 可以在配置对话框中打开 Adapter 提供的页面，执行扫码登录、授权跳转或 Token 校验。在 `adapter.Descriptor.HTTP` 中登记一条 GET 路由，保留 `Auth` 的零值以要求管理会话。每个 Adapter 最多声明一个账号配置页面，`Title` 必填。
+
+```go
+return &adapter.Descriptor{
+    AdapterID: "example",
+    HTTP: []adapter.HTTPRoute{{
+        Method: http.MethodGet,
+        Path: "/account/",
+        Handler: http.HandlerFunc(serveAccountPage),
+        Page: &adapter.PageDescriptor{Title: "Connect account", Purpose: adapter.PageInstanceConfig},
+    }},
+}
+```
+
+Core 从 `RouteDescriptor.page_title` 取页面标题，并在组件列表的 `pages` 中发布 `{"path":"/account/","title":"Connect account","purpose":"instance_config"}`。协议字段 `page_purpose` 为空时按普通页面处理，列表中省略 `purpose`。
+
+页面加载 `kit.js` 后，可通过 `alonabot.plugin` 桥调用：
+
+| 接口 | op | 请求参数 | 成功结果 |
+| --- | --- | --- | --- |
+| `AlonaBot.getConfigContext()` | `config.context` | `{}` | `{mode: "create" \| "edit", instance_id: string, config: object, schema: object}` |
+| `AlonaBot.completeConfig({patch})` | `config.complete` | `{patch: object}` | `{}` |
+
+`config` 是当前表单配置，secret 仅提供脱敏值；`schema` 是 Adapter 实例配置 Schema。WebUI 收到补丁后按 RFC 7396 合入表单，仍由用户在对话框保存：省略字段保留原值，`null` 删除字段。新增或替换 secret 时在补丁中填明文值；保留原 secret 时省略字段，禁止提交 `$secret_set` 标记。若宿主当前没有账号配置上下文，两个调用都以带 `code: "FAILED_PRECONDITION"` 的 `Error` 拒绝。
+
+首版流程只覆盖登录产出可长期使用的静态凭据。运行中需要刷新的凭据由 Adapter 按实例 ID 保存在自己的组件存储中，配置里只存账号标识。`create` 模式的 `instance_id` 只是草稿名，Adapter 不得用它持久化数据；登录任务使用 Adapter 自己生成的随机 ID。重新登录可在账号实例停止时发起，处理逻辑放在组件 HTTP 路由；状态查询使用约两秒一次的短轮询。
+
+扫码页面在 `kit.js` 后单独加载同目录的 `qrcode.js`：
+
+```html
+<link rel="stylesheet" href="kit.css">
+<div id="login-code" role="img" aria-label="Login QR code"></div>
+<script src="kit.js"></script>
+<script src="qrcode.js"></script>
+```
+
+拿到平台的扫码文本后，调用 `AlonaBot.renderQRCode(document.getElementById('login-code'), loginURL, {size: 256})`。函数以 UTF-8 字节编码，自动选择版本，使用 M 级纠错，并替换容器内容为跟随套件主题的 SVG。
 
 ## 7. 配置与 secret
 

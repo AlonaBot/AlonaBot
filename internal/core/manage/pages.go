@@ -6,8 +6,9 @@ import (
 )
 
 type page struct {
-	Path  string `json:"path"`
-	Title string `json:"title"`
+	Path    string `json:"path"`
+	Title   string `json:"title"`
+	Purpose string `json:"purpose,omitempty"`
 }
 
 func (s *Service) pages(id string, locales []string) []page {
@@ -29,7 +30,7 @@ func (s *Service) pages(id string, locales []string) []page {
 		if catalog := plugin.Messages(); catalog != nil {
 			title = catalog.PageTitle(locales, path, title)
 		}
-		pages = append(pages, page{Path: path, Title: title})
+		pages = append(pages, page{Path: path, Title: title, Purpose: route.GetPagePurpose()})
 	}
 	return pages
 }

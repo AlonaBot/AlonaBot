@@ -1,5 +1,7 @@
 # 未发布
 
+- Adapter 可声明要求管理会话的账号配置页面，由 WebUI 在添加或编辑账号时打开。使用新 SDK 重建 Adapter，并配合支持账号配置桥的 WebUI；页面套件可按需加载二维码渲染脚本。
+
 - 插件与 Agent 配置 Schema 改用 `plugin_config_schema.json`，Adapter 保留 `adapter_config_schema.json`。先停用旧组件并升级 Core，再经管理端更新使用新 SDK 重建的组件包，最后启用；原配置值、秘密和受管数据保留。
 
 - 新增 Adapter 实时操作目录、管理认证统一调用 API、`sdk/debug` 客户端和 `adapter instance list/actions/call` CLI。目录按真实 SDK 接口、能力及平台动作生成，调用保留部分结果、错误与 trace。使用新增目录 RPC 时，Adapter 须使用同一版本 SDK 重建。

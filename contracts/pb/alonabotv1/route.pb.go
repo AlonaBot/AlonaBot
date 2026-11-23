@@ -781,8 +781,10 @@ type RouteDescriptor struct {
 	Spec isRouteDescriptor_Spec `protobuf_oneof:"spec"`
 	// 触发者满足其中任一权限即可；空集合不要求 Actor。
 	RequiredPermissions []string `protobuf:"bytes,17,rep,name=required_permissions,json=requiredPermissions,proto3" json:"required_permissions,omitempty"`
-	// HTTP 路由的英文页面标题；非空表示插件页面。
-	PageTitle     string `protobuf:"bytes,19,opt,name=page_title,json=pageTitle,proto3" json:"page_title,omitempty"`
+	// HTTP 路由的英文页面标题；非空表示组件页面。
+	PageTitle string `protobuf:"bytes,19,opt,name=page_title,json=pageTitle,proto3" json:"page_title,omitempty"`
+	// 空串表示普通页面；instance_config 表示 Adapter 账号配置页面。
+	PagePurpose   string `protobuf:"bytes,20,opt,name=page_purpose,json=pagePurpose,proto3" json:"page_purpose,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -962,6 +964,13 @@ func (x *RouteDescriptor) GetRequiredPermissions() []string {
 func (x *RouteDescriptor) GetPageTitle() string {
 	if x != nil {
 		return x.PageTitle
+	}
+	return ""
+}
+
+func (x *RouteDescriptor) GetPagePurpose() string {
+	if x != nil {
+		return x.PagePurpose
 	}
 	return ""
 }
@@ -2016,7 +2025,7 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x0eMigrationState\x12.\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1a.alonabot.v1.MigrationModeR\x04mode\x126\n" +
 	"\x17completed_migration_ids\x18\x02 \x03(\rR\x15completedMigrationIds\x124\n" +
-	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\xfa\x06\n" +
+	"\x16self_migrate_completed\x18\x03 \x01(\bR\x14selfMigrateCompleted\"\x9d\a\n" +
 	"\x0fRouteDescriptor\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.alonabot.v1.RouteKindR\x04kind\x12\x1a\n" +
@@ -2037,7 +2046,8 @@ const file_alonabot_v1_route_proto_rawDesc = "" +
 	"\x04task\x18\x12 \x01(\v2\x15.alonabot.v1.TaskSpecH\x00R\x04task\x121\n" +
 	"\x14required_permissions\x18\x11 \x03(\tR\x13requiredPermissions\x12\x1d\n" +
 	"\n" +
-	"page_title\x18\x13 \x01(\tR\tpageTitleB\x06\n" +
+	"page_title\x18\x13 \x01(\tR\tpageTitle\x12!\n" +
+	"\fpage_purpose\x18\x14 \x01(\tR\vpagePurposeB\x06\n" +
 	"\x04specJ\x04\b\x05\x10\x06R\x13required_permission\"R\n" +
 	"\x0eRuleDescriptor\x12&\n" +
 	"\x0fhas_custom_rule\x18\x01 \x01(\bR\rhasCustomRuleJ\x04\b\x02\x10\x03R\x12require_chat_admin\"\xae\x04\n" +

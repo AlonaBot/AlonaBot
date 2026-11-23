@@ -86,7 +86,7 @@ func register(r *pb.Register, isAdapter bool) error {
 		return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "plugin registration contains adapter descriptor")
 	}
 	seen := make(map[string]bool, len(r.GetRoutes()))
-	hasHTTP := false
+	hasHTTP, hasInstanceConfig := false, false
 	for i, rd := range r.GetRoutes() {
 		id := rd.GetRouteId()
 		switch {
@@ -98,6 +98,25 @@ func register(r *pb.Register, isAdapter bool) error {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has an invalid kind", id)
 		case routeKindOf(rd) != rd.GetKind():
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has kind %s, which does not match its spec", id, rd.GetKind())
+		}
+		switch rd.GetPagePurpose() {
+		case "":
+		case "instance_config":
+			switch {
+			case !isAdapter:
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q: instance_config pages require an adapter component", id)
+			case strings.TrimSpace(rd.GetPageTitle()) == "":
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q: instance_config page requires page_title", id)
+			case rd.GetHttp().GetMethod() != http.MethodGet:
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q: instance_config page requires HTTP GET", id)
+			case rd.GetHttp().GetIsPublic():
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q: instance_config page requires Core session authentication", id)
+			case hasInstanceConfig:
+				return errf(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "an adapter can declare only one instance_config page")
+			}
+			hasInstanceConfig = true
+		default:
+			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q has unknown page_purpose %q", id, rd.GetPagePurpose())
 		}
 		if strings.HasPrefix(id, taskRoutePrefix) && rd.GetKind() != pb.RouteKind_ROUTE_KIND_TASK {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "route %q occupies reserved task prefix", id)

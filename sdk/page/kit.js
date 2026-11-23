@@ -4,6 +4,8 @@
  * 在 window.AlonaBot 上提供与 WebUI postMessage 桥通信的接口：
  * - request(method, path, body?) → Promise<Response 数据>
  * - t(key, args?) → Promise<string>
+ * - getConfigContext() → Promise<配置上下文>
+ * - completeConfig({patch}) → Promise<{}>
  * - onTheme(fn)
  * - onLocale(fn)
  */
@@ -215,6 +217,14 @@
     });
   }
 
+  function getConfigContext() {
+    return sendBridgeRequest('config.context', {});
+  }
+
+  function completeConfig(options) {
+    return sendBridgeRequest('config.complete', { patch: options.patch });
+  }
+
   function onTheme(fn) {
     if (typeof fn !== 'function') return function() {};
     themeListeners.push(fn);
@@ -281,6 +291,11 @@
         return typeof result.text === 'string';
       case 'request':
         return typeof result.status === 'number' && isStringRecord(result.headers) && typeof result.body_base64 === 'string';
+      case 'config.context':
+        return (result.mode === 'create' || result.mode === 'edit') && typeof result.instance_id === 'string' &&
+          isRecord(result.config) && isRecord(result.schema);
+      case 'config.complete':
+        return Object.keys(result).length === 0;
     }
     return false;
   }
@@ -344,6 +359,8 @@
   var AlonaBot = {
     request: request,
     t: t,
+    getConfigContext: getConfigContext,
+    completeConfig: completeConfig,
     onTheme: onTheme,
     onLocale: onLocale
   };

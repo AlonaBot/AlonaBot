@@ -1,5 +1,7 @@
 # Unreleased
 
+- Adapters can declare a management-only account configuration page for WebUI's add/edit account dialog. Rebuild the Adapter with the updated SDK and use a WebUI version that supports the account configuration bridge. The page kit also provides an optional QR renderer.
+
 - Plugin and Agent configuration Schemas now use `plugin_config_schema.json`; `adapter_config_schema.json` is unchanged. Disable old components before upgrading Core, update packages rebuilt with the new SDK through the management API, then enable them. Existing configuration values, secrets and managed data are retained.
 
 - Added live Adapter operation discovery, authenticated invocation APIs, the `sdk/debug` client and `adapter instance list/actions/call` CLI. Discovery uses real SDK interfaces, capabilities and platform actions; calls preserve partial payloads, errors and traces. Rebuild Adapters with the matching SDK to use the new catalog RPC.
