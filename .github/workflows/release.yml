@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 已存在的发行 tag
+        description: Existing release tag
         required: true
 permissions:
   contents: read
@@ -14,7 +14,15 @@ concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
+  quality:
+    name: Release quality gate
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+
   archives:
+    name: Release archives
+    needs: quality
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -29,8 +37,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
-          cache: false
-      - name: 构建并核对正式归档
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+      - name: Build and verify release archives
         shell: bash
         run: |
           set -euo pipefail
@@ -41,13 +52,13 @@ jobs:
             --platforms linux/amd64,linux/arm64 --out dist/bundle
           go run ./scripts/release-check --bundle --candidate dist/bundle --version "${TAG#v}" \
             --platforms linux/amd64,linux/arm64 --out "$RUNNER_TEMP/bundle-evidence"
-      - name: 验收本次归档首次启动
+      - name: Test archive first run
         env:
           ALONABOT_RELEASE_DIR: ${{ github.workspace }}/dist/core
           ALONABOT_BUNDLE_DIR: ${{ github.workspace }}/dist/bundle
         working-directory: tests
         run: go test ./e2e -run '^TestFirstRunDistribution$' -count=1
-      - name: 创建发行草稿
+      - name: Create release draft
         shell: bash
         run: |
           set -euo pipefail
@@ -60,6 +71,7 @@ jobs:
           if-no-files-found: error
 
   image:
+    name: Container image (${{ matrix.arch }})
     needs: archives
     strategy:
       fail-fast: false
@@ -83,7 +95,9 @@ jobs:
         with:
           name: distribution
           path: dist
-      - name: 从归档构建镜像并通过 Compose 验收
+      - name: Install smoke test tools
+        run: pipx install uv==0.11.11
+      - name: Build image and test Compose
         env:
           ARCH: ${{ matrix.arch }}
         shell: bash
@@ -102,8 +116,8 @@ jobs:
             --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
             --label org.opencontainers.image.licenses=MIT \
             -t "$image" --load .
-          python3 scripts/release-smoke.py --compose dist/bundle/docker-compose.yml --image "$image"
-      - name: 推送已验收的平台镜像
+          uv run --no-project python scripts/release-smoke.py --compose dist/bundle/docker-compose.yml --image "$image"
+      - name: Push verified platform image
         env:
           REGISTRY_TOKEN: ${{ github.token }}
           ARCH: ${{ matrix.arch }}
@@ -116,6 +130,7 @@ jobs:
           docker push "ghcr.io/alonabot/alonabot:${TAG#v}-$ARCH"
 
   publish:
+    name: Publish release
     needs: image
     runs-on: ubuntu-latest
     permissions:
@@ -129,7 +144,7 @@ jobs:
         with:
           ref: ${{ env.TAG }}
           persist-credentials: false
-      - name: 发布双架构清单
+      - name: Publish multi-architecture manifest
         env:
           REGISTRY_TOKEN: ${{ github.token }}
         shell: bash
@@ -140,12 +155,14 @@ jobs:
           unset REGISTRY_TOKEN
           docker buildx imagetools create -t "ghcr.io/alonabot/alonabot:${TAG#v}" -t ghcr.io/alonabot/alonabot:latest \
             "ghcr.io/alonabot/alonabot:${TAG#v}-amd64" "ghcr.io/alonabot/alonabot:${TAG#v}-arm64"
-      - name: 匿名拉取并验收公开 Compose
+      - name: Install smoke test tools
+        run: pipx install uv==0.11.11
+      - name: Pull anonymously and test public Compose
         shell: bash
         run: |
           set -euo pipefail
           export DOCKER_CONFIG="$RUNNER_TEMP/docker-anonymous"
           mkdir -p "$DOCKER_CONFIG"
           for arch in arm64 amd64; do docker pull --platform "linux/$arch" "ghcr.io/alonabot/alonabot:${TAG#v}"; done
-          python3 scripts/release-smoke.py --compose docker-compose.yml --image "ghcr.io/alonabot/alonabot:${TAG#v}"
+          uv run --no-project python scripts/release-smoke.py --compose docker-compose.yml --image "ghcr.io/alonabot/alonabot:${TAG#v}"
           gh release edit "$TAG" --draft=false --latest
