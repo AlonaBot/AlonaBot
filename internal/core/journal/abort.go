@@ -153,7 +153,7 @@ func (o *Orchestrator) collectSecrets(ctx context.Context, id string) error {
 	if err == nil {
 		protected = append(protected, []byte(pending.ConfigJSON))
 	}
-	_, err = o.opt.Secrets.Collect(ctx, id, protected)
+	_, err = o.opt.Secrets.Collect(ctx, id, protected, filepath.Join(o.opt.DataDir, "plugins", id, "config.json"))
 	return err
 }
 

@@ -17,14 +17,16 @@ import (
 
 // Candidates 接收通过管理前置校验的候选操作，由候选编排器实现。
 type Candidates interface {
-	Reload(ctx context.Context, id string, manualMigrationApproved bool) error
+	Reload(ctx context.Context, id string, manualMigrationApproved bool, snapshotInput []byte) error
 	Update(ctx context.Context, id string, staged *packages.Candidate, manualMigrationApproved bool) error
 	Rollback(ctx context.Context, id, generation string, manualMigrationApproved bool) error
 }
 
 type unsupportedCandidates struct{}
 
-func (unsupportedCandidates) Reload(context.Context, string, bool) error { return unsupported() }
+func (unsupportedCandidates) Reload(context.Context, string, bool, []byte) error {
+	return unsupported()
+}
 func (unsupportedCandidates) Update(context.Context, string, *packages.Candidate, bool) error {
 	return unsupported()
 }
@@ -64,13 +66,27 @@ func (s *Service) Reload(ctx context.Context, id string, manualMigrationApproved
 			if err := replaceDevelopmentConfig(name, pending.ConfigJSON); err != nil {
 				return err
 			}
-			if err := s.opt.Candidates.Reload(ctx, id, manualMigrationApproved); err != nil {
+			if err := s.opt.Candidates.Reload(ctx, id, manualMigrationApproved, nil); err != nil {
 				return err
 			}
 			return s.configurations().Discard(ctx, id)
 		}
 	}
-	return s.opt.Candidates.Reload(ctx, id, manualMigrationApproved)
+	var snapshotInput []byte
+	if in.Source != "dev" {
+		if _, found, err := s.configurations().Pending(ctx, id); err != nil {
+			return err
+		} else if !found {
+			snapshotInput, err = s.configurations().Snapshot(ctx, id)
+			if err != nil {
+				return err
+			}
+			if _, err := s.writeConfigLocked(ctx, id, nil, snapshotInput, false); err != nil {
+				return err
+			}
+		}
+	}
+	return s.opt.Candidates.Reload(ctx, id, manualMigrationApproved, snapshotInput)
 }
 
 // UpdateResult 返回本次更新的清单警告。

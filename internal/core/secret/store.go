@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -165,17 +167,30 @@ func (s *Store) Redact(snapshot []byte) ([]byte, error) {
 	return json.Marshal(result)
 }
 
-// Collect 删除该插件中未被 protected 快照引用的版本；快照解析失败时保留全部记录。
-func (s *Store) Collect(ctx context.Context, pluginID string, protected [][]byte) (int, error) {
+// Collect 删除该插件中未被 protected 或编辑文件引用的版本。
+// 编辑文件未完成时记录原因并暂缓删除；状态快照或文件读取失败返回完整错误。
+func (s *Store) Collect(ctx context.Context, pluginID string, protected [][]byte, snapshotPath string) (int, error) {
+	// 编辑文件可能保留早于最近三个代次的引用，必须与 Active、Pending 一起保护。
+	snapshot, err := os.ReadFile(snapshotPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return 0, fmt.Errorf("read config snapshot for secret collection: %w", err)
+	}
 	// 1. 先列出所属插件的版本并完整收集保护引用，再执行任何删除。
 	rows, err := s.state.ListSecrets(ctx, pluginID)
 	if err != nil {
 		return 0, err
 	}
 	retained := make(map[string]bool)
-	for _, snapshot := range protected {
+	for index, snapshot := range append(protected, snapshot) {
+		if index == len(protected) && snapshot == nil {
+			continue // 编辑文件尚未创建。
+		}
 		object, err := decodeObject(snapshot)
 		if err != nil {
+			if index == len(protected) {
+				slog.Warn("secret collection deferred: config snapshot is being edited", "plugin_id", pluginID, "error", err)
+				return 0, nil
+			}
 			return 0, err
 		}
 		_, err = walk(object, nil, func(path []string, value any) (any, bool, error) {
@@ -186,6 +201,10 @@ func (s *Store) Collect(ctx context.Context, pluginID string, protected [][]byte
 			return nil, found, err
 		})
 		if err != nil {
+			if index == len(protected) {
+				slog.Warn("secret collection deferred: config snapshot has invalid references", "plugin_id", pluginID, "error", err)
+				return 0, nil
+			}
 			return 0, err
 		}
 	}

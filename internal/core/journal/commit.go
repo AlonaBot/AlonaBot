@@ -2,6 +2,7 @@ package journal
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,12 +17,19 @@ func (o *Orchestrator) Commit(ctx context.Context, r *Result) (*supervisor.Runni
 	unlock := o.lock(r.record.PluginID)
 	committed := false
 	running, err := o.commit(ctx, r, &committed)
+	activationErr := err
+	if err == nil {
+		if syncErr := o.opt.Config.SyncSnapshot(context.WithoutCancel(ctx), r.record.PluginID, r.record.ExpectedOld, r.snapshotInput); syncErr != nil {
+			err = fmt.Errorf("generation committed; sync config snapshot: %w", syncErr)
+			slog.Error("config snapshot synchronization failed", "plugin_id", r.record.PluginID, "generation_id", r.Generation, "error", err)
+		}
+	}
 	// Abort 自己取得同一插件的编排锁，先归还本次提交锁。
 	unlock()
 	if err != nil && !committed {
 		return nil, o.Abort(ctx, r, err)
 	}
-	if err != nil {
+	if activationErr != nil {
 		slog.Log(ctx, logging.LevelCritical, "committed candidate activation failed", "plugin_id", r.record.PluginID, "op_id", r.OpID, "generation_id", r.Generation, "kind", r.record.Kind, "phase", phaseCommitted, "error", err)
 	}
 	return running, err

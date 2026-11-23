@@ -79,7 +79,8 @@ func (s *Service) Patch(ctx context.Context, pluginID, baseGeneration string, pa
 }
 
 // ImportSnapshot 把 <dataDir>/plugins/<id>/config.json 导入为以当前 Active 为基础的 Pending；
-// 不改变 Active。文件不存在返回 NOT_FOUND，内容不是 JSON 对象返回 INVALID_ARGUMENT 且不改已有 Pending。
+// 不改变 Active。文件缺失且已有 Active 时补建快照；尚无 Active 时返回 NOT_FOUND。
+// 内容不是 JSON 对象返回 INVALID_ARGUMENT 且不改已有 Pending。
 func (s *Service) ImportSnapshot(ctx context.Context, pluginID string) (Pending, error) {
 	unlock := s.store.LockPlugin(pluginID)
 	defer unlock()
@@ -88,19 +89,48 @@ func (s *Service) ImportSnapshot(ctx context.Context, pluginID string) (Pending,
 	if err != nil {
 		return Pending{}, err
 	}
-	// 2. 读取编辑快照并校验它是 JSON 对象；失败时不动已有 Pending。
-	path := filepath.Join(s.dataDir, "plugins", pluginID, "config.json")
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return Pending{}, configError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "config snapshot %s does not exist", path)
-	} else if err != nil {
-		return Pending{}, configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "read config snapshot %s: %v", path, err)
+	raw, err := s.snapshot(ctx, pluginID, active)
+	if err != nil {
+		return Pending{}, err
 	}
 	configJSON, err := Canonical(raw)
 	if err != nil {
 		return Pending{}, err
 	}
 	return s.put(ctx, pluginID, active, configJSON)
+}
+
+// Snapshot 读取编辑快照，已有 Active 且文件缺失时从状态库补建。
+func (s *Service) Snapshot(ctx context.Context, pluginID string) ([]byte, error) {
+	unlock := s.store.LockPlugin(pluginID)
+	defer unlock()
+	active, err := s.active(ctx, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	return s.snapshot(ctx, pluginID, active)
+}
+
+func (s *Service) snapshot(ctx context.Context, pluginID, active string) ([]byte, error) {
+	// 快照只从状态库补建；已有编辑的对象检查由导入入口执行。
+	path := filepath.Join(s.dataDir, "plugins", pluginID, snapshotFile)
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) && active != "" {
+		stored, readErr := s.store.GenerationConfig(ctx, active)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if err := writeSnapshot(path, []byte(stored), nil, true); err != nil {
+			return nil, err
+		}
+		raw, err = os.ReadFile(path)
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, configError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "config snapshot %s does not exist", path)
+	} else if err != nil {
+		return nil, configError(pb.ErrorCode_ERROR_CODE_INTERNAL, "read config snapshot %s: %v", path, err)
+	}
+	return raw, nil
 }
 
 // Discard 删除插件的 Pending；没有 Pending 时什么也不做。

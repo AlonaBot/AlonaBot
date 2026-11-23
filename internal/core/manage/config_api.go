@@ -281,6 +281,11 @@ func (s *Service) redactConfig(ctx context.Context, active string, schema, snaps
 func (s *Service) writeConfig(ctx context.Context, id string, base *string, raw []byte, patch bool) (*pendingConfig, error) {
 	unlock := s.lock(id)
 	defer unlock()
+	return s.writeConfigLocked(ctx, id, base, raw, patch)
+}
+
+// writeConfigLocked 由配置写入与重载入口在同一包锁内调用。
+func (s *Service) writeConfigLocked(ctx context.Context, id string, base *string, raw []byte, patch bool) (*pendingConfig, error) {
 	schema, _, _, err := s.configResources(ctx, id)
 	if err != nil {
 		return nil, err
@@ -296,14 +301,14 @@ func (s *Service) writeConfig(ctx context.Context, id string, base *string, raw 
 		previous = pending.Config
 	}
 	// 1. 导入也走同一秘密抽取路径，磁盘文件中的明文不会直接进入 Pending。
-	if base == nil {
-		raw, err = os.ReadFile(filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id, configSnapshotFile))
-		if errors.Is(err, os.ErrNotExist) {
-			if _, development := s.opt.Development[id]; development {
+	if base == nil && raw == nil {
+		if _, development := s.opt.Development[id]; development {
+			raw, err = os.ReadFile(filepath.Join(filepath.Dir(s.opt.Packages), "plugins", id, configSnapshotFile))
+			if errors.Is(err, os.ErrNotExist) {
 				raw, err = previous, nil
-			} else {
-				return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, Message: "config snapshot not found"}
 			}
+		} else {
+			raw, err = s.configurations().Snapshot(ctx, id)
 		}
 		if err != nil {
 			return nil, err
@@ -312,6 +317,13 @@ func (s *Service) writeConfig(ctx context.Context, id string, base *string, raw 
 	candidate, err := config.Canonical(raw)
 	if err != nil {
 		return nil, err
+	}
+	if _, development := s.opt.Development[id]; base == nil && !development {
+		// Core 导出的文件带秘密引用；按所属插件解析后沿用明文提交校验。
+		candidate, err = secret.New(s.opt.Store).Resolve(ctx, id, candidate)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var submitted any
 	if err := json.Unmarshal(candidate, &submitted); err != nil {
