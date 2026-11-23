@@ -24,7 +24,7 @@ import (
 func TestT09ManagementFlow(t *testing.T) {
 	// 1. 复用恢复插件的 SQLite 读写，只给临时产物补充程序版本与配置的观测入口。
 	const id, source = "recovery", "github.com/example/recovery"
-	const schema = `{"label":{"type":"string","default":"initial"}}`
+	const schema = `{"label":{"type":"string","default":"initial"},"token":{"type":"string","secret":true}}`
 	packageAt := func(version string) string {
 		t.Helper()
 		dir := t.TempDir()
@@ -81,6 +81,7 @@ func TestT09ManagementFlow(t *testing.T) {
 	if installed.Enabled || installed.Active != "" || installed.Version != "1.0.0" || installed.Signed || installed.Source != source {
 		t.Fatalf("installed package: %+v", installed)
 	}
+	configPath := filepath.Join(dir, "plugins", id, "config.json")
 	c.management(t, dir, "", "enable", id)
 	first := findPackage(t, c, dir, id)
 	if !first.Enabled || first.Active == "" || first.State != "Activated" {
@@ -88,6 +89,30 @@ func TestT09ManagementFlow(t *testing.T) {
 	}
 	session := nextSession("")
 	expectState("1.0.0", "initial", "1")
+	snapshotOperations := map[string]struct{ operation, old string }{first.Active: {"first_install", ""}}
+	if raw, err := os.ReadFile(configPath); err != nil || !strings.Contains(string(raw), `"initial"`) {
+		t.Fatalf("first activation snapshot: %s %v", raw, err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"label":"initial","token":"fixture-secret"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// 先导入明文，再重载含引用的快照；历史安装缺文件时也能从 Active 补建。
+	for index := range 3 {
+		previous := first.Active
+		c.management(t, dir, "", "reload", id)
+		first = findPackage(t, c, dir, id)
+		snapshotOperations[first.Active] = struct{ operation, old string }{"reload", previous}
+		session = nextSession(session)
+		expectState("1.0.0", "initial", "1")
+		if raw, err := os.ReadFile(configPath); err != nil || !strings.Contains(string(raw), `"initial"`) || !strings.Contains(string(raw), `"$secret_ref"`) || strings.Contains(string(raw), "fixture-secret") {
+			t.Fatalf("reload snapshot: %s %v", raw, err)
+		}
+		if index > 0 {
+			if err := os.Remove(configPath); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	writeValue("41")
 
 	// 2. restart 保留 Active 和生效配置；编辑文件只有经过 CLI reload 才进入新代次。
@@ -245,11 +270,13 @@ func TestT09ManagementFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := map[string]struct{ operation, old string }{
-		first.Active:    {"first_install", ""},
 		reloaded.Active: {"reload", first.Active},
 		updated.Active:  {"update", reloaded.Active},
 		unpinned.Active: {"update", updated.Active},
 		rolled.Active:   {"rollback", unpinned.Active},
+	}
+	for generation, operation := range snapshotOperations {
+		expected[generation] = operation
 	}
 	if len(records) != len(expected) {
 		t.Fatalf("unexpected candidate operations: %+v", records)

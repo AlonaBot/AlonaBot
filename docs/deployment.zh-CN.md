@@ -224,6 +224,8 @@ alonabot sleep-policy my-plugin auto
 
 唤醒与调度的实现、测试入口见[架构地图](../ARCHITECTURE.md)；开发验证见[源码开发](development.zh-CN.md#验证改动)。
 
+删除 Adapter 实例时，Core 同步清除它的事件游标、Profile 指定和会话访问名单条目；名单的访问模式及其他实例条目保留。同名重建使用全新游标。普通停用与重启保留这些状态。
+
 ## 备份与恢复
 
 整机备份前先停止 Core 和全部插件进程，再复制完整的 `data_dir`。备份须同时覆盖 Core 元数据、程序包、插件配置及各代次的受管 SQLite 数据库。单独备份 `state.sqlite` 只保存 Core 元数据，不包含插件业务数据。

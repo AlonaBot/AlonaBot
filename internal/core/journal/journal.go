@@ -93,7 +93,8 @@ type Result struct {
 	resumed          bool
 	generationOwned  bool
 	databaseOwned    bool
-	cause            error // Abort 重入保留首次失败。
+	cause            error  // Abort 重入保留首次失败。
+	snapshotInput    []byte // 本次首装或重载实际应用的编辑快照，供提交后核对。
 }
 
 // KeepRunning 决定提交后是否保留候选 Session。更新按原启用意图启动新代次，即使旧 Session 已丢失。
@@ -119,11 +120,12 @@ func precondition(message string) error {
 // Prepare 完成静态检查、停止旧写入者和候选准备，停在 PREPARED。
 // manualMigrationApproved 确认已停用并备份 external 数据，仅传给本次 Session。
 // 写 Journal 之后发生的错误连同 Result 返回，由调用方 Abort。
-func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, manualMigrationApproved bool) (*Result, error) {
-	return o.prepare(ctx, pluginID, kind, staged, "", manualMigrationApproved)
+// snapshotInput 是本次重载实际导入的磁盘内容；应用既有 Pending 时传 nil。
+func (o *Orchestrator) Prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, manualMigrationApproved bool, snapshotInput []byte) (*Result, error) {
+	return o.prepare(ctx, pluginID, kind, staged, "", manualMigrationApproved, snapshotInput)
 }
 
-func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, source string, manualMigrationApproved bool) (*Result, error) {
+func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, staged *packages.Candidate, source string, manualMigrationApproved bool, snapshotInput []byte) (*Result, error) {
 	unlock := o.lock(pluginID)
 	defer unlock()
 	// 1. 静态检查全部在 Journal 与停机之前，旧配置交给 SDK 迁移。
@@ -238,7 +240,10 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 		return nil, err
 	}
 	// 2. 记录操作身份，再取得新包的清理所有权；安装记录始终保持旧程序身份。
-	r := &Result{OpID: "op-" + rand.Text(), Generation: boot.GenerationId, pluginDir: pluginDir}
+	r := &Result{OpID: "op-" + rand.Text(), Generation: boot.GenerationId, pluginDir: pluginDir, snapshotInput: snapshotInput}
+	if resourceKind == KindFirstInstall {
+		r.snapshotInput = configuration
+	}
 	r.record = state.Journal{OpID: r.OpID, PluginID: pluginID, Kind: string(kind), ExpectedOld: active, NewGeneration: r.Generation, Phase: phaseStarted,
 		PackageDir: packageDir, Entrypoint: target.Entrypoint, Version: target.Version, PublisherKeyID: target.PublisherKeyID, BuildDigest: target.BuildDigest,
 		WasRunning: o.opt.State(pluginID) != "", WasEnabled: wasEnabled}

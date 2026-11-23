@@ -98,8 +98,8 @@ func TestPendingConfigEdits(t *testing.T) {
 	t.Run("ImportSnapshot does not change Active", func(t *testing.T) {
 		store, dir := activatedStore(t, `{"from":"active"}`)
 		service := New(store, dir)
-		if _, err := service.ImportSnapshot(ctx, "demo"); !hasCode(err, pb.ErrorCode_ERROR_CODE_NOT_FOUND) {
-			t.Fatalf("a missing config.json should be NOT_FOUND, got %v", err)
+		if pending, err := service.ImportSnapshot(ctx, "demo"); err != nil || string(pending.ConfigJSON) != `{"from":"active"}` {
+			t.Fatalf("a missing config.json should be restored from Active, got %+v %v", pending, err)
 		}
 		path := filepath.Join(dir, "plugins", "demo", "config.json")
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

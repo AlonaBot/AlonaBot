@@ -9,7 +9,7 @@ import (
 
 // PrepareRollback 从保留代次复制新候选，返回 PREPARED Session，由调用方 Commit 或 Abort。
 func (o *Orchestrator) PrepareRollback(ctx context.Context, pluginID, generation string, manualMigrationApproved bool) (*Result, error) {
-	return o.prepare(ctx, pluginID, KindRollback, nil, generation, manualMigrationApproved)
+	return o.prepare(ctx, pluginID, KindRollback, nil, generation, manualMigrationApproved, nil)
 }
 
 func (o *Orchestrator) rollbackSource(ctx context.Context, id, generation, active string, records []state.Journal) (state.Journal, error) {

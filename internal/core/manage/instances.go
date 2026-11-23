@@ -148,7 +148,7 @@ func (s *Service) removeInstance(ctx context.Context, adapterID, instanceID stri
 		var typed *validate.Error
 		if instanceID != "" && errors.As(err, &typed) && typed.Code == pb.ErrorCode_ERROR_CODE_NOT_FOUND {
 			// 删除可重入：设置已消失时，重试仍可清除遗留指定，并保持 404 响应。
-			if cleanupErr := s.opt.Store.DeleteProfileAssignments(context.WithoutCancel(ctx), []string{instanceID}); cleanupErr != nil {
+			if cleanupErr := s.opt.Store.DeleteInstanceState(context.WithoutCancel(ctx), []string{instanceID}); cleanupErr != nil {
 				return cleanupErr
 			}
 		}
@@ -186,7 +186,7 @@ func (s *Service) removeInstance(ctx context.Context, adapterID, instanceID stri
 // forgetInstances 在设置提交后清除指定与运行期选择；重复清理同一批实例仍然安全。
 func (s *Service) forgetInstances(ctx context.Context, owner string, instances []string) error {
 	ctx = context.WithoutCancel(ctx) // 请求结束后仍须完成跨文件与状态库的必要清理。
-	err := s.opt.Store.DeleteProfileAssignments(ctx, instances)
+	err := s.opt.Store.DeleteInstanceState(ctx, instances)
 	for _, instance := range instances {
 		err = errors.Join(err, s.opt.ForgetInstance(ctx, owner, instance))
 	}

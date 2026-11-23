@@ -50,6 +50,7 @@ func Discard(ctx context.Context, st *state.Store, secrets *secret.Store, p *Pre
 	if err == nil {
 		protected = append(protected, []byte(pending.ConfigJSON))
 	}
-	_, err = secrets.Collect(ctx, p.PluginID, protected)
+	pluginDir := filepath.Dir(filepath.Dir(filepath.Dir(p.DatabasePath)))
+	_, err = secrets.Collect(ctx, p.PluginID, protected, filepath.Join(pluginDir, "config.json"))
 	return err
 }

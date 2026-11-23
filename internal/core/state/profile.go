@@ -218,18 +218,6 @@ func (s *Store) AssignProfile(ctx context.Context, instance, session, profileID 
 	return s.db.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&row).Error
 }
 
-// DeleteProfileAssignments 清除已删除 Adapter 实例的全部指定。
-func (s *Store) DeleteProfileAssignments(ctx context.Context, instances []string) error {
-	return s.tx(ctx, func(tx *gorm.DB) error {
-		for _, instance := range instances {
-			if err := tx.Where(&ProfileAssignment{Instance: instance}).Delete(&ProfileAssignment{}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
 // PatchProfilePlugin 同时保存开关与字段覆盖；null 删除字段，调用方已完成全部校验。
 func (s *Store) PatchProfilePlugin(ctx context.Context, profileID, pluginID string, enabled *bool, values map[string]json.RawMessage) error {
 	return s.tx(ctx, func(tx *gorm.DB) error {

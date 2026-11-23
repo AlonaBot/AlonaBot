@@ -131,7 +131,8 @@ func collectPlugin(ctx context.Context, st *state.Store, secrets *secret.Store, 
 	}
 
 	// 3. 文件清理成功后回收 secret，日志只记录数量，避免暴露引用或秘密值。
-	count, err := secrets.Collect(ctx, in.PluginID, protected)
+	snapshotPath := filepath.Join(filepath.Dir(packagesDir), "plugins", in.PluginID, "config.json")
+	count, err := secrets.Collect(ctx, in.PluginID, protected, snapshotPath)
 	if count != 0 {
 		slog.Info("unreferenced secrets removed", "plugin_id", in.PluginID, "count", count)
 	}

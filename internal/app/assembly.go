@@ -994,7 +994,7 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	}
 	if generation == "" {
 		return c.prepareCandidate(ctx, install.PluginID, func(ctx context.Context) (*journal.Result, error) {
-			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil, false)
+			return c.assembly.journal.Prepare(ctx, install.PluginID, journal.KindFirstInstall, nil, false, nil)
 		})
 	}
 	var snapshot state.RouteSnapshot
@@ -1143,7 +1143,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 type managedCandidates struct{ core *Core }
 
 // Reload 串行激活正式组件的 Pending；缺省导入快照，开发组件沿直接停止与启动路径执行。
-func (m managedCandidates) Reload(ctx context.Context, id string, manualMigrationApproved bool) error {
+func (m managedCandidates) Reload(ctx context.Context, id string, manualMigrationApproved bool, snapshotInput []byte) error {
 	return m.core.operation(ctx, func(ctx context.Context) error {
 		in, err := m.core.store.GetInstall(ctx, id)
 		if err != nil {
@@ -1186,7 +1186,7 @@ func (m managedCandidates) Reload(ctx context.Context, id string, manualMigratio
 			return nil
 		}
 		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
-			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil, manualMigrationApproved)
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindReload, nil, manualMigrationApproved, snapshotInput)
 		})
 	})
 }
@@ -1195,7 +1195,7 @@ func (m managedCandidates) Reload(ctx context.Context, id string, manualMigratio
 func (m managedCandidates) Update(ctx context.Context, id string, staged *packages.Candidate, manualMigrationApproved bool) error {
 	return m.core.operation(ctx, func(ctx context.Context) error {
 		return m.apply(ctx, id, func(ctx context.Context) (*journal.Result, error) {
-			return m.core.assembly.journal.Prepare(ctx, id, journal.KindUpdate, staged, manualMigrationApproved)
+			return m.core.assembly.journal.Prepare(ctx, id, journal.KindUpdate, staged, manualMigrationApproved, nil)
 		})
 	})
 }

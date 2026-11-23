@@ -224,6 +224,8 @@ No arguments returns global settings and every installed plugin/agent's policy/r
 
 See [architecture](../ARCHITECTURE.md) for wake/scheduler implementation/test entry points and [development](development.md#verify-changes) for verification.
 
+Deleting an Adapter instance clears its event cursor, Profile assignments and session access-list entries. Access modes and other instances’ entries are preserved. Reusing the instance name starts with a fresh cursor. Ordinary stops and restarts retain this state.
+
 ## Backup and recovery
 
 Stop Core and every plugin process before copying the entire `data_dir`. Backups must include Core metadata, packages, plugin configuration and every generation's managed SQLite DB. `state.sqlite` alone holds Core metadata without plugin business data.

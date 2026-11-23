@@ -1,7 +1,7 @@
 # 官方整合包；从对应发行 tag 下载此文件，镜像版本与该 tag 一致。
 services:
   alonabot:
-    image: ghcr.io/alonabot/alonabot:0.3.0
+    image: ghcr.io/alonabot/alonabot:0.3.1
     init: true
     volumes:
       - alonabot-data:/data

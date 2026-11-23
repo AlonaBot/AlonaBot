@@ -385,6 +385,8 @@ Go 源文件可自由命名，入口由包级 `New` 及其签名决定；同包�
 - 回调之后，SDK 给缺失或 `null` 的字段补 `default` 或类型零值，递归校正对象、列表与模板；类型不符时先无损转换，取值超出 options、slider 或数字范围时恢复默认值，失效的 template_list 元素被移除。每次转换、恢复和移除都记录路径、原因与原值，secret 字段省略原值；校正后 required 仍未满足时准备失败。未知键和数字精度保留。
 - `GET /api/v1/plugins/{id}/config` 的 `corrections` 返回 Active 代次的校正记录，`unknown` 列出无效配置路径。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除所列无效键并写入 Pending，随后调用 reload 生效。普通 restart 保持同一配置快照，回调或校正改变结果时返回 `FAILED_PRECONDITION`。
 
+Core 在首次成功激活后把配置导出到 `<data_dir>/plugins/<id>/config.json`，Secret 字段使用引用。编辑后执行 `alonabot reload <id>`：优先应用有效 Pending，否则导入该文件；文件缺失时从 Active 补建。成功应用后写回规范配置，准备期间的新编辑保留。更新、回退和应用 Pending 时，仅刷新缺失或仍与旧 Active 一致的文件，尚未应用的磁盘编辑保留。快照同步失败会报告错误，已提交的 Active 继续生效。
+
 插件对象从 OnStart 开始通过 `p.Config()`（Handler 内为 `c.Config()`）取得 `config.Values`，子插件的 `s.Config()` 是 `plugin_config_schema.json` 中同名顶层 object 的只读视图；在 OnConfigLoad 中或更早调用会 panic。例如 `p.Config().String("greeting")` 读取上例的问候语。基础配置取值对象在同一 Session 内保持不变，`c.Config()` 冻结本次调用的配置文件视图；两者均可并发读取，集合 getter 返回可独立修改的副本。
 
 给顶层字段或 `object` 子字段写 `"profile": true`，可在管理端按配置文件保存覆盖值。优先标记实际需要按会话变化的叶字段；整个复合字段被覆盖时，完整子树须无 `secret`，包括 list 元素与所有模板分支。在 OnStart 或后台读取的字段（令牌、连接、缓存）不要标记。Handler 的 `c.Config()` 已合并当前会话的有效覆盖，返回整个插件的只读配置；同一 Context 的视图保持不变。Rule、Service、Hook 与延续构造 Context 时同样冻结视图，覆盖更新从 SDK 接收之后开始的调用生效。`p.Config()`、`s.Config()`、OnStart 与后台读取保持基础配置。
