@@ -23,11 +23,12 @@ import (
 
 // InvokeOptions 提供工具转发与 Core 直接确认所需的装配依赖。
 type InvokeOptions struct {
-	Call           func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response
-	Adapters       *adapter.Registry
-	Buttons        *buttons.Service
-	ConfirmTimeout time.Duration
-	DefaultLocale  func() string // 每次确认读取当前 Core 设置
+	Call               func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response
+	Adapters           *adapter.Registry
+	Buttons            *buttons.Service
+	CheckSessionAccess func(context.Context, *pb.Target) *pb.ErrorInfo
+	ConfirmTimeout     time.Duration
+	DefaultLocale      func() string // 每次确认读取当前 Core 设置
 }
 
 // RegisterInvoke 注册工具调用与操作确认，并接入确认按钮的点击处理。

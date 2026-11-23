@@ -254,6 +254,14 @@ alonabot sleep-policy my-plugin auto
 | 插件数据 | `/api/v1/plugins/{id}/data/` 下的 tables/rows、kv、files、export、clear，见[数据处理器](../internal/core/manage/data_api.go) |
 | 诊断包 | `POST /api/v1/diagnostics`，缺省 `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}`，返回 no-store ZIP |
 
+### 配置文件的会话访问
+
+在配置文件的「平台与消息」中设置会话访问。Core 按会话单独指定、实例缺省、`default` 的顺序选择配置文件，再应用该配置文件的模式：`all`（缺省）允许所有会话；`allow` 只允许列表中的会话，空列表拒绝全部；`deny` 只拒绝列表中的会话，空列表允许全部。被拒绝的会话不会触发命令或进入 Agent、插件事件处理，Core 也会拒绝发送。现有全局禁止名单继续在原有准入路径生效，任一规则拒绝即拒绝。
+
+用 `GET`/`PUT /api/v1/profiles/{id}/session-access` 读取或整体替换模式和列表，例如 `{"mode":"allow","sessions":[{"instance":"main","session":"telegram:-100123#42"}]}`。条目以实例和完整会话 ID 配对；话题与聊天分别匹配。每次最多提交 1000 项，重复项只保留第一次。省略 `sessions` 或传空数组会清空列表；`all` 模式下列表仍保存，但不参与判断。
+
+### 其他管理约定
+
 本地 JSON 安装提供 Core 主机上的 `Archive` 路径，身份和来源取自归档内 `plugin.yaml`；在线安装只提供 `Source: "owner/repo"`，Core 从最新 Release API 选择平台归档。可选 `ID` 约束期望身份。首次来源信任和同类替换按需确认；后续更新与保留记录重装继续核对来源和身份。`Package.PublisherKeyID`、`Package.Signed` 保留历史记录含义；新安装及成功更新或重装后分别为空和 false。
 
 浏览器对 install/update 端点发送 `multipart/form-data`：必填一个文件 part `archive`；可选文本 `confirm=true|false`；仅 install 可带 `replace=true|false`，仅 update 必填文本 `id`。文件 part 带 `filename`，文本 part 省略；未知或重复 part、缺文件或更新 ID、错误布尔值和截断请求返回 400 / INVALID_ARGUMENT。认证先于上传解析；归档流式写入独占临时目录，沿用安装大小与预检限制，调用完成后清理。确认响应为 409 与完整 `affected`，确认后重新上传归档并带 `confirm=true`。预检在修改旧组件前完成，来源绑定不符返回 403 / PERMISSION_DENIED；更新沿用身份、pin 与依赖检查并保留用户数据。

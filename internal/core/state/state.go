@@ -227,8 +227,11 @@ var initialSchema string
 //go:embed command_menu.sql
 var commandMenuSchema string
 
+//go:embed profile_session_access.sql
+var profileSessionAccessSchema string
+
 // migrations 保留已发布的初始迁移，后续结构按下标顺序追加。
-var migrations = []string{initialSchema, commandMenuSchema}
+var migrations = []string{initialSchema, commandMenuSchema, profileSessionAccessSchema}
 
 // migrate 只在全新文件上从版本 0 开始；已有文件的 schema_version 表已由 verify 确认存在。
 func (s *Store) migrate(ctx context.Context, fresh bool) error {

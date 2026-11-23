@@ -98,18 +98,9 @@ func (s *Service) find(id string) (Profile, error) {
 
 // Resolve 按单独指定、实例缺省、default 的顺序解析快照中的配置文件。
 func (s *Service) Resolve(instance, session string) Profile {
-	id := Default
-	for _, a := range s.snapshot.Assignments {
-		if a.Instance == instance && a.Session == "" {
-			id = a.ProfileID
-		}
-	}
-	if session != "" {
-		for _, a := range s.snapshot.Assignments {
-			if a.Instance == instance && a.Session == session {
-				id = a.ProfileID
-			}
-		}
+	id := state.ResolveProfileAssignment(s.snapshot.Assignments, instance, session)
+	if id == "" {
+		id = Default
 	}
 	for _, p := range s.snapshot.Profiles {
 		if p.ID == id {

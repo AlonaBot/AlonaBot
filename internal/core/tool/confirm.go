@@ -85,6 +85,11 @@ func (i *invoker) ask(ctx context.Context, caller router.Caller, parent *router.
 	if actor.GetExternalUserId() == "" || target.GetChatId() == "" || actor.GetAdapterInstanceId() != target.GetAdapterInstanceId() {
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "confirmation requires a trusted actor and default target").Err
 	}
+	if i.options.CheckSessionAccess != nil {
+		if safe := i.options.CheckSessionAccess(ctx, target); safe != nil {
+			return safe
+		}
+	}
 	instance, ok := i.options.Adapters.Get(target.GetAdapterInstanceId())
 	if !ok {
 		return failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "confirmation adapter instance is unavailable").Err
@@ -184,7 +189,16 @@ func (i *invoker) ask(ctx context.Context, caller router.Caller, parent *router.
 	return nil
 }
 
-func (i *invoker) clicked(_ context.Context, id string, allow bool, ev *pb.Event) {
+func (i *invoker) clicked(ctx context.Context, id string, allow bool, ev *pb.Event) {
+	// Core 确认点击在 Router 入队前处理，沿用同一会话策略。
+	if i.options.CheckSessionAccess != nil {
+		if safe := i.options.CheckSessionAccess(ctx, ev.GetTarget()); safe != nil {
+			if safe.GetCode() != pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+				slog.Warn("confirmation session admission failed", "event_id", ev.GetEventId(), "error", safe.GetSafeMessage())
+			}
+			return
+		}
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	record := i.pending[id]

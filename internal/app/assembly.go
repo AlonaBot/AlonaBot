@@ -338,7 +338,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	a.bus = bus.New(bus.Options{QueueEvents: v.BusQueueEvents, QueueBytes: v.BusQueueBytes, Metrics: a.metrics, AcquireActivity: a.acquireActivity})
 	a.bus.Register(a.mux)
 	a.broker = broker.New(broker.Options{Router: a.router, RequestTimeout: v.RequestTimeout, MaxDepth: v.CallChainMaxDepth, Metrics: a.metrics, Agent: a.agentID, EnsureActive: a.ensureActive})
-	a.tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons,
+	a.tools.RegisterInvoke(a.mux, tool.InvokeOptions{Call: a.broker.Call, Adapters: a.adapters, Buttons: a.buttons, CheckSessionAccess: p.CheckSessionAccess,
 		ConfirmTimeout: v.ToolConfirmTimeout, DefaultLocale: func() string { return a.settings.Settings().DefaultLocale }})
 	a.mux.Forward(a.broker.Call)
 	a.schemas = make(map[string]componentOptionSchemas)

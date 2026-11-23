@@ -10,6 +10,7 @@ import (
 
 const (
 	columnProfileSequence  = "profile_seq"
+	columnProfileInstance  = "instance"
 	columnProfileSession   = "session"
 	columnProfileOperation = "operation"
 )
@@ -34,6 +35,23 @@ type ProfileAssignment struct {
 
 // TableName 指定配置文件的会话指定表。
 func (ProfileAssignment) TableName() string { return "profile_assignment" }
+
+// ResolveProfileAssignment 优先返回会话指定，其次返回实例缺省；无指定时返回空串。
+func ResolveProfileAssignment(assignments []ProfileAssignment, instance, session string) string {
+	var fallback string
+	for _, a := range assignments {
+		if a.Instance != instance {
+			continue
+		}
+		if a.Session == session {
+			return a.ProfileID
+		}
+		if a.Session == "" {
+			fallback = a.ProfileID
+		}
+	}
+	return fallback
+}
 
 // ProfileOverride 保留插件字段覆盖的原始 JSON，包括已失效的项。
 type ProfileOverride struct {
@@ -156,6 +174,14 @@ func (s *Store) CreateProfile(ctx context.Context, row Profile, copyFrom string)
 			if err := tx.Create(&platform).Error; err != nil {
 				return err
 			}
+		}
+		access, err := readProfileSessionAccess(tx, source.ID)
+		if err != nil {
+			return err
+		}
+		if access.ProfileID != "" {
+			access.ProfileID = row.ID
+			return tx.Create(&access).Error
 		}
 		return nil
 	})

@@ -114,6 +114,18 @@ func (s *Service) profileRoutes(mux *http.ServeMux) {
 	register("DELETE /api/v1/profiles/{id}", func(p *profile.Service, w http.ResponseWriter, r *http.Request) {
 		respond(w, struct{}{}, s.changeProfileOverrides(r.Context(), p, "", func() error { return p.Delete(r.Context(), r.PathValue("id")) }))
 	})
+	register("GET /api/v1/profiles/{id}/session-access", func(p *profile.Service, w http.ResponseWriter, r *http.Request) {
+		result, err := p.SessionAccess(r.Context(), r.PathValue("id"))
+		respond(w, result, err)
+	})
+	register("PUT /api/v1/profiles/{id}/session-access", func(p *profile.Service, w http.ResponseWriter, r *http.Request) {
+		var request profile.SessionAccess
+		if err := decode(r, &request); err != nil {
+			respond(w, nil, err)
+			return
+		}
+		respond(w, struct{}{}, p.PutSessionAccess(r.Context(), r.PathValue("id"), request))
+	})
 	register("GET /api/v1/profiles/assignments", func(p *profile.Service, w http.ResponseWriter, r *http.Request) { respond(w, p.Assignments(), nil) })
 	register("PUT /api/v1/profiles/assignments/instances/{instance}", func(p *profile.Service, w http.ResponseWriter, r *http.Request) {
 		var request *struct {
@@ -303,7 +315,7 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 	var selected profile.Profile
 	if parent != nil && parent.DefaultTarget != nil {
 		target := parent.DefaultTarget
-		selected = profiles.Resolve(target.GetAdapterInstanceId(), profileSession(target))
+		selected = profiles.Resolve(target.GetAdapterInstanceId(), profile.TargetSession(target))
 	}
 	summary := func() (*pb.ProfileSummary, error) {
 		all, err := profiles.List(ctx)
@@ -340,7 +352,7 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 		if request.ProfileId != "" {
 			id = &request.ProfileId
 		}
-		if err := profiles.Assign(ctx, parent.DefaultTarget.GetAdapterInstanceId(), profileSession(parent.DefaultTarget), id); err != nil {
+		if err := profiles.Assign(ctx, parent.DefaultTarget.GetAdapterInstanceId(), profile.TargetSession(parent.DefaultTarget), id); err != nil {
 			return fail(err)
 		}
 		if s.opt.Router != nil {
@@ -434,15 +446,6 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 		return fail(err)
 	}
 	return wire.Response{Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(response), SchemaVersion: 1, Bytes: encoded}}
-}
-
-func profileSession(target *pb.Target) string {
-	escape := strings.NewReplacer("%", "%25", "#", "%23")
-	session := target.GetAdapterId() + ":" + escape.Replace(target.GetChatId())
-	if target.ThreadId != nil {
-		session += "#" + escape.Replace(target.GetThreadId())
-	}
-	return session
 }
 
 func (s *Service) changeProfileOverrides(ctx context.Context, profiles *profile.Service, pluginID string, change func() error) error {

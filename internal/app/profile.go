@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -81,12 +80,7 @@ func targetProfile(profiles *profile.Service, target *pb.Target) profile.Profile
 	if target.GetChatId() == "" {
 		return profiles.Resolve(target.GetAdapterInstanceId(), "")
 	}
-	escape := strings.NewReplacer("%", "%25", "#", "%23")
-	session := target.GetAdapterId() + ":" + escape.Replace(target.GetChatId())
-	if target.ThreadId != nil {
-		session += "#" + escape.Replace(target.GetThreadId())
-	}
-	return profiles.Resolve(target.GetAdapterInstanceId(), session)
+	return profiles.Resolve(target.GetAdapterInstanceId(), profile.TargetSession(target))
 }
 
 func (a *assembly) toolProfile(ctx context.Context, target *pb.Target) (*profile.Service, string, error) {
