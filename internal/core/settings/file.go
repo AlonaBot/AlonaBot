@@ -172,6 +172,7 @@ func settingsValues(s Settings) (map[string]any, error) {
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": s.TrustedProxies, "proxy": s.Proxy, "admins": s.Admins,
 		"github_api_base": s.GitHubAPIBase, "github_download_prefix": s.GitHubDownloadPrefix,
+		"go_download_base": s.GoDownloadBase, "goproxy": s.GoProxy,
 		"command_prefixes": s.CommandPrefixes,
 		"reply":            s.Reply,
 		"sleep":            s.Sleep,

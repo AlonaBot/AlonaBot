@@ -89,6 +89,18 @@ func (s *Service) settingsRoutes(mux *http.ServeMux) {
 		err = s.opt.Settings.Update(func(doc *settings.Document) error { return doc.Set([]string{"default_locale"}, *request.Locale) })
 		respond(w, struct{}{}, err)
 	})
+	mux.HandleFunc("GET /api/v1/core/downloads", func(w http.ResponseWriter, r *http.Request) {
+		current := s.opt.Settings.Settings()
+		respond(w, downloadSettings{&current.GoDownloadBase, &current.GoProxy, &current.Proxy}, nil)
+	})
+	mux.HandleFunc("PUT /api/v1/core/downloads", func(w http.ResponseWriter, r *http.Request) {
+		var request downloadSettings
+		if err := decode(r, &request); err != nil {
+			respond(w, nil, err)
+			return
+		}
+		respond(w, struct{}{}, s.updateDownloads(request))
+	})
 	mux.HandleFunc("GET /api/v1/core/denies", func(w http.ResponseWriter, r *http.Request) {
 		denies, err := s.readDenies(r.Context())
 		respond(w, denies, err)
@@ -103,6 +115,48 @@ func (s *Service) settingsRoutes(mux *http.ServeMux) {
 			respond(w, struct{}{}, s.updateDenies(r.Context(), request, method == "DELETE"))
 		})
 	}
+}
+
+// downloadSettings 是网络代理与源码构建的 Go 下载来源；PUT 时省略或为 null 的字段保持原值。
+// proxy 在 Core 启动时写入进程环境，修改后重启 Core 才生效。
+type downloadSettings struct {
+	GoDownloadBase *string `json:"go_download_base"`
+	GoProxy        *string `json:"goproxy"`
+	Proxy          *string `json:"proxy"`
+}
+
+func (s *Service) updateDownloads(request downloadSettings) error {
+	fields := []struct {
+		key   string
+		value *string
+		check func(string) error
+	}{
+		{"go_download_base", request.GoDownloadBase, settings.ValidateURLPrefix},
+		{"goproxy", request.GoProxy, settings.ValidateGoProxy},
+		{"proxy", request.Proxy, settings.ValidateProxy},
+	}
+	for _, field := range fields {
+		if field.value == nil {
+			continue
+		}
+		expanded, err := expandConfiguration(*field.value)
+		if err != nil {
+			return err
+		}
+		if err := field.check(expanded.(string)); err != nil {
+			return invalid(field.key + ": " + err.Error())
+		}
+	}
+	return s.opt.Settings.Update(func(doc *settings.Document) error {
+		for _, field := range fields {
+			if field.value != nil {
+				if err := doc.Set([]string{field.key}, *field.value); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (s *Service) updateAdmins(users []string, remove bool) error {

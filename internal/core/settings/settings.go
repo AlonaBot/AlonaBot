@@ -37,6 +37,9 @@ const (
 	defaultListen   = "127.0.0.1:" + defaultPort
 	containerListen = "0.0.0.0:" + defaultPort
 	defaultLocale   = "en-US"
+	// 源码构建下载 Go 发行版与模块的缺省来源。
+	defaultGoDownloadBase = "https://go.dev/dl/"
+	defaultGoProxy        = "https://proxy.golang.org,direct"
 )
 
 // DNS 文本长度扣除可选的终止点，遵循 net 解析器采用的 RFC 1035 线格式上限。
@@ -76,6 +79,8 @@ type Settings struct {
 	Proxy                string
 	GitHubAPIBase        string
 	GitHubDownloadPrefix string
+	GoDownloadBase       string // Go 发行版目录，以 / 结尾。
+	GoProxy              string // 源码构建使用的 GOPROXY。
 	Admins               []Admin
 	CommandPrefixes      []string
 	Reply                Reply
@@ -105,7 +110,8 @@ type fileState struct {
 func Defaults() Settings {
 	s := Settings{Listen: defaultListen, BaseURL: "http://" + defaultListen,
 		LogLevel:  slog.LevelInfo,
-		LogFormat: string(logging.FormatText), CommandPrefixes: []string{"/"}, DefaultLocale: defaultLocale}
+		LogFormat: string(logging.FormatText), CommandPrefixes: []string{"/"}, DefaultLocale: defaultLocale,
+		GoDownloadBase: defaultGoDownloadBase, GoProxy: defaultGoProxy}
 	if os.Getenv("ALONABOT_CONTAINER") == "1" {
 		s.Listen = containerListen
 	}
@@ -196,6 +202,7 @@ func defaultDocument() ([]byte, error) {
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
 		"github_api_base": s.GitHubAPIBase, "github_download_prefix": s.GitHubDownloadPrefix,
+		"go_download_base": s.GoDownloadBase, "goproxy": s.GoProxy,
 		"command_prefixes": s.CommandPrefixes, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
 		"sleep": map[string]any{"mode": s.Sleep.Mode, "idle_timeout": s.Sleep.IdleTimeout.String(), "plugins": s.Sleep.Plugins},
@@ -385,7 +392,8 @@ func readValue(n *node, key string, s *Settings) error {
 		}
 		s.LogFile.MaxAgeDays = days
 		return nil
-	case "github_api_base", "github_download_prefix", "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
+	case "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale",
+		"github_api_base", "github_download_prefix", "go_download_base", "goproxy":
 		value, err := n.text()
 		if err != nil {
 			return err
@@ -628,6 +636,56 @@ func readString(value, key string, s *Settings) error {
 			}
 		}
 		s.Proxy = value
+	case "go_download_base":
+		if err := ValidateURLPrefix(value); err != nil {
+			return err
+		}
+		s.GoDownloadBase = value
+	case "goproxy":
+		if err := ValidateGoProxy(value); err != nil {
+			return err
+		}
+		s.GoProxy = value
+	}
+	return nil
+}
+
+// ValidateProxy 校验 proxy 设置：空串表示直连，否则为 http、https 或 socks5 地址。
+func ValidateProxy(value string) error {
+	return readString(value, "proxy", &Settings{})
+}
+
+// ValidateURLPrefix 校验 go_download_base：HTTPS、有效主机、以 / 结尾，且没有查询、片段或认证信息。
+// Go 发行版的摘要与归档来自同一地址，因此要求 HTTPS。
+func ValidateURLPrefix(value string) error {
+	u, err := baseURL(value)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "https" {
+		return errors.New("URL prefix must use https")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return errors.New("URL prefix must not contain credentials, a query or a fragment")
+	}
+	if !strings.HasSuffix(value, "/") {
+		return errors.New("URL prefix must end with /")
+	}
+	return nil
+}
+
+// ValidateGoProxy 校验 GOPROXY 列表：以逗号或竖线分隔，每项是 direct、off 或 http(s) URL。
+func ValidateGoProxy(value string) error {
+	for _, entry := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == '|' }) {
+		if entry == "direct" || entry == "off" {
+			continue
+		}
+		if _, err := baseURL(entry); err != nil {
+			return fmt.Errorf("invalid GOPROXY entry %q: %w", entry, err)
+		}
+	}
+	if strings.Trim(value, ",|") == "" {
+		return errors.New("must not be empty")
 	}
 	return nil
 }

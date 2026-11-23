@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/diagnostics"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 )
@@ -46,6 +49,64 @@ func githubClient(base *http.Client) *http.Client {
 func (s *Service) githubHTTPError(address string, response *http.Response) error {
 	raw, err := io.ReadAll(io.LimitReader(response.Body, s.opt.Tuning.InstallMaxHTTPError))
 	return errors.Join(fmt.Errorf("download %s: %s: %s", address, response.Status, raw), err, response.Body.Close())
+}
+
+// copyGitHubArchive 共用 Release 资产与源码归档的请求期限和大小上限。
+func (s *Service) copyGitHubArchive(ctx context.Context, prefix, original string, dest io.Writer) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.opt.Tuning.InstallDownloadTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, prefix+original, nil)
+	if err != nil {
+		return 0, err
+	}
+	response, err := s.opt.HTTPClient.Do(request)
+	if err != nil {
+		return 0, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return 0, s.githubHTTPError(request.URL.String(), response)
+	}
+	n, err := io.Copy(dest, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
+	if err := errors.Join(err, response.Body.Close()); err != nil {
+		return n, err
+	}
+	if n > s.opt.Limits.MaxArchiveBytes {
+		return n, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
+	}
+	return n, nil
+}
+
+// readGitHubAPI 读取受限的 GitHub API 响应，保留 HTTP 状态供调用方解释 404。
+func (s *Service) readGitHubAPI(ctx context.Context, address, accept string) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.opt.Tuning.InstallDownloadTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	if request.URL.Scheme != "https" {
+		return nil, 0, invalid("GitHub API requires HTTPS")
+	}
+	request.Header.Set("Accept", accept)
+	response, err := s.opt.HTTPClient.Do(request)
+	if err != nil {
+		return nil, 0, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, response.StatusCode, s.githubHTTPError(address, response)
+	}
+	limited := &io.LimitedReader{R: response.Body, N: s.opt.Tuning.InstallMaxReleaseJSON}
+	raw, readErr := io.ReadAll(limited)
+	if readErr == nil && limited.N == 0 {
+		var extra [1]byte
+		_, readErr = io.ReadFull(response.Body, extra[:])
+		if readErr == nil {
+			readErr = &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "GitHub API metadata exceeds the size limit"}
+		} else if readErr == io.EOF {
+			readErr = nil
+		}
+	}
+	return raw, response.StatusCode, errors.Join(readErr, response.Body.Close())
 }
 
 // redactDownloadQuery 同时遮盖镜像在响应正文中单独回显的凭据值。

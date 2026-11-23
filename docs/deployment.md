@@ -60,19 +60,27 @@ Uninstall stops/unregisters the service, removes its definition/program/bundled 
 
 ## Container images
 
-Download the release Compose file, start the bundle and read the first-login token:
+Download the release Compose file and start the bundle:
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
   -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.2.0/docker-compose.yml
 docker compose up -d
+```
+
+Open `http://127.0.0.1:7650` in a browser on the host. The WebUI shows the one-time management token; save it and confirm to log in. Without a browser on the host, use the SSH tunnel below to complete confirmation while the port is still bound to loopback. To read the token for manual login:
+```fish
 docker compose exec alonabot alonabot admin-token show --data-dir /data
 ```
 
-Open `http://127.0.0.1:7650` and log in with the token. Initial startup needs no TTY: Core writes `/data/admin_token`, retaining it after login for the local CLI. Images support `linux/amd64` and `linux/arm64`; compose chooses the host platform. Keep the pinned image version in compose aligned with the chosen Release.
+After logging in, install plugins and Adapters from the store or [from source](#source-builds), create account instances, then configure an LLM. Behind restricted networks, configure the [GitHub endpoints](#component-download-mirrors) and, for source builds, the [Go download settings](#core-settings-and-http-entry-point). Initial startup needs no TTY: Core writes `/data/admin_token`, retaining it after login for the local CLI. Images support `linux/amd64` and `linux/arm64`; compose chooses the host platform. Keep the pinned image version in compose aligned with the chosen Release.
 
 The image runs as `10001:10001`. Its named volume mounts at `/data`, inheriting that image directory's ownership on first creation. For host bind mounts, grant UID/GID 10001 read/write/traversal access first; existing volumes need the same permissions. Retain the volume to keep configuration, state and component data.
 
 Ports publish only on host `127.0.0.1`. With `ALONABOT_CONTAINER=1`, the default listener is `0.0.0.0:7650`, while `base_url` remains `http://127.0.0.1:7650`; explicit `listen` wins. When this container exception applies, startup emits one WARN reminding you to publish only on host loopback. Remote management can use `ssh -N -L 7650:127.0.0.1:7650 user@host`, then the local address. For HTTPS reverse proxies configure `base_url`/`trusted_proxies` under [Core settings and HTTP](#core-settings-and-http-entry-point).
+
+Keep the host port bound to `127.0.0.1` until you confirm the first-run token locally. Only then change the binding to `0.0.0.0` or another non-loopback address. With Docker's userland proxy, even LAN requests can appear to come from the gateway; anyone who reaches the published port before confirmation could claim the token and gain full management access.
+
+The first-run endpoint `POST /api/auth/bootstrap` accepts direct local connections. With `ALONABOT_CONTAINER=1`, it also accepts the IPv4 default gateway from `/proc/net/route` for host requests routed through Docker's bridge. Host and Origin must still match the local `base_url`; requests with `Forwarded`, `X-Forwarded-*` or `X-Real-IP` are rejected. After confirmation, the endpoint stops returning the token.
 
 After installing an Adapter as needed, pass `TELEGRAM_BOT_TOKEN` through the compose service's `environment`; instance credentials in `/data/core_config.json` can use `"token": "${TELEGRAM_BOT_TOKEN}"`, preserved on writeback. The final scratch image contains Core, adjacent `packages/` and CA certificates. MCP stdio servers needing shell/Node/Python require your own image with those runtimes, retaining UID 10001, a writable data volume and `--init`.
 
@@ -107,6 +115,23 @@ An existing regular-file positional argument to `install` selects that archive; 
 After enabling help, send `/whoami` in chat and pass its returned user string to `admin add`. The returned instance name identifies its source.
 
 See [management API usage](#management-api) for endpoints and configuration reads/writes.
+
+### Source builds
+
+With `Build: true`, Core builds from source instead of downloading a Release asset, for example `POST /api/v1/packages/install` with `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.2.0","Confirm":true}`:
+
+1. Core resolves `Ref` (branch, tag or commit; empty means the default branch) through `github_api_base`, downloads `https://github.com/<owner>/<repo>/archive/<commit>.tar.gz` using `github_download_prefix` when configured, and unpacks it under `<data_dir>/staging`. GitHub publishes no digest for source tarballs. When a prefix is used, the task log warns that the archive came through the prefix without digest verification. Use a trusted download mirror.
+2. Core downloads the Go release Core itself was built with into `<data_dir>/toolchain/go` when missing, checking size and SHA-256 against the JSON listing of `go_download_base` (`?mode=json&include=all`, served by both `go.dev/dl/` and `golang.google.cn/dl/`).
+3. The project is packed for Core's platform like `alonabot plugin pack`: `CGO_ENABLED=0`, `GOTOOLCHAIN=auto`, modules come from `goproxy` and are verified by GOSUMDB (default `sum.golang.org`). `GOCACHE`, `GOMODCACHE`, `GOTMPDIR`, `TMPDIR` and `HOME` all live under `<data_dir>/cache`, so the scratch image can build. The Go subprocess inherits only `PATH`, `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` from Core, with its Go settings set explicitly (`GOENV=off`, `GOWORK=off`).
+4. The archive then goes through the usual install preflight, source trust and same-kind replacement confirmation, bound to source `github.com/<owner>/<repo>`. When `Ref` is a SemVer tag the version is the tag and must match `plugin.yaml`; any other commit gets the `plugin.yaml` version plus `+<12-character commit>`, for example `0.2.0+4769d92b0a8f`.
+
+Updates use `POST /api/v1/packages/update` with `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`; without `Source` the bound source is built.
+
+Builds run as background tasks: the request returns 202 with `{"task_id":"…"}` immediately. `GET /api/v1/tasks/{id}` returns `{"id","action":"install|update","status":"running|succeeded|failed","created_at","finished_at","log","result"}`; `log` holds each step and the complete standard error of the go command, and on success `result` equals the synchronous endpoint's result. On failure `http_status` and `error` match the synchronous error response, including 409 with `{"affected":[…]}` when confirmation is required; resubmit with `Confirm: true`, the build cache makes the rebuild faster. `GET /api/v1/tasks` lists tasks without `log`, and `DELETE /api/v1/tasks/{id}` cancels a running task or removes a finished record. Only one build runs at a time and queued tasks log that they are waiting. Tasks live only in memory, disappear when Core restarts, and running builds are cancelled on shutdown.
+
+`GET /api/v1/core/build-environment` returns `{"go_version":"go1.27.1","toolchain_bytes":0,"cache_bytes":0}`, with an empty `go_version` before the toolchain is downloaded. `DELETE /api/v1/core/build-environment?part=toolchain|cache` removes the toolchain or the cache, both when `part` is omitted, and returns the new usage; it returns 412 while a build runs. The toolchain takes about 250 MiB and the cache grows with builds.
+
+Source builds support neither cgo nor private repositories and modules: Core sends no credentials to GitHub or module proxies and has no `GOPRIVATE`/`GONOSUMDB` settings. The image has no git, so the `direct` fallback in `goproxy` does not work inside the container and dependencies must be available through a proxy. The module must sit at the repository root and the source must not contain symbolic links. Windows hosts and Core binaries built with a development Go version do not support source builds yet.
 
 ### Export diagnostics
 ```fish
@@ -147,6 +172,8 @@ Core exposes one public HTTP entry point at `listen` (default `127.0.0.1:7650`).
 All plugin-route responses, including Core errors, set `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups` and `X-Content-Type-Options: nosniff`, replacing plugin values. Core removes all plugin `Set-Cookie`/`Access-Control-Allow-Credentials` including trailers, logging only cookie names at WARN. Missing Content-Type becomes `application/octet-stream`. HTML uses this sandbox policy.
 
 A configured `proxy` becomes Core/child `HTTP_PROXY`/`HTTPS_PROXY`; otherwise existing `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` pass through unchanged.
+
+`go_download_base` (default `https://go.dev/dl/`, for example `https://golang.google.cn/dl/`) and `goproxy` (default `https://proxy.golang.org,direct`) are used only by [source builds](#source-builds). `go_download_base` must be an HTTPS URL ending with `/`. Changes apply to subsequent downloads without restarting. `GET`/`PUT /api/v1/core/downloads` reads and writes both settings and the network `proxy`; changing `proxy` requires restarting Core. Configure GitHub API and archive addresses separately under [Component download mirrors](#component-download-mirrors).
 
 First startup persists `<data_dir>/admin_token` with mode 0600 and prints only management address/file path. Local WebUI displays the pending token; copy/save it and click “I've saved it”. Remote browsers can read it explicitly:
 ```fish
@@ -199,14 +226,17 @@ Back up plugin-owned external databases/files outside framework directories usin
 
 ## Management API
 
-Use the same controlled `base_url` and authentication described above. Core API major 1 lives at `/api/v1/`; authentication lives at `/api/auth/`. JSON writes use `Content-Type: application/json`. CLI clients send `Authorization: Bearer <admin token>`; browsers use the management Cookie and send controlled `Origin` plus `X-Alonabot-CSRF` on methods other than GET/HEAD. `POST /api/auth/login` takes `{"token":"…"}`, returns `{"csrf_token":"…"}` and sets the Cookie. `GET /api/auth/session` restores CSRF after refresh; `POST /api/auth/logout` revokes the session. Login and confirmation keep the persisted token file.
+Use the same controlled `base_url` and authentication described above. Core API major 1 lives at `/api/v1/`; authentication lives at `/api/auth/`. JSON writes use `Content-Type: application/json`. CLI clients send `Authorization: Bearer <admin token>`; browsers use the management Cookie and send controlled `Origin` plus `X-Alonabot-CSRF` on methods other than GET/HEAD. `POST /api/auth/login` takes `{"token":"…","remember":true}`, returns `{"csrf_token":"…"}` and sets the Cookie: with `remember` the session lasts 30 days and the Cookie persists; otherwise the session lasts 8 hours and the Cookie ends with the browser session. `GET /api/auth/session` restores CSRF after refresh; `POST /api/auth/logout` revokes the session. Login and confirmation keep the persisted token file.
 
 Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTTP mappings are 400 INVALID_ARGUMENT, 403 PERMISSION_DENIED, 404 NOT_FOUND, 409 ALREADY_EXISTS or stale configuration, 412 FAILED_PRECONDITION, 501 UNSUPPORTED, 503 UNAVAILABLE and 500 INTERNAL/other codes. Authentication errors are plain text. Unknown management routes authenticate first (401 without credentials, JSON 404 afterward). Confirmation-required operations return 409 with `{"affected":["…"]}`: display every affected object and resend the same request after administrator approval using `Confirm: true` for install or `confirm: true` for actions/instance creation. Check actual status and Content-Type before parsing.
 
 | Operation | Endpoint and request |
 | --- | --- |
 | Core identity and components | `GET /api/v1/core`, `GET /api/v1/packages` |
-| Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`); see [management types](../internal/core/manage/install.go) |
+| Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`, `Build`, `Ref`); see [management types](../internal/core/manage/install.go). `Build` returns 202 with a task ID, see [Source builds](#source-builds) |
+| Background tasks | `GET /api/v1/tasks`, `GET`/`DELETE /api/v1/tasks/{id}` |
+| Build environment | `GET`/`DELETE /api/v1/core/build-environment`; DELETE accepts `?part=toolchain\|cache` |
+| Go downloads and network proxy | `GET`/`PUT /api/v1/core/downloads`, `{"go_download_base":"https://go.dev/dl/","goproxy":"https://proxy.golang.org,direct","proxy":""}`; PUT updates only the fields present, invalid values return 400 |
 | Enable, disable, restart, reload | `POST /api/v1/packages/{action}` with `{"id":"demo"}`; disable may require `confirm` |
 | Update | `POST /api/v1/packages/update`, `{"id":"demo","confirm":false,"install":{"Source":"owner/repo"}}` |
 | Rollback | `POST /api/v1/packages/rollback`, `{"id":"demo","generation":"retained-generation","confirm":false}` |
@@ -215,7 +245,7 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Active configuration | `GET /api/v1/plugins/{id}/config`; inspect `corrections` and `unknown` |
 | Edit Pending | `PUT`/`PATCH /api/v1/plugins/{id}/config/pending` with `base_generation` and full `config` or RFC 7396 `patch`; `DELETE` discards Pending |
 | Import and apply | `POST /api/v1/plugins/{id}/config/import` reads editable config.json into Pending; `POST /api/v1/plugins/{id}/reload` prepares/commits it |
-| Adapter instances | `GET /api/v1/adapter/instances`; `POST /api/v1/adapter/instances/{create,start,stop,delete}`; create uses `package_id`, `instance_id`, `config`, optional `confirm`, others use `instance_id` |
+| Adapter instances | `GET /api/v1/adapter/instances`; `POST /api/v1/adapter/instances/{create,start,stop,delete}`; create uses `package_id`, `instance_id`, `config`, optional `confirm`, others use `instance_id`; each listed instance has `package_state`: `enabled`, `disabled` or `not_installed` (not installed or uninstalled, configuration retained) for its Adapter component |
 | Instance configuration | `GET /api/v1/adapters/{adapter_id}/instance-schema`; `GET`/`PUT`/`DELETE /api/v1/adapters/{adapter_id}/instances/{instance_id}`; PUT uses `{"config":{}}` |
 | Logs | `GET /api/v1/logs/recent`, `/stream` (SSE), `/history?date=YYYY-MM-DD`; optional `source`, `level`, `trace`; `GET`/`PUT /api/v1/logs/levels` uses `{"global":"info","sources":{}}` partial updates |
 | Profiles | `GET`/`POST /api/v1/profiles`; `PATCH`/`DELETE /api/v1/profiles/{id}`; assignments, plugin, platform and tool overrides are in [profile routes](../internal/core/manage/profile_api.go) |
@@ -238,7 +268,7 @@ For hibernation use `GET`/`PUT /api/v1/core/sleep` and `GET`/`PUT`/`DELETE /api/
 
 Authenticated `GET /api/v1/core/changelog` returns `{"locale":"en-US","entries":[{"version":"0.1.0","markdown":"…"}]}`. It uses released `changelog/v<SemVer>/{en,zh-CN}.md`, excludes unreleased, maps en to en-US and selects exact or primary-language `Accept-Language` matches; absent/unmatched headers fall back to English. Entries sort by SemVer descending; versions omit `v`, optional `date` is omitted when unknown, and Markdown is preserved. `GET /api/v1/packages/{id}/changelog` reads the installed package: single-file CHANGELOG.md sections omit Unreleased and use en-US; directory form selects per version by preferred exact/canonical/primary-language match then en-US.md, with lexicographic filename tie-breaking. Uninstalled or dev components return 404; no released entries returns en-US/empty entries.
 
-Component icons use authenticated `GET /api/v1/packages/{id}/icon`. Referenced configuration images use `GET /api/v1/packages/{id}/examples/{path}` from the Active package only. Plugin pages appear in package `pages` and open under `/plugins/{id}` inside the WebUI sandbox; see [page kit](plugin-guide.md#plugin-pages).
+Component icons use authenticated `GET /api/v1/packages/{id}/icon`. Referenced configuration images use `GET /api/v1/packages/{id}/examples/{path}` from the Active package only. Package `Name`, `Description` and `Author` come from the packaged `plugin.yaml` and are omitted when unreadable. Plugin pages appear in package `pages` and open under `/plugins/{id}` inside the WebUI sandbox; see [page kit](plugin-guide.md#plugin-pages).
 
 The official WebUI is a real component with its own backend, not just static `dist` files. Its authenticated prefix `/plugins/alonabot-webui-admin` includes `/stats?range=24h|7d|30d`, `/users`, `/store`, and `/changelog/seen?component=core`. `PUT /changelog/seen` accepts exactly `{"component":"core","version":"0.1.0"}` and monotonically advances persisted SemVer; GET returns `{"version":null}` or a version. Copying only `dist` leaves these backend routes unavailable. Agent model/persona/MCP/skill/memory/task pages similarly belong to the Agent; see its [HTTP implementation](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go).
 
@@ -248,11 +278,11 @@ The [management package](../internal/core/manage) owns the complete current rout
 
 The official WebUI stores its data in its own managed SQLite database. Backend routes below are relative to `/plugins/alonabot-webui-admin`, use management authentication/CSRF and return `Cache-Control: no-store`. Component installation and updates still use Core's management APIs.
 
-Use `GET /store?source=AlonaBot/plugin-store&role=plugin&q=&sort=stars&offset=0&limit=9&refresh=false`. `source` must be `owner/repo`; specify nonnegative `offset` and positive `limit`. Role is empty or plugin/adapter/agent/webui. The response contains `source`, `fetched_at`, `stale`, `items`, `total` and `counts` (`all` and each role). Items contain `repo,role,tags,id,name,version` plus optional `description,author,stars,icon_url`; missing stars means unknown, while zero remains zero. The default source is `AlonaBot/plugin-store`; browser-persisted source lists retain an intentional empty list.
+Use `GET /store?source=AlonaBot/plugin-store&mirror=auto&role=plugin&q=&sort=stars&offset=0&limit=9&refresh=false`. The store reads `store.json` from the source repository's `index` branch, a snapshot generated by that repository's CI (see the [plugin-store README](https://github.com/AlonaBot/plugin-store#readme)); it makes no per-entry GitHub API calls and downloads no archives. `mirror` selects the route: `auto` (default) requests `https://raw.githubusercontent.com/<source>/index/store.json` and `https://cdn.jsdelivr.net/gh/<source>@index/store.json` concurrently and uses the first success; `github` or `jsdelivr` uses only that address; an https URL prefix is prepended to the raw address (GitHub accelerator style); other values return 400 / INVALID_ARGUMENT. Entries whose repo or role is invalid are dropped and icons other than `data:image/` are removed. `source` must be `owner/repo`; specify nonnegative `offset` and positive `limit`. Role is empty or plugin/adapter/agent/webui. The response contains `source`, `fetched_at`, `stale`, `items`, `total` and `counts` (`all` and each role). Items contain `repo,role,tags,id,name,version` plus optional `description,author,stars,icon_url`; missing stars means unknown, while zero remains zero. The default source is `AlonaBot/plugin-store`; browser-persisted source lists retain an intentional empty list.
 
 Search is a case-insensitive substring match over name, description, repo, author and space-joined tags; missing values are empty. Counts are calculated after search and before role filtering; total is calculated after role filtering. Default/empty `sort=stars` orders known star counts descending before unknown values; `sort=name` orders names case-insensitively. Ties preserve index order; other sort values return 400 / INVALID_ARGUMENT. WebUI shows nine cards per page and returns to page one after search, role or sort changes.
 
-`refresh` accepts only literal `true` or `false`; even an empty value returns 400 / INVALID_ARGUMENT. Omitted/true refreshes and persists a successful full snapshot. With false, an existing successful snapshot is searched, counted, sorted and paginated without remote requests; no snapshot triggers the first fetch. Snapshot reads return `stale=false` and the original `fetched_at`. Entering the store, changing sources and keyboard-accessible manual refresh use true; search/filter/sort/pagination use false. A failed refresh retains the successful snapshot and original timestamp, returning `stale=true` plus the full error. Without a snapshot, ordinary failures return 500 / INTERNAL; a missing source index returns 404 / SOURCE_INDEX_MISSING.
+`refresh` accepts only literal `true` or `false`; even an empty value returns 400 / INVALID_ARGUMENT. Omitted/true refreshes and persists a successful full snapshot. With false, an existing successful snapshot is searched, counted, sorted and paginated without remote requests; no snapshot triggers the first fetch. Snapshot reads return `stale=false` and the original `fetched_at`. Entering the store, changing sources and keyboard-accessible manual refresh use true; search/filter/sort/pagination use false. A failed refresh retains the successful snapshot and original timestamp, returning `stale=true` plus the full error. Without a snapshot, ordinary failures return 500 / INTERNAL; a source without `store.json` returns 404 / SOURCE_INDEX_MISSING.
 
 Version checks and Release previews for installation and updates use Core's `GET /api/v1/core/github/release?source=owner/repo`, returning `repo,version,release_url,markdown,fetched_at`. The lookup shares installation's GitHub mirror settings, HTTP client and original repository/tag validation. Failures return complete redacted errors without a stale snapshot. A latest-Release 404 returns 404 / NOT_FOUND, mapped to null by WebUI's `getLatestRelease`. Links allow only HTTP/HTTPS/mailto; HTML renders as text. Update previews use the component's bound source, installed changelogs supply post-update notes, and seen versions advance only to versions actually displayed.
 
@@ -260,7 +290,7 @@ For submission, `GET /store/check?repo=owner/repo` reads the latest Release API 
 
 A source index uses `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`; tags are optional. After checking, the user supplies tags and opens the source repository's `issues/new` with `template=submit-plugin.yml` and URL-encoded `repo`, `role`, `tags`, `release_url`, using the canonical checked repo. The browser submits the GitHub Issue.
 
-Each remote HTTP request has a 20-second deadline covering its response body; serial dependent requests may take longer in total, and aggregate refresh follows caller cancellation. HTTPS host/path restrictions apply to initial URLs and every redirect, allowing only the supported GitHub API/Release/CDN locations. Component safety limits are: metadata 1 MiB, index 4 MiB, archive 64 MiB, expanded data 256 MiB per scan (at most two scans), one file 128 MiB, 2,048 entries per scan, retained manifest 256 KiB and retained icon 1 MiB. Exceeding limits preserves the `exceeds ... bytes/entries` error and follows the same cache rules. The current implementation lives in [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go).
+Each WebUI store request to a remote server has a 20-second deadline covering the response body; serial requests may take longer in total, and refresh follows caller cancellation. `/store/check` reads the GitHub API and Release archives. It checks HTTPS hosts and paths on the initial URL and each redirect. Safety limits are: store snapshot 32 MiB (including inline icons), metadata 1 MiB, archive 64 MiB, expanded data 256 MiB per scan (at most two scans), one file 128 MiB, 2,048 entries per scan, retained manifest 256 KiB and retained icon 1 MiB. Exceeding limits preserves the `exceeds ... bytes/entries` error and follows the same cache rules. The current implementation lives in [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go).
 
 ## Component download mirrors
 
@@ -275,7 +305,7 @@ Set `github_api_base` and `github_download_prefix` independently in Core's `core
 
 The archive address is exactly **prefix + original URL**, for example `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`. Include any required trailing slash in the prefix. Both settings and redirects require HTTPS. Omit URL credentials and fragments. The API base may include a path and must omit query parameters. A download prefix may use a query form such as `https://proxy.example/?url=`.
 
-Install and update verify the archive against the SHA-256 digest returned by the Release API. `github_api_base` is the trust root for that digest; use only a trusted GitHub API reverse proxy. When an older asset has no digest, clear the download prefix and retry. Direct downloads of those assets verify size and log a warning.
+For Release installs and updates, Core verifies the archive against the SHA-256 digest returned by the Release API. `github_api_base` is the trust root for that digest; use only a trusted GitHub API reverse proxy. When an older asset has no digest, clear the download prefix and retry. Direct downloads of those assets verify size and log a warning. For source tarballs, see [Source builds](#source-builds).
 
 Override either field for one command; overrides leave the saved settings unchanged:
 
@@ -288,6 +318,6 @@ alonabot update alonabot-agent-official --github-download-prefix '' --yes
 
 Authenticated `GET/PUT /api/v1/core/github` reads/writes the persistent settings; PUT requires both strings. Install requests accept optional `github_api_base` and `github_download_prefix`; update requests place them inside `install`. Omission inherits settings; an explicit empty string restores the corresponding official address. Core validates the original GitHub repository, release tag and asset address before transforming request URLs, then checks the archive digest and the package's identity, platform, version and build-info. Errors and diagnostic settings omit the download-prefix query, and cross-host redirects remove `Referer`. Downloads have no automatic retry or fallback.
 
-`INSTALL_DOWNLOAD_TIMEOUT` defaults to five minutes per request, including redirects and body reads. `INSTALL_MAX_RELEASE_JSON` defaults to 4 MiB. `INSTALL_MAX_HTTP_ERROR` keeps the first 4 KiB of non-200 response bodies by default. Run `alonabot tune list` to see the effective values.
+`INSTALL_DOWNLOAD_TIMEOUT` defaults to five minutes per GitHub request, including redirects and body reads. `INSTALL_MAX_RELEASE_JSON` defaults to 4 MiB for GitHub API responses, including source ref resolution. `INSTALL_MAX_ARCHIVE` caps both Release assets and source tarballs. `INSTALL_MAX_HTTP_ERROR` keeps the first 4 KiB of non-200 response bodies by default. Run `alonabot tune list` to see the effective values.
 
 Store discovery and submission checks still use the selected source's GitHub index and display snapshot under the separate fetch rules above; first-time store browsing requires a reachable index source. Direct repository installation, installed-component update checks and confirmation previews call Core directly; installation and updates then use the same mirror settings.

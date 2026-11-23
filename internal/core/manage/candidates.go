@@ -81,6 +81,20 @@ type UpdateResult struct {
 // Update 验证来源、pin 与降版影响，再移交暂存候选。
 func (s *Service) Update(ctx context.Context, id string, req InstallRequest, manualMigrationApproved bool) (result UpdateResult, err error) {
 	defer finish(&err)
+	// 源码构建在目录锁外完成；未给出来源时构建已绑定的 GitHub 来源，候选来源随后照常核对。
+	if req.Build {
+		if req.Source == "" {
+			in, err := s.installed(ctx, id)
+			if err != nil {
+				return result, err
+			}
+			req.Source = strings.TrimPrefix(in.Source, "github.com/")
+		}
+		if req.built, err = s.buildSource(ctx, req, req.buildLog()); err != nil {
+			return result, err
+		}
+		defer func() { err = errors.Join(err, req.built.remove()) }()
+	}
 	s.catalog.Lock()
 	defer s.catalog.Unlock()
 	unlock := s.lock(id)

@@ -58,7 +58,11 @@ func packTargets(ctx context.Context, options generate.Options, targets []manife
 	if err != nil {
 		return nil, err
 	}
-	staging, err := os.MkdirTemp("", "alonabot-pack-*")
+	// 暂存目录与输出目录同级：无 /tmp 的容器也能打包，归档移动不跨文件系统。
+	if err := os.MkdirAll(filepath.Dir(outDir), privateMode); err != nil {
+		return nil, err
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(outDir), ".alonabot-pack-*")
 	if err != nil {
 		return nil, err
 	}

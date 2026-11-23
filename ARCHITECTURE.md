@@ -112,6 +112,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `internal/pluginkit -> internal/generate`、`plugintest -> internal/generate`；`sdk`、`sdk/internal/registry`、`sdk/genimpl`、`internal/app`、`plugintest`、`internal/generate -> internal/generated`；本 module 的测试代码 `-> internal/generated` | 生成器在内部包中，由 CLI 构建与 plugintest 的现场扫描共用；资源登记表只 import 标准库 |
 | `根包 -> internal/app`、`cmd/alonabot -> internal/app`；`internal/app -> internal/core/...`、`-> sdk/...`、`-> contracts`、`-> internal/inproc`、`-> internal/tune` | 根包只保留库模式接口，装配与开发 CLI 专用能力在 `internal/app`；`cmd/alonabot` 不 import 根包 |
 | `cmd/alonabot -> internal/pluginkit`、`internal/pluginkit -> contracts/...`、`-> internal/generate` | 开发 CLI 的构建与打包复用生成器与契约包 |
+| `internal/core/manage -> internal/pluginkit`、`-> internal/generate` | 源码安装复用开发 CLI 的打包，并为 go 命令指定下载的工具链与隔离环境 |
 | `examples/plugins/... -> sdk/...`、`-> contracts` | 示例只走公共 SDK |
 | `tests/e2e -> alonabot-adapter-telegram/telegramtest`（仅集成测试） | Telegram 目录运行集成测试与本地故障矩阵复用官方 Adapter、Bot API 模拟服务和开发构建装配 |
 | `scripts/dist -> contracts/release`、`-> internal/core/packages`、`-> internal/tune`、`-> internal/releasenotes`；`scripts/release-notes -> internal/releasenotes`；`internal/releasenotes -> contracts/manifest`；`scripts/release-check -> contracts/manifest`、`-> contracts/release` | 发行构建复用安装预检核对组件身份与资源，发布复验读取包内声明；其余步骤经 `os/exec` 调用 go 与 alonabot |
@@ -136,6 +137,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `<plugins>/<id>/runtime.lock`、插件受管 DB 连接 | 插件进程内的 `sdk` |
 | 插件业务数据（受管 SQLite 候选文件） | 插件；Core 只负责候选复制与准入 |
 | `_alonabot_kv` | `sdk/sqlitedb` 初始化表结构，插件经 `sdk/kv` 管理键值；表随受管 SQLite 处理 |
+| `<data_dir>/toolchain/`、`<data_dir>/cache/`（源码构建的 Go 工具链与 GOCACHE、GOMODCACHE 等缓存） | `internal/core/manage` |
 | `<data_dir>/plugin_data/<id>/` | `internal/app` 在启动装配时创建并下发路径（离线 `test` 由 CLI 准备临时目录），`internal/core/manage` 清理；文件由插件管理 |
 | 插件自管的外部数据（外部数据库、框架外文件） | 插件；Core 不创建、不校验、不备份 |
 

@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -37,6 +38,8 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.logRoutes(mux)
 	s.jobRoutes(mux)
 	s.dataRoutes(mux)
+	s.taskRoutes(mux)
+	s.buildEnvironmentRoutes(mux)
 	mux.HandleFunc("GET /api/v1/plugins/{id}/generations", s.generations)
 	mux.HandleFunc("GET /api/v1/adapter/instances", s.listInstances)
 	mux.HandleFunc("GET /api/v1/chats", s.chats)
@@ -56,6 +59,14 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 		var request InstallRequest
 		if err := decode(r, &request); err != nil {
 			respond(w, nil, err)
+			return
+		}
+		// 源码构建作为后台任务运行，返回 202 与任务 ID，经 /api/v1/tasks/{id} 查询。
+		if request.Build {
+			respondTask(w, s.startTask("install", func(ctx context.Context, log io.Writer) (any, error) {
+				request.log = log
+				return s.Install(ctx, request)
+			}))
 			return
 		}
 		result, err := s.Install(r.Context(), request)
@@ -101,6 +112,13 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 				err = s.Reload(r.Context(), request.ID, request.ManualMigrationApproved)
 			case "update":
 				request.Install.Confirm = request.Confirm
+				if request.Install.Build {
+					respondTask(w, s.startTask("update", func(ctx context.Context, log io.Writer) (any, error) {
+						request.Install.log = log
+						return s.Update(ctx, request.ID, request.Install, request.ManualMigrationApproved)
+					}))
+					return
+				}
 				result, err := s.Update(r.Context(), request.ID, request.Install, request.ManualMigrationApproved)
 				respond(w, result, err)
 				return
@@ -193,6 +211,49 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	}))
 }
 
+// errorResponse 把管理错误映射为 HTTP 状态与 JSON 错误体，需要确认时为 409 与 {"affected":[…]}。
+func errorResponse(err error) (status int, result any) {
+	var confirmation *ErrNeedsConfirm
+	if errors.As(err, &confirmation) {
+		return http.StatusConflict, struct {
+			Affected []string `json:"affected"`
+		}{confirmation.Affected}
+	}
+	var detail *validate.Error
+	errors.As(failure(err), &detail)
+	status = http.StatusInternalServerError
+	switch detail.Code {
+	case pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT:
+		status = http.StatusBadRequest
+	case pb.ErrorCode_ERROR_CODE_NOT_FOUND:
+		status = http.StatusNotFound
+	case pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS:
+		status = http.StatusConflict
+	case pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED:
+		status = http.StatusForbidden
+	case pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION:
+		status = http.StatusPreconditionFailed
+	case pb.ErrorCode_ERROR_CODE_UNSUPPORTED:
+		status = http.StatusNotImplemented
+	case pb.ErrorCode_ERROR_CODE_UNAVAILABLE:
+		status = http.StatusServiceUnavailable
+	}
+	var conflict *configConflict
+	if errors.As(err, &conflict) {
+		status = http.StatusConflict
+	}
+	// 只省略单条 typed 错误的重复错误码，保留包装与聚合的完整上下文。
+	message := err.Error()
+	if message == detail.Error() {
+		message = detail.Message
+	}
+	result = struct {
+		Code    string `json:"code"`
+		Message string `json:"safe_message"`
+	}{strings.TrimPrefix(detail.Code.String(), "ERROR_CODE_"), message}
+	return status, result
+}
+
 func decode(r *http.Request, target any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -208,46 +269,7 @@ func decode(r *http.Request, target any) error {
 func respond(w http.ResponseWriter, result any, err error) {
 	status := http.StatusOK
 	if err != nil {
-		var confirmation *ErrNeedsConfirm
-		if errors.As(err, &confirmation) {
-			status = http.StatusConflict
-			result = struct {
-				Affected []string `json:"affected"`
-			}{confirmation.Affected}
-		} else {
-			var detail *validate.Error
-			errors.As(failure(err), &detail)
-			status = http.StatusInternalServerError
-			switch detail.Code {
-			case pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT:
-				status = http.StatusBadRequest
-			case pb.ErrorCode_ERROR_CODE_NOT_FOUND:
-				status = http.StatusNotFound
-			case pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS:
-				status = http.StatusConflict
-			case pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED:
-				status = http.StatusForbidden
-			case pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION:
-				status = http.StatusPreconditionFailed
-			case pb.ErrorCode_ERROR_CODE_UNSUPPORTED:
-				status = http.StatusNotImplemented
-			case pb.ErrorCode_ERROR_CODE_UNAVAILABLE:
-				status = http.StatusServiceUnavailable
-			}
-			var conflict *configConflict
-			if errors.As(err, &conflict) {
-				status = http.StatusConflict
-			}
-			// 只省略单条 typed 错误的重复错误码，保留包装与聚合的完整上下文。
-			message := err.Error()
-			if message == detail.Error() {
-				message = detail.Message
-			}
-			result = struct {
-				Code    string `json:"code"`
-				Message string `json:"safe_message"`
-			}{strings.TrimPrefix(detail.Code.String(), "ERROR_CODE_"), message}
-		}
+		status, result = errorResponse(err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

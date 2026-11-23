@@ -11,6 +11,9 @@ services:
 volumes:
   alonabot-data:
 
-# 首次启动：docker compose up -d
-# 读取管理 token：docker compose exec alonabot alonabot admin-token show --data-dir /data
-# 打开 http://127.0.0.1:7650 登录；凭据保存在 /data/admin_token。
+# 首次启动：docker compose up -d，在本机浏览器打开 http://127.0.0.1:7650，
+# WebUI 显示一次性管理 token，保存后确认即可登录；凭据保存在 /data/admin_token。
+# 远程管理：ssh -N -L 7650:127.0.0.1:7650 user@host 后打开本机地址，或读取 token：
+#   docker compose exec alonabot alonabot admin-token show --data-dir /data
+# 端口只发布到 127.0.0.1；发布到 0.0.0.0 时，能访问该端口的人可能抢先领取首次 token。
+# 组件、设置以及源码构建下载的 Go 工具链与缓存都保存在 alonabot-data 卷中。

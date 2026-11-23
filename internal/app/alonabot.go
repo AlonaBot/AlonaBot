@@ -83,8 +83,9 @@ type Core struct {
 	environment     map[string]string
 	http            *http.Server
 	httpErrors      chan error
-	monitors        sync.WaitGroup // 停止后等待退出观察者交还清理权，再关闭共享资源。
-	done            chan struct{}  // err 写入后关闭，允许多个 Wait 读取同一结果。
+	management      *manage.Service // 停机时等待其后台任务结束后再停止组件与关闭状态库。
+	monitors        sync.WaitGroup  // 停止后等待退出观察者交还清理权，再关闭共享资源。
+	done            chan struct{}   // err 写入后关闭，允许多个 Wait 读取同一结果。
 	err             error
 	lifetime        context.Context // Core 启动、业务唤醒与运行循环共用的生命周期。
 	runtimeAdapters map[string]settings.AdapterSettings
@@ -469,6 +470,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			})
 		},
 	})
+	c.management = management
 	management.RegisterProfiles(c.assembly.mux)
 	if err := c.preinstall(ctx, management, bundles); err != nil {
 		return fail(err)
@@ -970,6 +972,9 @@ func (c *Core) shutdown() error {
 		result = c.http.Shutdown(ctx)
 		cancel()
 		result = errors.Join(result, c.http.Close())
+	}
+	if c.management != nil {
+		c.management.Wait() // stopping 已关闭，任务随之取消。
 	}
 	t0 := time.Now()
 	timing := host.NewStopTiming(c.values)

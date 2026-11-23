@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,6 +30,11 @@ type InstallRequest struct {
 	Source               string // GitHub 的 owner/repo；本地安装时留空。
 	ID                   string // 自动预装时指定期望的组件身份。
 	Replace, Confirm     bool
+	Build                bool   // 从 Source 的源码构建，而不是下载最新 Release 资产。
+	Ref                  string // 构建的分支、标签或提交；空串为默认分支。仅用于 Build。
+
+	built *builtSource // Install 与 Update 在取得目录锁之前完成的构建产物。
+	log   io.Writer    // 源码构建日志；nil 时丢弃。
 }
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -38,6 +42,13 @@ var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 // Install 先完成下载与预检，再确认信任及同类替换，最后登记不可变安装包。
 func (s *Service) Install(ctx context.Context, req InstallRequest) (result Package, err error) {
 	defer finish(&err)
+	// 源码构建耗时较长，在目录锁外完成；安装仍走同一套预检、信任与替换检查。
+	if req.Build {
+		if req.built, err = s.buildSource(ctx, req, req.buildLog()); err != nil {
+			return result, err
+		}
+		defer func() { err = errors.Join(err, req.built.remove()) }()
+	}
 	s.catalog.Lock()
 	defer s.catalog.Unlock()
 	candidate, err := s.prepare(ctx, req)
@@ -156,12 +167,34 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	return result, err
 }
 
+func (req InstallRequest) buildLog() io.Writer {
+	if req.log == nil {
+		return io.Discard
+	}
+	return req.log
+}
+
+func checkRepository(source string) error {
+	if !repositoryName.MatchString(source) {
+		return invalid("source must be owner/repo")
+	}
+	for _, part := range strings.Split(source, "/") {
+		if part == "." || part == ".." {
+			return invalid("source must be owner/repo")
+		}
+	}
+	return nil
+}
+
 func exists(message string) error {
 	return &validate.Error{Code: pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, Message: message}
 }
 
 func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.Candidate, err error) {
-	apiBase, downloadPrefix, err := s.githubEndpoints(req)
+	var apiBase, downloadPrefix string
+	if req.built == nil {
+		apiBase, downloadPrefix, err = s.githubEndpoints(req)
+	}
 	defer func() {
 		if req.Source != "" && err != nil {
 			err = downloadFailure{cause: err, prefix: downloadPrefix}
@@ -177,13 +210,18 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.
 	if req.Source == "" && req.Archive == "" {
 		return nil, invalid("local archive or source is required")
 	}
+	if req.Ref != "" && !req.Build {
+		return nil, invalid("ref requires a source build")
+	}
 	staging := filepath.Join(filepath.Dir(s.opt.Packages), "staging")
 	if err := os.MkdirAll(staging, 0o700); err != nil {
 		return nil, err
 	}
 	input := packages.Input{ID: req.ID, OS: runtime.GOOS, Arch: runtime.GOARCH, ArchivePath: req.Archive}
 	var asset release.Download
-	if req.Source != "" {
+	if req.built != nil {
+		input.ArchivePath, input.Source, input.Version = req.built.archive, "github.com/"+req.Source, req.built.version
+	} else if req.Source != "" {
 		publication, err := s.githubRelease(ctx, req.Source, apiBase)
 		if err != nil {
 			return nil, err
@@ -207,7 +245,7 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.
 	if err != nil {
 		return nil, err
 	}
-	if req.Source != "" && release.ArchiveName(candidate.Manifest) != asset.Name {
+	if req.Source != "" && req.built == nil && release.ArchiveName(candidate.Manifest) != asset.Name {
 		return nil, errors.Join(invalid("archive name does not match the package manifest"), candidate.Discard())
 	}
 	if req.ID != "" && trust.Source(req.ID) != "" && !trust.MatchesSource(req.ID, candidate.Manifest.Source) {
@@ -237,22 +275,9 @@ func (s *Service) downloadArchive(ctx context.Context, staging, prefix string, a
 		}
 	}
 	// 2. 在同一请求期限内下载、验证并关闭归档，失败时清理暂存文件。
-	ctx, cancel := context.WithTimeout(ctx, s.opt.Tuning.InstallDownloadTimeout)
-	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, prefix+asset.URL, nil)
-	if err != nil {
-		return "", err
-	}
-	response, err := s.opt.HTTPClient.Do(request)
-	if err != nil {
-		return "", err
-	}
-	if response.StatusCode != http.StatusOK {
-		return "", s.githubHTTPError(request.URL.String(), response)
-	}
 	file, err := os.CreateTemp(staging, "download-*.tar.gz")
 	if err != nil {
-		return "", errors.Join(err, response.Body.Close())
+		return "", err
 	}
 	defer func() {
 		if err != nil {
@@ -264,12 +289,9 @@ func (s *Service) downloadArchive(ctx context.Context, staging, prefix string, a
 	if expected != nil {
 		dest = io.MultiWriter(file, digest)
 	}
-	n, copyErr := io.Copy(dest, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
-	if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
+	n, err := s.copyGitHubArchive(ctx, prefix, asset.URL, dest)
+	if err := errors.Join(err, file.Close()); err != nil {
 		return "", err
-	}
-	if n > s.opt.Limits.MaxArchiveBytes {
-		return "", &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
 	}
 	if expected != nil && !bytes.Equal(expected, digest.Sum(nil)) {
 		return "", denied("archive digest does not match the GitHub asset")

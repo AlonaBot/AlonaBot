@@ -28,7 +28,7 @@ func CompileApp(ctx context.Context, options generate.Options, outDir string, go
 		return "", err
 	}
 	options.Dir = dir
-	targetEnv, err := goCommand(ctx, dir, "env", "GOOS", "GOARCH")
+	targetEnv, err := goCommand(ctx, options.Toolchain, dir, "env", "GOOS", "GOARCH")
 	if err != nil {
 		return "", err
 	}

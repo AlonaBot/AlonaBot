@@ -91,6 +91,9 @@ type Service struct {
 	instances sync.Mutex // 实例名跨包唯一，串行化配置创建与删除。
 	packages  sync.Map   // 包 ID → *sync.Mutex；锁实例在服务生命周期内保持稳定。
 	catalog   sync.Mutex // 安装、同类替换、卸载与依赖图写入共用一个顺序。
+	builds    sync.Mutex // 串行化源码构建，以及工具链和构建缓存的下载与删除。
+	tasks     sync.Map   // 任务 ID → *task。
+	running   sync.WaitGroup
 }
 
 // New 创建复用 Core 装配资源的管理服务。
@@ -147,6 +150,7 @@ type Package struct {
 	ID, Role, AdapterID, Version, Source, PublisherKeyID, Pin string
 	Enabled, Uninstalled, Signed                              bool
 	Active, State                                             string
+	Name, Description, Author                                 string   `json:",omitempty"` // 取自包内 plugin.yaml；读不到时省略。
 	AvailableUpdate                                           string   `json:"available_update,omitempty"`
 	RuntimeState                                              string   `json:",omitempty"` // 仅插件和 Agent 持久化实际运行状态。
 	Warnings                                                  []string `json:",omitempty"` // 仅安装结果携带清单警告。
@@ -215,9 +219,14 @@ func (s *Service) describe(ctx context.Context, id string) (Package, error) {
 			current = "Suspended"
 		}
 	}
-	return Package{ID: id, Role: string(in.Role), AdapterID: in.AdapterID, Version: in.Version,
+	item := Package{ID: id, Role: string(in.Role), AdapterID: in.AdapterID, Version: in.Version,
 		Source: in.Source, PublisherKeyID: in.PublisherKeyID, Pin: in.Pin, Enabled: enabled,
-		Uninstalled: in.Uninstalled, Signed: in.PublisherKeyID != "", Active: active, State: current, RuntimeState: string(runtimeState), Pages: s.pages(id, nil)}, nil
+		Uninstalled: in.Uninstalled, Signed: in.PublisherKeyID != "", Active: active, State: current, RuntimeState: string(runtimeState), Pages: s.pages(id, nil)}
+	// 展示信息只是附加字段：已卸载或目录缺失时照常返回状态。
+	if m, err := s.manifest(ctx, id); err == nil {
+		item.Name, item.Description, item.Author = m.Name, m.Description, m.Author
+	}
+	return item, nil
 }
 
 func failure(err error) error {
