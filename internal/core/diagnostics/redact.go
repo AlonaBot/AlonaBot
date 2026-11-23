@@ -17,6 +17,7 @@ var (
 	authorization        = regexp.MustCompile(`(?i)\b(Bearer|Basic)([\t ]+)[^\s"'<>\\]+`)
 	urlUser              = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)[^/?#\s"'<>@]+@`)
 	querySecret          = regexp.MustCompile(`(?i)([?&](?:token|key|secret|password)=)[^&\s"'<>\\]*`)
+	urlQuery             = regexp.MustCompile(`(?i)(https?://[^?\s"'<>\\]+)\?[^\s"'<>\\]*`)
 	telegramToken        = regexp.MustCompile(`\bbot[0-9]+:[A-Za-z0-9_-]+`)
 	ipv6                 = regexp.MustCompile(`[0-9A-Fa-f]*:[0-9A-Fa-f:.]+(?:%[A-Za-z0-9_.-]+)?`)
 	ipv4                 = regexp.MustCompile(`\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`)
@@ -25,6 +26,9 @@ var (
 
 // RedactText 遮盖输出文本中的认证材料、URL 凭证、秘密查询参数与公网 IP。
 func RedactText(value string) string { return redactText(value) }
+
+// OmitURLQueries 移除下载错误中 URL 的完整查询串，包括非标准凭据键。
+func OmitURLQueries(value string) string { return urlQuery.ReplaceAllString(value, "${1}") }
 
 func redactText(value string) string {
 	value = authorization.ReplaceAllString(value, "${1}${2}"+redacted)

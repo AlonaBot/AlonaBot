@@ -70,7 +70,8 @@ func (s *Service) ReadNodes(ctx context.Context, caller router.Caller, in *wire.
 	}
 	items, safe := reader.ReadNodes(ctx, target, request.Segment)
 	chain := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Forward{Forward: &pb.ForwardSegment{Items: items}}}}}
-	if len(items) > 0 {
+	// 管理调试返回已登记的对象 ID，后续独立请求按来源实例签发读取令牌。
+	if len(items) > 0 && caller.PluginID != router.DebugCallerID {
 		prepared, err := s.prepareIncoming(chain, caller, target)
 		if err != nil {
 			return rejectError(target, err)

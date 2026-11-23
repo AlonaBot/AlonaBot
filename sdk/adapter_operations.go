@@ -16,10 +16,10 @@ func (r *adapterRuntime) operations(_ context.Context, in *wire.Inbound) wire.Re
 		return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 	}
 	r.mu.Lock()
-	entry := r.instances[request.InstanceId]
-	if entry == nil || entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+	entry, safe := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+	if safe != nil {
 		r.mu.Unlock()
-		return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+		return wire.Response{Err: safe}
 	}
 	instance := entry.instance
 	core := entry.core

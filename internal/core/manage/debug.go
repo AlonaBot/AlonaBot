@@ -125,7 +125,7 @@ func (s *Service) debugCall(ctx context.Context, request debugapi.Call) (debugap
 	trace := make([]byte, debugTraceBytes)
 	rand.Read(trace)
 	ctx = wire.WithTraceID(ctx, trace)
-	caller := router.NewCaller("@debug", "")
+	caller := router.NewCaller(router.DebugCallerID, "")
 	invocation := &router.Invocation{PluginID: caller.PluginID, DefaultTarget: target, Event: &pb.Event{AdapterInstanceId: proto.String(request.Instance)}, TraceID: trace}
 	release := invocation.Begin()
 	defer release()
@@ -143,9 +143,9 @@ func (s *Service) debugCall(ctx context.Context, request debugapi.Call) (debugap
 		}
 		// 实例和目标只有管理入口可以绑定，参数中的同名字段拒绝覆盖。
 		fields := params.ProtoReflect().Descriptor().Fields()
-		for _, name := range []string{"instance_id", "target"} {
+		for _, name := range []string{"instance_id", "instance_generation", "target"} {
 			if f := fields.ByName(protoreflect.Name(name)); f != nil && params.ProtoReflect().Has(f) {
-				return debugapi.Result{}, invalid("instance and target must be provided outside params")
+				return debugapi.Result{}, invalid("instance, generation and target are bound by Core")
 			}
 		}
 		var service string
@@ -177,18 +177,10 @@ func (s *Service) debugCall(ctx context.Context, request debugapi.Call) (debugap
 			response.Err = sync.SyncCommands(ctx, p.Commands)
 			response.Payload = debugPayload(&pb.AdapterCommandsSyncResponse{})
 		case *pb.AdapterMediaReadRequest:
-			if p.Length == 0 || p.Length > wire.MaxMediaChunk {
-				return debugapi.Result{}, invalid("invalid media read length")
+			if s.opt.DebugMedia == nil {
+				return debugapi.Result{}, precondition("debug media service is unavailable")
 			}
-			reader, ok := instance.(adapter.MediaReader)
-			if !ok {
-				return debugapi.Result{}, precondition("media reader is unavailable")
-			}
-			data, next, eof, err := reader.ReadMedia(ctx, p.FileId, p.Offset, p.Length)
-			response.Payload = debugPayload(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof})
-			if err != nil {
-				response.Err = &pb.ErrorInfo{Code: wire.CodeOf(err), SafeMessage: err.Error()}
-			}
+			response = s.opt.DebugMedia(ctx, caller, instance, p)
 		}
 		if message != nil {
 			if s.opt.DebugCall == nil {

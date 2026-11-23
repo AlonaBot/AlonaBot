@@ -250,7 +250,7 @@ The SDK discovers interfaces on the real running Instance and combines them with
 
 The public `sdk/debug.Client{URL, Token, Host, HTTP}` exposes `Instances(ctx)`, `Operations(ctx, instance, name)` and `Invoke(ctx, debug.Call{Instance, Name, Version, To, Params})`. Invoke returns both a complete Result and an error for business failures. Request contexts carry cancellation; releasing the client keeps Core running.
 
-Endpoints are `GET /api/v1/debug/adapters/{instance}/operations` and `POST /api/v1/debug/adapters/call`, protected by existing management authentication. Send/Edit/Delete, node reads and platform actions reuse Core admission. Sending retains hooks and media authorization; menus share the instance worker and SDK menu lock. Platform media reads accept `fileId`, `offset`, `length` and return base64 `data`. Calls perform real platform operations.
+Endpoints are `GET /api/v1/debug/adapters/{instance}/operations` and `POST /api/v1/debug/adapters/call`, protected by existing management authentication. Send/Edit/Delete, node reads and platform actions reuse Core admission. Sending retains hooks and media authorization; menus share the instance worker and SDK menu lock. Media reads accept `fileId`, `offset`, and `length` and return base64 `data`. Use a Core-registered inbound object ID from the current instance run for `fileId`, such as `incomingRef.token` in an `sdk/message.read_nodes` result. Injected events reject inbound platform file references. Calls perform real platform operations.
 
 Run `go test -race ./internal/core/adapter/remote -run '^TestDebugAdapter$'` to exercise the real SDK subprocess, authentication, catalog, calls, partial results, media chunks and instance replacement.
 

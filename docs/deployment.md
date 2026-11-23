@@ -273,7 +273,9 @@ Set `github_api_base` and `github_download_prefix` independently in Core's `core
 }
 ```
 
-The archive address is exactly **prefix + original URL**, for example `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`. Include any required trailing slash in the prefix. Both settings require valid HTTP(S) URLs without credentials or fragments; the API base may include a path and must omit query parameters. A download prefix may use a query form such as `https://proxy.example/?url=`.
+The archive address is exactly **prefix + original URL**, for example `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`. Include any required trailing slash in the prefix. Both settings and redirects require HTTPS. Omit URL credentials and fragments. The API base may include a path and must omit query parameters. A download prefix may use a query form such as `https://proxy.example/?url=`.
+
+Install and update verify the archive against the SHA-256 digest returned by the Release API. `github_api_base` is the trust root for that digest; use only a trusted GitHub API reverse proxy. When an older asset has no digest, clear the download prefix and retry. Direct downloads of those assets verify size and log a warning.
 
 Override either field for one command; overrides leave the saved settings unchanged:
 
@@ -284,6 +286,8 @@ alonabot update alonabot-agent-official --github-api-base https://api-mirror.exa
 alonabot update alonabot-agent-official --github-download-prefix '' --yes
 ```
 
-Authenticated `GET/PUT /api/v1/core/github` reads/writes the persistent settings; PUT requires both strings. Install requests accept optional `github_api_base` and `github_download_prefix`; update requests place them inside `install`. Omission inherits settings; an explicit empty string restores the corresponding official address. Core validates the original GitHub repository, release tag and asset address before transforming request URLs, then checks the downloaded package's identity, platform, version and build-info. Errors retain complete context with authentication materials redacted; downloads have no automatic retry or fallback.
+Authenticated `GET/PUT /api/v1/core/github` reads/writes the persistent settings; PUT requires both strings. Install requests accept optional `github_api_base` and `github_download_prefix`; update requests place them inside `install`. Omission inherits settings; an explicit empty string restores the corresponding official address. Core validates the original GitHub repository, release tag and asset address before transforming request URLs, then checks the archive digest and the package's identity, platform, version and build-info. Errors and diagnostic settings omit the download-prefix query, and cross-host redirects remove `Referer`. Downloads have no automatic retry or fallback.
+
+`INSTALL_DOWNLOAD_TIMEOUT` defaults to five minutes per request, including redirects and body reads. `INSTALL_MAX_RELEASE_JSON` defaults to 4 MiB. `INSTALL_MAX_HTTP_ERROR` keeps the first 4 KiB of non-200 response bodies by default. Run `alonabot tune list` to see the effective values.
 
 Store discovery and submission checks still use the selected source's GitHub index and display snapshot under the separate fetch rules above; first-time store browsing requires a reachable index source. Direct repository installation, installed-component update checks and confirmation previews call Core directly; installation and updates then use the same mirror settings.

@@ -82,6 +82,9 @@ func (p *Process) serviceRequest(ctx context.Context, caller router.Caller, in *
 		if ev == nil || ev.GetAdapterId() != p.opt.AdapterID || ev.GetAdapterInstanceId() != id || ev.GetAccountId() != entry.account {
 			return invalid()
 		}
+		if expected != nil && len(incomingMedia(eventChains(ev)...)) != 0 {
+			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "injected events cannot register incoming platform media")
+		}
 		if ev.Target == nil && ev.ChatTitle != nil {
 			slog.Warn("chat_title requires target", "adapter_id", p.opt.AdapterID, "chat_id", ev.GetTarget().GetChatId())
 			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "chat_title requires target")

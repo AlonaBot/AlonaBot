@@ -1178,10 +1178,10 @@ func TestRemoteMediaRead(t *testing.T) {
 		}
 	}
 	readCount("0")
-	if id := mediaStore.RegisterIncoming("readable", "platform-file", nil, nil); id != objectID {
+	if id := mediaStore.RegisterIncoming(in, &pb.IncomingMedia{Token: "platform-file"}); id != objectID {
 		t.Fatalf("registered object ID = %q, want %q", id, objectID)
 	}
-	unsupportedID := mediaStore.RegisterIncoming("unsupported", "platform-file", nil, nil)
+	unsupportedID := mediaStore.RegisterIncoming(unsupported, &pb.IncomingMedia{Token: "platform-file"})
 	if unsupportedID == objectID {
 		t.Fatal("different adapter instances shared an incoming object")
 	}
@@ -1278,7 +1278,7 @@ func TestRemoteMediaRead(t *testing.T) {
 			t.Fatalf("length %d error = %v", length, err)
 		}
 	}
-	mediaRequest := &pb.AdapterMediaReadRequest{InstanceId: "unsupported", FileId: "platform-file", Length: 4}
+	mediaRequest := &pb.AdapterMediaReadRequest{InstanceId: "unsupported", InstanceGeneration: 2, FileId: "platform-file", Length: 4}
 	encoded, err = proto.Marshal(mediaRequest)
 	if err != nil {
 		t.Fatal(err)

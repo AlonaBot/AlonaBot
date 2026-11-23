@@ -19,9 +19,10 @@ type GitHubRelease struct {
 
 // Download 描述 GitHub Release 上的一个附件。
 type Download struct {
-	Name string `json:"name"`
-	URL  string `json:"browser_download_url"`
-	Size int64  `json:"size"`
+	Name   string `json:"name"`
+	URL    string `json:"browser_download_url"`
+	Size   int64  `json:"size"`
+	Digest string `json:"digest"` // 旧资产可能未提供摘要。
 }
 
 // Validate 核对 Release 标签及页面所属仓库。

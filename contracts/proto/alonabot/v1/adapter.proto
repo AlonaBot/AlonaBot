@@ -55,6 +55,8 @@ message AdapterInstanceStartRequest {
   string instance_id = 1;
   string config_json = 2;
   bytes cursor = 3;
+  // Core 为每次启动分配的非零代次，后续实例操作须携带同一值。
+  uint64 instance_generation = 4;
 }
 
 // AdapterInstanceStartResponse 返回已验证账号与实例能力。
@@ -81,6 +83,7 @@ message AdapterSendRequest {
   string instance_id = 1;
   Target target = 2;
   MessageChain chain = 3;
+  uint64 instance_generation = 4;
 }
 
 // AdapterDeliverRequest 交付实例事件及交付后的游标。
@@ -122,6 +125,7 @@ message AdapterMediaReadRequest {
   string file_id = 2;
   uint64 offset = 3;
   uint32 length = 4;
+  uint64 instance_generation = 5;
 }
 
 // AdapterMediaReadResponse 返回文件分块及下一次读取位置。
@@ -138,6 +142,7 @@ message AdapterEditRequest {
   string platform_message_id = 3;
   // 恰好一个 text 片段和至多一个 buttons 片段。
   MessageChain chain = 4;
+  uint64 instance_generation = 5;
 }
 
 // AdapterDeleteRequest 向指定实例提交撤回，响应为 DeleteResult。
@@ -145,6 +150,7 @@ message AdapterDeleteRequest {
   string instance_id = 1;
   Target target = 2;
   repeated string platform_message_ids = 3;
+  uint64 instance_generation = 4;
 }
 
 // ActionScope 指定动作需要会话还是只需要账号实例。
@@ -186,6 +192,7 @@ message AdapterActionRequest {
   string name = 3;
   uint32 version = 4;
   string params_json = 5;
+  uint64 instance_generation = 6;
 }
 
 // MediaURLRequest 为本次发送的只读令牌申请临时 URL，载荷版本为 1。
@@ -211,6 +218,7 @@ message CommandMenuItem {
 message AdapterCommandsSyncRequest {
   string instance_id = 1;
   repeated CommandMenuItem commands = 2;
+  uint64 instance_generation = 3;
 }
 
 // AdapterCommandsSyncResponse 确认菜单同步完成，错误沿用 ErrorInfo。
@@ -249,6 +257,7 @@ message CommandMenuRequest {
   string instance_id = 1;
   string operation = 2;
   CommandMenu menu = 3;
+  uint64 instance_generation = 4; // Core 调用 Adapter 时填写，插件请求由 Core 绑定。
 }
 
 // CommandMenuPosition 返回最后一次成功写入的位置、模式与插件所有者。
@@ -273,11 +282,13 @@ message AdapterReadNodesRequest {
   string instance_id = 1;
   Target target = 2;
   ForwardSegment segment = 3;
+  uint64 instance_generation = 4;
 }
 
 // AdapterOperationsRequest 查询当前运行实例的真实操作接口。
 message AdapterOperationsRequest {
   string instance_id = 1;
+  uint64 instance_generation = 2;
 }
 
 // AdapterOperationsResponse 保留标准操作与平台声明的相同描述格式。

@@ -32,6 +32,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
+	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
 
@@ -60,6 +61,7 @@ type Options struct {
 	Limits                 packages.Limits
 	ReleaseBaseURL         string                                                      // 缺省 https://api.github.com，测试可指向回环服务。
 	HTTPClient             *http.Client                                                // nil 使用 http.DefaultClient。
+	Tuning                 *tune.Values                                                // nil 使用默认的 GitHub 下载调优值。
 	Development            map[string]*manifest.Manifest                               // 由库模式登记的只读工程身份。
 	DevelopmentConfig      func(id string) (json.RawMessage, map[string][]byte, error) // 读取当前开发资源；返回值只读。
 	RestartDevelopment     func(context.Context, string) error                         // 配置落盘后沿 Core 运行循环重启。
@@ -77,6 +79,8 @@ type Options struct {
 	Scheduler             *scheduler.Scheduler
 	InstanceStatus        func(ctx context.Context, packageID, instanceID string) (state, safeError string, err error) // 远端实例的运行状态；直接装配 Registry 时可省略。
 	RecordInstanceFailure func(ctx context.Context, packageID, instanceID, safeError string) error                     // 可选，留存启动前的配置失败。
+
+	DebugMedia func(context.Context, router.Caller, adapter.Instance, *pb.AdapterMediaReadRequest) wire.Response // 只读取本实例已登记的入站对象。
 }
 
 // Service 用独立的逐包锁串行管理动作，supervisor 继续持有状态库的进程锁。
@@ -97,6 +101,11 @@ func New(opt Options) *Service {
 	if opt.HTTPClient == nil {
 		opt.HTTPClient = http.DefaultClient
 	}
+	if opt.Tuning == nil {
+		defaults := tune.Defaults()
+		opt.Tuning = &defaults
+	}
+	opt.HTTPClient = githubClient(opt.HTTPClient)
 	if opt.Candidates == nil {
 		opt.Candidates = unsupportedCandidates{}
 	}

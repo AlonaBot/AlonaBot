@@ -142,9 +142,13 @@ func (s snapshot) settings(ctx context.Context, files map[string][]byte, redact 
 		if err != nil {
 			return fmt.Errorf("read Core settings: %w", err)
 		}
+		root, _ := value.(map[string]any)
+		if prefix, ok := root["github_download_prefix"].(string); ok {
+			base, _, _ := strings.Cut(prefix, "?")
+			root["github_download_prefix"] = base
+		}
 		if redact {
 			maskCredentials(value)
-			root, _ := value.(map[string]any)
 			adapters, _ := root["adapters"].(map[string]any)
 			for adapterID, value := range adapters {
 				adapter, ok := value.(map[string]any)

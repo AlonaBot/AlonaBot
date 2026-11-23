@@ -44,7 +44,7 @@ func All() []Operation {
 		{SendRPC, "sdk/message.send", "", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterSendRequest{} }, func() proto.Message { return &pb.SendResult{} }},
 		{EditRPC, "sdk/message.edit", "message.edit", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterEditRequest{} }, func() proto.Message { return &pb.SendResult{} }},
 		{DeleteRPC, "sdk/message.delete", "message.delete", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterDeleteRequest{} }, func() proto.Message { return &pb.DeleteResult{} }},
-		{MediaReadRPC, "sdk/media.read", "", pb.ActionScope_ACTION_SCOPE_ACCOUNT, func() proto.Message { return &pb.AdapterMediaReadRequest{} }, func() proto.Message { return &pb.AdapterMediaReadResponse{} }},
+		{MediaReadRPC, "sdk/media.read", "", pb.ActionScope_ACTION_SCOPE_ACCOUNT, func() proto.Message { return &pb.AdapterMediaReadRequest{} }, func() proto.Message { return &pb.ReadResponse{} }},
 		{NodesRPC, "sdk/message.read_nodes", "", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterReadNodesRequest{} }, func() proto.Message { return &pb.ReadNodesResponse{} }},
 		{SyncRPC, "sdk/commands.sync", "commands.sync", pb.ActionScope_ACTION_SCOPE_ACCOUNT, func() proto.Message { return &pb.AdapterCommandsSyncRequest{} }, func() proto.Message { return &pb.AdapterCommandsSyncResponse{} }},
 		{MenuRPC, "sdk/command.menu", "commands.sync", pb.ActionScope_ACTION_SCOPE_ACCOUNT, func() proto.Message { return &pb.CommandMenuRequest{} }, func() proto.Message { return &pb.CommandMenuResponse{} }},
@@ -113,6 +113,7 @@ func schema(m proto.Message, params bool) string {
 		d := defs[string(m.ProtoReflect().Descriptor().FullName())].(map[string]any)
 		props := d["properties"].(map[string]any)
 		delete(props, "instanceId")
+		delete(props, "instanceGeneration")
 		delete(props, "target")
 	}
 	root["$defs"] = defs

@@ -18,9 +18,7 @@ func (r *Router) DebugCommandMenu(ctx context.Context, instance adapter.Instance
 	if !bound || worker == nil || worker.controller == nil {
 		return menuResponse(nil, menuError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter command menu worker is unavailable"))
 	}
-	current, currentOK := worker.instance.(adapter.MediaSession)
-	selected, selectedOK := instance.(adapter.MediaSession)
-	if !currentOK || !selectedOK || current.MediaSessionKey() != selected.MediaSessionKey() {
+	if worker.instance != instance {
 		return menuResponse(nil, menuError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter command menu worker is unavailable"))
 	}
 	operation := &menuOperation{ctx: ctx, request: request, result: make(chan wire.Response, 1), admin: true}

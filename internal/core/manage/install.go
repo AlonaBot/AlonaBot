@@ -1,9 +1,11 @@
 package manage
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -159,12 +161,12 @@ func exists(message string) error {
 }
 
 func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.Candidate, err error) {
+	apiBase, downloadPrefix, err := s.githubEndpoints(req)
 	defer func() {
 		if req.Source != "" && err != nil {
-			err = downloadFailure{err}
+			err = downloadFailure{cause: err, prefix: downloadPrefix}
 		}
 	}()
-	apiBase, downloadPrefix, err := s.githubEndpoints(req)
 	if err != nil {
 		return nil, err
 	}
@@ -193,35 +195,12 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.
 		if err := asset.Validate(req.Source, publication.Tag); err != nil {
 			return nil, denied(err.Error())
 		}
-		input.Source, input.Version = "github.com/"+req.Source, strings.TrimPrefix(publication.Tag, "v")
-		file, err := os.CreateTemp(staging, "download-*.tar.gz")
+		input.ArchivePath, err = s.downloadArchive(ctx, staging, downloadPrefix, asset)
 		if err != nil {
 			return nil, err
 		}
-		input.ArchivePath = file.Name()
 		defer os.Remove(input.ArchivePath)
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadPrefix+asset.URL, nil)
-		if err != nil {
-			return nil, errors.Join(err, file.Close())
-		}
-		response, err := s.opt.HTTPClient.Do(request)
-		if err != nil {
-			return nil, errors.Join(err, file.Close())
-		}
-		if response.StatusCode != http.StatusOK {
-			raw, readErr := io.ReadAll(response.Body)
-			return nil, errors.Join(fmt.Errorf("download archive %s: %s: %s", request.URL, response.Status, raw), readErr, response.Body.Close(), file.Close())
-		}
-		n, copyErr := io.Copy(file, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
-		if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
-			return nil, err
-		}
-		if n > s.opt.Limits.MaxArchiveBytes {
-			return nil, &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
-		}
-		if n != asset.Size {
-			return nil, invalid("archive size does not match the GitHub asset")
-		}
+		input.Source, input.Version = "github.com/"+req.Source, strings.TrimPrefix(publication.Tag, "v")
 	}
 	// 2. 本地与下载归档共用身份、平台和受控解压检查。
 	candidate, err := packages.Preflight(input, staging, s.opt.Limits)
@@ -238,4 +217,68 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.
 		slog.Warn("package manifest warning", "plugin_id", candidate.Manifest.ID, "warning", warning)
 	}
 	return candidate, nil
+}
+
+func (s *Service) downloadArchive(ctx context.Context, staging, prefix string, asset release.Download) (_ string, err error) {
+	// 1. 摘要由已选 API 基址提供；镜像只能提供与该摘要一致的归档。
+	var expected []byte
+	if asset.Digest == "" {
+		if prefix != "" {
+			return "", denied("GitHub asset has no digest; clear the download prefix and try again")
+		}
+	} else {
+		algorithm, digest, _ := strings.Cut(asset.Digest, ":")
+		if algorithm != "sha256" {
+			return "", denied("unsupported GitHub asset digest algorithm")
+		}
+		expected, err = hex.DecodeString(digest)
+		if err != nil || len(expected) != sha256.Size {
+			return "", denied("invalid GitHub asset digest")
+		}
+	}
+	// 2. 在同一请求期限内下载、验证并关闭归档，失败时清理暂存文件。
+	ctx, cancel := context.WithTimeout(ctx, s.opt.Tuning.InstallDownloadTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, prefix+asset.URL, nil)
+	if err != nil {
+		return "", err
+	}
+	response, err := s.opt.HTTPClient.Do(request)
+	if err != nil {
+		return "", err
+	}
+	if response.StatusCode != http.StatusOK {
+		return "", s.githubHTTPError(request.URL.String(), response)
+	}
+	file, err := os.CreateTemp(staging, "download-*.tar.gz")
+	if err != nil {
+		return "", errors.Join(err, response.Body.Close())
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.Remove(file.Name()))
+		}
+	}()
+	digest := sha256.New()
+	var dest io.Writer = file
+	if expected != nil {
+		dest = io.MultiWriter(file, digest)
+	}
+	n, copyErr := io.Copy(dest, io.LimitReader(response.Body, s.opt.Limits.MaxArchiveBytes+1))
+	if err := errors.Join(copyErr, response.Body.Close(), file.Close()); err != nil {
+		return "", err
+	}
+	if n > s.opt.Limits.MaxArchiveBytes {
+		return "", &validate.Error{Code: pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, Message: "archive exceeds the size limit"}
+	}
+	if expected != nil && !bytes.Equal(expected, digest.Sum(nil)) {
+		return "", denied("archive digest does not match the GitHub asset")
+	}
+	if n != asset.Size {
+		return "", invalid("archive size does not match the GitHub asset")
+	}
+	if expected == nil {
+		slog.Warn("GitHub asset has no digest; verified archive size only", "url", asset.URL)
+	}
+	return file.Name(), nil
 }

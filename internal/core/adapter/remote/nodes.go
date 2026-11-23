@@ -19,7 +19,7 @@ func (i *instance) ReadNodes(ctx context.Context, target *pb.Target, segment *pb
 	if !running {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
 	}
-	request, err := payload(&pb.AdapterReadNodesRequest{InstanceId: i.id, Target: target, Segment: segment})
+	request, err := payload(&pb.AdapterReadNodesRequest{InstanceId: i.id, InstanceGeneration: i.generation, Target: target, Segment: segment})
 	if err != nil {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
 	}
@@ -44,8 +44,9 @@ func (i *instance) ReadNodes(ctx context.Context, target *pb.Target, segment *pb
 					response.Err = proto.CloneOf(response.Err)
 					response.Err.SafeMessage += "; " + detail
 				}
+			} else {
+				p.registerIncomingChains(i, item.GetChain())
 			}
-			p.registerIncomingChains(i.id, item.GetChain())
 		}
 	}
 	if response.Err != nil {

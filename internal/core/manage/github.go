@@ -1,16 +1,74 @@
 package manage
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/diagnostics"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 )
 
-type downloadFailure struct{ cause error }
+type downloadFailure struct {
+	cause  error
+	prefix string
+}
 
-func (e downloadFailure) Error() string { return diagnostics.RedactText(e.cause.Error()) }
+func (e downloadFailure) Error() string {
+	return diagnostics.RedactText(redactDownloadQuery(diagnostics.OmitURLQueries(e.cause.Error()), e.prefix))
+}
 func (e downloadFailure) Unwrap() error { return e.cause }
+
+func githubClient(base *http.Client) *http.Client {
+	client := *base
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if base.CheckRedirect != nil {
+			if err := base.CheckRedirect(req, via); err != nil {
+				return err
+			}
+		} else if len(via) >= 10 { // 保留 net/http 默认的重定向次数上限。
+			return errors.New("stopped after 10 redirects")
+		}
+		if req.URL.Scheme != "https" {
+			return errors.New("GitHub redirects require HTTPS")
+		}
+		if !strings.EqualFold(req.URL.Host, via[len(via)-1].URL.Host) {
+			req.Header.Del("Referer")
+		}
+		return nil
+	}
+	return &client
+}
+
+func (s *Service) githubHTTPError(address string, response *http.Response) error {
+	raw, err := io.ReadAll(io.LimitReader(response.Body, s.opt.Tuning.InstallMaxHTTPError))
+	return errors.Join(fmt.Errorf("download %s: %s: %s", address, response.Status, raw), err, response.Body.Close())
+}
+
+// redactDownloadQuery 同时遮盖镜像在响应正文中单独回显的凭据值。
+func redactDownloadQuery(text, prefix string) string {
+	_, query, _ := strings.Cut(prefix, "?")
+	if query == "" {
+		return text
+	}
+	var replacements []string
+	for field := range strings.SplitSeq(query, "&") {
+		_, value, hasValue := strings.Cut(field, "=")
+		if !hasValue {
+			value = field
+		}
+		if value != "" {
+			replacements = append(replacements, value, "[REDACTED]")
+			if decoded, err := url.QueryUnescape(value); err == nil && decoded != value {
+				replacements = append(replacements, decoded, "[REDACTED]")
+			}
+		}
+	}
+	return strings.NewReplacer(replacements...).Replace(text)
+}
 
 // githubEndpoints 冻结本次下载所用设置，逐字段应用显式覆盖。
 func (s *Service) githubEndpoints(req InstallRequest) (string, string, error) {

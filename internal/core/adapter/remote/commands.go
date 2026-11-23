@@ -18,7 +18,7 @@ func (p *Process) startCommandSync(entry *instance) {
 	running := entry.running
 	p.mu.Unlock()
 	if running && p.opt.StartCommandSync != nil {
-		p.opt.StartCommandSync(entry)
+		p.opt.StartCommandSync(entry.registered)
 	}
 }
 
@@ -31,7 +31,7 @@ func (entry *instance) SyncCommands(ctx context.Context, commands []*pb.CommandM
 	if !running {
 		return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
 	}
-	err := call(ctx, entry.session, wire.ServiceAdapterCommandsSync, &pb.AdapterCommandsSyncRequest{InstanceId: entry.id, Commands: commands}, &pb.AdapterCommandsSyncResponse{})
+	err := call(ctx, entry.session, wire.ServiceAdapterCommandsSync, &pb.AdapterCommandsSyncRequest{InstanceId: entry.id, InstanceGeneration: entry.generation, Commands: commands}, &pb.AdapterCommandsSyncResponse{})
 	if err != nil {
 		var failure *wire.CallError
 		if errors.As(err, &failure) {
@@ -55,7 +55,7 @@ func (entry *instance) CommandMenu(ctx context.Context, operation string, menu *
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
 	}
 	response := &pb.CommandMenuResponse{}
-	err := call(ctx, entry.session, wire.ServiceAdapterCommandMenu, &pb.CommandMenuRequest{InstanceId: entry.id, Operation: operation, Menu: menu}, response)
+	err := call(ctx, entry.session, wire.ServiceAdapterCommandMenu, &pb.CommandMenuRequest{InstanceId: entry.id, InstanceGeneration: entry.generation, Operation: operation, Menu: menu}, response)
 	if err != nil {
 		var failure *wire.CallError
 		if errors.As(err, &failure) {

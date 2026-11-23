@@ -57,7 +57,7 @@ func (i *instance) Action(ctx context.Context, target *pb.Target, name string, v
 	if action.scope == pb.ActionScope_ACTION_SCOPE_ACCOUNT {
 		target = nil
 	}
-	request, err := payload(&pb.AdapterActionRequest{InstanceId: i.id, Target: target, Name: name, Version: version, ParamsJson: paramsJSON})
+	request, err := payload(&pb.AdapterActionRequest{InstanceId: i.id, InstanceGeneration: i.generation, Target: target, Name: name, Version: version, ParamsJson: paramsJSON})
 	if err != nil {
 		return "", &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
 	}

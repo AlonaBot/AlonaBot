@@ -348,7 +348,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	}, DebugRelease: func(caller router.Caller) {
 		c.assembly.messages.Release(caller)
 		c.assembly.media.ReleaseSession(caller.SessionKey)
-	}, DebugMenu: c.assembly.router.DebugCommandMenu, NotifyProfileOverrides: func(ctx context.Context, id string) error {
+	}, DebugMenu: c.assembly.router.DebugCommandMenu, DebugMedia: c.assembly.media.ReadDebugIncoming, NotifyProfileOverrides: func(ctx context.Context, id string) error {
 		return c.operation(ctx, func(ctx context.Context) error { return c.assembly.notifyProfileOverrides(ctx, id) })
 	}, Logs: output, Stopping: c.stopping, NotifyLogLevel: func(ctx context.Context, id string, level pb.LogLevel) error {
 		return c.operation(ctx, func(ctx context.Context) error {
@@ -404,7 +404,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 				return fmt.Errorf("adapter is not running: %s", id)
 			})
 		},
-		Packages: filepath.Join(dir, "packages"), BundledPackages: bundles, Limits: packages.NewLimits(values), Development: development, DevelopmentWebUI: webUI,
+		Packages: filepath.Join(dir, "packages"), BundledPackages: bundles, Limits: packages.NewLimits(values), Tuning: &values, Development: development, DevelopmentWebUI: webUI,
 		Descriptor:        c.assembly.componentDescriptor,
 		DevelopmentConfig: c.developmentConfig, RestartDevelopment: c.Restart,
 		Candidates: managedCandidates{core: c},

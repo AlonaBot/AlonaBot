@@ -36,13 +36,14 @@ type realTimer struct{ *time.Timer }
 
 func (t realTimer) C() <-chan time.Time { return t.Timer.C }
 
-// Manual 持有测试时间与全部定时器；Advance 在锁外执行到期回调。
+// Manual 持有测试时间与全部定时器；Advance 在定时器表锁外执行到期回调。
 type Manual struct {
-	mu     sync.Mutex
-	now    time.Time
-	next   uint64
-	timers map[uint64]*manualTimer
-	closed bool
+	advance sync.Mutex // 串行化含回调的完整推进，避免旧目标覆盖新时间。
+	mu      sync.Mutex
+	now     time.Time
+	next    uint64
+	timers  map[uint64]*manualTimer
+	closed  bool
 }
 type manualTimer struct {
 	clock *Manual
@@ -91,10 +92,13 @@ func (t *manualTimer) Stop() bool {
 func (t *manualTimer) C() <-chan time.Time { return t.ch }
 
 // Advance 推进时间，按到期时间与登记顺序执行截至目标时刻的定时器。
+// 回调可以读时钟或操作定时器；正在执行的回调须返回后才能继续推进。
 func (c *Manual) Advance(d time.Duration) {
 	if d < 0 {
 		panic("clock cannot move backwards")
 	}
+	c.advance.Lock()
+	defer c.advance.Unlock()
 	c.mu.Lock()
 	end := c.now.Add(d)
 	for {

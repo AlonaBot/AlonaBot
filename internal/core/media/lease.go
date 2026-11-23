@@ -70,7 +70,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 			s.mu.Unlock()
 			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
 		}
-		if access.object.source.instanceID == target.GetAdapterInstanceId() {
+		if instance, ok := s.readers.Resolve(ctx, target.GetAdapterInstanceId()); ok && instance == access.object.source.instance {
 			lease := &mediaLease{token: token(), incoming: access.object, activity: activity, caller: c}
 			access.object.leases++
 			release := s.bindLease(ctx, lease, readerSessionKey, File{ExpiresAt: deadline})

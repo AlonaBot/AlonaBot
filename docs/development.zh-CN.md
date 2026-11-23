@@ -250,7 +250,7 @@ SDK 在持有真实 Instance 的进程里识别 Send、Editor、Deleter、MediaS
 
 公共客户端 `sdk/debug.Client{URL, Token, Host, HTTP}` 提供 `Instances(ctx)`、`Operations(ctx, instance, name)` 与 `Invoke(ctx, debug.Call{Instance, Name, Version, To, Params})`。`Invoke` 遇到业务错误时同时返回完整 Result 和 error；请求 context 传递取消，释放客户端保持 Core 运行。
 
-目录端点为 `GET /api/v1/debug/adapters/{instance}/operations`，调用端点为 `POST /api/v1/debug/adapters/call`。两者使用现有管理认证。Send/Edit/Delete、节点和平台动作复用 Core 的业务准入；发送经过 Hook 与媒体授权，菜单沿用实例 worker 和 SDK 菜单锁。平台媒体读取使用 `fileId`、`offset`、`length`，响应 `data` 为 base64。实际平台操作仍会产生真实副作用。
+目录端点为 `GET /api/v1/debug/adapters/{instance}/operations`，调用端点为 `POST /api/v1/debug/adapters/call`。两者使用现有管理认证。Send/Edit/Delete、节点和平台动作复用 Core 的业务准入；发送经过 Hook 与媒体授权，菜单沿用实例 worker 和 SDK 菜单锁。媒体读取使用 `fileId`、`offset`、`length`，其中 `fileId` 填本次运行实例已由 Core 登记的入站对象 ID，例如 `sdk/message.read_nodes` 结果中的 `incomingRef.token`。响应 `data` 为 base64。注入事件不接受入站平台文件引用。实际平台操作仍会产生真实副作用。
 
 验证入口为 `go test -race ./internal/core/adapter/remote -run '^TestDebugAdapter$'`，通过真实 SDK 子进程与管理认证验证目录、调用、部分成功、媒体分块和实例替换。
 

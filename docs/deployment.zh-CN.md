@@ -273,7 +273,9 @@ Core 的 `core_config.json` 可独立保存 GitHub Release 元数据基址与归
 }
 ```
 
-两个值缺省均为空：API 使用 `https://api.github.com`，归档使用原始资产 URL。下载地址严格按「前缀 + 原始 URL」拼接，例如 `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`；填写前缀时保留所需的末尾斜线。API 基址可含路径；两个地址须为有效 HTTP(S) URL，API 基址须省略查询参数，凭据与 fragment 均须省略。下载前缀允许查询参数形式，例如 `https://proxy.example/?url=`。
+两个值缺省均为空：API 使用 `https://api.github.com`，归档使用原始资产 URL。下载地址严格按「前缀 + 原始 URL」拼接，例如 `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`；填写前缀时保留所需的末尾斜线。两个地址及重定向均使用 HTTPS。API 基址可含路径，须省略查询参数；两个地址均省略用户凭据与 fragment。下载前缀允许查询参数形式，例如 `https://proxy.example/?url=`。
+
+安装和更新使用 Release API 返回的 SHA-256 摘要核验归档。`github_api_base` 决定摘要的信任根，只应填可信的 GitHub API 反向代理。旧资产缺少摘要时，清空下载前缀再试；直连原资产会校验大小并记一条警告。
 
 CLI 可逐字段覆盖本次操作，覆盖值保留在当前请求中：
 
@@ -284,6 +286,8 @@ alonabot update alonabot-agent-official --github-api-base https://api-mirror.exa
 alonabot update alonabot-agent-official --github-download-prefix '' --yes
 ```
 
-管理 API 使用认证后的 `GET/PUT /api/v1/core/github` 读写两个持久字段，PUT 须同时提供两个字符串。安装请求的 `github_api_base`、`github_download_prefix` 可选，更新请求放在 `install` 对象内；省略沿用设置，显式空串恢复对应官方地址。Core 先核对原始 GitHub Release 与资产的仓库、标签和地址，再转换访问 URL；来源身份始终来自原始仓库，下载后继续核对包身份、平台、版本与 build-info。失败保留完整错误并遮盖认证材料，不自动重试或切换地址。
+管理 API 使用认证后的 `GET/PUT /api/v1/core/github` 读写两个持久字段，PUT 须同时提供两个字符串。安装请求的 `github_api_base`、`github_download_prefix` 可选，更新请求放在 `install` 对象内；省略沿用设置，显式空串恢复对应官方地址。Core 先核对原始 GitHub Release 与资产的仓库、标签和地址，再转换访问 URL；下载后核对归档摘要、包身份、平台、版本与 build-info。错误及诊断设置省略下载前缀的查询串，跨主机重定向移除 `Referer`。下载无自动重试或地址回退。
+
+`INSTALL_DOWNLOAD_TIMEOUT` 默认每个请求 5 分钟，覆盖重定向和响应体读取；`INSTALL_MAX_RELEASE_JSON` 默认 4 MiB；`INSTALL_MAX_HTTP_ERROR` 默认保留非 200 响应体的前 4 KiB。用 `alonabot tune list` 查看生效值。
 
 商店的索引发现与收录检查仍使用所选源的 GitHub 索引及展示快照，其独立抓取规则见上文；首次浏览商店需要索引源可达。按仓库直接安装、已安装组件的更新检查及确认预览直接调用 Core，随后安装或更新也使用同一份镜像设置。

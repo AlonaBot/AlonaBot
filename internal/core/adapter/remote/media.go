@@ -18,14 +18,14 @@ var (
 	_ adapter.MediaSession = (*instance)(nil)
 )
 
-// registerIncoming 将事件消息链中的平台文件标识改写为 Core 对象 ID。
-func (p *Process) registerIncoming(instanceID string, ev *pb.Event) {
+func eventChains(ev *pb.Event) []*pb.MessageChain {
 	payload := ev.GetEventPayload()
-	p.registerIncomingChains(instanceID, ev.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain())
+	return []*pb.MessageChain{ev.GetMessage().GetChain(), payload.GetMessageCreated().GetChain(), payload.GetMessageEdited().GetChain(), payload.GetMessageEdited().GetOldChain()}
 }
 
-func (p *Process) registerIncomingChains(instanceID string, chains ...*pb.MessageChain) {
+func incomingMedia(chains ...*pb.MessageChain) []*pb.IncomingMedia {
 	seen := make(map[*pb.IncomingMedia]bool)
+	var result []*pb.IncomingMedia
 	var rewrite func(*pb.MessageChain)
 	rewrite = func(chain *pb.MessageChain) {
 		for _, segment := range chain.GetSegments() {
@@ -43,7 +43,7 @@ func (p *Process) registerIncomingChains(instanceID string, chains ...*pb.Messag
 			if incoming := source.GetIncomingRef(); incoming != nil && !seen[incoming] {
 				// 同一描述符可出现在事件的多条消息链中，避免重复改写已登记的对象 ID。
 				seen[incoming] = true
-				incoming.Token = p.opt.RegisterIncoming(instanceID, incoming.Token, incoming.Size, incoming.Mime)
+				result = append(result, incoming)
 			}
 			for _, item := range segment.GetForward().GetItems() {
 				rewrite(item.GetChain())
@@ -52,6 +52,14 @@ func (p *Process) registerIncomingChains(instanceID string, chains ...*pb.Messag
 	}
 	for _, chain := range chains {
 		rewrite(chain)
+	}
+	return result
+}
+
+// registerIncomingChains 仅从已验证的 Adapter 事件或节点响应登记平台文件。
+func (p *Process) registerIncomingChains(entry *instance, chains ...*pb.MessageChain) {
+	for _, incoming := range incomingMedia(chains...) {
+		incoming.Token = p.opt.RegisterIncoming(entry.registered, incoming)
 	}
 }
 
@@ -67,7 +75,7 @@ func (entry *mediaInstance) ReadMedia(ctx context.Context, fileID string, offset
 	if !running {
 		return nil, 0, false, failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}
-	request, err := payload(&pb.AdapterMediaReadRequest{InstanceId: entry.id, FileId: fileID, Offset: offset, Length: length})
+	request, err := payload(&pb.AdapterMediaReadRequest{InstanceId: entry.id, InstanceGeneration: entry.generation, FileId: fileID, Offset: offset, Length: length})
 	if err != nil {
 		return nil, 0, false, err
 	}
