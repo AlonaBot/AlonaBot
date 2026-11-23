@@ -397,7 +397,7 @@ func migrationMode(ctx context.Context, options generate.Options, overlay, modFi
 
 func goCommand(ctx context.Context, toolchain generate.Toolchain, dir string, args ...string) ([]byte, error) {
 	var stderr bytes.Buffer
-	output, err := toolchain.Command(ctx, dir, &stderr, args...).Output()
+	output, err := toolchain.Output(ctx, toolchain.Command(ctx, dir, &stderr, args...), &stderr)
 	if err != nil {
 		return output, fmt.Errorf("go %s: %w\n%s%s", strings.Join(args, " "), err, output, stderr.String())
 	}
@@ -427,7 +427,7 @@ func targetGoCommand(ctx context.Context, options generate.Options, development 
 		options.CGOEnabled = "0"
 	}
 	var stderr bytes.Buffer
-	output, err := targetGo(ctx, options, &stderr, args...).Output()
+	output, err := options.Toolchain.Output(ctx, targetGo(ctx, options, &stderr, args...), &stderr)
 	if err != nil {
 		return output, fmt.Errorf("go %s: %w\n%s%s", strings.Join(args, " "), err, output, stderr.String())
 	}

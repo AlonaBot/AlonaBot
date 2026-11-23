@@ -129,6 +129,12 @@ func (s *Service) buildSource(ctx context.Context, req InstallRequest, log io.Wr
 	if err != nil {
 		return nil, err
 	}
+	if runtime.GOOS == "linux" {
+		threshold := s.opt.Tuning.BuildMemoryWarnBelow
+		if available, ok := availableBuildMemory(os.DirFS("/")); ok && available < threshold {
+			fmt.Fprintf(log, "WARNING: %d MiB of memory is available (below %d MiB). Small plugins build fine; components with large dependencies, such as LLM SDKs, may need about 2 GiB and can fail.\n", available>>20, threshold>>20)
+		}
+	}
 	fmt.Fprintf(log, "build %s %s for %s/%s\n", req.Source, version, runtime.GOOS, runtime.GOARCH)
 	built.archive, err = pluginkit.Pack(ctx, generate.Options{Dir: source, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Toolchain: toolchain}, filepath.Join(dir, "out"))
 	if err != nil {

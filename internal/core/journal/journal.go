@@ -96,6 +96,12 @@ type Result struct {
 	cause            error // Abort 重入保留首次失败。
 }
 
+// KeepRunning 决定提交后是否保留候选 Session。更新按原启用意图启动新代次，即使旧 Session 已丢失。
+func (r *Result) KeepRunning() bool {
+	return r.record.Kind == string(KindFirstInstall) || r.record.WasEnabled &&
+		(r.record.Kind == string(KindUpdate) || r.record.WasRunning || r.record.ExpectedOld == "")
+}
+
 // New 返回绑定 opt 的候选编排器。
 func New(opt Options) *Orchestrator { return &Orchestrator{opt: opt} }
 
@@ -318,8 +324,7 @@ func (o *Orchestrator) prepare(ctx context.Context, pluginID string, kind Kind, 
 		return r, err
 	}
 	// 5. supervisor 只运行到 PREPARED；候选不进入普通异常恢复或业务装配。
-	// 静态 WebUI 没有旧进程与 Active，其首个进程只服从原启用意图。
-	if kind != KindFirstInstall && (!r.record.WasEnabled || !r.record.WasRunning && r.record.ExpectedOld != "") {
+	if !r.KeepRunning() {
 		// 停用意图跨提交保留，候选激活仅完成生命周期，不发布 HTTP 或调度。
 		spec.HTTP, spec.Scheduler, spec.CommandsChanged = nil, nil, nil
 	}

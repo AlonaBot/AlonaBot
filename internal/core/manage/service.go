@@ -61,7 +61,7 @@ type Options struct {
 	Limits                 packages.Limits
 	ReleaseBaseURL         string                                                      // 缺省 https://api.github.com，测试可指向回环服务。
 	HTTPClient             *http.Client                                                // nil 使用 http.DefaultClient。
-	Tuning                 *tune.Values                                                // nil 使用默认的 GitHub 下载调优值。
+	Tuning                 *tune.Values                                                // nil 使用默认的下载与构建调优值。
 	Development            map[string]*manifest.Manifest                               // 由库模式登记的只读工程身份。
 	DevelopmentConfig      func(id string) (json.RawMessage, map[string][]byte, error) // 读取当前开发资源；返回值只读。
 	RestartDevelopment     func(context.Context, string) error                         // 配置落盘后沿 Core 运行循环重启。
