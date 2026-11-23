@@ -5,7 +5,7 @@ Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core�
 ## 固定源码与发行说明
 
 1. 选择已审查的 Core 提交和发行版本，确认相应检查通过。
-2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试还使用其他条目。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
+2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试的 Agent 输入由 `tests/go.mod` 固定，可独立使用真实开发提交。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
 3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`，按[更新日志格式](../changelog/README.zh-CN.md)写入单版本标题和实际发行日期，执行 `go generate ./internal/core/manage` 更新 Core 管理 API 内嵌的双语原文。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`。
 4. 先将组件 SDK 固定到已验证的 Core 精确提交，待组件发布后再固定整合锁和 Core tag，避免相互引用尚未发布的版本。插件模板随后更新至正式 SDK tag。
 
@@ -84,3 +84,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 2. 发布采用单归档上传和商店读取流程的 WebUI，再发布 Agent、Adapter、插件与模板的工作流变更。组件和模板使用新 Core CLI 打包前，先将 CLI/SDK 固定到已发布的精确版本。通过 CLI 与 WebUI 验证在线安装、更新、来源拒绝以及数据保留。
 3. 新 Core 和 WebUI 均验证通过后，逐个列出五个组件仓库的历史 Release 资产，仅删除 `release.json`、`release.json.sig`、`release.pub`。保留平台归档、源码、Release 正文和 tag。此步骤须在具备发布授权的会话中执行。
 4. 清理完成后逐仓核对资产只含平台归档，并重新验证公开在线安装。旧 Core 在线安装及更新需先升级；已安装组件和用户数据继续保留。整合发行仍按上文固定组件版本和构建镜像。
+
+## Schema 文件名切换的发行准备
+
+本轮插件与 Agent 改用 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。先发行使用新 Schema 文件名的 SDK/Core，再让 Agent 和 WebUI 固定该真实版本并重新构建。Agent 的 Schema 与 WebUI 的 Schema fixtures 须同步。新 SDK 发布前，`test`、`build`、`check` 可通过临时 `go.work` 将组件接到本地 Core。`pack` 会使用临时 `-modfile`；本地打包时复制组件源码到临时目录，在副本的 `go.mod` 添加指向本地 Core 的 `replace`，再执行 `env GOWORK=off alonabot pack <临时副本目录>`。组件源码保留已有真实 module 版本。组件发布后再更新 `components.lock.json`，整合归档沿用公开资产构建流程。用户先停用旧组件、升级 Core，再经管理端更新新包并启用；配置值和数据保留。

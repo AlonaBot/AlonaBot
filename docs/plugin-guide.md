@@ -16,7 +16,7 @@ bin/alonabot check ./alonabot-plugin-hello
 bin/alonabot run ./alonabot-plugin-hello --data-dir ./data
 ```
 
-Enter `/hello` in the same terminal for `Hello AlonaBot`. Source edits reload automatically; Ctrl-C stops. Generated `New() *sdk.Plugin` is the entry point; `plugin.yaml` declares identity/source and `config_schema.json` supplies configuration Schema. Plugin/agent templates explicitly mark `.Menu()` and directly call `c.Reply("Hello AlonaBot")`; add `i18n/<locale>.json` when needed. Generated Go/plugin.yaml have no comments for any role. Change `source` to the component repository before release.
+Enter `/hello` in the same terminal for `Hello AlonaBot`. Source edits reload automatically; Ctrl-C stops. Generated `New() *sdk.Plugin` is the entry point; `plugin.yaml` declares identity/source and `plugin_config_schema.json` supplies configuration Schema. Plugin/agent templates explicitly mark `.Menu()` and directly call `c.Reply("Hello AlonaBot")`; add `i18n/<locale>.json` when needed. Generated Go/plugin.yaml have no comments for any role. Change `source` to the component repository before release.
 
 ```fish
 bin/alonabot test ./alonabot-plugin-hello
@@ -50,7 +50,7 @@ For separate repositories create your own Go module first. Release CLI writes it
 - Same-generation `RESUME` reuses generation/configuration/business DB, skipping SELF/VERSIONED migration callbacks while preserving mode/ledger. First activation/update/rollback still follow migration rules. Configuration still runs `OnConfigLoad`, filling/correction/required checks, with full results identical to the original snapshot.
 - Reload/update use independent candidate SQLite copies; preparation failures restore old data. External files/databases have their own recovery responsibilities.
 - Keep large indexes/caches/vectors on disk in managed SQLite or files under `sdk.PluginDataDir(ctx)`, rather than loading everything. Bound memory caches.
-- PostgreSQL/MySQL users supply drivers and administrator-filled connection configuration marked `"secret": true` in `config_schema.json` (§7). If migrations/OnStart write external DBs, declare `prepare_effects=external`; updates to existing installations then require administrator maintenance mode. Core neither creates nor backs up external DBs.
+- PostgreSQL/MySQL users supply drivers and administrator-filled connection configuration marked `"secret": true` in `plugin_config_schema.json` (§7). If migrations/OnStart write external DBs, declare `prepare_effects=external`; updates to existing installations then require administrator maintenance mode. Core neither creates nor backs up external DBs.
 - Use `sdk/kv` for simple state: reserved managed SQLite table `_alonabot_kv` copies/rolls back/cleans with generations. KV links SQLite, so tools infer `prepare_effects=managed_db`; reserved-table initialization is independent of plugin migration IDs.
 - Write plugin files under `sdk.PluginDataDir(ctx)`. They survive restart without generation rollback. Disable/ordinary uninstall preserve them; `uninstall --purge-data`/`--purge` lists and deletes the directory after confirmation.
 
@@ -324,7 +324,11 @@ AlonaBot.onLocale(async function(locale) {
 
 ## 7. Configuration and secrets
 
-Place config_schema.json beside plugin.yaml, declaring types/English source text by field key. alonabot build validates/embeds normalized JSON through overlays; check validates the same. For example:
+Go source filenames are unrestricted: the package-level `New` and its signature define the entry point. Duplicate `New` declarations in one package produce Go's `redeclared` error. Plugins and Agents use `plugin_config_schema.json`; Adapters retain `adapter_config_schema.json`.
+
+For upgrades, disable old components, back up data and upgrade Core, update component packages rebuilt with the new SDK, then enable them. Configuration values, secret references and managed data retain their existing storage. Disabled old packages remain updateable through the management API.
+
+Place plugin_config_schema.json beside plugin.yaml, declaring types/English source text by field key. alonabot build validates/embeds normalized JSON through overlays; check validates the same. For example:
 
 ```json
 {
@@ -402,7 +406,7 @@ Optional condition matches all path/value pairs, e.g. `"condition":{"mode.$key":
 
 Translate under config.<field>.example in i18n/<locale>.json, preserving example object/array and reply string/segment-array shapes. Positionally override input/reply strings/segment text/alt; omitted entries fall back, `{}` skips intermediate array items. check/build/pack validate keys/types/shapes/positions/placeholders.
 
-After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/examples/greeting.png` serves only config_schema-referenced images in Active, with the same security headers as icons. See [management API](deployment.md#management-api).
+After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/examples/greeting.png` serves only plugin_config_schema.json-referenced images in Active, with the same security headers as icons. See [management API](deployment.md#management-api).
 
 ## 8. Tests
 

@@ -36,9 +36,9 @@ type Options struct {
 	Store            *state.Store
 	Registry         *adapter.Registry
 	Sink             adapter.Sink
-	RegisterIncoming func(instanceID, fileID string, size *uint64, mime *string) string // 装配处必须提供媒体 Store 的入站登记入口
-	StartCommandSync func(adapter.Instance)                                             // 登记成功后在状态锁外通知。
-	StopCommandSync  func(adapter.Instance)                                             // 停止或 Session 撤销后在状态锁外通知。
+	RegisterIncoming func(source adapter.Instance, media *pb.IncomingMedia) string // 装配处必须提供媒体 Store 的入站登记入口。
+	StartCommandSync func(adapter.Instance)                                        // 登记成功后在状态锁外通知。
+	StopCommandSync  func(adapter.Instance)                                        // 停止或 Session 撤销后在状态锁外通知。
 }
 
 // Process 并发安全地管理一个 Adapter 包进程及其账号实例。
@@ -51,6 +51,8 @@ type Process struct {
 	instances    map[string]*instance
 	failures     map[string]string // 最近失败的 safe_message，成功启动、停止或忘记实例时清除；mu 保护。
 	declarations declarations      // 当前绑定 Session 的声明缓存，由 mu 保护
+
+	nextGeneration uint64 // 由 operations 保护；每次启动尝试独占一代。
 }
 
 // instance 保存远端账号身份与启停状态；可变字段统一由 Process.mu 保护。
@@ -59,9 +61,11 @@ type instance struct {
 	needsStop    bool       // SDK 中仍有待回收的平台实例
 	process      *Process
 	id           string
-	config       []byte // 只保留在内存中，恢复时重新下发
-	enabled      bool   // 管理员要求运行，Bind 时恢复
-	running      bool   // 已登记到 Registry，绑定当前 Session
+	generation   uint64           // 本次运行在所属 Session 内的身份。
+	registered   adapter.Instance // 与 Registry 发布的实例相同，入站对象绑定此运行身份。
+	config       []byte           // 只保留在内存中，恢复时重新下发
+	enabled      bool             // 管理员要求运行，Bind 时恢复
+	running      bool             // 已登记到 Registry，绑定当前 Session
 	account      string
 	displayName  *string
 	username     string
@@ -198,7 +202,9 @@ func (p *Process) start(ctx context.Context, id string, config []byte) (err erro
 		return err
 	}
 	response := &pb.AdapterInstanceStartResponse{}
-	err = call(ctx, bound.Session, wire.ServiceAdapterInstanceStart, &pb.AdapterInstanceStartRequest{InstanceId: id, ConfigJson: string(config), Cursor: cursor}, response)
+	p.nextGeneration++
+	generation := p.nextGeneration
+	err = call(ctx, bound.Session, wire.ServiceAdapterInstanceStart, &pb.AdapterInstanceStartRequest{InstanceId: id, ConfigJson: string(config), Cursor: cursor, InstanceGeneration: generation}, response)
 	if err != nil {
 		return err
 	}
@@ -227,7 +233,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) (err erro
 	}
 	// 3. 运行登记与在线事件在状态锁内完成，服务只接纳已登记实例。
 	p.mu.Lock()
-	entry := &instance{needsStop: true, process: p, id: id, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, commandMenu: response.CommandMenu, session: bound.Session}
+	entry := &instance{needsStop: true, process: p, id: id, generation: generation, config: append([]byte(nil), config...), enabled: true, running: true, account: response.AccountId, displayName: response.AccountDisplayName, username: response.GetAccountUsername(), capabilities: response.Capabilities, commandMenu: response.CommandMenu, session: bound.Session}
 	entry.sessionKey = p.caller.SessionKey
 	var registered adapter.Instance = entry
 	for _, capability := range entry.capabilities {
@@ -236,6 +242,7 @@ func (p *Process) start(ctx context.Context, id string, config []byte) (err erro
 			break
 		}
 	}
+	entry.registered = registered
 	if err := p.opt.Registry.Add(registered); err != nil {
 		p.mu.Unlock()
 		stopErr := call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: id}, &pb.AdapterInstanceStopResponse{})
@@ -271,7 +278,7 @@ func (p *Process) StopInstance(ctx context.Context, instanceID string) error {
 		// 先取消菜单回调，再等待 SDK 排空；反向顺序会让 stop 等待仍在途的菜单。
 		if p.opt.StopCommandSync != nil {
 			entry.syncMu.Lock()
-			p.opt.StopCommandSync(entry)
+			p.opt.StopCommandSync(entry.registered)
 			entry.syncMu.Unlock()
 		}
 		stopErr = call(ctx, bound.Session, wire.ServiceAdapterInstanceStop, &pb.AdapterInstanceStopRequest{InstanceId: instanceID}, &pb.AdapterInstanceStopResponse{})
@@ -301,7 +308,7 @@ func (p *Process) offline(ctx context.Context, entry *instance, reason pb.BotOff
 		// 回调可重新读取实例状态，必须释放 Process.mu；停止只携带本次运行身份。
 		p.mu.Unlock()
 		entry.syncMu.Lock()
-		p.opt.StopCommandSync(entry)
+		p.opt.StopCommandSync(entry.registered)
 		entry.syncMu.Unlock()
 		p.mu.Lock()
 	}
@@ -322,7 +329,7 @@ func (p *Process) event(entry *instance, eventType string) *pb.Event {
 
 // deliver 在调用方持有状态锁时投递，队列满只记丢弃；其他错误保留给调用方。
 func (p *Process) deliver(ctx context.Context, entry *instance, ev *pb.Event) error {
-	p.registerIncoming(entry.id, ev)
+	p.registerIncomingChains(entry, eventChains(ev)...)
 	err := p.opt.Sink.Deliver(ctx, ev)
 	if errors.Is(err, adapter.ErrQueueFull) {
 		entry.dropped++
@@ -357,7 +364,7 @@ func (entry *instance) Send(ctx context.Context, target *pb.Target, chain *pb.Me
 	if !running {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is unavailable"}
 	}
-	request, err := payload(&pb.AdapterSendRequest{InstanceId: entry.id, Target: target, Chain: chain})
+	request, err := payload(&pb.AdapterSendRequest{InstanceId: entry.id, InstanceGeneration: entry.generation, Target: target, Chain: chain})
 	if err != nil {
 		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
 	}

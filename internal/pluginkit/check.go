@@ -81,7 +81,7 @@ func scanProject(ctx context.Context, options generate.Options) (*projectScan, e
 	snapshot.generated = result
 	// 包资源与生成代码均采用同一份规范 schema。
 	if len(result.ConfigSchema) > 0 {
-		files["config_schema.json"] = result.ConfigSchema
+		files["plugin_config_schema.json"] = result.ConfigSchema
 	}
 	if raw, ok := files["adapter_config_schema.json"]; ok {
 		schema, problems := configschema.Parse(raw)
@@ -179,7 +179,7 @@ func projectResources(dir string, project *manifest.Manifest, process bool) (map
 				return nil, fmt.Errorf("adapter_config_schema.json:1:1: %w", err)
 			}
 		}
-		for _, name := range []string{"config_schema.json", "adapter_config_schema.json", "i18n"} {
+		for _, name := range []string{"plugin_config_schema.json", "adapter_config_schema.json", "i18n"} {
 			if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
 				continue
 			} else if err != nil {
@@ -208,7 +208,7 @@ func projectResources(dir string, project *manifest.Manifest, process bool) (map
 			return nil, err
 		}
 	}
-	for _, schemaName := range []string{"config_schema.json", "adapter_config_schema.json"} {
+	for _, schemaName := range []string{"plugin_config_schema.json", "adapter_config_schema.json"} {
 		raw, exists := files[schemaName]
 		if !exists {
 			continue

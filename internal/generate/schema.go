@@ -12,7 +12,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 )
 
-const configSchemaFileName = "config_schema.json"
+const configSchemaFileName = "plugin_config_schema.json"
 
 func (s *scan) configSchema() error {
 	// 1. 未声明 schema 时使用空字段集核对翻译，生成项保持 nil。

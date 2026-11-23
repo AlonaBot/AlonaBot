@@ -240,7 +240,7 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。插件页面在包的 `pages` 中列出，经 `/plugins/{id}` 在 WebUI 沙箱打开，见[页面套件](plugin-guide.zh-CN.md#插件页面)。
 
-官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/updates?repo=owner/repo`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go)。
+官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go)。
 
 完整现行路由和请求/响应类型由[管理包](../internal/core/manage)维护，[管理集成测试](../tests/e2e/manage_e2e_test.go)通过真实 Core 验证。
 
@@ -254,10 +254,40 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 `refresh` 仅接受字面量 `true` 或 `false`，空值也返回 400 / INVALID_ARGUMENT。省略或 true 会刷新并持久化完整成功快照；false 且有成功快照时，在快照上搜索、计数、排序与分页，全程无远端请求；无快照时执行首次抓取。快照读取返回 `stale=false` 和原 `fetched_at`。进入商店、切换源及支持键盘的手动刷新使用 true，搜索、筛选、排序与分页使用 false。刷新失败保留成功快照和原时间，返回 `stale=true` 及完整错误；无快照的一般失败返回 500 / INTERNAL，源索引缺失返回 404 / SOURCE_INDEX_MISSING。
 
-`GET /updates?repo=owner/repo` 每次查询刷新，返回 `repo,version,release_url,markdown,fetched_at,stale`。最新 Release 标签去掉前导 v 后须为 SemVer，Markdown 保留 Release 正文。latest Release 的 404 返回 404 / NO_RELEASE，由 WebUI 的 `getLatestRelease` 映射为 null。源与 Release 缓存按小写 source/repo 隔离。链接仅允许 HTTP/HTTPS/mailto，HTML 按文本显示。更新预览使用组件绑定来源，更新后说明来自已安装包内 changelog，已读版本只推进到实际展示的版本。
+安装和更新使用的版本检查与 Release 预览通过 Core 的 `GET /api/v1/core/github/release?source=owner/repo` 查询，返回 `repo,version,release_url,markdown,fetched_at`。它与安装共用 GitHub 镜像设置、HTTP 客户端及原始仓库和标签校验，查询失败完整脱敏返回，不使用旧快照。latest Release 的 404 返回 404 / NOT_FOUND，由 WebUI 的 `getLatestRelease` 映射为 null。链接仅允许 HTTP/HTTPS/mailto，HTML 按文本显示。更新预览使用组件绑定来源，更新后说明来自已安装包内 changelog，已读版本只推进到实际展示的版本。
 
 收录时，`GET /store/check?repo=owner/repo` 读取最新 Release API 及其首个平台归档，保留持久缓存原状；核对仓库、Release 与资产 URL、标签 SemVer、资产名称和长度，以及包内 manifest 的 ID、版本与来源。返回 `repo,role,id,name,version,release_url`，可选 description/author，及保持顺序的 manifest `warnings`（空数组也返回）。响应 repo 取已验证 manifest Source 去掉 `github.com/` 后的规范大小写。Core 安装预检继续检查平台、build-info、资源及归档完整性。仅 latest Release 的 404 映射为 NO_RELEASE；坏资产 404 及其他失败返回 500 / INTERNAL，保留实际错误。
 
 源索引为 `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`，tags 可省略。检查后，用户填写标签，用检查所得规范 repo，在浏览器打开源仓库 `issues/new`，携带 `template=submit-plugin.yml` 以及经 URL 编码的 `repo`、`role`、`tags`、`release_url`，由浏览器提交 GitHub Issue。
 
 每个远端 HTTP 请求的期限为 20 秒，覆盖响应体；串行依赖请求总耗时可更长，聚合刷新响应调用方取消。初始 URL 与每次重定向均检查 HTTPS 主机和路径，只允许支持的 GitHub API/Release/CDN 地址。组件安全上限为：元数据 1 MiB、索引 4 MiB、归档 64 MiB、每轮展开 256 MiB（最多两轮）、单文件 128 MiB、每轮 2,048 条、保留的 manifest 256 KiB、保留的图标 1 MiB。超限保留 `exceeds ... bytes/entries` 错误并沿用同样的缓存规则。当前实现见 [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go)。
+
+## 组件下载镜像
+
+Core 的 `core_config.json` 可独立保存 GitHub Release 元数据基址与归档下载前缀，WebUI 的「设置 → 组件下载」读写同一份设置。保存后对下一次安装或更新生效。
+
+```json
+{
+  "github_api_base": "https://api-mirror.example",
+  "github_download_prefix": "https://proxy.example/"
+}
+```
+
+两个值缺省均为空：API 使用 `https://api.github.com`，归档使用原始资产 URL。下载地址严格按「前缀 + 原始 URL」拼接，例如 `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`；填写前缀时保留所需的末尾斜线。两个地址及重定向均使用 HTTPS。API 基址可含路径，须省略查询参数；两个地址均省略用户凭据与 fragment。下载前缀允许查询参数形式，例如 `https://proxy.example/?url=`。
+
+安装和更新使用 Release API 返回的 SHA-256 摘要核验归档。`github_api_base` 决定摘要的信任根，只应填可信的 GitHub API 反向代理。旧资产缺少摘要时，清空下载前缀再试；直连原资产会校验大小并记一条警告。
+
+CLI 可逐字段覆盖本次操作，覆盖值保留在当前请求中：
+
+```fish
+alonabot install --source AlonaBot/alonabot-agent --github-api-base https://api-mirror.example --github-download-prefix https://proxy.example/ --yes
+alonabot update alonabot-agent-official --github-api-base https://api-mirror.example --github-download-prefix https://proxy.example/ --yes
+# 本次直连归档，API 继续沿用持久设置
+alonabot update alonabot-agent-official --github-download-prefix '' --yes
+```
+
+管理 API 使用认证后的 `GET/PUT /api/v1/core/github` 读写两个持久字段，PUT 须同时提供两个字符串。安装请求的 `github_api_base`、`github_download_prefix` 可选，更新请求放在 `install` 对象内；省略沿用设置，显式空串恢复对应官方地址。Core 先核对原始 GitHub Release 与资产的仓库、标签和地址，再转换访问 URL；下载后核对归档摘要、包身份、平台、版本与 build-info。错误及诊断设置省略下载前缀的查询串，跨主机重定向移除 `Referer`。下载无自动重试或地址回退。
+
+`INSTALL_DOWNLOAD_TIMEOUT` 默认每个请求 5 分钟，覆盖重定向和响应体读取；`INSTALL_MAX_RELEASE_JSON` 默认 4 MiB；`INSTALL_MAX_HTTP_ERROR` 默认保留非 200 响应体的前 4 KiB。用 `alonabot tune list` 查看生效值。
+
+商店的索引发现与收录检查仍使用所选源的 GitHub 索引及展示快照，其独立抓取规则见上文；首次浏览商店需要索引源可达。按仓库直接安装、已安装组件的更新检查及确认预览直接调用 Core，随后安装或更新也使用同一份镜像设置。

@@ -58,7 +58,7 @@ func testDevelopmentCLI(t *testing.T, role string) {
 	if mod := string(developmentRead(t, filepath.Join(dir, "go.mod"))); !strings.Contains(mod, "module alonabot-plugin-cli\n") {
 		t.Fatalf("default module: %s", mod)
 	}
-	for _, name := range []string{"plugin.go", "plugin.yaml", "config_schema.json", ".gitignore"} {
+	for _, name := range []string{"plugin.go", "plugin.yaml", "plugin_config_schema.json", ".gitignore"} {
 		developmentRead(t, filepath.Join(dir, name))
 	}
 	if _, err := os.Stat(filepath.Join(dir, "main.go")); !os.IsNotExist(err) {
@@ -111,7 +111,7 @@ func TestHello(t *testing.T) {
 	if project.Manifest.ID != id || len(project.Warnings) != 0 {
 		t.Fatalf("default identity: %+v", project)
 	}
-	if _, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "config_schema.json"))); len(problems) > 0 {
+	if _, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "plugin_config_schema.json"))); len(problems) > 0 {
 		t.Fatal(problems)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "i18n")); !os.IsNotExist(err) {
@@ -187,7 +187,7 @@ func TestHello(t *testing.T) {
 	if m.Role != role || m.MigrationMode != manifest.MigrationNone || m.PrepareEffects != manifest.EffectsNone || m.OS != runtime.GOOS || m.Arch != runtime.GOARCH {
 		t.Fatalf("package manifest: %+v", m)
 	}
-	for _, name := range []string{m.Entrypoint, "plugin.yaml", "config_schema.json", "build-info"} {
+	for _, name := range []string{m.Entrypoint, "plugin.yaml", "plugin_config_schema.json", "build-info"} {
 		developmentRead(t, filepath.Join(candidate.Dir, name))
 	}
 	info, err := debug.ParseBuildInfo(string(developmentRead(t, filepath.Join(candidate.Dir, "build-info"))))
@@ -206,11 +206,11 @@ func TestHello(t *testing.T) {
 			t.Fatalf("unexpected package material %s: %v", name, err)
 		}
 	}
-	schema, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "config_schema.json")))
+	schema, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "plugin_config_schema.json")))
 	if len(problems) > 0 {
 		t.Fatal(problems)
 	}
-	if !bytes.Equal(schema.Canonical(), developmentRead(t, filepath.Join(candidate.Dir, "config_schema.json"))) {
+	if !bytes.Equal(schema.Canonical(), developmentRead(t, filepath.Join(candidate.Dir, "plugin_config_schema.json"))) {
 		t.Fatal("package schema is not canonical")
 	}
 	if !bytes.Equal(author, developmentRead(t, filepath.Join(dir, "plugin.yaml"))) {

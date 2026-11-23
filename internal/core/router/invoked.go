@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/debugapi"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"google.golang.org/protobuf/proto"
@@ -19,11 +20,12 @@ const (
 	commandDenied       = "denied"
 )
 
-func (r *Router) commandAllowed(c *candidate, ev *pb.Event) bool {
+func (r *Router) commandAllowed(c *candidate, ev *pb.Event, state *dispatchState) bool {
 	if !r.available(*c) {
 		return false
 	}
 	if failure := r.commandPolicyFailure(profile.WithView(r.ctx), c, ev); failure != nil {
+		r.recordDiagnostic(state, *c, nil, debugapi.PhaseAdmission, failure)
 		r.commandInvoked(*c, ev, commandPolicyResult(failure.GetCode()), 0)
 		return false
 	}

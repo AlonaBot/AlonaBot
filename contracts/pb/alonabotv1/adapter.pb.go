@@ -394,12 +394,14 @@ func (x *EventDeclaration) GetSchemaJson() string {
 
 // AdapterInstanceStartRequest 下发实例配置与已持久化游标。
 type AdapterInstanceStartRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	ConfigJson    string                 `protobuf:"bytes,2,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
-	Cursor        []byte                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	ConfigJson string                 `protobuf:"bytes,2,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
+	Cursor     []byte                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// Core 为每次启动分配的非零代次，后续实例操作须携带同一值。
+	InstanceGeneration uint64 `protobuf:"varint,4,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterInstanceStartRequest) Reset() {
@@ -451,6 +453,13 @@ func (x *AdapterInstanceStartRequest) GetCursor() []byte {
 		return x.Cursor
 	}
 	return nil
+}
+
+func (x *AdapterInstanceStartRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
 }
 
 // AdapterInstanceStartResponse 返回已验证账号与实例能力。
@@ -615,12 +624,13 @@ func (*AdapterInstanceStopResponse) Descriptor() ([]byte, []int) {
 
 // AdapterSendRequest 向指定实例发送消息链；响应为 SendResult。
 type AdapterSendRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Target        *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
-	Chain         *MessageChain          `protobuf:"bytes,3,opt,name=chain,proto3" json:"chain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Target             *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Chain              *MessageChain          `protobuf:"bytes,3,opt,name=chain,proto3" json:"chain,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,4,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterSendRequest) Reset() {
@@ -672,6 +682,13 @@ func (x *AdapterSendRequest) GetChain() *MessageChain {
 		return x.Chain
 	}
 	return nil
+}
+
+func (x *AdapterSendRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
 }
 
 // AdapterDeliverRequest 交付实例事件及交付后的游标。
@@ -970,13 +987,14 @@ func (*AdapterStatusResponse) Descriptor() ([]byte, []int) {
 
 // AdapterMediaReadRequest 从指定实例读取平台文件，length 为 1～1 MiB。
 type AdapterMediaReadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	FileId        string                 `protobuf:"bytes,2,opt,name=file_id,json=fileId,proto3" json:"file_id,omitempty"`
-	Offset        uint64                 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length        uint32                 `protobuf:"varint,4,opt,name=length,proto3" json:"length,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	FileId             string                 `protobuf:"bytes,2,opt,name=file_id,json=fileId,proto3" json:"file_id,omitempty"`
+	Offset             uint64                 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Length             uint32                 `protobuf:"varint,4,opt,name=length,proto3" json:"length,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,5,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterMediaReadRequest) Reset() {
@@ -1033,6 +1051,13 @@ func (x *AdapterMediaReadRequest) GetOffset() uint64 {
 func (x *AdapterMediaReadRequest) GetLength() uint32 {
 	if x != nil {
 		return x.Length
+	}
+	return 0
+}
+
+func (x *AdapterMediaReadRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
 	}
 	return 0
 }
@@ -1105,9 +1130,10 @@ type AdapterEditRequest struct {
 	Target            *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	PlatformMessageId string                 `protobuf:"bytes,3,opt,name=platform_message_id,json=platformMessageId,proto3" json:"platform_message_id,omitempty"`
 	// 恰好一个 text 片段和至多一个 buttons 片段。
-	Chain         *MessageChain `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Chain              *MessageChain `protobuf:"bytes,4,opt,name=chain,proto3" json:"chain,omitempty"`
+	InstanceGeneration uint64        `protobuf:"varint,5,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterEditRequest) Reset() {
@@ -1168,12 +1194,20 @@ func (x *AdapterEditRequest) GetChain() *MessageChain {
 	return nil
 }
 
+func (x *AdapterEditRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
+}
+
 // AdapterDeleteRequest 向指定实例提交撤回，响应为 DeleteResult。
 type AdapterDeleteRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	Target             *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	PlatformMessageIds []string               `protobuf:"bytes,3,rep,name=platform_message_ids,json=platformMessageIds,proto3" json:"platform_message_ids,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,4,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1227,6 +1261,13 @@ func (x *AdapterDeleteRequest) GetPlatformMessageIds() []string {
 		return x.PlatformMessageIds
 	}
 	return nil
+}
+
+func (x *AdapterDeleteRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
 }
 
 // ActionDeclaration 声明平台动作的版本、作用范围与参数和结果 Schema。
@@ -1439,14 +1480,15 @@ func (x *ActionResponse) GetResultJson() string {
 
 // AdapterActionRequest 向指定实例提交动作；账号动作省略 target。
 type AdapterActionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Target        *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Version       uint32                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	ParamsJson    string                 `protobuf:"bytes,5,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Target             *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Name               string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Version            uint32                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
+	ParamsJson         string                 `protobuf:"bytes,5,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,6,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterActionRequest) Reset() {
@@ -1512,6 +1554,13 @@ func (x *AdapterActionRequest) GetParamsJson() string {
 		return x.ParamsJson
 	}
 	return ""
+}
+
+func (x *AdapterActionRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
 }
 
 // MediaURLRequest 为本次发送的只读令牌申请临时 URL，载荷版本为 1。
@@ -1676,11 +1725,12 @@ func (x *CommandMenuItem) GetDescriptions() map[string]string {
 
 // AdapterCommandsSyncRequest 替换指定实例的命令菜单，空列表清空菜单。
 type AdapterCommandsSyncRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Commands      []*CommandMenuItem     `protobuf:"bytes,2,rep,name=commands,proto3" json:"commands,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Commands           []*CommandMenuItem     `protobuf:"bytes,2,rep,name=commands,proto3" json:"commands,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,3,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterCommandsSyncRequest) Reset() {
@@ -1725,6 +1775,13 @@ func (x *AdapterCommandsSyncRequest) GetCommands() []*CommandMenuItem {
 		return x.Commands
 	}
 	return nil
+}
+
+func (x *AdapterCommandsSyncRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
 }
 
 // AdapterCommandsSyncResponse 确认菜单同步完成，错误沿用 ErrorInfo。
@@ -1995,12 +2052,13 @@ func (x *CommandMenu) GetCommands() []*CommandMenuEntry {
 
 // CommandMenuRequest 执行 set、get、delete、status 或 sync。
 type CommandMenuRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Operation     string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
-	Menu          *CommandMenu           `protobuf:"bytes,3,opt,name=menu,proto3" json:"menu,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Operation          string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	Menu               *CommandMenu           `protobuf:"bytes,3,opt,name=menu,proto3" json:"menu,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,4,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"` // Core 调用 Adapter 时填写，插件请求由 Core 绑定。
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CommandMenuRequest) Reset() {
@@ -2052,6 +2110,13 @@ func (x *CommandMenuRequest) GetMenu() *CommandMenu {
 		return x.Menu
 	}
 	return nil
+}
+
+func (x *CommandMenuRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
 }
 
 // CommandMenuPosition 返回最后一次成功写入的位置、模式与插件所有者。
@@ -2202,12 +2267,13 @@ func (x *CommandMenuResponse) GetPositions() []*CommandMenuPosition {
 
 // AdapterReadNodesRequest 将查询绑定到实例账号及当前会话。
 type AdapterReadNodesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Target        *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
-	Segment       *ForwardSegment        `protobuf:"bytes,3,opt,name=segment,proto3" json:"segment,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	Target             *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Segment            *ForwardSegment        `protobuf:"bytes,3,opt,name=segment,proto3" json:"segment,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,4,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AdapterReadNodesRequest) Reset() {
@@ -2261,6 +2327,111 @@ func (x *AdapterReadNodesRequest) GetSegment() *ForwardSegment {
 	return nil
 }
 
+func (x *AdapterReadNodesRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
+}
+
+// AdapterOperationsRequest 查询当前运行实例的真实操作接口。
+type AdapterOperationsRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId         string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	InstanceGeneration uint64                 `protobuf:"varint,2,opt,name=instance_generation,json=instanceGeneration,proto3" json:"instance_generation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AdapterOperationsRequest) Reset() {
+	*x = AdapterOperationsRequest{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdapterOperationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdapterOperationsRequest) ProtoMessage() {}
+
+func (x *AdapterOperationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdapterOperationsRequest.ProtoReflect.Descriptor instead.
+func (*AdapterOperationsRequest) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *AdapterOperationsRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *AdapterOperationsRequest) GetInstanceGeneration() uint64 {
+	if x != nil {
+		return x.InstanceGeneration
+	}
+	return 0
+}
+
+// AdapterOperationsResponse 保留标准操作与平台声明的相同描述格式。
+type AdapterOperationsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Operations    []*ActionDeclaration   `protobuf:"bytes,1,rep,name=operations,proto3" json:"operations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdapterOperationsResponse) Reset() {
+	*x = AdapterOperationsResponse{}
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdapterOperationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdapterOperationsResponse) ProtoMessage() {}
+
+func (x *AdapterOperationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_adapter_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdapterOperationsResponse.ProtoReflect.Descriptor instead.
+func (*AdapterOperationsResponse) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_adapter_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *AdapterOperationsResponse) GetOperations() []*ActionDeclaration {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
 var File_alonabot_v1_adapter_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_adapter_proto_rawDesc = "" +
@@ -2289,13 +2460,14 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12\x1f\n" +
 	"\vschema_json\x18\x03 \x01(\tR\n" +
-	"schemaJson\"w\n" +
+	"schemaJson\"\xa8\x01\n" +
 	"\x1bAdapterInstanceStartRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x1f\n" +
 	"\vconfig_json\x18\x02 \x01(\tR\n" +
 	"configJson\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\fR\x06cursor\"\xd2\x02\n" +
+	"\x06cursor\x18\x03 \x01(\fR\x06cursor\x12/\n" +
+	"\x13instance_generation\x18\x04 \x01(\x04R\x12instanceGeneration\"\xd2\x02\n" +
 	"\x1cAdapterInstanceStartResponse\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x125\n" +
@@ -2308,12 +2480,13 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x1aAdapterInstanceStopRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\"\x1d\n" +
-	"\x1bAdapterInstanceStopResponse\"\x93\x01\n" +
+	"\x1bAdapterInstanceStopResponse\"\xc4\x01\n" +
 	"\x12AdapterSendRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12+\n" +
 	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x12/\n" +
-	"\x05chain\x18\x03 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"z\n" +
+	"\x05chain\x18\x03 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x12/\n" +
+	"\x13instance_generation\x18\x04 \x01(\x04R\x12instanceGeneration\"z\n" +
 	"\x15AdapterDeliverRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12(\n" +
@@ -2332,29 +2505,32 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x05state\x18\x02 \x01(\x0e2!.alonabot.v1.AdapterInstanceStateR\x05state\x125\n" +
 	"\n" +
 	"safe_error\x18\x03 \x01(\v2\x16.alonabot.v1.ErrorInfoR\tsafeError\"\x17\n" +
-	"\x15AdapterStatusResponse\"\x83\x01\n" +
+	"\x15AdapterStatusResponse\"\xb4\x01\n" +
 	"\x17AdapterMediaReadRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x17\n" +
 	"\afile_id\x18\x02 \x01(\tR\x06fileId\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x04R\x06offset\x12\x16\n" +
-	"\x06length\x18\x04 \x01(\rR\x06length\"a\n" +
+	"\x06length\x18\x04 \x01(\rR\x06length\x12/\n" +
+	"\x13instance_generation\x18\x05 \x01(\x04R\x12instanceGeneration\"a\n" +
 	"\x18AdapterMediaReadResponse\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1f\n" +
 	"\vnext_offset\x18\x02 \x01(\x04R\n" +
 	"nextOffset\x12\x10\n" +
-	"\x03eof\x18\x03 \x01(\bR\x03eof\"\xc3\x01\n" +
+	"\x03eof\x18\x03 \x01(\bR\x03eof\"\xf4\x01\n" +
 	"\x12AdapterEditRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12+\n" +
 	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x12.\n" +
 	"\x13platform_message_id\x18\x03 \x01(\tR\x11platformMessageId\x12/\n" +
-	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\x96\x01\n" +
+	"\x05chain\x18\x04 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x12/\n" +
+	"\x13instance_generation\x18\x05 \x01(\x04R\x12instanceGeneration\"\xc7\x01\n" +
 	"\x14AdapterDeleteRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12+\n" +
 	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x120\n" +
-	"\x14platform_message_ids\x18\x03 \x03(\tR\x12platformMessageIds\"\xcd\x01\n" +
+	"\x14platform_message_ids\x18\x03 \x03(\tR\x12platformMessageIds\x12/\n" +
+	"\x13instance_generation\x18\x04 \x01(\x04R\x12instanceGeneration\"\xcd\x01\n" +
 	"\x11ActionDeclaration\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12.\n" +
@@ -2371,7 +2547,7 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x12use_default_target\x18\x06 \x01(\bR\x10useDefaultTarget\"1\n" +
 	"\x0eActionResponse\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\tR\n" +
-	"resultJson\"\xb3\x01\n" +
+	"resultJson\"\xe4\x01\n" +
 	"\x14AdapterActionRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12+\n" +
@@ -2379,7 +2555,8 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\rR\aversion\x12\x1f\n" +
 	"\vparams_json\x18\x05 \x01(\tR\n" +
-	"paramsJson\"B\n" +
+	"paramsJson\x12/\n" +
+	"\x13instance_generation\x18\x06 \x01(\x04R\x12instanceGeneration\"B\n" +
 	"\x0fMediaURLRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\"Q\n" +
@@ -2391,11 +2568,12 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\fdescriptions\x18\x02 \x03(\v2..alonabot.v1.CommandMenuItem.DescriptionsEntryR\fdescriptions\x1a?\n" +
 	"\x11DescriptionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"w\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa8\x01\n" +
 	"\x1aAdapterCommandsSyncRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x128\n" +
-	"\bcommands\x18\x02 \x03(\v2\x1c.alonabot.v1.CommandMenuItemR\bcommands\"\x1d\n" +
+	"\bcommands\x18\x02 \x03(\v2\x1c.alonabot.v1.CommandMenuItemR\bcommands\x12/\n" +
+	"\x13instance_generation\x18\x03 \x01(\x04R\x12instanceGeneration\"\x1d\n" +
 	"\x1bAdapterCommandsSyncResponse\"|\n" +
 	"\x11CommandMenuConfig\x12,\n" +
 	"\x12auto_sync_commands\x18\x01 \x01(\bR\x10autoSyncCommands\x129\n" +
@@ -2410,12 +2588,13 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\vCommandMenu\x123\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1d.alonabot.v1.CommandMenuScopeR\x05scope\x12#\n" +
 	"\rlanguage_code\x18\x02 \x01(\tR\flanguageCode\x129\n" +
-	"\bcommands\x18\x03 \x03(\v2\x1d.alonabot.v1.CommandMenuEntryR\bcommands\"\x81\x01\n" +
+	"\bcommands\x18\x03 \x03(\v2\x1d.alonabot.v1.CommandMenuEntryR\bcommands\"\xb2\x01\n" +
 	"\x12CommandMenuRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12,\n" +
-	"\x04menu\x18\x03 \x01(\v2\x18.alonabot.v1.CommandMenuR\x04menu\"\xab\x01\n" +
+	"\x04menu\x18\x03 \x01(\v2\x18.alonabot.v1.CommandMenuR\x04menu\x12/\n" +
+	"\x13instance_generation\x18\x04 \x01(\x04R\x12instanceGeneration\"\xab\x01\n" +
 	"\x13CommandMenuPosition\x123\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1d.alonabot.v1.CommandMenuScopeR\x05scope\x12#\n" +
 	"\rlanguage_code\x18\x02 \x01(\tR\flanguageCode\x12\x12\n" +
@@ -2427,12 +2606,21 @@ const file_alonabot_v1_adapter_proto_rawDesc = "" +
 	"\x05ready\x18\x03 \x01(\bR\x05ready\x12\x1d\n" +
 	"\n" +
 	"last_error\x18\x04 \x01(\tR\tlastError\x12>\n" +
-	"\tpositions\x18\x05 \x03(\v2 .alonabot.v1.CommandMenuPositionR\tpositions\"\x9e\x01\n" +
+	"\tpositions\x18\x05 \x03(\v2 .alonabot.v1.CommandMenuPositionR\tpositions\"\xcf\x01\n" +
 	"\x17AdapterReadNodesRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12+\n" +
 	"\x06target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\x06target\x125\n" +
-	"\asegment\x18\x03 \x01(\v2\x1b.alonabot.v1.ForwardSegmentR\asegment*a\n" +
+	"\asegment\x18\x03 \x01(\v2\x1b.alonabot.v1.ForwardSegmentR\asegment\x12/\n" +
+	"\x13instance_generation\x18\x04 \x01(\x04R\x12instanceGeneration\"l\n" +
+	"\x18AdapterOperationsRequest\x12\x1f\n" +
+	"\vinstance_id\x18\x01 \x01(\tR\n" +
+	"instanceId\x12/\n" +
+	"\x13instance_generation\x18\x02 \x01(\x04R\x12instanceGeneration\"[\n" +
+	"\x19AdapterOperationsResponse\x12>\n" +
+	"\n" +
+	"operations\x18\x01 \x03(\v2\x1e.alonabot.v1.ActionDeclarationR\n" +
+	"operations*a\n" +
 	"\x14AdapterInstanceState\x12&\n" +
 	"\"ADAPTER_INSTANCE_STATE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dADAPTER_INSTANCE_STATE_FAILED\x10\x01*\\\n" +
@@ -2454,7 +2642,7 @@ func file_alonabot_v1_adapter_proto_rawDescGZIP() []byte {
 }
 
 var file_alonabot_v1_adapter_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_alonabot_v1_adapter_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(AdapterInstanceState)(0),            // 0: alonabot.v1.AdapterInstanceState
 	(ActionScope)(0),                     // 1: alonabot.v1.ActionScope
@@ -2494,34 +2682,36 @@ var file_alonabot_v1_adapter_proto_goTypes = []any{
 	(*CommandMenuPosition)(nil),          // 35: alonabot.v1.CommandMenuPosition
 	(*CommandMenuResponse)(nil),          // 36: alonabot.v1.CommandMenuResponse
 	(*AdapterReadNodesRequest)(nil),      // 37: alonabot.v1.AdapterReadNodesRequest
-	nil,                                  // 38: alonabot.v1.CommandMenuItem.DescriptionsEntry
-	(*Capability)(nil),                   // 39: alonabot.v1.Capability
-	(*Target)(nil),                       // 40: alonabot.v1.Target
-	(*MessageChain)(nil),                 // 41: alonabot.v1.MessageChain
-	(*Event)(nil),                        // 42: alonabot.v1.Event
-	(*ErrorInfo)(nil),                    // 43: alonabot.v1.ErrorInfo
-	(*ForwardSegment)(nil),               // 44: alonabot.v1.ForwardSegment
+	(*AdapterOperationsRequest)(nil),     // 38: alonabot.v1.AdapterOperationsRequest
+	(*AdapterOperationsResponse)(nil),    // 39: alonabot.v1.AdapterOperationsResponse
+	nil,                                  // 40: alonabot.v1.CommandMenuItem.DescriptionsEntry
+	(*Capability)(nil),                   // 41: alonabot.v1.Capability
+	(*Target)(nil),                       // 42: alonabot.v1.Target
+	(*MessageChain)(nil),                 // 43: alonabot.v1.MessageChain
+	(*Event)(nil),                        // 44: alonabot.v1.Event
+	(*ErrorInfo)(nil),                    // 45: alonabot.v1.ErrorInfo
+	(*ForwardSegment)(nil),               // 46: alonabot.v1.ForwardSegment
 }
 var file_alonabot_v1_adapter_proto_depIdxs = []int32{
-	39, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
+	41, // 0: alonabot.v1.AdapterDescriptor.capabilities:type_name -> alonabot.v1.Capability
 	3,  // 1: alonabot.v1.AdapterDescriptor.extensions:type_name -> alonabot.v1.ExtensionDeclaration
 	4,  // 2: alonabot.v1.AdapterDescriptor.permissions:type_name -> alonabot.v1.PermissionDeclaration
 	5,  // 3: alonabot.v1.AdapterDescriptor.events:type_name -> alonabot.v1.EventDeclaration
 	21, // 4: alonabot.v1.AdapterDescriptor.actions:type_name -> alonabot.v1.ActionDeclaration
-	39, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
+	41, // 5: alonabot.v1.AdapterInstanceStartResponse.capabilities:type_name -> alonabot.v1.Capability
 	30, // 6: alonabot.v1.AdapterInstanceStartResponse.command_menu:type_name -> alonabot.v1.CommandMenuConfig
-	40, // 7: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
-	41, // 8: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	42, // 9: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
+	42, // 7: alonabot.v1.AdapterSendRequest.target:type_name -> alonabot.v1.Target
+	43, // 8: alonabot.v1.AdapterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	44, // 9: alonabot.v1.AdapterDeliverRequest.event:type_name -> alonabot.v1.Event
 	0,  // 10: alonabot.v1.AdapterStatusRequest.state:type_name -> alonabot.v1.AdapterInstanceState
-	43, // 11: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
-	40, // 12: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
-	41, // 13: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
-	40, // 14: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
+	45, // 11: alonabot.v1.AdapterStatusRequest.safe_error:type_name -> alonabot.v1.ErrorInfo
+	42, // 12: alonabot.v1.AdapterEditRequest.target:type_name -> alonabot.v1.Target
+	43, // 13: alonabot.v1.AdapterEditRequest.chain:type_name -> alonabot.v1.MessageChain
+	42, // 14: alonabot.v1.AdapterDeleteRequest.target:type_name -> alonabot.v1.Target
 	1,  // 15: alonabot.v1.ActionDeclaration.scope:type_name -> alonabot.v1.ActionScope
-	40, // 16: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
-	40, // 17: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
-	38, // 18: alonabot.v1.CommandMenuItem.descriptions:type_name -> alonabot.v1.CommandMenuItem.DescriptionsEntry
+	42, // 16: alonabot.v1.ActionRequest.to:type_name -> alonabot.v1.Target
+	42, // 17: alonabot.v1.AdapterActionRequest.target:type_name -> alonabot.v1.Target
+	40, // 18: alonabot.v1.CommandMenuItem.descriptions:type_name -> alonabot.v1.CommandMenuItem.DescriptionsEntry
 	27, // 19: alonabot.v1.AdapterCommandsSyncRequest.commands:type_name -> alonabot.v1.CommandMenuItem
 	31, // 20: alonabot.v1.CommandMenu.scope:type_name -> alonabot.v1.CommandMenuScope
 	32, // 21: alonabot.v1.CommandMenu.commands:type_name -> alonabot.v1.CommandMenuEntry
@@ -2530,13 +2720,14 @@ var file_alonabot_v1_adapter_proto_depIdxs = []int32{
 	32, // 24: alonabot.v1.CommandMenuResponse.commands:type_name -> alonabot.v1.CommandMenuEntry
 	30, // 25: alonabot.v1.CommandMenuResponse.config:type_name -> alonabot.v1.CommandMenuConfig
 	35, // 26: alonabot.v1.CommandMenuResponse.positions:type_name -> alonabot.v1.CommandMenuPosition
-	40, // 27: alonabot.v1.AdapterReadNodesRequest.target:type_name -> alonabot.v1.Target
-	44, // 28: alonabot.v1.AdapterReadNodesRequest.segment:type_name -> alonabot.v1.ForwardSegment
-	29, // [29:29] is the sub-list for method output_type
-	29, // [29:29] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	42, // 27: alonabot.v1.AdapterReadNodesRequest.target:type_name -> alonabot.v1.Target
+	46, // 28: alonabot.v1.AdapterReadNodesRequest.segment:type_name -> alonabot.v1.ForwardSegment
+	21, // 29: alonabot.v1.AdapterOperationsResponse.operations:type_name -> alonabot.v1.ActionDeclaration
+	30, // [30:30] is the sub-list for method output_type
+	30, // [30:30] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_adapter_proto_init() }
@@ -2554,7 +2745,7 @@ func file_alonabot_v1_adapter_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_adapter_proto_rawDesc), len(file_alonabot_v1_adapter_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   37,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

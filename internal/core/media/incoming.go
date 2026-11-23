@@ -12,7 +12,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type platformFile struct{ instanceID, fileID string }
+type platformFile struct {
+	instance    adapter.Instance
+	fileID      string
+	unsupported bool
+}
 
 // incomingObject 的状态由 Store.mu 保护；只有一个取件者在锁外写文件。
 // 每轮取件单独发布完成信号与错误，失败后对象可由新的读取调用重新取件。
@@ -45,9 +49,9 @@ type incomingAccess struct {
 	unsupported bool      // 保留签发时的来源可读性，Grant 继承该限制
 }
 
-// RegisterIncoming 为可信实例的平台文件登记对象，同一实例与 fileID 复用对象。
+// RegisterIncoming 为可信实例的平台文件登记对象，绑定该次运行和来源的可读性。
 // size 与 mime 保留未知状态；登记时不下载文件。
-func (s *Store) RegisterIncoming(instanceID, fileID string, size *uint64, mime *string) string {
+func (s *Store) RegisterIncoming(instance adapter.Instance, media *pb.IncomingMedia) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweep()
@@ -56,17 +60,17 @@ func (s *Store) RegisterIncoming(instanceID, fileID string, size *uint64, mime *
 		s.bySource = make(map[platformFile]string)
 		s.incomingTokens = make(map[string]*incomingAccess)
 	}
-	source := platformFile{instanceID, fileID}
+	source := platformFile{instance, media.Token, media.Readability == pb.MediaReadability_MEDIA_READABILITY_UNSUPPORTED}
 	if id, ok := s.bySource[source]; ok {
 		return id
 	}
 	id := token()
 	object := &incomingObject{source: source, expires: s.now().Add(s.lim.TTL), charges: make(map[string]int64)}
-	if size != nil {
-		object.size = proto.Uint64(*size)
+	if media.Size != nil {
+		object.size = proto.Uint64(*media.Size)
 	}
-	if mime != nil {
-		object.mime = proto.String(*mime)
+	if media.Mime != nil {
+		object.mime = proto.String(*media.Mime)
 	}
 	s.incoming[id] = object
 	s.bySource[source] = id
@@ -83,6 +87,11 @@ func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Ta
 	if object == nil {
 		return nil
 	}
+	object.issued = true
+	return s.issueIncoming(object, c, targets)
+}
+
+func (s *Store) issueIncoming(object *incomingObject, c router.Caller, targets []*pb.Target) *pb.IncomingMedia {
 	expires := s.now().Add(s.lim.TTL)
 	id := token()
 	access := &incomingAccess{object: object, sessionKey: c.SessionKey, expires: expires}
@@ -90,7 +99,6 @@ func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Ta
 		access.targets = append(access.targets, proto.CloneOf(target))
 	}
 	s.incomingTokens[id] = access
-	object.issued = true
 	result := &pb.IncomingMedia{Token: id, ExpiresAtUnixMs: expires.UnixMilli(), Readability: pb.MediaReadability_MEDIA_READABILITY_UNSUPPORTED}
 	if object.size != nil {
 		result.Size = proto.Uint64(*object.size)
@@ -98,8 +106,8 @@ func (s *Store) IssueIncoming(objectID string, c router.Caller, targets []*pb.Ta
 	if object.mime != nil {
 		result.Mime = proto.String(*object.mime)
 	}
-	if instance, ok := s.readers.Get(object.source.instanceID); ok {
-		if _, ok := instance.(adapter.MediaReader); ok {
+	if !object.source.unsupported {
+		if _, ok := object.source.instance.(adapter.MediaReader); ok {
 			result.Readability = pb.MediaReadability_MEDIA_READABILITY_READABLE
 		}
 	}
@@ -333,10 +341,10 @@ func (s *Store) loadIncoming(ctx context.Context, c router.Caller, id string) er
 			s.mu.Unlock()
 			return mediaCallError(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, "media quota exceeded")
 		}
-		instance, ok := s.readers.Get(object.source.instanceID)
-		if !ok {
+		instance, ok := s.readers.Resolve(ctx, object.source.instance.InstanceID())
+		if !ok || instance != object.source.instance {
 			s.mu.Unlock()
-			return mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
+			return mediaCallError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "media source adapter instance is no longer running")
 		}
 		reader, supported := instance.(adapter.MediaReader)
 		if !supported {

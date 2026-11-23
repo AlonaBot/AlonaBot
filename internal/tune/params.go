@@ -55,6 +55,10 @@ type Values struct {
 	SleepMinUptime        time.Duration
 	SleepColdStartWindow  time.Duration
 	SleepColdStartMax     int
+
+	InstallDownloadTimeout time.Duration
+	InstallMaxReleaseJSON  int64 // 字节
+	InstallMaxHTTPError    int64 // 字节
 }
 
 const maxOptionsPage = 200 // 配置选项单页的固定上限。
@@ -136,6 +140,9 @@ var parameters = []parameter{
 	param("INSTALL_MAX_ARCHIVE", bytesUnit, int64(256<<20), true, "> 0", "internal/tune/params.go", func(v *Values) *int64 { return &v.InstallMaxArchive }),
 	param("INSTALL_MAX_EXPANDED", bytesUnit, int64(1<<30), true, ">= INSTALL_MAX_ARCHIVE", "internal/tune/params.go", func(v *Values) *int64 { return &v.InstallMaxExpanded }),
 	param("INSTALL_MAX_ENTRIES", integerUnit, int(10000), true, ">= 1", "internal/tune/params.go", func(v *Values) *int { return &v.InstallMaxEntries }),
+	param("INSTALL_DOWNLOAD_TIMEOUT", durationUnit, 5*time.Minute, true, "> 0", "docs/deployment.md#component-download-mirrors", func(v *Values) *time.Duration { return &v.InstallDownloadTimeout }),
+	param("INSTALL_MAX_RELEASE_JSON", bytesUnit, int64(4<<20), true, "> 0", "docs/deployment.md#component-download-mirrors", func(v *Values) *int64 { return &v.InstallMaxReleaseJSON }),
+	param("INSTALL_MAX_HTTP_ERROR", bytesUnit, int64(4<<10), true, "> 0", "docs/deployment.md#component-download-mirrors", func(v *Values) *int64 { return &v.InstallMaxHTTPError }),
 	param("DEV_RELOAD_POLL", durationUnit, time.Duration(500*time.Millisecond), true, "> 0", "internal/tune/params.go", func(v *Values) *time.Duration { return &v.DevReloadPoll }),
 	param("PLUGIN_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "internal/tune/params.go", func(v *Values) *int64 { return &v.PluginMemorySoftLimit }),
 	param("CORE_MEMORY_SOFT_LIMIT", bytesUnit, int64(0), true, "> 0", "internal/tune/params.go", func(v *Values) *int64 { return &v.CoreMemorySoftLimit }),

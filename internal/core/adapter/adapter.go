@@ -39,12 +39,15 @@ type Instance interface {
 // Registry 并发安全地按实例 ID 保存 Adapter 实例；使用 NewRegistry 创建。
 type Registry struct {
 	mu        sync.RWMutex // 保护 instances 与 defaults；不在锁内调用平台操作
+	epochs    map[string]*instanceEpoch
 	instances map[string]Instance
 	defaults  map[string]string
 }
 
 // NewRegistry 创建空的实例注册表。
-func NewRegistry() *Registry { return &Registry{instances: make(map[string]Instance)} }
+func NewRegistry() *Registry {
+	return &Registry{instances: make(map[string]Instance), epochs: make(map[string]*instanceEpoch)}
+}
 
 // Add 注册实例；重复的 instance_id 返回错误，原实例保持不变。
 func (r *Registry) Add(in Instance) error {
@@ -55,6 +58,7 @@ func (r *Registry) Add(in Instance) error {
 		return fmt.Errorf("adapter instance %q already registered", id)
 	}
 	r.instances[id] = in
+	r.epochs[id] = &instanceEpoch{}
 	return nil
 }
 
@@ -116,6 +120,7 @@ func (r *Registry) Remove(instanceID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.instances, instanceID)
+	delete(r.epochs, instanceID)
 }
 
 // NodesReader 查询当前目标内的完整递归节点，保留结果与错误。

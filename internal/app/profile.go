@@ -50,7 +50,7 @@ func (a *assembly) profileSchemaAt(ctx context.Context, id, active string) (*con
 		if directoryErr != nil {
 			return nil, directoryErr
 		}
-		raw, err = os.ReadFile(filepath.Join(directory, "config_schema.json"))
+		raw, err = os.ReadFile(filepath.Join(directory, "plugin_config_schema.json"))
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}

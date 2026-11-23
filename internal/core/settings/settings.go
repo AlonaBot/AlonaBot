@@ -72,16 +72,18 @@ type Settings struct {
 		MaxSize, MaxTotal int64 // 字节
 		MaxAgeDays        int
 	}
-	LogSources      map[string]string
-	Proxy           string
-	Admins          []Admin
-	CommandPrefixes []string
-	Reply           Reply
-	Sleep           Sleep
-	DefaultLocale   string
-	Adapters        map[string]AdapterSettings
-	Corrections     []configschema.Correction // Core 设置的运行校正，原值不写日志。
-	Unknown         []string                  // Core 声明之外的 JSON 路径。
+	LogSources           map[string]string
+	Proxy                string
+	GitHubAPIBase        string
+	GitHubDownloadPrefix string
+	Admins               []Admin
+	CommandPrefixes      []string
+	Reply                Reply
+	Sleep                Sleep
+	DefaultLocale        string
+	Adapters             map[string]AdapterSettings
+	Corrections          []configschema.Correction // Core 设置的运行校正，原值不写日志。
+	Unknown              []string                  // Core 声明之外的 JSON 路径。
 }
 
 // File 持有设置文档及当前有效快照；方法可并发调用。
@@ -193,6 +195,7 @@ func defaultDocument() ([]byte, error) {
 	content, err := json.MarshalIndent(map[string]any{
 		"listen": s.Listen, "base_url": s.BaseURL,
 		"trusted_proxies": []string{}, "proxy": s.Proxy, "admins": []string{},
+		"github_api_base": s.GitHubAPIBase, "github_download_prefix": s.GitHubDownloadPrefix,
 		"command_prefixes": s.CommandPrefixes, "reply": s.Reply,
 		"default_locale": s.DefaultLocale, "adapters": map[string]any{},
 		"sleep": map[string]any{"mode": s.Sleep.Mode, "idle_timeout": s.Sleep.IdleTimeout.String(), "plugins": s.Sleep.Plugins},
@@ -289,8 +292,8 @@ func readCorrectedMapping(root, defaults *node, fields map[string]configField, p
 		before := *s
 		if err := readValue(field.value, name, s); err != nil {
 			*s = before
-			if name == "adapters" {
-				return err // 实例结构与名称由实例准备路径处理。
+			if name == "adapters" || name == "github_api_base" || name == "github_download_prefix" {
+				return err // 实例目录和下载地址的错误交回调用方。
 			}
 			resetCoreNode(field.value, defaults, name, s)
 		}
@@ -382,7 +385,7 @@ func readValue(n *node, key string, s *Settings) error {
 		}
 		s.LogFile.MaxAgeDays = days
 		return nil
-	case "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
+	case "github_api_base", "github_download_prefix", "listen", "base_url", "log.level", "log.format", "log.file.max_size", "log.file.max_total", "proxy", "default_locale":
 		value, err := n.text()
 		if err != nil {
 			return err
@@ -588,6 +591,15 @@ func readString(value, key string, s *Settings) error {
 			s.LogFile.MaxSize = size
 		} else {
 			s.LogFile.MaxTotal = size
+		}
+	case "github_api_base", "github_download_prefix":
+		if err := ValidateGitHubEndpoint(value, key == "github_download_prefix"); err != nil {
+			return err
+		}
+		if key == "github_api_base" {
+			s.GitHubAPIBase = value
+		} else {
+			s.GitHubDownloadPrefix = value
 		}
 	case "default_locale":
 		if value == "" {

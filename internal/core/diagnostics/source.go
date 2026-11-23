@@ -130,7 +130,7 @@ func (s Directory) load(ctx context.Context, opts Options) (result snapshot, err
 		if instance && c.Source == "dev" {
 			return nil, nil // 开发声明由运行 Core 持有；离线由 maskAdapter 完整遮盖实例值。
 		}
-		name := "config_schema.json"
+		name := "plugin_config_schema.json"
 		if instance {
 			name = "adapter_config_schema.json"
 		}

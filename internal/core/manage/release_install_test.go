@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +17,9 @@ import (
 	"sync"
 	"testing"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
+	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/packages"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
@@ -24,7 +27,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
-// TestReleaseAssetsInstallation 通过 HTTPS、真实状态库与归档验证无旁车安装及旧记录更新。
+// TestReleaseAssetsInstallation 通过模拟 Release 服务、真实状态库与归档验证安装和更新。
 func TestReleaseAssetsInstallation(t *testing.T) {
 	const repo = "example/webui"
 	const id = "alonabot-webui-fixture"
@@ -66,13 +69,25 @@ func TestReleaseAssetsInstallation(t *testing.T) {
 		defer mu.Unlock()
 		archive = out.Bytes()
 		publication = release.GitHubRelease{Tag: "v" + version, URL: "https://github.com/" + repo + "/releases/tag/v" + version,
-			Assets: []release.Download{{Name: name, URL: "https://github.com/" + repo + "/releases/download/v" + version + "/" + name, Size: int64(len(archive))}}}
+			Assets: []release.Download{{Name: name, URL: "https://github.com/" + repo + "/releases/download/v" + version + "/" + name, Size: int64(len(archive)), Digest: fmt.Sprintf("sha256:%x", sha256.Sum256(archive))}}}
 	}
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{Transport: releaseTransport(func(r *http.Request) (*http.Response, error) {
+		address := r.URL
+		if r.URL.Host == "mirror.example" {
+			var err error
+			address, err = url.Parse(r.URL.Query().Get("url"))
+			if err != nil {
+				return nil, err
+			}
+		}
+		if address.Scheme != "https" || (address.Host != "api.github.com" && address.Host != "github.com") {
+			return nil, fmt.Errorf("unexpected download: %s", r.URL)
+		}
 		mu.Lock()
 		defer mu.Unlock()
-		requests = append(requests, r.URL.Path)
-		switch r.URL.Path {
+		w := httptest.NewRecorder()
+		requests = append(requests, address.Path)
+		switch address.Path {
 		case "/repos/" + repo + "/releases/latest":
 			if err := json.NewEncoder(w).Encode(publication); err != nil {
 				t.Error(err)
@@ -85,14 +100,8 @@ func TestReleaseAssetsInstallation(t *testing.T) {
 			t.Errorf("unexpected download: %s", r.URL)
 			http.NotFound(w, r)
 		}
-	}))
-	t.Cleanup(server.Close)
-	endpoint, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := server.Client()
-	client.Transport = releaseTransport{target: endpoint, transport: client.Transport}
+		return w.Result(), nil
+	})}
 	configuration, err := settings.Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -121,6 +130,17 @@ func TestReleaseAssetsInstallation(t *testing.T) {
 		t.Fatal(err)
 	}
 	publish("1.1.0")
+	mu.Lock()
+	archive[len(archive)-1] ^= 1
+	mu.Unlock()
+	var denied *validate.Error
+	prefix := "https://mirror.example/?url="
+	if _, err := service.Update(t.Context(), id, manage.InstallRequest{GitHubDownloadPrefix: &prefix}, false); !errors.As(err, &denied) || denied.Code != pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+		t.Fatalf("equal-size archive with changed bytes: %v", err)
+	}
+	mu.Lock()
+	archive[len(archive)-1] ^= 1
+	mu.Unlock()
 	if _, err := service.Update(t.Context(), id, manage.InstallRequest{}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -150,22 +170,14 @@ func TestReleaseAssetsInstallation(t *testing.T) {
 			downloaded = append(downloaded, filepath.Base(path))
 		}
 	}
-	want := []string{id + "-1.0.0-any.tar.gz", id + "-1.0.0-any.tar.gz", id + "-1.1.0-any.tar.gz", id + "-1.2.0-any.tar.gz"}
+	want := []string{id + "-1.0.0-any.tar.gz", id + "-1.0.0-any.tar.gz", id + "-1.1.0-any.tar.gz", id + "-1.1.0-any.tar.gz", id + "-1.2.0-any.tar.gz"}
 	if !reflect.DeepEqual(downloaded, want) {
 		t.Fatalf("downloaded: %v", downloaded)
 	}
 }
 
-type releaseTransport struct {
-	target    *url.URL
-	transport http.RoundTripper
-}
+type releaseTransport func(*http.Request) (*http.Response, error)
 
 func (t releaseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Host != "api.github.com" && request.URL.Host != "github.com" {
-		return nil, fmt.Errorf("unexpected host: %s", request.URL.Host)
-	}
-	request = request.Clone(request.Context())
-	request.URL.Scheme, request.URL.Host = t.target.Scheme, t.target.Host
-	return t.transport.RoundTrip(request)
+	return t(request)
 }

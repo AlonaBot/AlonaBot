@@ -8,6 +8,8 @@ github.com/AlonaBot/alonabot-adapter-telegram v0.2.0 h1:bCozDC6KBbE2Nc2xhP5Ch03w
 github.com/AlonaBot/alonabot-adapter-telegram v0.2.0/go.mod h1:nxCZ4ci/rHGzL7FigZJQkdtK9nVc7Qb2k5gOAKIm6Wc=
 github.com/AlonaBot/alonabot-agent v0.2.0 h1:u69P8fXGzjze1tTU1+M+UWQ+7kwQIzi/dEUhDDNXAj8=
 github.com/AlonaBot/alonabot-agent v0.2.0/go.mod h1:gaoEQFRyzzncnp3B9aNDcg+vuiH2tzDUnEI8GVWHLTc=
+github.com/AlonaBot/alonabot-agent v0.2.1-0.20261122111930-6a68f8aa7083 h1:XZB6PMnKVoBQZD5gztFfsLdM+gu1eegv8vJRCsdhyQ0=
+github.com/AlonaBot/alonabot-agent v0.2.1-0.20261122111930-6a68f8aa7083/go.mod h1:gaoEQFRyzzncnp3B9aNDcg+vuiH2tzDUnEI8GVWHLTc=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3 h1:qgnWTiWs1G7AqcKZegFvkJD1bmXJcaDU3uC0ELSgZ5U=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3/go.mod h1:XtxD48QPInqoj+GMlcRlXHEYsoOxFnP6w2JgIZ9rDS4=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.13.0 h1:Terj1CMW4+NY5CpWjSRkqLoxh2DkYDdv/FH2z0897Uc=

@@ -34,6 +34,7 @@ type Hooks interface {
 
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
 type Service struct {
+	observe         func([]byte, string, *pb.Target, *pb.MessageChain, *pb.SendResult, *pb.ErrorInfo)
 	prepareIncoming func(*pb.MessageChain, router.Caller, *pb.Target) (*pb.MessageChain, error)
 	replyMu         sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
 	resolveReply    func(context.Context, *pb.Target) (settings.Reply, error)
@@ -58,6 +59,7 @@ func New(adapters *adapter.Registry, p *policy.Policy, lease func(context.Contex
 // Send 按载荷、可信目标、消息链和实例绑定依次准入，不自动重试平台发送。
 // 拒绝时同时返回 REJECTED 回执与错误，发送后保留 Adapter 返回的二者。
 func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	ctx = wire.WithTraceID(ctx, in.TraceID)
 	// 1. 取得已知的可信目标供拒绝回执使用，再校验协议载荷。
 	invocation, _ := in.ParentAttach.(*router.Invocation)
 	var defaultTarget *pb.Target
@@ -101,7 +103,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 	}
 	// 4. 校验最终实例绑定，媒体来源准备也使用这一实例的 Session。
-	instance, ok := s.adapters.Get(target.GetAdapterInstanceId())
+	instance, ok := s.adapters.Resolve(ctx, target.GetAdapterInstanceId())
 	if !ok {
 		return reject(target, pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}
@@ -174,6 +176,9 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	// 8. 所有媒体已就绪后执行唯一一次发送，Hook 观察结果后完整转发回执与错误。
 	result, sendError := instance.Send(ctx, target, request.Chain)
+	if s.observe != nil {
+		s.observe(in.TraceID, "send", target, request.Chain, result, sendError)
+	}
 	s.rememberReply(caller, session, target, request.Chain, result, decoration)
 	if s.hooks != nil {
 		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, result, sendError, invocation)
@@ -271,4 +276,9 @@ func response(result *pb.SendResult, sendError *pb.ErrorInfo) wire.Response {
 	}
 	out.Payload = wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(result), SchemaVersion: schemaVersion, Bytes: encoded}
 	return out
+}
+
+// SetObserver 在开始接纳请求前绑定平台回执观察器。
+func (s *Service) SetObserver(observe func([]byte, string, *pb.Target, *pb.MessageChain, *pb.SendResult, *pb.ErrorInfo)) {
+	s.observe = observe
 }

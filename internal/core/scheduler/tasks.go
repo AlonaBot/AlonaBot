@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/schedule"
+	"github.com/AlonaBot/AlonaBot/internal/clock"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 )
@@ -25,7 +26,7 @@ type taskKey struct{ name, key string }
 type registeredTask struct {
 	definition state.Task
 	trigger    schedule.Trigger // at 使用 definition.At；周期触发复用 contracts/schedule。
-	timer      *time.Timer
+	timer      clock.Timer
 	next       time.Time
 	state      *jobState
 	queued     bool
@@ -84,7 +85,7 @@ func (s *Scheduler) armTask(pluginID string, reg *registration, task *registered
 	task.next = next
 	task.timer = nil
 	if !next.IsZero() {
-		task.timer = time.AfterFunc(next.Sub(now), func() { s.tickTask(pluginID, reg, task, next) })
+		task.timer = s.clock.AfterFunc(next.Sub(now), func() { s.tickTask(pluginID, reg, task, next) })
 	}
 }
 

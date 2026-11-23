@@ -240,7 +240,7 @@ Authenticated `GET /api/v1/core/changelog` returns `{"locale":"en-US","entries":
 
 Component icons use authenticated `GET /api/v1/packages/{id}/icon`. Referenced configuration images use `GET /api/v1/packages/{id}/examples/{path}` from the Active package only. Plugin pages appear in package `pages` and open under `/plugins/{id}` inside the WebUI sandbox; see [page kit](plugin-guide.md#plugin-pages).
 
-The official WebUI is a real component with its own backend, not just static `dist` files. Its authenticated prefix `/plugins/alonabot-webui-admin` includes `/stats?range=24h|7d|30d`, `/users`, `/store`, `/updates?repo=owner/repo`, and `/changelog/seen?component=core`. `PUT /changelog/seen` accepts exactly `{"component":"core","version":"0.1.0"}` and monotonically advances persisted SemVer; GET returns `{"version":null}` or a version. Copying only `dist` leaves these backend routes unavailable. Agent model/persona/MCP/skill/memory/task pages similarly belong to the Agent; see its [HTTP implementation](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go).
+The official WebUI is a real component with its own backend, not just static `dist` files. Its authenticated prefix `/plugins/alonabot-webui-admin` includes `/stats?range=24h|7d|30d`, `/users`, `/store`, and `/changelog/seen?component=core`. `PUT /changelog/seen` accepts exactly `{"component":"core","version":"0.1.0"}` and monotonically advances persisted SemVer; GET returns `{"version":null}` or a version. Copying only `dist` leaves these backend routes unavailable. Agent model/persona/MCP/skill/memory/task pages similarly belong to the Agent; see its [HTTP implementation](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go).
 
 The [management package](../internal/core/manage) owns the complete current route registrations and request/response types; [management integration tests](../tests/e2e/manage_e2e_test.go) exercise them through real Core.
 
@@ -254,10 +254,40 @@ Search is a case-insensitive substring match over name, description, repo, autho
 
 `refresh` accepts only literal `true` or `false`; even an empty value returns 400 / INVALID_ARGUMENT. Omitted/true refreshes and persists a successful full snapshot. With false, an existing successful snapshot is searched, counted, sorted and paginated without remote requests; no snapshot triggers the first fetch. Snapshot reads return `stale=false` and the original `fetched_at`. Entering the store, changing sources and keyboard-accessible manual refresh use true; search/filter/sort/pagination use false. A failed refresh retains the successful snapshot and original timestamp, returning `stale=true` plus the full error. Without a snapshot, ordinary failures return 500 / INTERNAL; a missing source index returns 404 / SOURCE_INDEX_MISSING.
 
-`GET /updates?repo=owner/repo` refreshes on every query and returns `repo,version,release_url,markdown,fetched_at,stale`. The latest Release tag must be SemVer after stripping a leading v; Markdown preserves the Release body. A latest-Release 404 returns 404 / NO_RELEASE, mapped to null by WebUI's `getLatestRelease`. Source and Release caches use lowercase source/repo keys. Links allow only HTTP/HTTPS/mailto; HTML renders as text. Update previews use the component's bound source, installed changelogs supply post-update notes, and seen versions advance only to versions actually displayed.
+Version checks and Release previews for installation and updates use Core's `GET /api/v1/core/github/release?source=owner/repo`, returning `repo,version,release_url,markdown,fetched_at`. The lookup shares installation's GitHub mirror settings, HTTP client and original repository/tag validation. Failures return complete redacted errors without a stale snapshot. A latest-Release 404 returns 404 / NOT_FOUND, mapped to null by WebUI's `getLatestRelease`. Links allow only HTTP/HTTPS/mailto; HTML renders as text. Update previews use the component's bound source, installed changelogs supply post-update notes, and seen versions advance only to versions actually displayed.
 
 For submission, `GET /store/check?repo=owner/repo` reads the latest Release API and its first platform archive without changing persistent caches. It checks repository, Release and asset URLs, tag SemVer, asset name/length, and packaged manifest ID/version/source. It returns `repo,role,id,name,version,release_url`, optional description/author and ordered manifest `warnings` (including an empty array). The returned repo preserves the verified manifest Source’s canonical case after removing `github.com/`. Core preflight also checks platform, build-info, resources and archive integrity. Only latest-Release 404 maps to NO_RELEASE; bad asset 404s and other failures return 500 / INTERNAL with the actual error.
 
 A source index uses `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`; tags are optional. After checking, the user supplies tags and opens the source repository's `issues/new` with `template=submit-plugin.yml` and URL-encoded `repo`, `role`, `tags`, `release_url`, using the canonical checked repo. The browser submits the GitHub Issue.
 
 Each remote HTTP request has a 20-second deadline covering its response body; serial dependent requests may take longer in total, and aggregate refresh follows caller cancellation. HTTPS host/path restrictions apply to initial URLs and every redirect, allowing only the supported GitHub API/Release/CDN locations. Component safety limits are: metadata 1 MiB, index 4 MiB, archive 64 MiB, expanded data 256 MiB per scan (at most two scans), one file 128 MiB, 2,048 entries per scan, retained manifest 256 KiB and retained icon 1 MiB. Exceeding limits preserves the `exceeds ... bytes/entries` error and follows the same cache rules. The current implementation lives in [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go).
+
+## Component download mirrors
+
+Set `github_api_base` and `github_download_prefix` independently in Core's `core_config.json`, or use **Settings → Component downloads** in WebUI. Saved values apply to the next install or update. Both default to an empty string: the API uses `https://api.github.com` and archives use the original asset URL.
+
+```json
+{
+  "github_api_base": "https://api-mirror.example",
+  "github_download_prefix": "https://proxy.example/"
+}
+```
+
+The archive address is exactly **prefix + original URL**, for example `https://proxy.example/https://github.com/owner/repo/releases/download/v1.0.0/package.tar.gz`. Include any required trailing slash in the prefix. Both settings and redirects require HTTPS. Omit URL credentials and fragments. The API base may include a path and must omit query parameters. A download prefix may use a query form such as `https://proxy.example/?url=`.
+
+Install and update verify the archive against the SHA-256 digest returned by the Release API. `github_api_base` is the trust root for that digest; use only a trusted GitHub API reverse proxy. When an older asset has no digest, clear the download prefix and retry. Direct downloads of those assets verify size and log a warning.
+
+Override either field for one command; overrides leave the saved settings unchanged:
+
+```fish
+alonabot install --source AlonaBot/alonabot-agent --github-api-base https://api-mirror.example --github-download-prefix https://proxy.example/ --yes
+alonabot update alonabot-agent-official --github-api-base https://api-mirror.example --github-download-prefix https://proxy.example/ --yes
+# Download directly this time while retaining the saved API setting
+alonabot update alonabot-agent-official --github-download-prefix '' --yes
+```
+
+Authenticated `GET/PUT /api/v1/core/github` reads/writes the persistent settings; PUT requires both strings. Install requests accept optional `github_api_base` and `github_download_prefix`; update requests place them inside `install`. Omission inherits settings; an explicit empty string restores the corresponding official address. Core validates the original GitHub repository, release tag and asset address before transforming request URLs, then checks the archive digest and the package's identity, platform, version and build-info. Errors and diagnostic settings omit the download-prefix query, and cross-host redirects remove `Referer`. Downloads have no automatic retry or fallback.
+
+`INSTALL_DOWNLOAD_TIMEOUT` defaults to five minutes per request, including redirects and body reads. `INSTALL_MAX_RELEASE_JSON` defaults to 4 MiB. `INSTALL_MAX_HTTP_ERROR` keeps the first 4 KiB of non-200 response bodies by default. Run `alonabot tune list` to see the effective values.
+
+Store discovery and submission checks still use the selected source's GitHub index and display snapshot under the separate fetch rules above; first-time store browsing requires a reachable index source. Direct repository installation, installed-component update checks and confirmation previews call Core directly; installation and updates then use the same mirror settings.

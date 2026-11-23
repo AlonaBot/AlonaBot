@@ -71,7 +71,7 @@ func (s *Store) grant(ctx context.Context, c router.Caller, in *wire.Inbound, di
 		return denied
 	}
 	if incoming != nil && (incoming.event == nil || !dispatch.HasInFlight(grantee, incoming.event)) {
-		permitted, err := allowed(ctx, grantee.PluginID, incoming.object.source.instanceID)
+		permitted, err := allowed(ctx, grantee.PluginID, incoming.object.source.instance.InstanceID())
 		if err != nil {
 			return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, fmt.Errorf("read allowed adapter instances: %w", err))
 		}

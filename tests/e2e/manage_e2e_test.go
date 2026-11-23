@@ -1829,7 +1829,7 @@ func main(){
 	if output, err := exec.Command("go", fixtureBuildArgs("-o", binary, file)...).CombinedOutput(); err != nil {
 		t.Fatalf("build weather fixture: %v: %s", err, output)
 	}
-	archive, err := writeTestPackage(dir, "weather", "plugin", "", "github.com/example/weather", version, binary, "", map[string][]byte{"config_schema.json": []byte(schema)})
+	archive, err := writeTestPackage(dir, "weather", "plugin", "", "github.com/example/weather", version, binary, "", map[string][]byte{"plugin_config_schema.json": []byte(schema)})
 	if err != nil {
 		t.Fatal(err)
 	}

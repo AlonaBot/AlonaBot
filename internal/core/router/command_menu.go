@@ -22,6 +22,7 @@ const (
 )
 
 type menuOperation struct {
+	admin   bool // 仅管理认证后的调试入口设置。
 	ctx     context.Context
 	caller  Caller
 	request *pb.CommandMenuRequest
@@ -274,29 +275,34 @@ func (r *Router) deleteMenuPosition(ctx context.Context, worker *commandSync, po
 }
 
 func menuResponse(message *pb.CommandMenuResponse, err error) wire.Response {
-	if err != nil {
-		var call *wire.CallError
-		if errors.As(err, &call) {
-			failure := proto.CloneOf(call.ErrorInfo)
-			if err.Error() != call.Error() {
-				failure.SafeMessage = err.Error()
-			}
-			return wire.Response{Err: failure}
+	out := wire.Response{}
+	if message != nil {
+		encoded, encodeErr := proto.Marshal(message)
+		if encodeErr != nil {
+			return menuResponse(nil, encodeErr)
 		}
-		code := pb.ErrorCode_ERROR_CODE_INTERNAL
-		if errors.Is(err, context.Canceled) {
-			code = pb.ErrorCode_ERROR_CODE_CANCELLED
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
-		}
-		return wire.Response{Err: &pb.ErrorInfo{Code: code, SafeMessage: err.Error()}}
+		out.Payload = wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(message), SchemaVersion: handlerSchemaVersion, Bytes: encoded}
 	}
-	encoded, err := proto.Marshal(message)
-	if err != nil {
-		return menuResponse(nil, err)
+	if err == nil {
+		return out
 	}
-	return wire.Response{Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(message), SchemaVersion: handlerSchemaVersion, Bytes: encoded}}
+	var call *wire.CallError
+	if errors.As(err, &call) {
+		out.Err = proto.CloneOf(call.ErrorInfo)
+		if err.Error() != call.Error() {
+			out.Err.SafeMessage = err.Error()
+		}
+		return out
+	}
+	code := pb.ErrorCode_ERROR_CODE_INTERNAL
+	if errors.Is(err, context.Canceled) {
+		code = pb.ErrorCode_ERROR_CODE_CANCELLED
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+	}
+	out.Err = &pb.ErrorInfo{Code: code, SafeMessage: err.Error()}
+	return out
 }
 
 func menuError(code pb.ErrorCode, message string) error {
@@ -350,12 +356,15 @@ func (r *Router) executeMenuOperation(worker *commandSync, operation *menuOperat
 	if worker.ctx.Err() != nil {
 		return menuResponse(nil, menuError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable"))
 	}
-	if _, active := r.PluginFor(operation.caller); !active {
+	if _, active := r.PluginFor(operation.caller); !operation.admin && !active {
 		return menuResponse(nil, menuError(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, "plugin session is no longer active"))
 	}
 	request := operation.request
 	chatID := request.GetMenu().GetScope().GetChatId()
-	allowed, err := r.menuOwnerAllowed(ctx, worker, operation.caller.PluginID, chatID)
+	allowed, err := true, error(nil)
+	if !operation.admin {
+		allowed, err = r.menuOwnerAllowed(ctx, worker, operation.caller.PluginID, chatID)
+	}
 	if err != nil {
 		return menuResponse(nil, err)
 	}
@@ -377,7 +386,7 @@ func (r *Router) executeMenuOperation(worker *commandSync, operation *menuOperat
 		clear(worker.published)
 		return menuResponse(&pb.CommandMenuResponse{}, r.reconcileMenus(ctx, worker))
 	case "set", "get", "delete":
-		if err := checkMenu(request.Menu, request.Operation == "set", false); err != nil {
+		if err := checkMenu(request.Menu, request.Operation == "set", operation.admin); err != nil {
 			return menuResponse(nil, err)
 		}
 	default:
@@ -396,7 +405,7 @@ func (r *Router) executeMenuOperation(worker *commandSync, operation *menuOperat
 	// 准入在实际执行前重读；成功回执后才转移 owner，失败保留上次所有权。
 	response, failure := worker.controller.CommandMenu(ctx, request.Operation, request.Menu)
 	if failure != nil {
-		return menuResponse(nil, &wire.CallError{ErrorInfo: failure})
+		return menuResponse(response, &wire.CallError{ErrorInfo: failure})
 	}
 	position := menuPosition(worker, request.Menu, menuModeManual, operation.caller.PluginID)
 	if request.Operation == "set" {

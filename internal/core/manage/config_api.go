@@ -136,7 +136,7 @@ func (s *Service) configResources(ctx context.Context, id string) (json.RawMessa
 		}
 	} else {
 		directory := s.directory(in)
-		raw, err = os.ReadFile(filepath.Join(directory, "config_schema.json"))
+		raw, err = os.ReadFile(filepath.Join(directory, "plugin_config_schema.json"))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, nil, nil, err
 		}

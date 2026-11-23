@@ -14,6 +14,7 @@ Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用�
 | `contracts/` | `.proto` 源（`proto/`）与生成类型（`pb/alonabotv1`）、manifest/release/消息结构校验、调度触发计算（`schedule`）、通用 Markdown 解析（`markdown`，Goldmark）、兼容 fixture；生成工具 `contracts/internal/protocgen`（只由 go:generate 运行） | 任何运行时 I/O、会话状态、平台/GORM 依赖 |
 | `internal/wire/` | 帧编解码（4 MiB 上限）、TCP/stdio 传输、Session 调用表、准入预算、优先通道、取消 | 业务路由、权限、插件生命周期决策 |
 | `internal/tune/` | 调优参数表：名称、缺省值、单位、约束与 `--args` 解析 | 参数的业务含义（由使用方实现） |
+| `internal/clock/` | Scheduler 与 continuation 共用的真实时钟、手动时钟及当前时间/定时器/取消语义 | 协议帧的真实绝对期限、其他 Core 子系统的时间 |
 | `internal/oslock/` | 跨进程 OS 独占文件锁（flock / LockFileEx），供 core.lock 与 runtime.lock 共用 | 锁的业务语义（何时加锁由调用方决定） |
 | `internal/inproc/` | 库模式同进程组件的启动参数与运行入口（`internal/app` 构造参数；SDK 读取参数，并在 init 中登记入口） | 启动流程本身（归 sdk 与 `internal/app`） |
 | `internal/pluginkit/` | 开发 CLI 的构建与组件归档打包（plugin build/pack） | 安装与预检（归 `internal/core/packages`） |
@@ -27,7 +28,7 @@ Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用�
 | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | 官方 Agent 组件（`role: agent`，～D-61）：对话循环、Provider、工具与 MCP、记忆、技能、定时任务与 `llm.generate`；只经 SDK 与 Core 通信，可被社区 Agent 替换 | Core 的工具策略、确认与会话存储（归 Core） |
 | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射 | Core 策略、命令路由、游标持久化与按钮 token（归 Core） |
 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | 官方 OneBot 11 Adapter 程序：正向与反向（经 Core 统一端口）WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务 | Core 策略、命令路由与按钮 token（归 Core） |
-| `plugintest/` | 插件测试套件：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，注入事件并取得发送 | Core 的检查与派发（照常由 Core 执行，不另建路径） |
+| `plugintest/` | 插件测试套件：在 `go test` 中用 `alonabot.Start` 启动真实 Core、测试 Adapter 与被测插件，配置多平台账号与操作结果，按 trace 归属并行事件和媒体取件记录；Connect 经 sdk/debug 连接运行中的 Core | Core 的检查与派发（照常由 Core 执行，不另建路径） |
 | `cmd/alonabot/` | Core 启停、开发者与管理 CLI 的装配入口 | 业务逻辑（只组装） |
 | `examples/plugins/` | 随 SDK 编译的示例与集成样例 | 生产代码依赖 |
 | [alonabot-webui](https://github.com/AlonaBot/alonabot-webui) | 官方 WebUI 组件（`role: webui`，）：Vite + TypeScript + React 19 管理界面及 Go 后台进程；进程与同一份 `dist` 按平台同包发行 | Core 管理数据的所有权与写入规则（经 Admin API 操作） |
@@ -53,7 +54,7 @@ S-06.1 的 `manage.Options.SleepPolicy` 由 app 注入只读策略：复用 `idl
 
 `manage.Options.NotifyProfileOverrides func(context.Context, string) error` 由 `internal/app` 装配，读取新快照并向当前在线 Session 下发有效覆盖全集，失败关闭原 Session 并返回实际错误；离线插件在下次 Bootstrap 接收。候选 Bootstrap 按候选 schema 筛选覆盖集合。`contracts/configschema.Schema.ApplyProfile(raw json.RawMessage, overrides map[string]json.RawMessage) (json.RawMessage, error)` 提供字段路径替换，`sdk/config.Values.WithOverrides(overrides map[string]json.RawMessage) (Values, error)` 建立独立只读视图并保留子路径。SDK 原子发布集合，每次 Context 构造冻结视图，`c.Config()` 返回整个插件的调用配置，`p.Config()` 与 `s.Config()` 保持基础配置。
 
-配置回复示例沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `config_schema.json` 引用的图片。
+配置回复示例沿用现有依赖方向：`contracts/configschema` 检查示例、字段引用与翻译的对应关系，并通过 `Schema.ExampleImages()` 返回去重排序的图片路径；`contracts/i18n` 检查通用词典中示例覆盖的结构与文案类型。`internal/pluginkit` 校验两种配置 schema 引用的图片并收集到资源快照，`internal/core/packages` 在安装和更新时复核。`internal/core/manage` 按 Active 代次的已提交 Journal 选包，只通过认证后的 GET/HEAD 提供包中 `plugin_config_schema.json` 引用的图片。
 
 `sdk/kv` 提供基于 Session 的键值存储；`sdk.PluginDataDir(ctx)` 优先按 `ctx` 选择所属 Session，同进程插件各取自己的目录，独立进程在 `ctx` 未绑定时使用默认 Session。SQLite 驱动随 `sdk/sqlitedb`、`sdk/gormdb` 或 `sdk/kv` 按需链接，SDK 根包不引入驱动。
 
@@ -84,6 +85,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 
 | 允许的边 | 理由 |
 | --- | --- |
+| `internal/core/scheduler`、`internal/core/continuation`、`internal/app`、`plugintest -> internal/clock` | 同一时钟拥有调度与等待的 Now 和定时器；生产装配真实时钟，测试装配手动时钟 |
 | `internal/wire -> contracts` | 帧内承载生成的 Envelope 类型 |
 | `internal/wire -> internal/tune`、`sdk/... -> internal/tune`、`internal/core/... -> internal/tune` | 读取调优参数的生效值 |
 | `sdk/... -> contracts`、`sdk/... -> internal/wire`、`sdk/... -> internal/oslock` | 插件侧复用同一协议实现与 runtime.lock（Go 允许本 module 的 `sdk` import `internal`） |
@@ -102,7 +104,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `sdk/message -> contracts/validate` | 会话、消息句柄与用户字符串复用 Adapter ID 的校验规则 |
 | `sdk -> sdk/internal/messagecodec`、`sdk/message -> sdk/internal/messagecodec`、`sdk/internal/convert -> sdk/internal/messagecodec` | 跨包传递按钮与片段的编码错误，在发送前报告；保留引用目标的省略信息 |
 | `alonabot-adapter-{telegram,onebot11}/... -> sdk/...`、`-> contracts` | Adapter 程序与插件示例一样，只经公共 SDK（`sdk/adapter`）与 Core 通信 |
-| `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> internal/tune` | 装配；`run` 经 `internal/app` 复用库模式的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
+| `cmd/alonabot -> internal/core/...`、`-> contracts`、`-> internal/tune`、`-> sdk/debug` | 装配；`run` 经 `internal/app` 复用库模式的 Core 装配；`--args` 与 `tune list` 使用调优参数表 |
 | `internal/app -> internal/core/...`、`-> sdk/...`、`-> contracts`、`-> internal/wire` | 在同一进程中装配 Core 与开发中的组件 |
 | `tests/app` overlay 测试 `-> alonabot-agent/...`（仅集成测试） | 通过官方 Agent 与本地 Provider 验证文本生成服务及选项来源 |
 | `internal/app -> internal/inproc`、`sdk/... -> internal/inproc` | 库模式把同进程组件的启动参数从 `internal/app` 交给 SDK，SDK 在 init 中向它登记运行入口供 `internal/app` 调用；`internal` 保证外部模块无法构造这些参数 |
@@ -120,7 +122,9 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 | `alonabot-plugin-*/...`、`alonabot-agent/...`、`examples/plugins/...`、`plugintest -> alonabot-adapter-<adapter_id>/perm`、`-> alonabot-adapter-<adapter_id>/event`、`-> alonabot-adapter-<adapter_id>/action` | 引用 Adapter 声明的权限、扩展事件与平台动作；公开包提供权限/事件声明、载荷类型与动作类型助手，直接依赖见下一行；保持不链接 Adapter 运行时 |
 | `alonabot-adapter-<adapter_id>/perm`、`alonabot-adapter-<adapter_id>/event -> sdk`；`alonabot-adapter-<adapter_id>/action -> sdk`、`-> sdk/action`、`-> sdk/message`、`-> sdk/errcode` | 权限与事件声明使用 SDK builder；动作通过 `action.Caller` 调用，选项、消息句柄、流式正式发送与错误复用 SDK 类型；这些公开包只依赖标准库及所列 SDK 包 |
 
-明确禁止（重点）：`internal/oslock`、`internal/tune` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`sdk` 根包 -> 分类子包（`sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`）；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters（上表的公开 perm/event/action 包除外）| cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | internal/app | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
+明确禁止（重点）：`internal/oslock`、`internal/tune`、`internal/clock` 与 `internal/inproc` 不 import 本 module 任何包；`contracts ->` 任何本 module 包；`internal/wire -> sdk | internal/core`；`sdk -> internal/core | adapters | plugins | agent | cmd`；`sdk` 根包 -> 分类子包（`sdk/task`、`sdk/service`、`sdk/bus`、`sdk/button`、`sdk/media`、`sdk/conversation`、`sdk/tool`、`sdk/action`、`sdk/options`、`sdk/command`）；`internal/core -> sdk | adapters | plugins | agent | cmd`；`adapters -> internal/core`；`plugins | agent -> internal/core | adapters（上表的公开 perm/event/action 包除外）| cmd`；`plugins`、`agent` 之间不互相 import；`internal/core | internal/app | sdk | adapters | plugins | agent -> 根包`；`internal/core | sdk | adapters | 根包 -> plugintest`，以及非测试代码 `-> plugintest`；任何包 `-> examples`。依赖图不允许环。
+
+`contracts/adapterops` 维护标准操作、RPC 名称及从 protobuf 类型生成的 Schema，`contracts/debugapi` 维护管理调用的 JSON 契约；两者供 Core 与 SDK 共用。SDK 在真实实例所在进程识别接口，`adapter.operations` 通过原 Session 返回目录，remote wrapper 每次查询并复核实例代次。`sdk/debug` 只连接管理 HTTP API；Core 经既有消息服务和 Router 菜单 worker 执行，经上下文传递 trace 与实例绑定。`sdk/debug` 的释放保持 Core 运行。
 
 ## 状态归属
 
@@ -142,5 +146,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 ## 检查
 
 依赖方向由代码审查对照上表把关；import 环由 Go 编译器拒绝。Core 可执行文件与 SDK 根包能链接的第三方模块由审查时用 `go list -deps` 对照 [docs/development.md](docs/development.zh-CN.md) 的允许清单核对。
+
+调试事件经管理认证后的 `POST /api/v1/debug/events` 注入运行实例，复用入站身份、平台权限、媒体登记与正常路由，保留真实 Adapter 的接收游标。Router 的短期观察器按来源事件与 trace 汇总实际 Handler 的 Outcomes、调用前参数解析/准入的 Diagnostics 及实际发送回执；调试观察和平台调用在管理元数据写锁及 GC 临界区外等待，各自沿用实例代次、菜单 worker 与 Core 生命周期。真正元数据写入继续串行并按原顺序回收。请求结束或取消即释放观察器，Core 和组件继续运行。`sdk/debug` 对外转换标准 SDK 消息与结果；`plugintest.Connect` 只持有客户端 context。
 
 `sdk/agent/hook` 与 `sdk/agent/goal` 可依赖 `sdk/agent`、`sdk/llm`、`sdk/service` 和根 `sdk`；根包通过 `sdk/internal/registry` 的回调与分类包共享运行态。Goal 的记录与调度归 Agent；通用增量关联与身份校验归 Core 通信层，当前能力状态见 [Agent API](docs/agent-api.zh-CN.md)。

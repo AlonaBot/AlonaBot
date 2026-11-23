@@ -47,6 +47,7 @@ type adapterEntry struct {
 type adapterCore struct {
 	runtime     *adapterRuntime
 	instanceID  string
+	generation  uint64
 	stopped     atomic.Bool // 停止或报告失败后锁存，阻止新的交付
 	commandSync sync.Mutex  // 覆盖本次运行的实际菜单回调，RPC 到期后仍持有。
 }
@@ -235,6 +236,21 @@ func (r *adapterRuntime) stopEntry(ctx context.Context, entry *adapterEntry) err
 	return nil
 }
 
+// operationEntry 在持有 r.mu 时核对代次，调用方须在释放锁前保存本次执行对象。
+func (r *adapterRuntime) operationEntry(id string, generation uint64) (*adapterEntry, *pb.ErrorInfo) {
+	entry := r.instances[id]
+	if entry == nil {
+		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_NOT_FOUND, SafeMessage: "adapter instance not found"}
+	}
+	if entry.core != nil && entry.core.generation != generation {
+		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance generation changed"}
+	}
+	if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
+		return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, SafeMessage: "adapter instance is not running"}
+	}
+	return entry, nil
+}
+
 func adapterPayload(message proto.Message) (wire.Payload, error) {
 	encoded, err := proto.Marshal(message)
 	return wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(message), SchemaVersion: invocationSchemaVersion, Bytes: encoded}, err
@@ -250,10 +266,15 @@ func adapterResponse(message proto.Message, safe *pb.ErrorInfo) wire.Response {
 
 func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Response {
 	switch in.Target {
+	case wire.ServiceAdapterOperations:
+		return r.operations(ctx, in)
 	case wire.ServiceAdapterInstanceStart:
 		request := &pb.AdapterInstanceStartRequest{}
 		if err := decodeInvocation(in.Payload, request); err != nil {
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
+		}
+		if request.InstanceGeneration == 0 {
+			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter instance generation is required")
 		}
 		r.mu.Lock()
 		if r.stopping {
@@ -277,7 +298,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			r.mu.Unlock()
 			return dispatchError(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, "adapter instance already started")
 		}
-		core := &adapterCore{runtime: r, instanceID: request.InstanceId}
+		core := &adapterCore{runtime: r, instanceID: request.InstanceId, generation: request.InstanceGeneration}
 		entry.busy = true
 		entry.core = core
 		entry.config = []byte(request.ConfigJson)
@@ -345,14 +366,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "invalid media read length")
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, safe := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if safe != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: safe}
 		}
 		source, supported := entry.instance.(adapter.MediaSource)
 		config := entry.config
@@ -370,7 +387,7 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 				code = validate.PublicCode(pb.ErrorCode(public.Code))
 				message = public.Message
 			}
-			return dispatchError(code, adapterSafeError(errors.New(message), config))
+			return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, &pb.ErrorInfo{Code: code, SafeMessage: adapterSafeError(errors.New(message), config)})
 		}
 		return adapterResponse(&pb.AdapterMediaReadResponse{Data: data, NextOffset: next, Eof: eof}, nil)
 	case wire.ServiceAdapterCommandMenu:
@@ -381,14 +398,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, rejected := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if rejected != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: rejected}
 		}
 		core := entry.core
 		r.mu.Unlock()
@@ -422,14 +435,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, rejected := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if rejected != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: rejected}
 		}
 		instance := entry.instance
 		reader, supported := instance.(adapter.NodesReader)
@@ -457,14 +466,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, rejected := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if rejected != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: rejected}
 		}
 		executor, supported := entry.instance.(adapter.ActionExecutor)
 		r.mu.Unlock()
@@ -483,14 +488,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, rejected := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if rejected != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: rejected}
 		}
 		editor, supported := entry.instance.(adapter.Editor)
 		r.mu.Unlock()
@@ -513,14 +514,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, rejected := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if rejected != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: rejected}
 		}
 		instance := entry.instance
 		r.mu.Unlock()
@@ -544,14 +541,10 @@ func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Resp
 			return dispatchError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 		}
 		r.mu.Lock()
-		entry, ok := r.instances[request.InstanceId]
-		if !ok {
+		entry, rejected := r.operationEntry(request.InstanceId, request.InstanceGeneration)
+		if rejected != nil {
 			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "adapter instance not found")
-		}
-		if entry.busy || entry.instance == nil || entry.core.stopped.Load() {
-			r.mu.Unlock()
-			return dispatchError(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is not running")
+			return wire.Response{Err: rejected}
 		}
 		instance := entry.instance
 		r.mu.Unlock()
