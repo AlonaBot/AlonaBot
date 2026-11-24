@@ -2,30 +2,23 @@
 
 ### Added
 
-- Docker deployments hand out the management token on the first visit from the host browser: inside a container (`ALONABOT_CONTAINER=1`) Core also trusts the default gateway as a source, with all other checks unchanged. Sign-in can be kept on the device. See [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312).
-- Install components by building from GitHub source (`Build: true`). The Go toolchain is downloaded into the data directory on demand; an asynchronous task reports steps and build logs, and the result still passes install preflight and source trust. See [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312).
-- Download settings: GitHub download mirror prefix, API base, Go toolchain download base, GOPROXY and network proxy. Release assets fetched through a mirror are verified against the sha256 digest GitHub reports. See [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312).
-- Optional session access in profiles: all sessions, only selected sessions, or all except selected sessions. Behavior is unchanged when unset, and library mode is unaffected. See [PR #315](https://github.com/AlonaBot/AlonaBot/pull/315).
-- Adapters can declare an account configuration page (`page_purpose = instance_config`) that WebUI opens when adding or editing an account; the page returns a configuration patch through the bridge. The page kit adds `getConfigContext`, `completeConfig` and an on-demand `qrcode.js`. See [PR #317](https://github.com/AlonaBot/AlonaBot/pull/317).
-- Live Adapter action catalog, a management-authenticated call API, the `sdk/debug` client and `alonabot adapter instance list/actions/call`. plugintest supports multiple Adapters and instances, configurable platform results, asynchronous Submit/Wait and event injection through management authentication. See [PR #310](https://github.com/AlonaBot/AlonaBot/pull/310).
-- `alonabot --version` prints the version, build date and Release URL. See [PR #309](https://github.com/AlonaBot/AlonaBot/pull/309).
-- The SDK adds `OnSleep`, structured `llm.Generate`, `agent.Run`, AI hooks, Goal interfaces and a streaming service protocol. See [PR #308](https://github.com/AlonaBot/AlonaBot/pull/308).
+- On the first visit to WebUI from the Docker host, you can claim the admin token in the browser. You can also choose to stay signed in on the current device. See [#312](https://github.com/AlonaBot/AlonaBot/pull/312).
+- Administrators can install components by building them from GitHub source and follow progress in the build log. Download settings accept a GitHub mirror, API address, Go download address, `GOPROXY` and a network proxy. Core still verifies mirrored release assets against the original digest from GitHub. See [#312](https://github.com/AlonaBot/AlonaBot/pull/312).
+- Administrators can allow all chats, allow only selected chats, or block selected chats for each profile. The setting applies to managed components. See [#315](https://github.com/AlonaBot/AlonaBot/pull/315).
+- Adapter authors can declare an account setup page with `page_purpose = instance_config`. WebUI opens it when an account is added or edited. The page can read the setup context, show a QR code and return the user's changes to WebUI. See [#317](https://github.com/AlonaBot/AlonaBot/pull/317).
+- Developers can use `alonabot adapter instance list/actions/call` or `sdk/debug` to inspect and call actions on running adapter instances. For integration testing, `plugintest` supports multiple adapters and instances, configurable platform responses, and asynchronous event submission and waiting. See [#310](https://github.com/AlonaBot/AlonaBot/pull/310).
+- `alonabot --version` prints the version, build date and release page URL. See [#309](https://github.com/AlonaBot/AlonaBot/pull/309).
+- Component authors can handle sleep with `OnSleep`, start multi-turn tasks with `agent.Run`, and participate in task execution through AI hooks and Goal interfaces. The service protocol supports streaming responses. See [#308](https://github.com/AlonaBot/AlonaBot/pull/308).
 
 ### Changed
 
-- Plugin and Agent configuration Schemas are now `plugin_config_schema.json`; Adapters keep `adapter_config_schema.json`.
-- Command builders are split by matcher kind; only path commands offer `Menu`, arguments and aliases. `llm.Generate` replaces `Ask` and the old single-shot entry points. See [PR #308](https://github.com/AlonaBot/AlonaBot/pull/308).
-- Managed source builds compile serially with `GOMEMLIMIT` and `GOGC`. On Linux the kernel prefers to kill the compiler rather than Core when memory runs out. Build logs warn about low available memory or long silence, and a killed build reports a possible out-of-memory failure with alternatives. See [PR #316](https://github.com/AlonaBot/AlonaBot/pull/316).
-- The package list includes names and descriptions, and account instances report their component's state. See [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312).
+- Plugin and agent authors should rename their configuration schema to `plugin_config_schema.json` before rebuilding. Adapters still use `adapter_config_schema.json`. Older Agent builds cannot run on this Core release; update standalone Agent installations to v0.3.0 before enabling them. Existing configuration and managed data are retained. The `ghcr.io/alonabot/alonabot:0.3.0` Compose image already includes Agent and WebUI v0.3.0.
+- For a single model call, the SDK now takes a structured request through `llm.Generate`. Replace calls to `llm.Ask` or the old `agent.Generate` with that entry point. Only path command builders expose `Menu`, arguments and aliases. See [#308](https://github.com/AlonaBot/AlonaBot/pull/308).
+- Source builds compile one at a time. The build log warns when memory is low or output stalls. If the compiler is killed, the task reports possible memory exhaustion and suggests alternatives. On Linux, the compiler is targeted first when memory runs out, reducing the risk that Core also exits. See [#316](https://github.com/AlonaBot/AlonaBot/pull/316).
+- The management API includes names and descriptions in the component list and reports the owning component's state for each account instance. See [#312](https://github.com/AlonaBot/AlonaBot/pull/312).
 
 ### Fixed
 
-- Updating a Degraded component no longer stops the new generation right away. See [PR #316](https://github.com/AlonaBot/AlonaBot/pull/316).
-
-### Upgrade and compatibility
-
-- Components built with the new SDK require Core v0.3.0. Stop Core and back up the whole data directory before upgrading; disable old components, upgrade Core, then update each component to 0.3.0 and enable it. Configuration values, secrets and managed data are retained.
-- The state database migrates to v3 automatically (adds the session access table).
-- Official components are pinned to their v0.3.0 releases; Compose uses `ghcr.io/alonabot/alonabot:0.3.0` with WebUI 0.3.0 and Agent 0.3.0.
+- Updating a degraded component now keeps the successfully activated new version running. Previously, Core could stop it immediately after the update. See [#316](https://github.com/AlonaBot/AlonaBot/pull/316).
 
 [0.3.0]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0

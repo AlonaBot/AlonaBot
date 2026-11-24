@@ -2,30 +2,23 @@
 
 ### Added
 
-- Docker 部署首次从本机浏览器打开时直接领取管理令牌：容器内（`ALONABOT_CONTAINER=1`）额外信任默认网关来源，其余检查不变；登录可选择在这台设备上保持。见 [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312)。
-- 从 GitHub 源码构建安装组件（`Build: true`）：按需下载 Go 工具链到数据目录，异步任务提供步骤与构建日志，构建产物仍走安装预检与来源信任。见 [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312)。
-- 下载设置：GitHub 下载镜像前缀、API 地址、Go 工具链下载地址、GOPROXY 与网络代理；经镜像下载的 Release 资产按 GitHub 给出的 sha256 摘要校验。见 [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312)。
-- 配置文件可选的会话访问：全部、只允许所选会话或屏蔽所选会话；不设置时行为不变，库模式不受影响。见 [PR #315](https://github.com/AlonaBot/AlonaBot/pull/315)。
-- Adapter 可声明账号配置页面（`page_purpose = instance_config`），WebUI 在添加或编辑账号时打开，页面经桥交回配置补丁；页面套件新增 `getConfigContext`、`completeConfig` 与按需加载的 `qrcode.js`。见 [PR #317](https://github.com/AlonaBot/AlonaBot/pull/317)。
-- Adapter 实时操作目录、管理认证的统一调用 API、`sdk/debug` 客户端与 `alonabot adapter instance list/actions/call`；plugintest 支持多 Adapter/实例、可配置平台结果、异步 Submit/Wait、经管理认证注入事件等。见 [PR #310](https://github.com/AlonaBot/AlonaBot/pull/310)。
-- `alonabot --version` 显示版本、构建日期与 Release 地址。见 [PR #309](https://github.com/AlonaBot/AlonaBot/pull/309)。
-- SDK 新增 `OnSleep`、结构化 `llm.Generate`、`agent.Run`、AI 钩子与 Goal 接口及流式服务协议。见 [PR #308](https://github.com/AlonaBot/AlonaBot/pull/308)。
+- 从 Docker 宿主机首次打开 WebUI 时，可以在浏览器领取管理令牌。登录时也可以选择在当前设备保持会话。见 [#312](https://github.com/AlonaBot/AlonaBot/pull/312)。
+- 管理员可以直接从 GitHub 源码构建并安装组件，构建任务会显示进度和日志。下载设置支持 GitHub 镜像、API 地址、Go 下载地址、`GOPROXY` 和网络代理；经镜像下载的发行资产仍按 GitHub 原始摘要校验。见 [#312](https://github.com/AlonaBot/AlonaBot/pull/312)。
+- 管理员可以为每份配置文件选择允许全部聊天、仅允许所选聊天，或屏蔽所选聊天。该设置适用于受管组件。见 [#315](https://github.com/AlonaBot/AlonaBot/pull/315)。
+- Adapter 作者可以用 `page_purpose = instance_config` 声明账号配置页面。WebUI 会在添加或编辑账号时打开页面；页面可以读取配置上下文、显示二维码，并把用户的修改交回 WebUI。见 [#317](https://github.com/AlonaBot/AlonaBot/pull/317)。
+- 开发者可以用 `alonabot adapter instance list/actions/call` 或 `sdk/debug` 查看并调用运行中 Adapter 实例的动作。联调时，`plugintest` 支持多个 Adapter 和实例、自定义平台返回值，以及异步提交和等待事件。见 [#310](https://github.com/AlonaBot/AlonaBot/pull/310)。
+- `alonabot --version` 会显示版本、构建日期和发行页地址。见 [#309](https://github.com/AlonaBot/AlonaBot/pull/309)。
+- 组件作者可以用 `OnSleep` 处理休眠，用 `agent.Run` 启动多轮 Agent 任务，并通过 AI 钩子和 Goal 接口参与任务执行。服务协议支持流式响应。见 [#308](https://github.com/AlonaBot/AlonaBot/pull/308)。
 
 ### Changed
 
-- 插件与 Agent 配置 Schema 文件改名为 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。
-- 命令 Builder 按匹配方式拆分，只有路径命令提供 `Menu`、参数和别名；`llm.Generate` 取代 `Ask` 等旧入口。见 [PR #308](https://github.com/AlonaBot/AlonaBot/pull/308)。
-- 受管源码构建串行编译并设置 `GOMEMLIMIT`、`GOGC`；Linux 上内存不足时内核优先结束编译进程而非 Core；可用内存偏低或长时间无输出时在构建日志提示，进程被杀时任务报告可能内存不足并给出替代做法。见 [PR #316](https://github.com/AlonaBot/AlonaBot/pull/316)。
-- 包列表返回名称与简介，账号实例返回所属组件状态。见 [PR #312](https://github.com/AlonaBot/AlonaBot/pull/312)。
+- 插件和 Agent 作者应将配置 Schema 文件改名为 `plugin_config_schema.json` 后重新构建；Adapter 继续使用 `adapter_config_schema.json`。旧版 Agent 在本版 Core 上无法运行；使用独立部署的管理员应更新到 Agent v0.3.0 后再启用。现有配置和受管数据会保留。Compose 镜像 `ghcr.io/alonabot/alonabot:0.3.0` 已包含 Agent 和 WebUI v0.3.0。
+- SDK 的单次模型调用改用接收结构化请求的 `llm.Generate`。使用 `llm.Ask` 或旧 `agent.Generate` 的组件应改用新入口。只有路径命令的 Builder 提供 `Menu`、参数和别名。见 [#308](https://github.com/AlonaBot/AlonaBot/pull/308)。
+- 源码构建改为串行编译。可用内存不足或构建长时间没有输出时，日志会给出提示；如果编译进程被终止，任务会报告可能的内存不足并给出替代做法。Linux 上内存耗尽时会优先结束编译进程，降低 Core 同时退出的风险。见 [#316](https://github.com/AlonaBot/AlonaBot/pull/316)。
+- 管理 API 在组件列表中提供名称和简介，并在账号实例中提供所属组件的状态。见 [#312](https://github.com/AlonaBot/AlonaBot/pull/312)。
 
 ### Fixed
 
-- 更新处于 Degraded 状态的组件后，新代次不再被立即停用。见 [PR #316](https://github.com/AlonaBot/AlonaBot/pull/316)。
-
-### 升级与兼容性
-
-- 用新 SDK 构建的组件需要 Core v0.3.0。升级前停止 Core 并备份完整数据目录；先停用旧组件，升级 Core，再把各组件更新到 0.3.0 并启用。配置值、秘密和受管数据保留。
-- 状态库自动迁移到 v3（新增会话访问表）。
-- 官方组件锁定各自的 v0.3.0 发行；Compose 使用 `ghcr.io/alonabot/alonabot:0.3.0`，整合 WebUI 0.3.0 与 Agent 0.3.0。
+- 更新处于 Degraded 状态的组件后，Core 会保留已成功启用的新版本，修复更新后组件立即被停用的问题。见 [#316](https://github.com/AlonaBot/AlonaBot/pull/316)。
 
 [0.3.0]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0

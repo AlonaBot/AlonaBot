@@ -2,13 +2,9 @@
 
 ### Fixed
 
-- Core 在激活后生成配置编辑快照，重载前从 Active 配置补建缺失文件；成功重载后写回规范配置，重载、更新和回退时保留磁盘上尚未应用的编辑。
-- 删除 Adapter 实例时清除持久化事件游标，同名重建的实例使用全新游标。
-- 删除实例时同步清理 Profile 会话访问名单中的对应条目，保留访问模式和其他实例的条目。
+- 首次启用组件后，Core 会生成可编辑的配置文件。重载时如果文件缺失，Core 会从当前生效的配置补建。成功重载后，Core 会将当前生效的配置写回文件；重载、更新或回退时会保留磁盘上尚未应用的编辑。见 [#321](https://github.com/AlonaBot/AlonaBot/pull/321)。
+- 删除 Adapter 实例会清除它的旧事件游标，并从 Profile 的会话访问名单移除该实例的条目。同名重建的实例使用新的游标，访问模式和其他实例的条目保持原样。见 [#321](https://github.com/AlonaBot/AlonaBot/pull/321)。
 
-### 升级与兼容性
-
-- 升级 Core 至 v0.3.1，官方组件沿用 v0.3.0。Compose 使用 `ghcr.io/alonabot/alonabot:0.3.1`，整合 Agent 和 WebUI v0.3.0。
-- 保留已有配置值、Secret 引用和受管数据，状态库维持 v3。升级前备份完整数据目录。
+Compose 镜像 `ghcr.io/alonabot/alonabot:0.3.1` 包含 Agent 和 WebUI v0.3.0。
 
 [0.3.1]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.1
