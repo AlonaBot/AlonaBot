@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -170,7 +171,7 @@ func (s *Service) List(ctx context.Context) ([]Package, error) {
 		if err == nil {
 			_, version, candidateErr := s.bundledUpdate(ctx, install.PluginID)
 			if candidateErr != nil {
-				slog.Error("bundled update candidate rejected", "plugin_id", install.PluginID, "error", candidateErr)
+				slog.Error(fmt.Sprintf("Rejected the bundled update for component %s: %v", install.PluginID, candidateErr), "plugin_id", install.PluginID, "error", candidateErr)
 			} else {
 				item.AvailableUpdate = version
 			}

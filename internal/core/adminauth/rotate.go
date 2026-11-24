@@ -2,6 +2,7 @@ package adminauth
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -44,7 +45,7 @@ func (a *Auth) rotateToken(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Token string `json:"token"`
 	}{token}); err != nil {
-		slog.Error("write admin token rotation response", "err", err)
+		slog.Error(fmt.Sprintf("Failed to write the admin token rotation response: %v", err), "err", err)
 	}
 }
 
@@ -55,6 +56,6 @@ func rotationError(w http.ResponseWriter, status int, code, message string) {
 		Code    string `json:"code"`
 		Message string `json:"safe_message"`
 	}{code, message}); err != nil {
-		slog.Error("write admin token rotation error", "err", err)
+		slog.Error(fmt.Sprintf("Failed to write the admin token rotation error response: %v", err), "err", err)
 	}
 }

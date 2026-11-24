@@ -96,21 +96,21 @@ func subscriptionEvents(a *activation, reg *registration) func(*pb.Envelope, fun
 		ready := a.ready.Load() && !a.stopping.Load()
 		a.readyMu.Unlock()
 		if !ready {
-			componentLogger(a.lifetime).Warn("bus event dropped while plugin is not ready", "route_id", env.GetTarget())
+			componentLogger(a.lifetime).Warn(fmt.Sprintf("Dropped a bus event for route %s because the component is not ready", env.GetTarget()), "route_id", env.GetTarget())
 			release()
 			return
 		}
 		mu.Lock()
 		if closed {
 			mu.Unlock()
-			componentLogger(a.lifetime).Warn("bus event dropped after subscription dispatcher stopped", "route_id", env.GetTarget())
+			componentLogger(a.lifetime).Warn(fmt.Sprintf("Dropped a bus event for route %s because the subscription dispatcher stopped", env.GetTarget()), "route_id", env.GetTarget())
 			release()
 			return
 		}
 		n := int64(len(env.GetPayload()))
 		if bytes+n > maxBytes {
 			mu.Unlock()
-			componentLogger(a.lifetime).Warn("bus event dropped because subscription payload budget is full", "route_id", env.GetTarget())
+			componentLogger(a.lifetime).Warn(fmt.Sprintf("Dropped a bus event for route %s because the subscription payload budget is full", env.GetTarget()), "route_id", env.GetTarget())
 			release()
 			return
 		}
@@ -138,23 +138,23 @@ func invokeSubscription(a *activation, routes map[string]subscriptionRoute, deli
 	defer a.l.runtime.callbacks.Done()
 	env := delivery.env
 	if !a.ready.Load() || a.stopping.Load() || a.lifetime.Err() != nil {
-		componentLogger(a.lifetime).Warn("bus event dropped while plugin is stopping", "route_id", env.GetTarget())
+		componentLogger(a.lifetime).Warn(fmt.Sprintf("Dropped a bus event for route %s because the component is stopping", env.GetTarget()), "route_id", env.GetTarget())
 		return
 	}
 	// 1. 校验实际回调与事件声明，失败仅记日志，不产生 RESPONSE。
 	sub, ok := routes[env.GetTarget()]
 	if !ok {
-		componentLogger(a.lifetime).Warn("bus subscription route not found", "route_id", env.GetTarget())
+		componentLogger(a.lifetime).Warn(fmt.Sprintf("Discarded a bus event because subscription route %s is not registered", env.GetTarget()), "route_id", env.GetTarget())
 		return
 	}
 	ev := &pb.BusEvent{}
 	if err := proto.Unmarshal(env.GetPayload(), ev); err != nil {
-		componentLogger(a.lifetime).Warn("decode BusEvent failed", "route_id", env.GetTarget(), "error", err)
+		componentLogger(a.lifetime).Warn(fmt.Sprintf("Failed to decode a bus event for route %s: %v", env.GetTarget(), err), "route_id", env.GetTarget(), "error", err)
 		return
 	}
 	spec := sub.Descriptor.GetBusSubscription()
 	if ev.GetEventName() != spec.GetEventName() || ev.GetSchemaId() != spec.GetSchemaId() || ev.GetSchemaVersion() != spec.GetSchemaVersion() || ev.GetEncoding() != pb.PayloadEncoding_PAYLOAD_ENCODING_JSON || !utf8.Valid(ev.GetPayload()) {
-		componentLogger(a.lifetime).Warn("bus event does not match registered JSON subscription", "route_id", env.GetTarget(), "event_name", ev.GetEventName())
+		componentLogger(a.lifetime).Warn(fmt.Sprintf("Bus event %s does not match the registered JSON subscription for route %s", ev.GetEventName(), env.GetTarget()), "route_id", env.GetTarget(), "event_name", ev.GetEventName())
 		return
 	}
 	// 2. 回调没有入站 Event/Actor、默认 Target 或父调用编号，后续调用仅带订阅插件身份。

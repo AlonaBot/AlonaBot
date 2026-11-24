@@ -74,12 +74,12 @@ func (c *Core) preinstall(ctx context.Context, management *manage.Service, dir s
 		}
 		req, err := officialBundledPackage(dir, id)
 		if err != nil {
-			slog.Error("bundled package preinstallation failed", "plugin_id", id, "error", err)
+			slog.Error(fmt.Sprintf("Failed to preinstall bundled component %s: %v", id, err), "plugin_id", id, "error", err)
 			continue
 		}
 		installed, err := management.Install(ctx, req)
 		if err != nil {
-			slog.Error("bundled package preinstallation failed", "plugin_id", id, "error", err)
+			slog.Error(fmt.Sprintf("Failed to preinstall bundled component %s: %v", id, err), "plugin_id", id, "error", err)
 			continue
 		}
 		if id == officialHelp && installed.Role == string(state.RolePlugin) || id == officialWebUI && installed.Role == string(state.RoleWebUI) {
@@ -135,7 +135,7 @@ adapterGroups:
 		}
 		configured[id] = true
 		if err := c.configureAdapter(ctx, management, bundles, id, adapterID); err != nil {
-			slog.Error("configured adapter preparation failed", "plugin_id", id, "adapter_id", adapterID, "error", err)
+			slog.Error(fmt.Sprintf("Failed to prepare adapter %s from component %s: %v", adapterID, id, err), "plugin_id", id, "adapter_id", adapterID, "error", err)
 		}
 	}
 	return configured, nil

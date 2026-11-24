@@ -162,7 +162,7 @@ func TestSleepMetrics(t *testing.T) {
 		})
 		logged := make(map[metrics.Reason]uint64)
 		for _, record := range core.output.Recent("") {
-			if !record.Time.Before(since) && record.Message == "wake metric" && record.Attrs["plugin_id"] == id {
+			if !record.Time.Before(since) && strings.HasPrefix(record.Message, "Wake activity for component ") && record.Attrs["plugin_id"] == id {
 				if record.Level != slog.LevelDebug {
 					t.Fatalf("wake log level=%v", record)
 				}
@@ -285,7 +285,7 @@ func TestSleepMetrics(t *testing.T) {
 	// 4. 三个真实冷启动分别关联同一 Session 的两个实际回调及 Core 可见阶段。
 	callbacks := make(map[string]map[string]int)
 	for _, record := range core.output.Recent(id) {
-		if record.Message != "lifecycle callback completed" {
+		if !strings.HasPrefix(record.Message, "Lifecycle callback ") {
 			continue
 		}
 		session, _ := record.Attrs["lifecycle_session_id"].(string)
@@ -304,7 +304,7 @@ func TestSleepMetrics(t *testing.T) {
 	}
 	sessions := make(map[string]bool)
 	for _, record := range core.output.Recent("") {
-		if record.Message != "cold start completed" || record.Attrs["plugin_id"] != id {
+		if !strings.HasPrefix(record.Message, "Component "+id+" completed its cold start in ") || record.Attrs["plugin_id"] != id {
 			continue
 		}
 		session, _ := record.Attrs["session_id"].(string)

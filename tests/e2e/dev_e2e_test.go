@@ -258,7 +258,7 @@ func developmentRead(t *testing.T, path string) []byte {
 
 func developmentPID(t *testing.T, c *core, id string) int {
 	t.Helper()
-	pattern := `plugin activated plugin_id=` + regexp.QuoteMeta(id) + ` generation_id=\S+ mode=\w+ pid=(\d+)`
+	pattern := `plugin activated: ` + regexp.QuoteMeta(id) + ` \(generation \S+, \w+, PID (\d+)\)`
 	c.waitFor(pattern)
 	matches := regexp.MustCompile(pattern).FindAllStringSubmatch(c.log(), -1)
 	pid, err := strconv.Atoi(matches[len(matches)-1][1])

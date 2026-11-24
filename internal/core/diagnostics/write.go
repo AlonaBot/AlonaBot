@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/AlonaBot/AlonaBot/internal/core/logging"
 )
 
 const (
@@ -260,6 +263,7 @@ func (s snapshot) readLog(ctx context.Context, r io.Reader, date time.Time, opts
 	reader := bufio.NewReader(r)
 	var record strings.Builder
 	var stamp time.Time
+	var structured *logging.Record
 	flush := func() error {
 		text := record.String()
 		if text == "" {
@@ -267,16 +271,32 @@ func (s snapshot) readLog(ctx context.Context, r io.Reader, date time.Time, opts
 		}
 		_, header, _ := strings.Cut(text, "] [")
 		label, body, _ := strings.Cut(header, "] ")
+		isError := strings.HasPrefix(body, "[ERRO]") || strings.HasPrefix(body, "[CRITICAL]")
+		if structured != nil {
+			isError = structured.Level >= slog.LevelError
+			if opts.Redact {
+				maskCredentials(structured.Attrs)
+				encoded, err := json.Marshal(structured)
+				if err != nil {
+					return err
+				}
+				text = string(encoded) + "\n"
+			}
+		}
 		if opts.Redact {
 			text = redactText(text)
 		}
-		if opts.Components && (strings.HasPrefix(body, "[ERRO]") || strings.HasPrefix(body, "[CRITICAL]")) {
+		if opts.Components && isError {
 			for i := range s.components {
 				c := &s.components[i]
 				plugin := label == "Plug:"+strings.TrimPrefix(c.ID, "alonabot-plugin-")
 				adapter := c.Role == "adapter" && (label == "Adpt:"+c.install.AdapterID || strings.HasPrefix(label, "Adpt:"+c.install.AdapterID+"/"))
 				core := label == "Core" && (strings.Contains(body, " plugin_id="+c.ID+" ") || strings.HasSuffix(strings.TrimSpace(body), " plugin_id="+c.ID))
-				if (plugin || adapter || core) && !stamp.Before(lastErrors[c.ID]) {
+				belongs := plugin || adapter || core
+				if structured != nil {
+					belongs = structured.Source == c.ID || structured.Source == logging.ComponentCore && structured.Attrs[logging.KeyPluginID] == c.ID
+				}
+				if belongs && !stamp.Before(lastErrors[c.ID]) {
 					c.LastError = strings.TrimSuffix(text, "\n")
 					lastErrors[c.ID] = stamp
 				}
@@ -288,6 +308,7 @@ func (s snapshot) readLog(ctx context.Context, r io.Reader, date time.Time, opts
 			}
 		}
 		record.Reset()
+		structured = nil
 		return nil
 	}
 	for {
@@ -303,14 +324,22 @@ func (s snapshot) readLog(ctx context.Context, r io.Reader, date time.Time, opts
 				if err := flush(); err != nil {
 					return err
 				}
-				clock, _, found := strings.Cut(strings.TrimPrefix(line, "["), "]")
-				if !found {
-					return errors.New("invalid log record header")
-				}
-				var err error
-				stamp, err = time.ParseInLocation(dateLayout+" 15:04:05.000", date.Format(dateLayout)+" "+clock, time.Local)
-				if err != nil {
-					return err
+				if strings.HasPrefix(line, "{") {
+					structured = &logging.Record{}
+					if err := json.Unmarshal([]byte(line), structured); err != nil {
+						return fmt.Errorf("decode structured log: %w", err)
+					}
+					stamp = structured.Time
+				} else {
+					clock, _, found := strings.Cut(strings.TrimPrefix(line, "["), "]")
+					if !found {
+						return errors.New("invalid log record header")
+					}
+					var err error
+					stamp, err = time.ParseInLocation(dateLayout+" 15:04:05.000", date.Format(dateLayout)+" "+clock, time.Local)
+					if err != nil {
+						return err
+					}
 				}
 			} else if record.Len() == 0 {
 				return errors.New("log continuation without a record")

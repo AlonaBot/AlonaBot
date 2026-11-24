@@ -69,7 +69,7 @@ func (f *File) update(edit func(doc *Document) error) error {
 	f.document, f.current = document, current
 	logCorrections(current.Corrections)
 	if err := syncDirectory(filepath.Dir(f.name)); err != nil {
-		slog.Log(context.Background(), logging.LevelCritical, "settings directory sync failed", "file", f.name, "error", err)
+		slog.Log(context.Background(), logging.LevelCritical, fmt.Sprintf("Failed to synchronize the directory containing settings file %s: %v", f.name, err), "file", f.name, "error", err)
 		return fmt.Errorf("settings saved but directory sync failed: %w", err)
 	}
 	return nil
@@ -126,7 +126,7 @@ func (f *File) reload() (changed []string, err error) {
 func replaceFile(name string, content []byte) (err error) {
 	defer func() {
 		if err != nil {
-			slog.Log(context.Background(), logging.LevelCritical, "settings write failed", "file", name, "error", err)
+			slog.Log(context.Background(), logging.LevelCritical, fmt.Sprintf("Failed to write settings file %s: %v", name, err), "file", name, "error", err)
 		}
 	}()
 	temporary, err := os.CreateTemp(filepath.Dir(name), "."+FileName+"-*") // CreateTemp 使用 0600。

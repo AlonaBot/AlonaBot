@@ -115,12 +115,12 @@ func (a *activation) runOnReady(m *pb.Activate) {
 	select {
 	case err := <-errc:
 		if err != nil {
-			componentLogger(a.l.runtime.ctx).Error("OnReady failed", "err", err)
+			componentLogger(a.l.runtime.ctx).Error(fmt.Sprintf("Lifecycle callback OnReady failed: %v", err), "err", err)
 			a.reportFailure(pb.ErrorCode_ERROR_CODE_PLUGIN_NOT_READY, "OnReady returned an error", err)
 			return
 		}
 	case <-timer.C:
-		componentLogger(ctx).DebugContext(ctx, "lifecycle callback deadline observed", "phase", phase, "outcome", "timeout",
+		componentLogger(ctx).DebugContext(ctx, fmt.Sprintf("Lifecycle callback %s exceeded its execution deadline", phase), "phase", phase, "outcome", "timeout",
 			"observed_ns", time.Since(observedAt).Nanoseconds(), "lifecycle_session_id", hex.EncodeToString(a.ack.GetSessionId()))
 		a.reportFailure(pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "OnReady exceeded its budget", nil)
 		return
@@ -187,13 +187,13 @@ func (a *activation) shutdown(deadline time.Time, reason pb.StopReason) {
 		select {
 		case <-done:
 		case <-timer.C:
-			componentLogger(a.l.runtime.ctx).Warn("lifecycle callbacks exceeded the stop deadline; giving up waiting")
+			componentLogger(a.l.runtime.ctx).Warn("Stopped waiting for lifecycle callbacks because the stop deadline elapsed")
 		}
 		timer.Stop()
 		cancel()
 		a.l.closeHTTP(deadline)
 		if err := a.l.runtime.database.Close(); err != nil {
-			componentLogger(a.l.runtime.ctx).Error("close plugin database failed", "err", err)
+			componentLogger(a.l.runtime.ctx).Error(fmt.Sprintf("Failed to close the plugin database: %v", err), "err", err)
 		}
 		// 3. 关闭 Session 并通知 serve 返回。
 		_ = a.sess.Close()
@@ -297,7 +297,7 @@ func runStopCallback(ctx context.Context, phase string, fn func(context.Context)
 	}()
 	if fn != nil {
 		if err := fn(ctx); err != nil {
-			componentLogger(ctx).Error(phase+" failed", "err", err)
+			componentLogger(ctx).Error(fmt.Sprintf("Lifecycle callback %s failed: %v", phase, err), "err", err)
 		}
 	}
 }

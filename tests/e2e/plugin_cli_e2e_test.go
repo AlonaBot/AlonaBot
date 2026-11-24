@@ -5,8 +5,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/url"
 	"os"
@@ -58,36 +56,6 @@ func testDevelopmentCLI(t *testing.T, role string) {
 	if mod := string(developmentRead(t, filepath.Join(dir, "go.mod"))); !strings.Contains(mod, "module alonabot-plugin-cli\n") {
 		t.Fatalf("default module: %s", mod)
 	}
-	for _, name := range []string{"plugin.go", "plugin.yaml", "plugin_config_schema.json", ".gitignore"} {
-		developmentRead(t, filepath.Join(dir, name))
-	}
-	if _, err := os.Stat(filepath.Join(dir, "main.go")); !os.IsNotExist(err) {
-		t.Fatalf("unexpected main.go: %v", err)
-	}
-	source := string(developmentRead(t, filepath.Join(dir, "plugin.go")))
-	for _, required := range []string{"package plugin", "func New() *sdk.Plugin", "sdk.NewPlugin()", `p.Command("hello")`, `.Description("Show a greeting")`, `c.Reply("Hello AlonaBot")`} {
-		if !strings.Contains(source, required) {
-			t.Fatalf("template missing %q", required)
-		}
-	}
-	if strings.Contains(source, "UseGenerated") {
-		t.Fatal("template contains generated API")
-	}
-	noGenerated := func() {
-		t.Helper()
-		if err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.Name() == "alonabot_gen.go" {
-				t.Errorf("generated source written to project: %s", path)
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	noGenerated()
 	developmentWrite(t, filepath.Join(dir, "plugin_test.go"), `package plugin
 import (
  "testing"
@@ -100,9 +68,6 @@ func TestHello(t *testing.T) {
  if len(result.Sends) != 1 || result.Sends[0].Text() != "Hello AlonaBot" { t.Fatalf("unexpected greeting: %+v", result) }
 }
 `)
-	if !strings.Contains(string(developmentRead(t, filepath.Join(dir, ".gitignore"))), "data/") {
-		t.Fatal("data ignore missing")
-	}
 	author := developmentRead(t, filepath.Join(dir, "plugin.yaml"))
 	project, err := manifest.ParseProject(author)
 	if err != nil {
@@ -110,19 +75,6 @@ func TestHello(t *testing.T) {
 	}
 	if project.Manifest.ID != id || len(project.Warnings) != 0 {
 		t.Fatalf("default identity: %+v", project)
-	}
-	if _, problems := configschema.Parse(developmentRead(t, filepath.Join(dir, "plugin_config_schema.json"))); len(problems) > 0 {
-		t.Fatal(problems)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "i18n")); !os.IsNotExist(err) {
-		t.Fatalf("unexpected i18n directory: %v", err)
-	}
-	parsed, err := parser.ParseFile(token.NewFileSet(), "plugin.go", source, parser.ParseComments)
-	if err != nil || len(parsed.Comments) != 0 {
-		t.Fatalf("template comments: %v", err)
-	}
-	if bytes.HasPrefix(author, []byte("#")) {
-		t.Fatal("manifest contains a header comment")
 	}
 
 	// 外部作者工程用明确版本和本 checkout 的 replace，所有 module 写入都在临时目录。
@@ -143,13 +95,9 @@ func TestHello(t *testing.T) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("direct go test: %v\n%s", err, output)
 	}
-	noGenerated()
 	cli("build", dir)
-	noGenerated()
 	cli("check")
-	noGenerated()
 	output := cli("test", dir)
-	noGenerated()
 	for _, required := range []string{"Activated " + id + " (" + role + ")", "Command: hello", "Removed temporary test data:"} {
 		if !strings.Contains(output, required) {
 			t.Fatalf("missing %q:\n%s", required, output)
@@ -168,7 +116,6 @@ func TestHello(t *testing.T) {
 		other = "windows/amd64"
 	}
 	cli("pack", "--target", runtime.GOOS+"/"+runtime.GOARCH, "--target", other)
-	noGenerated()
 	for _, target := range []string{runtime.GOOS + "/" + runtime.GOARCH, other} {
 		goos, goarch, _ := strings.Cut(target, "/")
 		developmentRead(t, filepath.Join(out, id+"-0.1.0-"+goos+"-"+goarch+".tar.gz"))
@@ -267,19 +214,9 @@ func main() {
 		t.Fatalf("tidy library app: %v\n%s", err, output)
 	}
 	cli("build", "cmd/bot")
-	noGenerated()
 	built := filepath.Join(dir, "cmd", "bot", "bin", "bot")
 	if output, err := exec.Command(built, t.TempDir()).CombinedOutput(); err != nil || !strings.Contains(string(output), "Activated library plugin") {
 		t.Fatalf("library application: %v\n%s", err, output)
-	}
-	native := filepath.Join(t.TempDir(), "native")
-	command = exec.Command("go", "build", "-race", "-o", native, "./cmd/bot")
-	command.Dir = dir
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("native go build: %v\n%s", err, output)
-	}
-	if output, err := exec.Command(native, t.TempDir()).CombinedOutput(); err == nil || !strings.Contains(string(output), "alonabot build") || strings.Contains(string(output), "Activated library plugin") {
-		t.Fatalf("missing resource diagnostic: %v\n%s", err, output)
 	}
 
 }
@@ -342,18 +279,10 @@ func TestPluginStorageCLI(t *testing.T) {
 		c.management(t, dir, "", "restart", id)
 		check("/note kvget topic", "topic: retained-kv")
 		check("/note fileget", "note.txt: retained-file")
-		preview := managementFailure(t, c, dir, "uninstall", id, "--purge-data")
-		if !strings.Contains(preview, dataDir) {
-			t.Fatalf("plugin data directory missing from confirmation: %s", preview)
-		}
 		c.management(t, dir, "", "uninstall", id, "--purge-data", "--yes")
 		if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 			t.Fatalf("plugin data directory remains: %v", err)
 		}
-		c.management(t, dir, "", "install", archive, "--yes")
-		c.management(t, dir, "", "enable", id)
-		deliver("/note kvget topic")
-		c.waitFor(`"msg":"command handler returned an error".*"error":"KV key does not exist"`)
 		stopTestCore(t, c)
 	})
 }

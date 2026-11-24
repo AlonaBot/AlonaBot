@@ -36,7 +36,7 @@ func (o *Orchestrator) Recover(ctx context.Context) (blocked []string, err error
 				blocked = append(blocked, record.PluginID)
 				continue
 			}
-			slog.Error("candidate recovery failed", "plugin_id", record.PluginID, "op_id", record.OpID, "phase", record.Phase, "error", err)
+			slog.Error(fmt.Sprintf("Failed to recover operation %s for component %s in phase %s: %v", record.OpID, record.PluginID, record.Phase, err), "plugin_id", record.PluginID, "op_id", record.OpID, "phase", record.Phase, "error", err)
 			failures = append(failures, fmt.Errorf("recover plugin %s operation %s: %w", record.PluginID, record.OpID, err))
 		}
 	}

@@ -103,6 +103,7 @@ Use the domain terms in the guides/protocol so readers can map code to the same 
 
 Core has one log output through standard log/slog; fields/formats/levels follow internal/core/logging.
 
+- Write each log message as a readable sentence, including DEBUG records. Name the component or route, describe the action and result, and include the reason for a failure or state change. Keep structured attributes for filtering and Trace correlation; the message must make sense on its own. For example, use `Component rollpig changed from ACTIVE to QUIESCING: idle timeout` instead of a generic state-change title followed by fields. Keep message bodies, credentials and other protected values out of summaries.
 - Immediately after logging.Open, cmd/alonabot calls slog.SetDefault(out.Logger()) before constructing Core. internal/core packages call slog.Info/Warn/Error/With at logging sites, without storing slog.Default/With results in constructors/fields/package variables.
 - Add no logging constructor parameters/Options/fields/context values. Component processes use SDK's default logger.
 - Keep these dependencies explicit:

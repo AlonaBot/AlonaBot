@@ -93,7 +93,7 @@ func translate(ctx context.Context, actorLocale, key string, args []any) string 
 	// 3. LoadOrStore 保证并发调用同一问题时只产生一条日志。
 	for _, problem := range problems {
 		if _, loaded := session.warned.LoadOrStore([2]string{key, problem}, struct{}{}); !loaded {
-			componentLogger(ctx).WarnContext(ctx, "translation problem", "key", key, "problem", problem)
+			componentLogger(ctx).WarnContext(ctx, fmt.Sprintf("Failed to translate message key %s: %s", key, problem), "key", key, "problem", problem)
 		}
 	}
 	return text

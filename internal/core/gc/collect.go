@@ -134,7 +134,7 @@ func collectPlugin(ctx context.Context, st *state.Store, secrets *secret.Store, 
 	snapshotPath := filepath.Join(filepath.Dir(packagesDir), "plugins", in.PluginID, "config.json")
 	count, err := secrets.Collect(ctx, in.PluginID, protected, snapshotPath)
 	if count != 0 {
-		slog.Info("unreferenced secrets removed", "plugin_id", in.PluginID, "count", count)
+		slog.Info(fmt.Sprintf("Removed %d unreferenced secrets for component %s", count, in.PluginID), "plugin_id", in.PluginID, "count", count)
 	}
 	return removed, err
 }
@@ -159,7 +159,7 @@ func removeChildren(ctx context.Context, parent string, protected func(string) b
 			return removed, err
 		}
 		removed = append(removed, path)
-		slog.Info("unreferenced resource removed", "path", path)
+		slog.Info(fmt.Sprintf("Removed unreferenced resource %s", path), "path", path)
 	}
 	return removed, nil
 }

@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -162,7 +163,7 @@ func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt tim
 						return err
 					}
 					plugin.taskStats.Expired++
-					slog.Warn("expired one-time task discarded", "plugin_id", p.PluginID(), "task_name", task.Name, "key", task.Key, "scheduled_at", task.At)
+					slog.Warn(fmt.Sprintf("Discarded expired one-time task %s of component %s, scheduled for %s", task.Name, p.PluginID(), task.At), "plugin_id", p.PluginID(), "task_name", task.Name, "key", task.Key, "scheduled_at", task.At)
 					continue
 				}
 				unregistered++
@@ -229,7 +230,7 @@ func (s *Scheduler) Attach(ctx context.Context, p router.Plugin, activatedAt tim
 				return err
 			}
 			plugin.taskStats.Expired++
-			slog.Warn("expired one-time task discarded", "plugin_id", p.PluginID(), "task_name", task.Name, "key", task.Key, "scheduled_at", task.At)
+			slog.Warn(fmt.Sprintf("Discarded expired one-time task %s of component %s, scheduled for %s", task.Name, p.PluginID(), task.At), "plugin_id", p.PluginID(), "task_name", task.Name, "key", task.Key, "scheduled_at", task.At)
 			continue
 		}
 		if !reg.names[task.Name] {
@@ -513,21 +514,21 @@ func (s *Scheduler) releaseRun(pluginID string, job *jobState, run *jobRun) {
 func logResponse(pluginID, routeID, runID, traceID string, response wire.Response, err error) {
 	logger := slog.With("plugin_id", pluginID, "route_id", routeID, "run_id", runID, "trace_id", traceID)
 	if err != nil {
-		logger.Error("scheduled handler failed", "error", err, "raw_error_code", response.RawErrorCode)
+		logger.Error(fmt.Sprintf("Scheduled handler %s of component %s failed: %v", routeID, pluginID, err), "error", err, "raw_error_code", response.RawErrorCode)
 	}
 	if response.Payload.SchemaID == "" {
 		return
 	}
 	outcome := &pb.HandlerOutcome{}
 	if response.Payload.Encoding != pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF || response.Payload.SchemaID != validate.SchemaID(outcome) || response.Payload.SchemaVersion != handlerSchemaVersion {
-		logger.Error("invalid scheduled HandlerOutcome schema", "schema_id", response.Payload.SchemaID, "schema_version", response.Payload.SchemaVersion)
+		logger.Error(fmt.Sprintf("Scheduled handler %s of component %s returned unsupported outcome schema %s at version %d", routeID, pluginID, response.Payload.SchemaID, response.Payload.SchemaVersion), "schema_id", response.Payload.SchemaID, "schema_version", response.Payload.SchemaVersion)
 		return
 	}
 	if err := proto.Unmarshal(response.Payload.Bytes, outcome); err != nil {
-		logger.Error("decode scheduled HandlerOutcome failed", "error", err)
+		logger.Error(fmt.Sprintf("Failed to decode the outcome from scheduled handler %s of component %s: %v", routeID, pluginID, err), "error", err)
 		return
 	}
-	logger.Debug("scheduled handler completed", "outcome", outcome)
+	logger.Debug(fmt.Sprintf("Scheduled handler %s of component %s completed with propagation %s", routeID, pluginID, outcome.GetPropagation()), "outcome", outcome)
 }
 
 // Now 返回调度计划与定时器共用的当前时间。

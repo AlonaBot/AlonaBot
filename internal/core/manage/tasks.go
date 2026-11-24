@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -101,7 +102,7 @@ func (s *Service) startTask(action string, run func(ctx context.Context, log io.
 		t.finishedAt = time.Now()
 		if err != nil {
 			t.status, t.err = taskFailed, err
-			slog.Warn("management task failed", "task_id", t.id, "action", action, "error", err)
+			slog.Warn(fmt.Sprintf("Management task %s failed during %s: %v", t.id, action, err), "task_id", t.id, "action", action, "error", err)
 			return
 		}
 		t.status, t.result = taskSucceeded, result
@@ -157,6 +158,6 @@ func respondTask(w http.ResponseWriter, id string) {
 	if err := json.NewEncoder(w).Encode(struct {
 		TaskID string `json:"task_id"`
 	}{id}); err != nil {
-		slog.Error("write management response failed", "error", err)
+		slog.Error(fmt.Sprintf("Failed to write the management response: %v", err), "error", err)
 	}
 }

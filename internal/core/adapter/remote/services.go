@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -66,7 +67,7 @@ func (p *Process) serviceRequest(ctx context.Context, caller router.Caller, in *
 	defer p.mu.Unlock()
 	entry := p.instances[id]
 	invalid := func() wire.Response {
-		slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id)
+		slog.Warn(fmt.Sprintf("Rejected an invalid event from instance %s of component %s", id, p.opt.PluginID), "plugin_id", p.opt.PluginID, "instance_id", id)
 		return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "adapter instance or event identity mismatch")
 	}
 	if expected != nil && entry != expected {
@@ -86,7 +87,7 @@ func (p *Process) serviceRequest(ctx context.Context, caller router.Caller, in *
 			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "injected events cannot register incoming platform media")
 		}
 		if ev.Target == nil && ev.ChatTitle != nil {
-			slog.Warn("chat_title requires target", "adapter_id", p.opt.AdapterID, "chat_id", ev.GetTarget().GetChatId())
+			slog.Warn(fmt.Sprintf("Rejected a chat title from adapter %s because the event has no target", p.opt.AdapterID), "adapter_id", p.opt.AdapterID, "chat_id", ev.GetTarget().GetChatId())
 			return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "chat_title requires target")
 		}
 		if _, known := pb.ChatType_name[int32(ev.ChatType)]; !known || (ev.Target == nil && ev.ChatType != pb.ChatType_CHAT_TYPE_UNSPECIFIED) {
@@ -100,7 +101,7 @@ func (p *Process) serviceRequest(ctx context.Context, caller router.Caller, in *
 				err = p.declarations.validateEvent(ev)
 			}
 			if err != nil {
-				slog.Warn("invalid adapter instance event", "plugin_id", p.opt.PluginID, "instance_id", id, "error", err)
+				slog.Warn(fmt.Sprintf("Rejected an invalid event from instance %s of component %s: %v", id, p.opt.PluginID, err), "plugin_id", p.opt.PluginID, "instance_id", id, "error", err)
 				return serviceError(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, err.Error())
 			}
 		}

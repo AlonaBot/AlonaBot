@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/profile"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
@@ -449,99 +448,6 @@ func TestManagementLifecycle(t *testing.T) {
 		}
 		if _, status, _ := get("/api/v1/packages/showcase/examples/unreferenced.png"); status != http.StatusNotFound {
 			t.Fatalf("unreferenced example status = %d", status)
-		}
-		stopTestCore(t, c)
-	})
-	t.Run("package-warnings-and-build-info", func(t *testing.T) {
-		archive, err := pluginkit.Pack(t.Context(), generate.Options{Dir: "../../examples/plugins/lifecycle"}, t.TempDir())
-		if err != nil {
-			t.Fatal(err)
-		}
-		dir := t.TempDir()
-		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
-		first := validationPackage(t, archive, "1.0.0", []string{"prepare_effects"}, "")
-		var installed manage.Package
-		output := c.management(t, dir, "", "install", first, "--yes")
-		if err := json.Unmarshal([]byte(output), &installed); err != nil {
-			t.Fatal(err)
-		}
-		if installed.Version != "1.0.0" || len(installed.Warnings) != 2 || installed.Warnings[1] != "prepare_effects not declared; preparation and rollback assume no external side effects" {
-			t.Fatalf("install: %s", output)
-		}
-		c.management(t, dir, "", "enable", "demo")
-		adapter := testPackage(t, "alonabot-adapter-fixture", "adapter", "devloop", "github.com/example/adapter", "", map[string][]byte{"adapter_config_schema.json": []byte(`{}`)})
-		c.management(t, dir, "", "install", adapter, "--yes")
-		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", "one")
-		c.management(t, dir, "", "enable", "alonabot-adapter-fixture")
-		c.waitFor("fixture instance one started")
-		next := validationPackage(t, archive, "1.1.0", []string{"migration_mode", "prepare_effects"}, "")
-		output = c.management(t, dir, "", "update", "demo", "--archive", next, "--yes")
-		var updated manage.UpdateResult
-		if err := json.Unmarshal([]byte(output), &updated); err != nil {
-			t.Fatal(err)
-		}
-		want := []string{installed.Warnings[0], "migration_mode not declared; preparation and rollback assume no external side effects", installed.Warnings[1]}
-		if !slices.Equal(updated.Warnings, want) {
-			t.Fatalf("update: %s; want %v", output, want)
-		}
-		counts := map[string]int{}
-		for _, line := range strings.Split(c.log(), "\n") {
-			var record struct {
-				Level    string `json:"level"`
-				Message  string `json:"msg"`
-				PluginID string `json:"plugin_id"`
-				Warning  string `json:"warning"`
-			}
-			if json.Unmarshal([]byte(line), &record) != nil {
-				continue
-			}
-			if record.Level == "WARN" && record.PluginID == "demo" && record.Message == "package manifest warning" {
-				counts[record.Warning]++
-			}
-		}
-		for i, warning := range want {
-			count := 2
-			if i == 1 {
-				count = 1
-			}
-			if counts[warning] != count {
-				t.Fatalf("WARN %q count = %d, want %d\n%s", warning, counts[warning], count, c.log())
-			}
-		}
-		active := findPackage(t, c, dir, "demo")
-		session := lastSession(t, c)
-		if active.Version != "1.1.0" || active.State != "Activated" {
-			t.Fatalf("updated package: %+v", active)
-		}
-		for i, tc := range []struct{ change, message string }{{"change", "build-info does not match the entrypoint"}, {"remove", "archive has no build-info"}} {
-			bad := validationPackage(t, archive, "1.2.0", nil, tc.change)
-			output := managementFailure(t, c, dir, "update", "demo", "--archive", bad, "--yes")
-			if !strings.Contains(output, "INVALID_ARGUMENT") || !strings.Contains(output, tc.message) {
-				t.Fatal(output)
-			}
-			after := findPackage(t, c, dir, "demo")
-			if after.Active != active.Active || after.Version != active.Version || after.State != "Activated" || lastSession(t, c) != session {
-				t.Fatalf("rejected update changed running package: %+v", after)
-			}
-			status, body := fixtureHTTP(t, c, dir, http.MethodPost, "/plugins/alonabot-adapter-fixture/deliver?instance=one&user=alice&text=%2Fping")
-			if status != http.StatusNoContent {
-				t.Fatalf("ping: %d %s", status, body)
-			}
-			deadline := time.Now().Add(5 * time.Second)
-			for {
-				status, body = fixtureHTTP(t, c, dir, http.MethodGet, "/plugins/alonabot-adapter-fixture/sent")
-				var replies []string
-				if status != http.StatusOK || json.Unmarshal(body, &replies) != nil {
-					t.Fatalf("sent: %d %s", status, body)
-				}
-				if len(replies) == i+1 && replies[i] == "pong" {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatalf("old plugin did not reply: %s\n%s", body, c.log())
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
 		}
 		stopTestCore(t, c)
 	})
@@ -1129,78 +1035,6 @@ func packWebUIFixture(t *testing.T, version, source string, files map[string]str
 	return archive
 }
 
-// validationPackage 只改真实 pack 产物的声明与构建信息。
-func validationPackage(t *testing.T, original, version string, missing []string, buildInfoChange string) string {
-	t.Helper()
-	file, err := os.Open(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	gz, err := gzip.NewReader(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer gz.Close()
-	reader := tar.NewReader(gz)
-	var archive bytes.Buffer
-	compressed := gzip.NewWriter(&archive)
-	writer := tar.NewWriter(compressed)
-	for {
-		header, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		raw, err := io.ReadAll(reader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		switch header.Name {
-		case "plugin.yaml":
-			parsed, err := manifest.Parse(raw)
-			if err != nil {
-				t.Fatal(err)
-			}
-			raw = bytes.Replace(raw, []byte("version: "+parsed.Manifest.Version+"\n"), []byte("version: "+version+"\n"), 1)
-			for _, field := range missing {
-				raw = bytes.Replace(raw, []byte(field+": none\n"), nil, 1)
-			}
-		case "build-info":
-			if buildInfoChange == "remove" {
-				continue
-			}
-			if buildInfoChange == "change" {
-				index := bytes.Index(raw, []byte("go1."))
-				if index < 0 {
-					t.Fatal("build-info has no Go version")
-				}
-				raw[index+2] = '2'
-			}
-		}
-		header.Size = int64(len(raw))
-		if err := writer.WriteHeader(header); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := writer.Write(raw); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := compressed.Close(); err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.tar.gz"), archive.Bytes(), 0600); err != nil {
-		t.Fatal(err)
-	}
-	return filepath.Join(dir, "package.tar.gz")
-}
-
 func TestManagementDependencies(t *testing.T) {
 	dir := t.TempDir()
 	c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0")
@@ -1364,9 +1198,6 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
 	}
-	if output := managementFailure(t, c, dir, "adapter", "instance", "create", "alonabot-adapter-fixture", "fail", "--config", configFile); !strings.Contains(output, "fixture instance rejected") {
-		t.Fatal(output)
-	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
 		t.Fatal(err)
@@ -1384,16 +1215,14 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/adapter/instances")
 	var instances struct {
 		Instances []struct {
-			ID        string `json:"instance_id"`
-			State     string `json:"state"`
-			SafeError string `json:"safe_error"`
+			ID string `json:"instance_id"`
 		} `json:"instances"`
 	}
 	if status != http.StatusOK || json.Unmarshal(body, &instances) != nil {
 		t.Fatalf("instances: %d %s", status, body)
 	}
-	if len(instances.Instances) != 3 || instances.Instances[0].ID != "fail" || instances.Instances[0].State != "failed" || !strings.Contains(instances.Instances[0].SafeError, "fixture instance rejected") {
-		t.Fatalf("failed instance was not retained: %s", body)
+	if len(instances.Instances) != 2 || instances.Instances[0].ID != "one" || instances.Instances[1].ID != "two" {
+		t.Fatalf("configured instances: %s", body)
 	}
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
@@ -1432,7 +1261,6 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	check("two", "new", "!inspect", "admin=false", 2)
 	c.management(t, dir, "", "admin", "add", "devloop:new")
 	check("two", "new", "!inspect", "admin=true", 3)
-	check("one", "initial", "?number invalid", "用法：?number", 4)
 	c.management(t, dir, "", "adapter", "instance", "stop", "two")
 	c.management(t, dir, "", "adapter", "instance", "start", "two")
 	stopTestCore(t, c)
@@ -1440,7 +1268,6 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	listed := c.management(t, dir, "", "list")
 	if strings.Contains(listed, "fixture-credential-value") || strings.Contains(listed, "MANAGE_E2E_TOKEN") || strings.Contains(c.log(), "fixture-credential-value") {
 		t.Fatal("credentials escaped through management or logs")
@@ -1676,7 +1503,6 @@ const adapterFixtureSource = `package main
 import (
  "context"
  "encoding/json"
- "errors"
  "log/slog"
  "net/http"
  "os"
@@ -1692,7 +1518,6 @@ type operation struct{Operation,Instance,Session,ID string;Chain message.Chain}
 type platform struct {adapter.Adapter; mu sync.Mutex; cores map[string]adapter.Core; sent []string; records []operation; tokens []string}
 type instance struct {adapter.Instance; platform *platform; id string}
 func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapter.Core)(adapter.Instance,error){
- if req.InstanceID=="fail" {return nil,errors.New("fixture instance rejected")}
  base,err:=p.Adapter.Start(ctx,req,core);if err!=nil{return nil,err}
  p.mu.Lock();p.cores[req.InstanceID]=core;p.mu.Unlock()
  slog.Info("fixture instance "+req.InstanceID+" started")

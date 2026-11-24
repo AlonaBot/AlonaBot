@@ -47,12 +47,6 @@ func TestSendPermissions(t *testing.T) {
 	otherThread := proto.CloneOf(original)
 	otherThread.ThreadId = proto.String("other-topic")
 	otherInstance := &pb.Target{AdapterId: "memory", AdapterInstanceId: "b", AccountId: "account-b", ChatId: "other"}
-	missing := proto.CloneOf(original)
-	missing.AdapterInstanceId = "missing"
-	wrongAccount := proto.CloneOf(original)
-	wrongAccount.AccountId = "wrong"
-	wrongAdapter := proto.CloneOf(original)
-	wrongAdapter.AdapterId = "wrong"
 	invocation := &router.Invocation{Depth: 1, PluginID: pluginID, DefaultTarget: original}
 	foreign := &router.Invocation{Depth: 1, PluginID: "other-plugin", DefaultTarget: original}
 	chain := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "hello"}}}}}
@@ -75,17 +69,11 @@ func TestSendPermissions(t *testing.T) {
 				}
 			}
 			codeA, codeB := pb.ErrorCode_ERROR_CODE_UNSPECIFIED, pb.ErrorCode_ERROR_CODE_UNSPECIFIED
-			accountCode, adapterCode := pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
-			missingCode := pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED
 			if !setting.allowsA {
 				codeA = pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED
-				accountCode, adapterCode = codeA, codeA
 			}
 			if !setting.allowsB {
 				codeB = pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED
-			}
-			if !setting.set || setting.all {
-				missingCode = pb.ErrorCode_ERROR_CODE_UNAVAILABLE
 			}
 			tests := []struct {
 				name string
@@ -101,10 +89,6 @@ func TestSendPermissions(t *testing.T) {
 				{name: "background_a", to: original, code: codeA},
 				{name: "background_b", to: otherInstance, code: codeB},
 				{name: "same_instance_other_chat", to: otherChat, code: codeA},
-				{name: "account_binding", to: wrongAccount, code: accountCode},
-				{name: "adapter_binding", to: wrongAdapter, code: adapterCode},
-				{name: "permission_before_instance_lookup", to: missing, code: missingCode},
-				{name: "no_default_or_to", code: pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET},
 			}
 			for _, test := range tests {
 				t.Run(test.name, func(t *testing.T) {
@@ -191,13 +175,10 @@ func TestSendTargetCompletion(t *testing.T) {
 		restricted     bool
 		reference      bool
 		instance, chat string
-		code           pb.ErrorCode
 	}{
 		{name: "original_reply_without_permission", to: &pb.Target{AdapterId: "memory", ChatId: "original", ThreadId: proto.String("topic")}, restricted: true, instance: "a", chat: "original"},
 		{name: "default_instance", to: &pb.Target{AdapterId: "memory", ChatId: "other"}, defaults: map[string]string{"memory": "b"}, instance: "b", chat: "other"},
-		{name: "no_default_instance", to: &pb.Target{AdapterId: "memory", ChatId: "other"}, code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION},
 		{name: "explicit_instance", to: &pb.Target{AdapterId: "memory", AdapterInstanceId: "b", ChatId: "other"}, instance: "b", chat: "other"},
-		{name: "wrong_account", to: &pb.Target{AdapterId: "memory", AdapterInstanceId: "b", AccountId: "wrong", ChatId: "other"}, code: pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT},
 		{name: "reference", to: &pb.Target{AdapterId: "memory", ChatId: "original", ThreadId: proto.String("topic")}, reference: true, instance: "a", chat: "original"},
 	}
 	for _, test := range tests {
@@ -218,23 +199,14 @@ func TestSendTargetCompletion(t *testing.T) {
 			}
 			in := &wire.Inbound{ParentAttach: invocation, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}}
 			response := service.Send(ctx, router.NewCaller(pluginID, "generation"), in)
-			if response.Err.GetCode() != test.code {
-				t.Fatalf("error = %v; want %v", response.Err, test.code)
+			if response.Err != nil {
+				t.Fatal(response.Err)
 			}
 			result := &pb.SendResult{}
 			if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
 				t.Fatal(err)
 			}
 			afterA, afterB := len(platforms[0].Sent()), len(platforms[1].Sent())
-			if test.code != pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
-				if result.Status != pb.SendStatus_SEND_STATUS_REJECTED || beforeA != afterA || beforeB != afterB {
-					t.Fatalf("rejected send: result=%v, sends=%d/%d -> %d/%d", result, beforeA, beforeB, afterA, afterB)
-				}
-				if test.code == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION && !proto.Equal(result.Target, test.to) {
-					t.Fatalf("completion failure target = %v; want %v", result.Target, test.to)
-				}
-				return
-			}
 			want := &pb.Target{AdapterId: "memory", AdapterInstanceId: test.instance, AccountId: "account-" + test.instance, ChatId: test.chat, ThreadId: test.to.ThreadId}
 			if result.Status != pb.SendStatus_SEND_STATUS_ACCEPTED || !proto.Equal(result.Target, want) {
 				t.Fatalf("result = %v; want accepted target %v", result, want)

@@ -156,7 +156,7 @@ func validateComponents(components []Component, installs []state.Install) error 
 			entry.role = state.RoleAgent
 		}
 		for _, warning := range warnings {
-			slog.Warn("project manifest warning", "plugin_id", m.ID, "warning", warning)
+			slog.Warn(fmt.Sprintf("Component %s has a project manifest warning: %s", m.ID, warning), "plugin_id", m.ID, "warning", warning)
 		}
 		if state.Role(m.Role) != entry.role {
 			return fmt.Errorf("component %s has role %s, expected %s", m.ID, m.Role, entry.role)
@@ -776,7 +776,8 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		if err := c.store.SetEnabled(ctx, id, true); err != nil {
 			return err
 		}
-		slog.Info("plugin activated", "plugin_id", id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
+		pid := running.process.Process.Pid()
+		slog.Info(fmt.Sprintf("plugin activated: %s (generation %s, %s, PID %d)", id, generation, mode, pid), "plugin_id", id, "generation_id", generation, "mode", mode, "pid", pid)
 		return nil
 	}
 	// 4. 同进程调用经内部入口复用 SDK 的握手、激活和停止流程。
@@ -828,7 +829,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		return err
 	}
 	for _, correction := range prep.Corrections {
-		slog.Warn("configuration corrected", "plugin_id", id, "path", correction.Path, "reason", correction.Reason)
+		slog.Warn(fmt.Sprintf("Corrected configuration at %s for component %s: %s", correction.Path, id, correction.Reason), "plugin_id", id, "path", correction.Path, "reason", correction.Reason)
 	}
 	activation := host.ActivateOptions{PluginID: id, GenerationID: generation, Handler: c.assembly.handler(running, install), Global: c.assembly.global, Limits: limits, Messages: messages}
 	if active == "" {
@@ -902,7 +903,7 @@ func (a *assembly) detach(r *runningComponent) {
 	}
 	a.broker.Release(r.caller)
 	if err := a.messages.Release(r.caller); err != nil {
-		slog.Error("release reply decorations failed", "plugin_id", r.id, "error", err)
+		slog.Error(fmt.Sprintf("Failed to release reply decorations for component %s: %v", r.id, err), "plugin_id", r.id, "error", err)
 	}
 }
 
@@ -941,7 +942,14 @@ func (c *Core) stopComponentWithActivity(r *runningComponent, t0 time.Time, timi
 		if reason == pb.StopReason_STOP_REASON_IDLE && result.Err != nil && (!r.activity || a.waker.Activity(r.id).Session == r.instance.Session) {
 			return result.Err
 		}
-		slog.Info("plugin stopped", "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)
+		message := fmt.Sprintf("Component %s stopped", r.id)
+		if result.Drained {
+			message += " after draining its active requests"
+		}
+		if result.Killed {
+			message += "; its process tree was forcibly terminated"
+		}
+		slog.Info(message, "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)
 		err = result.Err
 		detach()
 	} else if r.instance != nil {
@@ -983,7 +991,7 @@ func (c *Core) stopComponentWithActivity(r *runningComponent, t0 time.Time, timi
 	}
 	err = errors.Join(err, runtimeErr)
 	if err != nil {
-		slog.Error("component shutdown failed", "plugin_id", r.id, "error", err)
+		slog.Error(fmt.Sprintf("Failed to shut down component %s: %v", r.id, err), "plugin_id", r.id, "error", err)
 		return fmt.Errorf("component %s: %w", r.id, err)
 	}
 	return nil
@@ -1060,7 +1068,8 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := c.startInstances(ctx, running, instanceSchema); err != nil {
 		return running, err
 	}
-	slog.Info("plugin activated", "plugin_id", running.id, "generation_id", generation, "mode", "restart", "pid", running.process.Process.Pid())
+	pid := running.process.Process.Pid()
+	slog.Info(fmt.Sprintf("plugin activated: %s (generation %s, restart, PID %d)", running.id, generation, pid), "plugin_id", running.id, "generation_id", generation, "mode", "restart", "pid", pid)
 	return running, nil
 }
 
@@ -1116,7 +1125,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 		failure := errors.Join(err, cause)
 		running.instance.Degrade(failure)
 		a.detach(running)
-		slog.Log(ctx, logging.LevelCritical, "committed candidate assembly failed", "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
+		slog.Log(ctx, logging.LevelCritical, fmt.Sprintf("Failed to assemble committed generation %s for component %s during operation %s: %v", r.Generation, id, r.OpID, failure), "plugin_id", id, "op_id", r.OpID, "generation_id", r.Generation, "kind", kind, "error", failure)
 		return running, errors.Join(failure, running.instance.Session.Close(), c.recordRuntime(context.WithoutCancel(ctx), running.install, state.RuntimeFailed, "candidate assembly failed"))
 	}
 	// 3. ACTIVATED 成功后发布业务入口，再启动 Adapter 实例。
@@ -1142,7 +1151,8 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 	if kind == journal.KindFirstInstall {
 		mode = "new"
 	}
-	slog.Info("plugin activated", "plugin_id", id, "generation_id", r.Generation, "mode", mode, "pid", process.Process.Pid())
+	pid := process.Process.Pid()
+	slog.Info(fmt.Sprintf("plugin activated: %s (generation %s, %s, PID %d)", id, r.Generation, mode, pid), "plugin_id", id, "generation_id", r.Generation, "mode", mode, "pid", pid)
 	return running, err
 }
 
@@ -1342,7 +1352,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 		return err
 	}
 	for _, problem := range diagnostics {
-		slog.Error("adapter instance configuration failed", "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
+		slog.Error(fmt.Sprintf("Invalid configuration at %s for instance %s of component %s: %s", problem.Path, problem.InstanceID, running.id, problem.Reason), "plugin_id", running.id, "instance_id", problem.InstanceID, "path", problem.Path, "reason", problem.Reason)
 		for id := range c.assembly.settings.Settings().Adapters[running.install.AdapterID].Instances {
 			if problem.InstanceID == "" || problem.InstanceID == id {
 				running.remote.RecordFailure(id, problem.Path+": "+problem.Reason)
@@ -1355,7 +1365,7 @@ func (c *Core) startInstances(ctx context.Context, running *runningComponent, ra
 			continue
 		}
 		if err := running.remote.StartInstance(ctx, id, configuration); err != nil {
-			slog.Error("adapter instance start failed", "plugin_id", running.id, "instance_id", id, "error", err)
+			slog.Error(fmt.Sprintf("Failed to start instance %s of component %s: %v", id, running.id, err), "plugin_id", running.id, "instance_id", id, "error", err)
 		}
 	}
 	return nil

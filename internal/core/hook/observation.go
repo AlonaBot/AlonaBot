@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -92,21 +93,21 @@ func (h *Runner) PrepareAfterSend(ctx context.Context, source router.Caller, op 
 				case h.workers <- struct{}{}:
 					defer func() { <-h.workers }()
 				case <-observerCtx.Done():
-					logger.Warn("after-send observation expired before execution", "error", observerCtx.Err())
+					logger.Warn(fmt.Sprintf("After-send observation expired while waiting for an execution slot: %v", observerCtx.Err()), "error", observerCtx.Err())
 					return
 				}
 				for _, candidate := range candidates {
 					if err := observerCtx.Err(); err != nil {
-						logger.Warn("after-send observation budget ended", "error", err)
+						logger.Warn(fmt.Sprintf("Stopped after-send observation because its execution budget ended: %v", err), "error", err)
 						return
 					}
 					request.RouteId = candidate.route.GetRouteId()
 					if !h.current(candidate) {
-						logger.Warn("after-send observer Session ended", "plugin_id", candidate.caller.PluginID, "route_id", request.RouteId)
+						logger.Warn(fmt.Sprintf("Skipped after-send hook %s of component %s because its Session ended", request.RouteId, candidate.caller.PluginID), "plugin_id", candidate.caller.PluginID, "route_id", request.RouteId)
 						continue
 					}
 					if safe := call(observerCtx, candidate, request, &pb.AfterSendResult{}, snapshot, true); safe != nil {
-						logger.Warn("after-send hook failed", "plugin_id", candidate.caller.PluginID, "route_id", request.RouteId, "code", safe.Code, "error", safe.SafeMessage)
+						logger.Warn(fmt.Sprintf("After-send hook %s of component %s failed: %s", request.RouteId, candidate.caller.PluginID, safe.SafeMessage), "plugin_id", candidate.caller.PluginID, "route_id", request.RouteId, "code", safe.Code, "error", safe.SafeMessage)
 					}
 				}
 			}()

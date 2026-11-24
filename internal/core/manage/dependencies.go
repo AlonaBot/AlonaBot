@@ -62,7 +62,7 @@ func CheckDependencies(m *manifest.Manifest, in manifest.Installed) error {
 		if problem.Required {
 			required = append(required, problem.Dependency+": "+problem.Reason)
 		} else {
-			slog.Warn("optional dependency is unavailable", "plugin_id", m.ID, "dependency", problem.Dependency, "reason", problem.Reason)
+			slog.Warn(fmt.Sprintf("Optional dependency %s is unavailable for component %s: %s", problem.Dependency, m.ID, problem.Reason), "plugin_id", m.ID, "dependency", problem.Dependency, "reason", problem.Reason)
 		}
 	}
 	if len(required) != 0 {

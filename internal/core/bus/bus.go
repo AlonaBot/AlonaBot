@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -327,7 +328,7 @@ func (b *Bus) dropLocked(sub *subscriber, ev *pb.BusEvent, reason metrics.Reason
 }
 
 func (b *Bus) warnDrop(d droppedEvent, reason string) {
-	slog.Warn("bus event dropped", "plugin_id", d.pluginID, "event_name", d.eventName, "dropped", d.count, "reason", reason)
+	slog.Warn(fmt.Sprintf("Dropped bus event %s for component %s after %d total drops: %s", d.eventName, d.pluginID, d.count, reason), "plugin_id", d.pluginID, "event_name", d.eventName, "dropped", d.count, "reason", reason)
 }
 
 func failure(code pb.ErrorCode, message string) wire.Response {

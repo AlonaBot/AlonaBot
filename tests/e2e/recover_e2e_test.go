@@ -49,7 +49,7 @@ func TestRecoveryEndToEnd(t *testing.T) {
 			old := findPackage(t, c, dir, "recovery").Active
 			stopTestCore(t, c)
 			c = start(t, dir, phase)
-			c.waitFor(`"msg":"plugin activated"`)
+			c.waitFor(`"msg":"plugin activated: `)
 			pluginDir := filepath.Join(dir, "plugins", "recovery")
 			survivor := false
 			if phase == "started" {
@@ -133,7 +133,7 @@ func TestRecoveryEndToEnd(t *testing.T) {
 					t.Fatal(err)
 				}
 				c = start(t, dir, "")
-				c.waitFor(`old process may still be running`)
+				c.waitFor(`The previous process of component recovery may still be running`)
 				item := findPackage(t, c, dir, "recovery")
 				after, err := os.ReadFile(filepath.Join(pluginDir, "starts"))
 				if err != nil || item.State != "Degraded" || item.Active != old || string(before) != string(after) {
@@ -151,7 +151,7 @@ func TestRecoveryEndToEnd(t *testing.T) {
 			} else {
 				waitRecoveryRuntime(t, pluginDir)
 				c = start(t, dir, "")
-				c.waitFor(`"msg":"plugin activated"`)
+				c.waitFor(`"msg":"plugin activated: `)
 			}
 			item := findPackage(t, c, dir, "recovery")
 			wantActive, wantPhase := old, "cleaned"
@@ -173,7 +173,7 @@ func TestRecoveryEndToEnd(t *testing.T) {
 				t.Fatalf("candidate directory after %s: %v", phase, err)
 			}
 			// 新 Session 只激活一次；禁止同时恢复旧版和新代次。
-			if count := strings.Count(c.log(), `"msg":"plugin activated"`); count != 1 {
+			if count := strings.Count(c.log(), `"msg":"plugin activated: `); count != 1 {
 				t.Fatalf("activation count = %d: %s", count, c.log())
 			}
 		})
@@ -214,7 +214,7 @@ func TestRecoveryEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		c = start(t, dir, "")
-		c.waitFor(`"msg":"plugin activated"`)
+		c.waitFor(`"msg":"plugin activated: `)
 		newArchive := recoveryPackage(t, fixture, plugin, "2.0.0")
 		c.management(t, dir, "", "update", "recovery", "--archive", newArchive, "--yes")
 		current := findPackage(t, c, dir, "recovery").Active

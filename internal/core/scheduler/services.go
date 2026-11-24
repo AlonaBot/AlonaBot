@@ -78,7 +78,7 @@ func storageFailure(pluginID string, err error) wire.Response {
 		return failure(validation.Code, validation.Message)
 	}
 	// 完整错误留在 Core 诊断中；安全错误通道不泄露宿主路径或任务参数。
-	slog.Error("task storage operation failed", "plugin_id", pluginID, "error", err)
+	slog.Error(fmt.Sprintf("Task storage operation failed for component %s: %v", pluginID, err), "plugin_id", pluginID, "error", err)
 	return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "task storage operation failed")
 }
 func validKey(key string) bool {

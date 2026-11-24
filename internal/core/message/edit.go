@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -122,10 +123,12 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 		return editRejected(target, rejectError(target, err).Err)
 	}
 	// 7. 执行唯一一次编辑，观察 Hook 的结果不改变平台回执与错误。
+	started := time.Now()
 	result, safe := editor.Edit(ctx, target, request.PlatformMessageId, request.Chain)
 	if complete != nil {
 		complete(result, safe)
 	}
+	logPlatformResult(ctx, "edit", target, result, safe, time.Since(started))
 	if s.observe != nil {
 		s.observe(in.TraceID, "edit", target, request.Chain, result, safe)
 	}

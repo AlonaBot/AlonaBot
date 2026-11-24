@@ -264,7 +264,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		}
 		harness.DebugToken = strings.TrimSpace(string(token))
 	}
-	slog.Info("admin credentials", "url", configuration.BaseURL, "path", filepath.Join(dir, adminauth.FirstTokenFile))
+	slog.Info(fmt.Sprintf("Manage Core at %s; initial token file: %s", configuration.BaseURL, filepath.Join(dir, adminauth.FirstTokenFile)), "url", configuration.BaseURL, "path", filepath.Join(dir, adminauth.FirstTokenFile))
 	if configuration.Proxy != "" {
 		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
 			if err := os.Setenv(name, configuration.Proxy); err != nil {
@@ -280,10 +280,12 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	}
 	if len(overrides) > 0 {
 		attrs := make([]any, 0, len(overrides))
+		descriptions := make([]string, 0, len(overrides))
 		for _, override := range overrides {
 			attrs = append(attrs, slog.Group(override.Name, "value", override.Value, "origin", override.Origin))
+			descriptions = append(descriptions, fmt.Sprintf("%s is %s (from %s)", override.Name, override.Value, override.Origin))
 		}
-		slog.Warn("tuning parameters overridden", attrs...)
+		slog.Warn("Tuning parameters overridden: "+strings.Join(descriptions, "; "), attrs...)
 	}
 	if values.CoreMemorySoftLimit > 0 {
 		debug.SetMemoryLimit(values.CoreMemorySoftLimit)
@@ -311,7 +313,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return fail(err)
 	}
 	for _, id := range blocked {
-		slog.Error("old process may still be running", "plugin_id", id)
+		slog.Error(fmt.Sprintf("The previous process of component %s may still be running", id), "plugin_id", id)
 	}
 	blocked, err = c.recoverRuntime(ctx, installs, blocked)
 	if err != nil {
@@ -348,7 +350,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return c.assembly.mux.For(caller)(ctx, in)
 	}, DebugRelease: func(caller router.Caller) {
 		if err := c.assembly.messages.Release(caller); err != nil {
-			slog.Error("release reply decorations failed", "error", err)
+			slog.Error(fmt.Sprintf("Failed to release reply decorations: %v", err), "error", err)
 		}
 		c.assembly.media.ReleaseSession(caller.SessionKey)
 	}, DebugMenu: c.assembly.router.DebugCommandMenu, DebugMedia: c.assembly.media.ReadDebugIncoming, NotifyProfileOverrides: func(ctx context.Context, id string) error {
@@ -511,7 +513,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 			_, err := gc.Collect(ctx, c.store, secret.New(c.store), filepath.Join(c.dir, "packages"))
 			return err
 		}); err != nil {
-			slog.Error("resource collection after management operation failed", "error", err)
+			slog.Error(fmt.Sprintf("Failed to collect resources after a management operation: %v", err), "error", err)
 		}
 	})
 	adminMux.Handle("/api/v1/", administration)
@@ -550,8 +552,8 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if nonLoopback && containerHTTP && len(configuration.TrustedProxies) == 0 {
 		slog.Warn("listening on all interfaces inside a container; publish the port to the host loopback only")
 	}
-	slog.Info("HTTP listener started", "listen", listener.Addr().String())
-	slog.Info("Core started", "data_dir", dir)
+	slog.Info("HTTP listener started at "+listener.Addr().String(), "listen", listener.Addr().String())
+	slog.Info("Core started with data directory "+dir, "data_dir", dir)
 	for _, install := range installs {
 		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI && install.Entrypoint == "" {
 			continue
@@ -585,21 +587,21 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 				c.components = append(c.components, running)
 			}
 			if err != nil && (recovering || active != "" && hasInstalledRoutes(install)) {
-				slog.Log(ctx, logging.LevelCritical, "committed generation recovery failed", "plugin_id", install.PluginID, "generation_id", active, "error", err)
+				slog.Log(ctx, logging.LevelCritical, fmt.Sprintf("Failed to recover committed generation %s of component %s: %v", active, install.PluginID, err), "plugin_id", install.PluginID, "generation_id", active, "error", err)
 				if running != nil && running.instance.State() != host.StateDegraded {
 					running.instance.Degrade(err)
 					c.assembly.detach(running)
 					if closeErr := running.instance.Session.Close(); closeErr != nil {
-						slog.Error("close degraded session failed", "plugin_id", install.PluginID, "error", closeErr)
+						slog.Error(fmt.Sprintf("Failed to close the degraded Session of component %s: %v", install.PluginID, closeErr), "plugin_id", install.PluginID, "error", closeErr)
 					}
 				}
 				continue
 			}
 			if err != nil && configuredAdapters[install.PluginID] {
-				slog.Error("configured adapter start failed", "plugin_id", install.PluginID, "error", err)
+				slog.Error(fmt.Sprintf("Failed to start configured adapter component %s: %v", install.PluginID, err), "plugin_id", install.PluginID, "error", err)
 				if running != nil && running.instance.State() != host.StateDegraded {
 					if stopErr := c.stopManaged(install.PluginID, pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
-						slog.Error("configured adapter cleanup failed", "plugin_id", install.PluginID, "error", stopErr)
+						slog.Error(fmt.Sprintf("Failed to clean up adapter component %s after its failed start: %v", install.PluginID, stopErr), "plugin_id", install.PluginID, "error", stopErr)
 					}
 				}
 				continue
@@ -714,7 +716,7 @@ running:
 			// 自动恢复 Adapter 也可能经 BindAdapter 重读文件；唤醒仍在循环外等待。
 			c.monitors.Go(func() {
 				if err := c.applySleep(ctx); err != nil {
-					slog.Error("apply published sleep settings failed", "error", err)
+					slog.Error(fmt.Sprintf("Failed to apply published sleep settings: %v", err), "error", err)
 				}
 			})
 		}
@@ -743,7 +745,7 @@ running:
 				// 已提交失败保留供管理员恢复；观察者已清理进程树，不触发自动重启。
 				c.assembly.media.ReleaseSession(old.caller.SessionKey)
 				if result.err != nil {
-					slog.Error("degraded process cleanup failed", "plugin_id", old.id, "error", result.err)
+					slog.Error(fmt.Sprintf("Failed to clean up the degraded process of component %s: %v", old.id, result.err), "plugin_id", old.id, "error", result.err)
 				}
 				continue
 			}
@@ -754,17 +756,17 @@ running:
 				break running
 			}
 			if result.abnormal {
-				slog.Error("plugin exited abnormally", "plugin_id", old.id, "state", result.state)
+				slog.Error(fmt.Sprintf("Component %s exited abnormally with state %s", old.id, result.state), "plugin_id", old.id, "state", result.state)
 			} else {
-				slog.Info("plugin exited", "plugin_id", old.id, "state", result.state)
+				slog.Info(fmt.Sprintf("Component %s exited with state %s", old.id, result.state), "plugin_id", old.id, "state", result.state)
 			}
 			if result.err != nil {
-				slog.Error("process tree not confirmed empty, not starting a replacement", "plugin_id", old.id, "error", result.err)
+				slog.Error(fmt.Sprintf("Component %s will remain stopped because its previous process tree may still be running: %v", old.id, result.err), "plugin_id", old.id, "error", result.err)
 				continue
 			}
 			enabled, err := c.store.Enabled(ctx, old.id)
 			if err != nil {
-				slog.Error("read component enabled state failed", "plugin_id", old.id, "error", err)
+				slog.Error(fmt.Sprintf("Failed to read whether component %s is enabled: %v", old.id, err), "plugin_id", old.id, "error", err)
 				continue
 			}
 			if !enabled {
@@ -772,12 +774,12 @@ running:
 			}
 			switch policy.OnExit(old.id, result.abnormal, time.Now()) {
 			case host.DecisionRestart:
-				slog.Info("restarting plugin", "plugin_id", old.id)
+				slog.Info(fmt.Sprintf("Restarting component %s", old.id), "plugin_id", old.id)
 				if old.install.Source == devSource {
 					c.components[index] = nil
 					before := len(c.components)
 					if err := c.startManaged(ctx, old.id); err != nil {
-						slog.Error("restart plugin failed", "plugin_id", old.id, "error", err)
+						slog.Error(fmt.Sprintf("Failed to restart component %s: %v", old.id, err), "plugin_id", old.id, "error", err)
 					}
 					for _, running := range c.components[before:] {
 						if running != nil {
@@ -791,10 +793,10 @@ running:
 					c.components[index] = replacement
 				}
 				if err != nil {
-					slog.Error("restart plugin failed", "plugin_id", old.id, "error", err)
+					slog.Error(fmt.Sprintf("Failed to restart component %s: %v", old.id, err), "plugin_id", old.id, "error", err)
 					if replacement != nil {
 						if stopErr := c.stopComponent(replacement, time.Now(), host.NewStopTiming(c.values), pb.StopReason_STOP_REASON_DISABLE); stopErr != nil {
-							slog.Error("cleanup failed restart", "plugin_id", old.id, "error", stopErr)
+							slog.Error(fmt.Sprintf("Failed to clean up component %s after its failed restart: %v", old.id, stopErr), "plugin_id", old.id, "error", stopErr)
 						}
 					}
 					continue
@@ -802,10 +804,10 @@ running:
 				c.watch(replacement, exits)
 			case host.DecisionDisable:
 				if err := c.store.SetEnabled(ctx, old.id, false); err != nil {
-					slog.Error("disable plugin failed", "plugin_id", old.id, "error", err)
+					slog.Error(fmt.Sprintf("Failed to disable component %s: %v", old.id, err), "plugin_id", old.id, "error", err)
 				} else {
 					c.assembly.router.RemoveRouteSnapshot(old.id)
-					slog.Error("plugin disabled after repeated abnormal exits", "plugin_id", old.id, "crashes", c.values.RestartMaxCrashes, "window", c.values.RestartWindow)
+					slog.Error(fmt.Sprintf("Disabled component %s after %d abnormal exits within %s", old.id, c.values.RestartMaxCrashes, c.values.RestartWindow), "plugin_id", old.id, "crashes", c.values.RestartMaxCrashes, "window", c.values.RestartWindow)
 				}
 			}
 		case operation := <-c.operations:
@@ -827,7 +829,7 @@ running:
 			c.assembly.media.Sweep()
 		case now := <-idleTicker.C:
 			if err := c.checkIdle(ctx, now); err != nil {
-				slog.Error("idle check failed", "error", err)
+				slog.Error(fmt.Sprintf("Failed to check idle components: %v", err), "error", err)
 			}
 		}
 	}
@@ -987,10 +989,10 @@ func (c *Core) shutdown() error {
 	if c.assembly != nil {
 		ctx, cancel := context.WithDeadline(context.Background(), t0.Add(timing.Drain))
 		if err := c.assembly.router.Close(ctx); err != nil {
-			slog.Warn("event router drain ended", "error", err)
+			slog.Warn(fmt.Sprintf("Stopped waiting for event handlers to drain: %v", err), "error", err)
 		}
 		if err := c.assembly.hooks.Close(ctx); err != nil {
-			slog.Warn("after-send drain ended", "error", err)
+			slog.Warn(fmt.Sprintf("Stopped waiting for after-send observers to drain: %v", err), "error", err)
 		}
 		cancel()
 	}
@@ -1015,7 +1017,7 @@ func (c *Core) shutdown() error {
 	}
 	if c.output != nil {
 		if err := errors.Join(c.err, result); err != nil {
-			slog.Log(context.Background(), logging.LevelCritical, "Core stopped", "err", err)
+			slog.Log(context.Background(), logging.LevelCritical, fmt.Sprintf("Core stopped with an error: %v", err), "err", err)
 		} else {
 			slog.Info("Core stopped")
 		}
@@ -1057,7 +1059,7 @@ func (c *Core) close() error {
 		err = errors.Join(err, c.output.Close())
 	}
 	if err != nil {
-		slog.Log(context.Background(), logging.LevelCritical, "close Core resources failed", "error", err)
+		slog.Log(context.Background(), logging.LevelCritical, fmt.Sprintf("Failed to close Core resources: %v", err), "error", err)
 	}
 	return err
 }

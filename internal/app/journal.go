@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/i18n"
@@ -48,7 +49,19 @@ func (c *Core) recordRuntime(ctx context.Context, in state.Install, next state.R
 		return err
 	}
 	if previous != next {
-		slog.Info("plugin runtime state changed", "plugin_id", in.PluginID, "previous_state", previous, "state", next, "reason", reason)
+		level := slog.LevelDebug
+		if next == state.RuntimeFailed {
+			level = slog.LevelError
+		}
+		message := fmt.Sprintf("Component %s changed from %s to %s", in.PluginID, previous, next)
+		if reason != "" {
+			description := reason
+			if stopReason, ok := strings.CutPrefix(reason, "STOP_REASON_"); ok {
+				description = strings.ToLower(strings.ReplaceAll(stopReason, "_", " "))
+			}
+			message += ": " + description
+		}
+		slog.Log(ctx, level, message, "plugin_id", in.PluginID, "previous_state", previous, "state", next, "reason", reason)
 	}
 	return nil
 }
@@ -67,7 +80,7 @@ func (c *Core) recoverRuntime(ctx context.Context, installs []state.Install, blo
 				}
 			} else if !errors.Is(err, os.ErrNotExist) {
 				blocked = append(blocked, in.PluginID)
-				slog.Error("cannot verify previous plugin runtime", "plugin_id", in.PluginID, "error", err)
+				slog.Error(fmt.Sprintf("Failed to verify the previous process of component %s: %v", in.PluginID, err), "plugin_id", in.PluginID, "error", err)
 			}
 		}
 		if slices.Contains(blocked, in.PluginID) {
@@ -99,7 +112,7 @@ func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir s
 	}
 	m := parsed.Manifest
 	for _, warning := range parsed.Warnings {
-		slog.Warn("installed manifest warning", "plugin_id", m.ID, "warning", warning)
+		slog.Warn(fmt.Sprintf("Component %s has an installed manifest warning: %s", m.ID, warning), "plugin_id", m.ID, "warning", warning)
 	}
 	executable, err := process.Entrypoint(packageDir, in.Entrypoint)
 	if err != nil {

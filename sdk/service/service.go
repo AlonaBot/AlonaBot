@@ -268,7 +268,7 @@ func (s Spec[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 	}
 	if err := registry.ValidateJSON(inputSchema, encoded); err != nil {
 		// 校验器错误包含载荷原值，公开错误与日志只保留声明信息。
-		registry.Logger(ctx).DebugContext(ctx, "service input schema validation failed", "target", s.target, "schema_id", inputID)
+		registry.Logger(ctx).DebugContext(ctx, fmt.Sprintf("Input for service %s does not match schema %s", s.target, inputID), "target", s.target, "schema_id", inputID)
 		return out, errcode.InvalidArgument.Errorf("invalid service input for %q", s.target)
 	}
 	target := s.target
@@ -290,7 +290,7 @@ func (s Spec[In, Out]) callJSON(ctx context.Context, in In) (Out, error) {
 		return out, errors.Join(callErr, errcode.Internal.New("expected JSON service output"))
 	}
 	if err := registry.ValidateJSON(outputSchema, response.Bytes); err != nil {
-		registry.Logger(ctx).DebugContext(ctx, "service output schema validation failed", "target", s.target, "schema_id", outputID)
+		registry.Logger(ctx).DebugContext(ctx, fmt.Sprintf("Output from service %s does not match schema %s", s.target, outputID), "target", s.target, "schema_id", outputID)
 		return out, errors.Join(callErr, errcode.Internal.Errorf("invalid service output for %q", s.target))
 	}
 	if err := json.Unmarshal(response.Bytes, &out); err != nil {

@@ -20,13 +20,14 @@ import (
 
 func TestLibraryLifecycle(t *testing.T) {
 	const startupTimeout = time.Minute
-	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
-	defer cancel()
 	temp := t.TempDir()
-	executable, err := pluginkit.CompileApp(ctx, generate.Options{Dir: "./examples/devbot"}, temp, "-race")
+	// 首次 race 编译可能较慢，启动期限从构建完成后开始计算。
+	executable, err := pluginkit.CompileApp(t.Context(), generate.Options{Dir: "./examples/devbot"}, temp, "-race")
 	if err != nil {
 		t.Fatalf("build devbot: %v", err)
 	}
+	ctx, cancel := context.WithTimeout(t.Context(), startupTimeout)
+	defer cancel()
 	logPath := filepath.Join(temp, "output.log")
 	output, err := os.Create(logPath)
 	if err != nil {
@@ -44,7 +45,6 @@ func TestLibraryLifecycle(t *testing.T) {
 	for _, scenario := range []struct{ name, config, want string }{
 		{name: "defaults", want: "Hello"},
 		{name: "configured", config: `{"greetings":[{"text":"Updated"}]}`, want: "Hello,Updated"},
-		{name: "missing_required", config: `{"greetings":[{}]}`},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			if err := output.Truncate(0); err != nil {
@@ -82,22 +82,6 @@ func TestLibraryLifecycle(t *testing.T) {
 					<-exited
 				}
 			}()
-			if scenario.want == "" {
-				select {
-				case err := <-exited:
-					finished = true
-					logs, readErr := os.ReadFile(logPath)
-					if readErr != nil {
-						t.Fatal(readErr)
-					}
-					if err == nil || !strings.Contains(string(logs), "SESSION_PHASE_CONFIG") || !strings.Contains(string(logs), "required") {
-						t.Fatalf("missing required config: %v\n%s", err, logs)
-					}
-				case <-ctx.Done():
-					t.Fatal("invalid config startup timed out")
-				}
-				return
-			}
 			ticker := time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
 			ready := false

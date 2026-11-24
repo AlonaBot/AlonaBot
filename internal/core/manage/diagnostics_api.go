@@ -3,6 +3,7 @@ package manage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -63,7 +64,7 @@ func (s *Service) diagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := errors.Join(f.Close(), os.Remove(f.Name())); err != nil {
-			slog.Error("clean diagnostic archive failed", "error", err)
+			slog.Error(fmt.Sprintf("Failed to clean up the diagnostic archive: %v", err), "error", err)
 		}
 	}()
 	opts := diagnostics.Options{Since: since, Logs: request.Logs, Settings: request.Settings, Components: request.Components, Redact: request.Redact}

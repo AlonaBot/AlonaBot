@@ -234,6 +234,12 @@ Stop Core and every plugin process before copying the entire `data_dir`. Backups
 
 Back up plugin-owned external databases/files outside framework directories using each plugin's instructions. For recovery keep Core/plugins stopped, restore full `data_dir` and external data together, then start Core. Restoring an old backup discards later writes; confirm the desired recovery point first.
 
+## Log summaries and details
+
+Every log message, including DEBUG, states what happened in plain language. Component and route names, state transitions and failure reasons appear in the message itself. Structured fields support filtering and correlation. Errors already included in the message appear once in console output.
+
+Console and WebUI show business summaries by default. Expand Details on a WebUI record for full structured fields, Trace, source location and errors. New log files store complete management API Records as JSON lines (`time`, `level`, `source`, `message`, `attrs`, `trace_id`), independently of console formatting. History reads existing text and new JSON records, retaining source, level and Trace filtering. `--log-format=json` still provides structured stderr. INFO covers intake, processing, sending and sleep/wake summaries; internal transaction stages and intermediate states use DEBUG. Existing protections apply to message bodies, model inputs/outputs, tool arguments and credentials. Runtime `runtime/reply.sqlite` holds only the current Sessions’ reply decorations; startup removes old runtime data and Session release deletes its rows.
+
 ## Management API
 
 Use the same controlled `base_url` and authentication described above. Core API major 1 lives at `/api/v1/`; authentication lives at `/api/auth/`. JSON writes use `Content-Type: application/json`. CLI clients send `Authorization: Bearer <admin token>`; browsers use the management Cookie and send controlled `Origin` plus `X-Alonabot-CSRF` on methods other than GET/HEAD. `POST /api/auth/login` takes `{"token":"…","remember":true}`, returns `{"csrf_token":"…"}` and sets the Cookie: with `remember` the session lasts 30 days and the Cookie persists; otherwise the session lasts 8 hours and the Cookie ends with the browser session. `GET /api/auth/session` restores CSRF after refresh; `POST /api/auth/logout` revokes the session. Login and confirmation keep the persisted token file.

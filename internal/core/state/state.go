@@ -94,7 +94,7 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	// 3. 打开并核对状态库；失败时释放锁。
 	s, err := open(ctx, filepath.Join(dataDir, stateFile))
 	if err != nil {
-		slog.Log(ctx, databaseErrorLevel(err), "state database open or verification failed", "error", err)
+		slog.Log(ctx, databaseErrorLevel(err), fmt.Sprintf("Failed to open or verify the state database: %v", err), "error", err)
 		_ = lock.Unlock()
 		return nil, err
 	}
@@ -269,7 +269,7 @@ func (s *Store) tx(ctx context.Context, fn func(*gorm.DB) error, opts ...*sql.Tx
 	}, opts...)
 	// SQL 执行错误已由 Trace 记录；这里记录事务开始或提交本身的失败。
 	if err != nil && operationErr == nil {
-		slog.Log(ctx, databaseErrorLevel(err), "state database transaction failed", "error", err)
+		slog.Log(ctx, databaseErrorLevel(err), fmt.Sprintf("State database transaction failed: %v", err), "error", err)
 	}
 	return err
 }
@@ -476,7 +476,7 @@ type stateLogger struct{ logger.Interface }
 
 func (stateLogger) Trace(ctx context.Context, _ time.Time, _ func() (string, int64), err error) {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.Log(ctx, databaseErrorLevel(err), "state database operation failed", "error", err)
+		slog.Log(ctx, databaseErrorLevel(err), fmt.Sprintf("State database operation failed: %v", err), "error", err)
 	}
 }
 

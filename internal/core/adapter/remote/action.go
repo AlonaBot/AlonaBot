@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
@@ -64,7 +65,7 @@ func (i *instance) Action(ctx context.Context, target *pb.Target, name string, v
 	response, callError := i.session.Call(ctx, wire.Request{Target: wire.ServiceAdapterAction, Payload: request})
 	// 3. 有效结果与安全错误同时保留，诊断只记录身份与动作名。
 	invalidResult := func() (string, *pb.ErrorInfo) {
-		slog.Error("adapter action result schema validation failed", "plugin_id", p.opt.PluginID, "instance_id", i.id, "action", name, "version", version)
+		slog.Error(fmt.Sprintf("Instance %s of component %s returned an invalid result for action %s at version %d", i.id, p.opt.PluginID, name, version), "plugin_id", p.opt.PluginID, "instance_id", i.id, "action", name, "version", version)
 		return "", &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "invalid adapter action result"}
 	}
 	var result string

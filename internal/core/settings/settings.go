@@ -184,7 +184,7 @@ func Load(dataDir string) (*File, error) {
 	document, err := parseDocument(content)
 	if err != nil {
 		if !json.Valid(content) {
-			slog.Log(context.Background(), logging.LevelCritical, "invalid settings JSON prevents startup", "file", name, "error", err)
+			slog.Log(context.Background(), logging.LevelCritical, fmt.Sprintf("Core startup stopped because settings file %s contains invalid JSON: %v", name, err), "file", name, "error", err)
 		}
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}

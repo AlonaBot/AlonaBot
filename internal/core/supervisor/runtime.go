@@ -2,7 +2,9 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,7 +50,28 @@ func (r *runtimeRecord) write(ctx context.Context, next state.RuntimeState, reas
 
 func logRuntimeChange(id string, previous, next state.RuntimeState, reason string) {
 	if previous != next {
-		slog.Info("plugin runtime state changed", "plugin_id", id, "previous_state", previous, "state", next, "reason", reason)
+		message := fmt.Sprintf("Component %s changed from %s to %s", id, previous, next)
+		level := slog.LevelDebug
+		if next == state.RuntimeSuspended {
+			level = slog.LevelInfo
+			message = fmt.Sprintf("Component %s entered sleep", id)
+		}
+		if next == state.RuntimeActive && (previous == state.RuntimeSuspended || previous == state.RuntimeWaking) {
+			level = slog.LevelInfo
+			message = fmt.Sprintf("Component %s is ready", id)
+		}
+		if next == state.RuntimeFailed {
+			level = slog.LevelError
+			message = fmt.Sprintf("Component %s failed", id)
+		}
+		if reason != "" {
+			description := reason
+			if stopReason, ok := strings.CutPrefix(reason, "STOP_REASON_"); ok {
+				description = strings.ToLower(strings.ReplaceAll(stopReason, "_", " "))
+			}
+			message += ": " + description
+		}
+		slog.Log(context.Background(), level, message, "plugin_id", id, "previous_state", previous, "state", next, "reason", reason)
 	}
 }
 

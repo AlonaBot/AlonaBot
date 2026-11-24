@@ -391,7 +391,7 @@ func prepare(ctx context.Context, store *state.Store, spec Spec) (prepared *Prep
 	}
 	sessionID = prep.SessionID
 	for _, correction := range prep.Corrections {
-		slog.Warn("configuration corrected", "plugin_id", spec.PluginID, "path", correction.Path, "reason", correction.Reason)
+		slog.Warn(fmt.Sprintf("Corrected configuration at %s for component %s: %s", correction.Path, spec.PluginID, correction.Reason), "plugin_id", spec.PluginID, "path", correction.Path, "reason", correction.Reason)
 	}
 	spec.Log.SetSession(prep.SessionID)
 	if snapshotRoutes && !bytes.Equal(prep.Register.GetConfigSchemaHash(), boot.GetConfigSchemaHash()) {
@@ -646,7 +646,7 @@ func (r *Running) detach() {
 // drainLogs 等待进程的日志管道读完，插件最后的输出才不会因 Core 随后退出而丢失。
 func drainLogs(proc *process.Process, deadline time.Time) {
 	if !proc.WaitLogsUntil(deadline) {
-		slog.Warn("plugin output was not fully read before the deadline", "plugin_id", proc.PluginID)
+		slog.Warn(fmt.Sprintf("Stopped reading output from component %s because its drain deadline elapsed", proc.PluginID), "plugin_id", proc.PluginID)
 	}
 }
 

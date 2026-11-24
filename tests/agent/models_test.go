@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,8 +27,6 @@ type modelAdmin struct {
 
 const modelAdminOrigin = "http://127.0.0.1"
 
-var modelListenerLog = regexp.MustCompile(`HTTP listener started listen=(127\.0\.0\.1:\d+)`)
-
 func startModelAdmin(t *testing.T, configuration map[string]any, plugins ...*sdk.Plugin) (*harness, modelAdmin) {
 	t.Helper()
 	h := startAgent(t, newLoop(false, 1024), configuration, map[string]any{"base_url": modelAdminOrigin}, plugins...)
@@ -44,9 +41,20 @@ func startModelAdmin(t *testing.T, configuration map[string]any, plugins ...*sdk
 		if err != nil {
 			t.Fatal(err)
 		}
-		if match := modelListenerLog.FindSubmatch(log); match != nil {
-			admin.address = string(match[1])
-			break
+		for _, line := range strings.Split(string(log), "\n") {
+			if line == "" {
+				continue
+			}
+			var record struct {
+				Attrs struct{ Listen string }
+			}
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatal(err)
+			}
+			if record.Attrs.Listen != "" {
+				admin.address = record.Attrs.Listen
+				break
+			}
 		}
 	}
 	if admin.address == "" {

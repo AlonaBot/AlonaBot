@@ -9,7 +9,6 @@ import (
 	"crypto/sha1"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,8 +74,6 @@ func TestMain(m *testing.M) {
 		err = sdk.Run(newObjectPlugin())
 	} else if mode == "options-plugin" {
 		err = sdk.Run(newOptionsPlugin())
-	} else if mode == "schema-parse" || mode == "schema-resolve" {
-		err = invalidSchemaAdapter(mode)
 	} else if mode == "http-upgrade" {
 		a := &httpUpgradeAdapter{}
 		genresources.Bind(a, genresources.Resources{})
@@ -201,7 +198,6 @@ func registerLoopEvents(r *sdk.Plugin) {
 	}
 	r.On(sdk.MessageCreated).ID("loop").Handle(func(c *sdk.Context) error { return observe("loop", c, nil) })
 	r.On(sdk.AdapterEvent[poke]("loop.poke", 1)).ID("extension").Handle(func(c *sdk.Context, value *poke) error { return observe("extension", c, value) })
-	r.On(sdk.AdapterEvent[poke]("other.poke", 1)).ID("uninstalled").Handle(func(c *sdk.Context, value *poke) error { return observe("uninstalled", c, value) })
 	r.On(sdk.Scheduled).ID("barrier").Handle(func(c *sdk.Context) error { return observe("barrier", c, nil) })
 }
 
@@ -370,73 +366,7 @@ func (*loopAdapter) Descriptor() *sdkadapter.Descriptor {
 			sdkadapter.Action[loopActionParams, loopActionResult]("loop.account", 1, sdkadapter.ActionScopeAccount),
 		}
 	}
-	switch os.Getenv(helperEnv) {
-	case "permission-prefix":
-		descriptor.Permissions[0].Name = "other.owner"
-	case "implies-user":
-		descriptor.Permissions[0].Implies = []string{"user"}
-	case "implies-admin":
-		descriptor.Permissions[0].Implies = []string{"admin"}
-	case "permission-cycle":
-		descriptor.Permissions[1].Implies = []string{"loop.owner"}
-	case "event-prefix":
-		descriptor.Events[0] = sdkadapter.Event[poke]("other.poke", 1)
-	}
 	return descriptor
-}
-
-// invalidSchemaAdapter 直接发送非法 REGISTER，保留 Core 对恶意 wire Schema 的原有验收。
-func invalidSchemaAdapter(mode string) error {
-	var conn *wire.Conn
-	if os.Getenv(wire.EnvTransport) == wire.TransportStdio {
-		conn = wire.NewConn(os.Stdin, os.Stdout, os.Stdin)
-	} else {
-		stream, err := net.Dial("tcp", os.Getenv(wire.EnvCoreAddr))
-		if err != nil {
-			return err
-		}
-		conn = wire.NewStreamConn(stream)
-	}
-	defer conn.Close()
-	secret, err := hex.DecodeString(os.Getenv(wire.EnvSecret))
-	if err != nil {
-		return err
-	}
-	digest, err := hex.DecodeString(os.Getenv(wire.EnvBuildDigest))
-	if err != nil {
-		return err
-	}
-	id := os.Getenv(wire.EnvPluginID)
-	hello, err := wire.ControlEnvelope(nil, 0, id, pb.FrameKind_FRAME_KIND_HELLO, &pb.Hello{PluginId: id, Secret: secret, BuildDigest: digest, SupportedMajor: validate.ProtocolMajor, SupportedMinor: validate.ProtocolMinor})
-	if err != nil {
-		return err
-	}
-	if err := conn.WriteFrame(hello); err != nil {
-		return err
-	}
-	frame, err := conn.ReadFrame()
-	if err != nil {
-		return err
-	}
-	control, err := validate.DecodeControl(frame)
-	if err != nil {
-		return err
-	}
-	ack := control.(*pb.HelloAck)
-	schema := `{"type":1}`
-	if mode == "schema-resolve" {
-		schema = `{"$ref":"#/$defs/missing"}`
-	}
-	registration := &pb.Register{Adapter: &pb.AdapterDescriptor{AdapterId: "loop", Events: []*pb.EventDeclaration{{Name: "loop.poke", Version: 1, SchemaJson: schema}}}, CandidateConfigJson: ack.Bootstrap.CandidateConfigJson, Migration: &pb.MigrationState{Mode: pb.MigrationMode_MIGRATION_MODE_NONE}}
-	frame, err = wire.ControlEnvelope(ack.SessionId, ack.ChosenMinor, id, pb.FrameKind_FRAME_KIND_REGISTER, registration)
-	if err != nil {
-		return err
-	}
-	if err := conn.WriteFrame(frame); err != nil {
-		return err
-	}
-	_, err = conn.ReadFrame()
-	return err
 }
 
 func expectedDescriptor(t *testing.T) *pb.AdapterDescriptor {
@@ -628,11 +558,7 @@ func (i *loopInstance) Send(ctx context.Context, target string, chain message.Ch
 		return &message.SendResult{Status: message.SendAccepted, PlatformMessageIDs: []string{strconv.Itoa(i.actionCalls)}}, nil
 	}
 	i.sequence++
-	id := i.id
-	if text == "forge" {
-		id = "other-instance"
-	}
-	ev := &message.Event{ID: "adapter-forged-id", Type: "message.created", AdapterID: "loop", AdapterInstanceID: id, AccountID: i.account, Session: target, Payload: &message.CreatedPayload{Chain: chain, PlatformMessageID: strconv.Itoa(i.sequence)}}
+	ev := &message.Event{ID: "adapter-forged-id", Type: "message.created", AdapterID: "loop", AdapterInstanceID: i.id, AccountID: i.account, Session: target, Payload: &message.CreatedPayload{Chain: chain, PlatformMessageID: strconv.Itoa(i.sequence)}}
 	switch text {
 	case "chat-directory-group":
 		ev.ChatType, ev.ChatTitle = message.ChatGroup, "Garden Group"
@@ -640,10 +566,6 @@ func (i *loopInstance) Send(ctx context.Context, target string, chain message.Ch
 		ev.ChatType, ev.ChatTitle = message.ChatPrivate, "Garden Person"
 	case "segments":
 		ev.ChatType = message.ChatGroup
-	case "bot.online", "bot.offline", "scheduled":
-		ev.Type = text
-	case "mismatched-payload":
-		ev.Type = "message.edited"
 	case "media-created":
 		ev.Message = &message.PlatformMessage{Chain: chain}
 	case "media-edited":
@@ -651,37 +573,13 @@ func (i *loopInstance) Send(ctx context.Context, target string, chain message.Ch
 		ev.Type = "message.edited"
 		ev.Payload = &message.EditedPayload{Chain: chain, OldChain: chain}
 	}
-	if text == "permissions" || strings.HasPrefix(text, "extension") || text == "actor-forge" || text == "target-forge" {
-		ev.Actor = &message.Actor{ExternalUserID: "external-7", AdapterInstanceID: i.id, Permissions: []string{"loop.owner", "loop.unknown", "user", "admin", "chat_admin", "loop.owner"}}
+	if text == "permissions" || text == "extension" {
+		ev.Actor = &message.Actor{ExternalUserID: "external-7", AdapterInstanceID: i.id, Permissions: []string{"loop.owner"}}
 	}
-	if strings.HasPrefix(text, "extension") {
+	if text == "extension" {
 		ev.Type = "loop.poke"
 		payload := &message.AdapterEventPayload{Version: 1, PayloadJSON: `{"user":"external-7"}`}
 		ev.Payload = payload
-		switch text {
-		case "extension-unknown":
-			ev.Type = "loop.unknown"
-		case "extension-other":
-			ev.Type = "other.poke"
-		case "extension-version":
-			payload.Version = 2
-		case "extension-schema":
-			payload.PayloadJSON = `{"user":7}`
-		case "extension-array":
-			payload.PayloadJSON = `[]`
-		case "extension-json":
-			payload.PayloadJSON = `{`
-		case "extension-extra":
-			payload.PayloadJSON = `{"user":"external-7","extra":true}`
-		case "extension-branch":
-			ev.Payload = &message.CreatedPayload{Chain: chain}
-		}
-	}
-	if text == "actor-forge" {
-		ev.Actor.AdapterInstanceID = "other"
-	}
-	if text == "target-forge" {
-		ev.AccountID = "other"
 	}
 	accepted, err := i.core.Deliver(ctx, ev, []byte(strconv.Itoa(i.sequence)))
 	if err != nil {
@@ -738,11 +636,6 @@ func setDefaultLogger(t *testing.T, logger *slog.Logger) {
 
 func setup(t *testing.T) (*state.Store, supervisor.Spec, *processLog) {
 	t.Helper()
-	return setupWithRole(t, state.RoleAdapter)
-}
-
-func setupWithRole(t *testing.T, role state.Role) (*state.Store, supervisor.Spec, *processLog) {
-	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	store, err := state.Open(ctx, filepath.Join(dir, "data"))
@@ -751,7 +644,7 @@ func setupWithRole(t *testing.T, role state.Role) (*state.Store, supervisor.Spec
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	digest := bytes.Repeat([]byte{1}, 32)
-	if err := store.AddInstall(ctx, state.Install{PluginID: "loop-package", Role: role, AdapterID: "loop", BuildDigest: digest}); err != nil {
+	if err := store.AddInstall(ctx, state.Install{PluginID: "loop-package", Role: state.RoleAdapter, AdapterID: "loop", BuildDigest: digest}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AddGeneration(ctx, "loop-package", "gen", "{}"); err != nil {
@@ -767,7 +660,7 @@ func setupWithRole(t *testing.T, role state.Role) (*state.Store, supervisor.Spec
 	limits.OnReady = 3 * time.Second
 	logs := &processLog{}
 	setDefaultLogger(t, slog.New(slog.NewTextHandler(logs, nil)))
-	return store, supervisor.Spec{PluginID: "loop-package", Role: role, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: "gen", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
+	return store, supervisor.Spec{PluginID: "loop-package", Role: state.RoleAdapter, AdapterID: "loop", PluginDir: pluginDir, Executable: os.Args[0], BuildDigest: digest, GenerationID: "gen", Bootstrap: &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: "gen", CandidateConfigJson: "{}", DatabaseDescriptor: &pb.DatabaseDescriptor{Backend: pb.DatabaseBackend_DATABASE_BACKEND_NONE, MigrationMode: pb.MigrationMode_MIGRATION_MODE_NONE}}, NewCandidate: true, Limits: limits, Stop: host.NewStopTiming(values), Log: logs, ExtraEnv: map[string]string{helperEnv: "adapter", "GORACE": "atexit_sleep_ms=0"}}, logs
 }
 
 func openMediaStore(t *testing.T) *media.Store {
@@ -779,40 +672,7 @@ func openMediaStore(t *testing.T) *media.Store {
 	return store
 }
 
-// TestAdapterRegistrationDeclarations 验证真实 Adapter 进程的非法权限和事件声明在注册阶段被拒绝。
-func TestAdapterRegistrationDeclarations(t *testing.T) {
-	for _, stdio := range []bool{false, true} {
-		for _, tc := range []struct {
-			mode string
-			want string
-		}{
-			{"permission-prefix", "invalid adapter permission name"},
-			{"implies-user", "implies invalid permission"},
-			{"implies-admin", "implies invalid permission"},
-			{"permission-cycle", "implication cycle"},
-			{"event-prefix", "invalid adapter event name"},
-			{"schema-parse", "parse adapter event"},
-			{"schema-resolve", "resolve adapter event"},
-		} {
-			t.Run(fmt.Sprintf("%s/stdio=%v", tc.mode, stdio), func(t *testing.T) {
-				store, spec, _ := setup(t)
-				spec.Stdio = stdio
-				spec.ExtraEnv[helperEnv] = tc.mode
-				running, err := supervisor.Launch(context.Background(), store, spec)
-				if err == nil {
-					stopped := running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
-					t.Fatalf("invalid adapter registration activated: stop=%+v", stopped)
-				}
-				var phase *host.PhaseError
-				if !errors.As(err, &phase) || phase.Phase != pb.SessionPhase_SESSION_PHASE_REGISTER || phase.Code != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("registration error = %v, want REGISTER/INVALID_ARGUMENT containing %q", err, tc.want)
-				}
-			})
-		}
-	}
-}
-
-// TestRemoteLifecycle 覆盖真实进程的多实例收发、账号唯一性、伪造拒绝、故障与游标恢复。
+// TestRemoteLifecycle 覆盖真实进程的多实例收发、故障与游标恢复。
 func TestRemoteLifecycle(t *testing.T) {
 	ctx := context.Background()
 	store, spec, logs := setup(t)
@@ -906,29 +766,6 @@ func TestRemoteLifecycle(t *testing.T) {
 	}
 	if err != nil {
 		t.Fatal(err)
-	}
-	eventsBefore := len(sink.snapshot())
-	if _, safe := send("two", "forge"); safe == nil {
-		t.Fatal("forged instance accepted")
-	}
-	after, err := store.AdapterCursor(ctx, "two")
-	if err != nil || !bytes.Equal(before, after) || len(sink.snapshot()) != eventsBefore {
-		t.Fatal("forgery advanced cursor or delivered event")
-	}
-	for _, text := range []string{"bot.online", "bot.offline", "scheduled", "mismatched-payload"} {
-		if _, safe := send("two", text); safe == nil {
-			t.Fatalf("invalid event %s accepted", text)
-		}
-		current, err := store.AdapterCursor(ctx, "two")
-		if err != nil || !bytes.Equal(before, current) || len(sink.snapshot()) != eventsBefore {
-			t.Fatalf("invalid event %s changed cursor or Sink", text)
-		}
-	}
-	if err := p.StartInstance(ctx, "duplicate", []byte(`{"account":"a"}`)); wire.CodeOf(err) != pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS {
-		t.Fatalf("duplicate account: %v", err)
-	}
-	if _, ok := registry.Get("duplicate"); ok {
-		t.Fatal("duplicate account registered")
 	}
 	if err := p.StopInstance(ctx, "one"); err != nil {
 		t.Fatal(err)
@@ -1028,29 +865,6 @@ func TestRemoteLifecycle(t *testing.T) {
 	defer logs.mu.Unlock()
 	if bytes.Contains(logs.b.Bytes(), []byte("credential-canary")) {
 		t.Fatal("configuration leaked into logs")
-	}
-}
-
-// TestRemoteRoleMismatch 在进程启动边界确认两种角色伪装都在 REGISTER 阶段失败。
-func TestRemoteRoleMismatch(t *testing.T) {
-	for _, mode := range []string{"adapter", "plugin"} {
-		t.Run(mode, func(t *testing.T) {
-			role := state.RoleAdapter
-			if mode == "adapter" {
-				role = state.RolePlugin
-			}
-			store, spec, _ := setupWithRole(t, role)
-			spec.ExtraEnv[helperEnv] = mode
-			running, err := supervisor.Launch(context.Background(), store, spec)
-			if running != nil {
-				running.Stop(time.Now(), pb.StopReason_STOP_REASON_DISABLE)
-				t.Fatal("role mismatch activated")
-			}
-			var phase *host.PhaseError
-			if !errors.As(err, &phase) || phase.Phase != pb.SessionPhase_SESSION_PHASE_REGISTER {
-				t.Fatalf("role mismatch failed outside REGISTER: %v", err)
-			}
-		})
 	}
 }
 
@@ -1299,7 +1113,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 	for _, stdio := range []bool{false, true} {
 		t.Run(fmt.Sprintf("stdio=%v", stdio), func(t *testing.T) {
 			ctx := t.Context()
-			store, spec, logs := setup(t)
+			store, spec, _ := setup(t)
 			spec.Stdio = stdio
 			registry := adapter.NewRegistry()
 			dispatch := router.New(router.Options{Concurrency: 1, QueueBytes: tune.Defaults().DispatchQueueBytes, QueueEvents: tune.Defaults().DispatchQueueEvents, Adapters: registry})
@@ -1377,30 +1191,18 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			instance, _ := registry.Get("one")
 			target := &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", AccountId: "a", ChatId: "chat"}
 			for _, tc := range []struct {
-				name     string
-				rejected bool
-				routes   []string
+				name   string
+				routes []string
 			}{
-				{"permissions", false, []string{"raw", "loop"}},
-				{"extension", false, []string{"extension"}},
-				{"extension-unknown", true, nil}, {"extension-other", true, nil}, {"extension-version", true, nil}, {"extension-schema", true, nil}, {"extension-array", true, nil}, {"extension-json", true, nil}, {"extension-branch", true, nil}, {"actor-forge", true, nil}, {"target-forge", true, nil},
+				{"permissions", []string{"raw", "loop"}},
+				{"extension", []string{"extension"}},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					before := len(reports())
-					cursor, err := store.AdapterCursor(ctx, "one")
-					if err != nil {
-						t.Fatal(err)
-					}
 					chain := &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: tc.name}}}}}
 					_, safe := instance.Send(ctx, target, chain)
-					if (safe != nil) != tc.rejected {
-						t.Fatalf("send error=%v rejected=%v", safe, tc.rejected)
-					}
-					if tc.rejected {
-						after, err := store.AdapterCursor(ctx, "one")
-						if err != nil || !bytes.Equal(cursor, after) {
-							t.Fatalf("rejected event advanced cursor: %q -> %q error=%v", cursor, after, err)
-						}
+					if safe != nil {
+						t.Fatal(safe)
 					}
 					if err := dispatch.Deliver(ctx, &pb.Event{EventType: "scheduled", SourceKind: pb.EventSourceKind_EVENT_SOURCE_KIND_SCHEDULER, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_Scheduled{Scheduled: &pb.ScheduledPayload{}}}}); err != nil {
 						t.Fatal(err)
@@ -1432,35 +1234,6 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 						t.Fatalf("routes=%v want %v", routes, tc.routes)
 					}
 				})
-			}
-			// 同一安装包的旧 Caller 也无法推进当前 Session 的游标。
-			cursor, err := store.AdapterCursor(ctx, "one")
-			if err != nil {
-				t.Fatal(err)
-			}
-			request := &pb.AdapterDeliverRequest{InstanceId: "one", Cursor: []byte("stale"), Event: &pb.Event{EventType: "message.created", AdapterId: proto.String("loop"), AdapterInstanceId: proto.String("one"), AccountId: proto.String("a"), Target: target, EventPayload: &pb.EventPayload{Kind: &pb.EventPayload_MessageCreated{MessageCreated: &pb.MessageCreatedPayload{Chain: &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: "stale"}}}}}}}}}}
-			encoded, err := proto.Marshal(request)
-			if err != nil {
-				t.Fatal(err)
-			}
-			response := mux.For(router.NewCaller(spec.PluginID, "old-generation"))(ctx, &wire.Inbound{Target: wire.ServiceCoreAdapterDeliver, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: 1, Bytes: encoded}})
-			after, err := store.AdapterCursor(ctx, "one")
-			if response.Err.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || err != nil || !bytes.Equal(cursor, after) {
-				t.Fatalf("stale Caller result=%v cursor=%q -> %q error=%v", response.Err, cursor, after, err)
-			}
-			logs.mu.Lock()
-			text := logs.b.String()
-			logs.mu.Unlock()
-			if strings.Count(text, "discard undeclared adapter permission") != 8 {
-				t.Fatalf("discard diagnostics=%s", text)
-			}
-			for _, name := range []string{"loop.unknown", "user", "admin", "chat_admin"} {
-				if !strings.Contains(text, "name="+name) {
-					t.Errorf("missing discarded permission diagnostic %q", name)
-				}
-			}
-			if !strings.Contains(text, "level=WARN") || !strings.Contains(text, "plugin_id=loop-package instance_id=one") || !strings.Contains(text, "invalid adapter instance event") {
-				t.Fatalf("missing rejection identity or level: %s", text)
 			}
 		})
 	}

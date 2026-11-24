@@ -259,7 +259,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	request := &pb.ServiceInvocation{RouteId: service.GetRouteId(), Context: trusted, Encoding: payload.Encoding, SchemaId: payload.SchemaID, SchemaVersion: payload.SchemaVersion, Payload: payload.Bytes}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
-		slog.Error("encode service invocation failed", "plugin_id", pluginID, "service_name", name, "error", err)
+		slog.Error(fmt.Sprintf("Failed to encode the invocation of service %s for component %s: %v", name, pluginID, err), "plugin_id", pluginID, "service_name", name, "error", err)
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "encode service invocation failed")
 	}
 	// 4. wire.Session 为本跳分配 call_id，并将它与此附件绑定；不回填源请求编号。
@@ -312,7 +312,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 			b.metrics.Add(pluginID, "service", "dropped_budget")
 		}
 		if code == pb.ErrorCode_ERROR_CODE_INTERNAL {
-			slog.Error("service call failed", "plugin_id", pluginID, "service_name", name, "trace_id", fmt.Sprintf("%x", trace), "error", err, "remote_error", message)
+			slog.Error(fmt.Sprintf("Service %s of component %s failed: %s", name, pluginID, message), "plugin_id", pluginID, "service_name", name, "trace_id", fmt.Sprintf("%x", trace), "error", err, "remote_error", message)
 			message = "service call failed"
 		}
 		// 重新构造公开错误，避免透传远端未知字段；业务载荷仍随错误保留。
@@ -321,7 +321,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	}
 	out := response.Payload
 	if out.Encoding != spec.GetEncoding() || out.SchemaID != service.GetOutputSchemaId() || out.SchemaVersion != service.GetOutputSchemaVersion() || out.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_JSON && !validJSON(out.Bytes) {
-		slog.Warn("service output does not match registered encoding or schema", "plugin_id", pluginID, "service_name", name)
+		slog.Warn(fmt.Sprintf("Service %s of component %s returned output that does not match its registered encoding or schema", name, pluginID), "plugin_id", pluginID, "service_name", name)
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "service output does not match registered encoding or schema")
 	}
 	return response

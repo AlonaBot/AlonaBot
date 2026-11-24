@@ -71,7 +71,7 @@ func (a *Auth) bootstrapConnection(r *http.Request) bool {
 		}
 		gateway, err := containerGateway()
 		if err != nil {
-			slog.Warn("read container default gateway failed", "error", err)
+			slog.Warn(fmt.Sprintf("Failed to read the container default gateway: %v", err), "error", err)
 			return false
 		}
 		if remote != gateway {
@@ -144,7 +144,7 @@ func (a *Auth) bootstrap(w http.ResponseWriter, r *http.Request) {
 		Token     string `json:"token"`
 		CSRFToken string `json:"csrf_token"`
 	}{token, session.CSRFToken}); err != nil {
-		slog.Error("write bootstrap response", "err", err)
+		slog.Error(fmt.Sprintf("Failed to write the bootstrap response: %v", err), "err", err)
 	}
 }
 
@@ -167,7 +167,7 @@ func (a *Auth) confirmBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.confirmGeneration(session.AuthGeneration); err != nil {
-		slog.Error("confirm admin token failed", "err", err)
+		slog.Error(fmt.Sprintf("Failed to confirm the admin token: %v", err), "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -239,7 +239,7 @@ func fieldContainsSecret(field configField) bool {
 
 func logCorrections(records []configschema.Correction) {
 	for _, record := range records {
-		slog.Warn("configuration corrected", "path", record.Path, "reason", record.Reason)
+		slog.Warn(fmt.Sprintf("Corrected Core configuration at %s: %s", record.Path, record.Reason), "path", record.Path, "reason", record.Reason)
 	}
 }
 

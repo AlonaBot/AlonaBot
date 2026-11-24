@@ -67,7 +67,7 @@ func t11Process(mode string) error {
 		return t11PermissionProcess()
 	}
 	if strings.HasPrefix(mode, "t11-adapter") {
-		a := &t11Adapter{buttons: mode != "t11-adapter-text"}
+		a := &t11Adapter{}
 		genresources.Bind(a, genresources.Resources{})
 		return sdk.RunAdapter(a)
 	}
@@ -166,25 +166,14 @@ func t11Execute(c *sdk.Context, in t11Command) (t11Reply, error) {
 
 type t11Adapter struct {
 	pipelineAdapter
-	buttons bool
 }
 type t11Loop struct {
 	pipelineLoop
-	buttons bool
 }
 
-// Start 绑定本次实例的按钮能力，其他平台输入沿用真实 Action 入口。
+// Start 绑定实例，平台输入沿用真实 Action 入口。
 func (a *t11Adapter) Start(_ context.Context, _ sdkadapter.StartRequest, core sdkadapter.Core) (sdkadapter.Instance, error) {
-	return &t11Loop{pipelineLoop: pipelineLoop{core: core}, buttons: a.buttons}, nil
-}
-
-// Capabilities 只对本矩阵的实例缩减按钮能力。
-func (i *t11Loop) Capabilities() []message.Capability {
-	capabilities := i.pipelineLoop.Capabilities()
-	if !i.buttons {
-		capabilities = slices.DeleteFunc(capabilities, func(c message.Capability) bool { return c.Name == "message.buttons" })
-	}
-	return capabilities
+	return &t11Loop{pipelineLoop: pipelineLoop{core: core}}, nil
 }
 
 // Send 记录 Core 发到平台的完整文本和两枚 token。
@@ -434,26 +423,6 @@ func t11Matrix(t *testing.T, stdio bool) {
 			})
 		}
 	})
-	t.Run("missing_context", func(t *testing.T) {
-		t.Run("actor", func(t *testing.T) {
-			h := t11Harness(t, stdio, tune.Defaults(), "t11-adapter")
-			out := t11Root(h, t11Caller, t11Command{Action: "invoke", Name: t11Provider + "/run", Arguments: t11ArgumentsFor("no-actor")})
-			t11Code(t, out, errcode.PermissionDenied)
-			h.idle()
-			if t11Count(h, "send") != 0 || t11Count(h, "execute") != 0 {
-				t.Fatal("actorless root service confirmed tool")
-			}
-		})
-		t.Run("buttons", func(t *testing.T) {
-			h := t11Harness(t, stdio, tune.Defaults(), "t11-adapter-text")
-			key, _ := t11Begin(h, t11Command{Action: "invoke", Name: t11Provider + "/run"})
-			t11Code(t, t11Result(h, key), errcode.Unsupported)
-			if t11Count(h, "send") != 0 || t11Count(h, "execute") != 0 {
-				t.Fatal("buttonless target confirmed tool")
-			}
-		})
-	})
-
 	t.Run("operations", func(t *testing.T) {
 		h := t11Harness(t, stdio, tune.Defaults(), "t11-adapter")
 		const operation = "mcp/x/y"

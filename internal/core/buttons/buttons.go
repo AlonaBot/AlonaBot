@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -109,7 +110,7 @@ func (s *Service) InterceptConfirm(ctx context.Context, ev *pb.Event) bool {
 		return false // 交回原解析路径处理未知 token 或存储错误。
 	}
 	if _, _, err := s.Resolve(ctx, ev); err != nil {
-		slog.Info("discard invalid confirmation click", "error", err)
+		slog.Info(fmt.Sprintf("Discarded an invalid confirmation click: %v", err), "error", err)
 	}
 	return true
 }

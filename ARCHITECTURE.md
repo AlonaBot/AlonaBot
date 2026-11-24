@@ -100,6 +100,7 @@ Adapter 账号配置页面以 `RouteDescriptor.page_purpose = "instance_config"`
 | `internal/core/idle -> internal/core/settings`、`-> internal/core/supervisor`、`-> internal/core/state`、`-> contracts/manifest`、`-> contracts/pb/alonabotv1`、`-> internal/tune`；`internal/app -> internal/core/idle` | 只读策略准入、活动与运行状态快照、调优值；Core 装配控制器并持有生命周期所有权 |
 | `internal/core/buttons -> internal/core/state`、`internal/core/buttons -> internal/core/router` | 持久化按钮 token，复用可信 Caller；message 与 router 通过函数注入接入 buttons |
 | `internal/core/state`、`internal/core/settings`、`internal/core/journal -> internal/core/logging` | 共用 Core 的 CRITICAL 级别记录状态库、设置与提交后故障；SDK 独立定义 `sdk.LevelCritical`，两侧共用协议的 `LogLevel` |
+| `internal/core/diagnostics -> internal/core/logging` | 读取结构化日志记录，按完整时间、组件身份与级别筛选诊断及最近错误 |
 | `internal/core/manage -> internal/core/scheduler` | 列出保留计划中的静态任务（含正常休眠），暂停与恢复复用调度器的持久状态及当前 Activated Session 准入 |
 | `internal/app -> internal/core/adapter/remote` | 装配 Adapter 实例运行状态查询，登记配置失败并在实例配置变更时清除旧快照 |
 | `internal/core/broker -> internal/core/metrics`、`internal/core/bus -> internal/core/metrics`、`internal/core/router -> internal/core/metrics`、`internal/app -> internal/core/metrics` | Service、Bus 与事件派发按原因计数（只在内存中，管理面在 T-09.14 读取） |

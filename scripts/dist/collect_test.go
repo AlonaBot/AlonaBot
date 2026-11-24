@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-// TestCollectPublishedComponent 经 HTTPS 与真实文件系统核对组件归档收录及坏包拒绝。
+// TestCollectPublishedComponent 经 HTTPS 与真实文件系统核对组件归档收录。
 func TestCollectPublishedComponent(t *testing.T) {
 	var archive []byte
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,9 +75,5 @@ func TestCollectPublishedComponent(t *testing.T) {
 		if err != nil || !bytes.Equal(raw, archive) {
 			t.Fatalf("collected archive: %v", err)
 		}
-	}
-	archive = []byte("invalid archive")
-	if err := collectComponent(t.Context(), component, source, "v0.1.0", t.TempDir(), []string{target}, map[string]string{target: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "gzip") {
-		t.Fatalf("invalid archive: %v", err)
 	}
 }

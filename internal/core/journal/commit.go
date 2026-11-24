@@ -21,7 +21,7 @@ func (o *Orchestrator) Commit(ctx context.Context, r *Result) (*supervisor.Runni
 	if err == nil {
 		if syncErr := o.opt.Config.SyncSnapshot(context.WithoutCancel(ctx), r.record.PluginID, r.record.ExpectedOld, r.snapshotInput); syncErr != nil {
 			err = fmt.Errorf("generation committed; sync config snapshot: %w", syncErr)
-			slog.Error("config snapshot synchronization failed", "plugin_id", r.record.PluginID, "generation_id", r.Generation, "error", err)
+			slog.Error(fmt.Sprintf("Failed to synchronize the configuration snapshot for generation %s of component %s: %v", r.Generation, r.record.PluginID, err), "plugin_id", r.record.PluginID, "generation_id", r.Generation, "error", err)
 		}
 	}
 	// Abort 自己取得同一插件的编排锁，先归还本次提交锁。
@@ -30,7 +30,7 @@ func (o *Orchestrator) Commit(ctx context.Context, r *Result) (*supervisor.Runni
 		return nil, o.Abort(ctx, r, err)
 	}
 	if activationErr != nil {
-		slog.Log(ctx, logging.LevelCritical, "committed candidate activation failed", "plugin_id", r.record.PluginID, "op_id", r.OpID, "generation_id", r.Generation, "kind", r.record.Kind, "phase", phaseCommitted, "error", err)
+		slog.Log(ctx, logging.LevelCritical, fmt.Sprintf("Failed to activate committed generation %s for component %s during operation %s: %v", r.Generation, r.record.PluginID, r.OpID, err), "plugin_id", r.record.PluginID, "op_id", r.OpID, "generation_id", r.Generation, "kind", r.record.Kind, "phase", phaseCommitted, "error", err)
 	}
 	return running, err
 }

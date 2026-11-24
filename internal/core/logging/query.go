@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,8 +19,8 @@ var historyHeader = regexp.MustCompile(`^\[([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}
 var historyMultilineField = regexp.MustCompile(` [^\s=]+=\n`)
 var historyField = regexp.MustCompile(`(?:^| )([^\s=]+)=`)
 
-// Query 按 Core 本地日期、显示来源、最低级别及文件中的 trace 前缀读取普通日志文件。
-// Message 保留来源标签之后的原文；文件中省略的身份与精度不会被补造。
+// Query 按 Core 本地日期、来源、最低级别及 trace 前缀读取 JSON 或旧版文本日志。
+// 旧版 Message 保留来源标签之后的原文；文件中省略的身份与精度不会被补造。
 func Query(dir string, date time.Time, source string, level slog.Level, traceID string) ([]Record, error) {
 	writer := &fileWriter{opt: FileOptions{Dir: dir}}
 	files, err := writer.list()
@@ -45,8 +46,11 @@ func Query(dir string, date time.Time, source string, level slog.Level, traceID 
 			return nil, fmt.Errorf("read %s: %w", name, err)
 		}
 		for _, record := range rows {
-			trace := traceID[:min(len(traceID), traceDigits)]
-			if (source == "" || source == record.Source) && record.Level >= level && (trace == "" || trace == record.TraceID) {
+			trace := traceID
+			if len(record.TraceID) == traceDigits {
+				trace = traceID[:min(len(traceID), traceDigits)]
+			}
+			if (source == "" || source == record.Source) && record.Level >= level && (trace == "" || strings.HasPrefix(record.TraceID, trace)) {
 				records = append(records, record)
 			}
 		}
@@ -99,6 +103,19 @@ func readHistory(reader io.Reader, date time.Time) ([]Record, error) {
 }
 
 func parseHistory(raw string, date time.Time) (Record, error) {
+	if strings.HasPrefix(raw, "{") {
+		var record Record
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&record); err != nil {
+			return Record{}, fmt.Errorf("decode structured log record: %w", err)
+		}
+		var extra any
+		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+			return Record{}, fmt.Errorf("unexpected content after structured log record")
+		}
+		return record, nil
+	}
 	first, _, _ := strings.Cut(raw, "\n")
 	m := historyHeader.FindStringSubmatch(first)
 	if m == nil {

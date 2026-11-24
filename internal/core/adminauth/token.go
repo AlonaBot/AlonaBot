@@ -35,7 +35,7 @@ func InitToken(ctx context.Context, st *state.Store, dataDir string) (string, er
 func FirstToken(ctx context.Context, st *state.Store, dataDir string) error {
 	if _, err := st.AdminCredential(ctx); err == nil {
 		if _, err := os.Stat(filepath.Join(dataDir, FirstTokenFile)); errors.Is(err, os.ErrNotExist) {
-			slog.Warn("admin token file is missing; run admin-token reset explicitly", "data_dir", dataDir)
+			slog.Warn(fmt.Sprintf("The admin token file is missing in %s; run admin-token reset explicitly", dataDir), "data_dir", dataDir)
 		} else if err != nil {
 			return err
 		}

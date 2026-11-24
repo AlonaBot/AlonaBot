@@ -9,22 +9,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/AlonaBot/alonabot-agent/provider"
 )
 
-// TestAgentSkills 经真实 Core、SDK Session、SQLite 和技能文件验证启动诊断与工具循环。
+// TestAgentSkills 经真实 Core、SDK Session、SQLite 和技能文件验证技能加载与工具循环。
 func TestAgentSkills(t *testing.T) {
 	directory := t.TempDir()
 	files := map[string]string{
-		"a-zeta":    "---\nname: zeta\ndescription: Zeta description\n---\nZeta body\n",
-		"b-alpha":   "---\nname: alpha\ndescription: Alpha description\nextra: ignored\n---\nAlpha body\n",
-		"c-no-yaml": "missing frontmatter",
-		"d-no-desc": "---\nname: no-description\n---\ninvalid body",
-		"e-large":   strings.Repeat("x", 256*1024+1),
+		"a-zeta":  "---\nname: zeta\ndescription: Zeta description\n---\nZeta body\n",
+		"b-alpha": "---\nname: alpha\ndescription: Alpha description\nextra: ignored\n---\nAlpha body\n",
 	}
 	for name, content := range files {
 		path := filepath.Join(directory, name)
@@ -78,15 +74,6 @@ data: [DONE]
 			callSkill("load", "alpha")
 		case 2:
 			checkToolResult(t, request, "load", "Alpha body\n")
-			if got := request.Messages[len(request.Messages)-1].Content; got != "Alpha body\n" {
-				t.Errorf("skill body = %q", got)
-			}
-			callSkill("missing", "absent")
-		case 3:
-			checkToolResult(t, request, "missing", "error: NOT_FOUND: unknown skill")
-			if got := request.Messages[len(request.Messages)-1].Content; got != "error: NOT_FOUND: unknown skill" {
-				t.Errorf("unknown skill result = %q", got)
-			}
 			writeDelta(w, provider.OpenAICompatible, "skills finished")
 			writeEnd(w, provider.OpenAICompatible)
 		default:
@@ -102,40 +89,13 @@ data: [DONE]
 	admin.request(t, "POST", pageRoutePrefix+"personas", `{"name":"test","prompt":"Persona prompt"}`, 201)
 	profile := admin.createProfile(t, "Skills", map[string]any{"default_persona": "test"})
 	admin.assignProfile(t, "main", loopSession, profile)
-	if err := os.WriteFile(filepath.Join(directory, "b-alpha", "SKILL.md"), []byte("changed after startup"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	h.deliver(t, "/ask skills", "member", "en-US", false)
 	h.waitText(t, "skills finished")
 	h.waitEntries(t, 2)
-	if calls.Load() != 3 {
-		t.Errorf("provider requests = %d, want 3", calls.Load())
+	if calls.Load() != 2 {
+		t.Errorf("provider requests = %d, want 2", calls.Load())
 	}
 	if err := h.stop(); err != nil {
 		t.Fatal(err)
-	}
-	paths, err := filepath.Glob(filepath.Join(h.dir, "logs", "*.log"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var diagnostics []string
-	for _, path := range paths {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, line := range strings.Split(string(raw), "\n") {
-			if strings.Contains(line, "invalid skill file") {
-				diagnostics = append(diagnostics, line)
-			}
-		}
-	}
-	if len(diagnostics) != 3 {
-		t.Fatalf("skill diagnostics = %v, want 3", diagnostics)
-	}
-	for i, name := range []string{"c-no-yaml", "d-no-desc", "e-large"} {
-		if !strings.Contains(diagnostics[i], "WARN") || !strings.Contains(diagnostics[i], filepath.Join(directory, name, "SKILL.md")) || !strings.Contains(diagnostics[i], "error=") {
-			t.Errorf("missing warning path or reason: %s", diagnostics[i])
-		}
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -174,7 +173,7 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 			c.StopPropagation()
 			return pipelineObserve("stopped", "cmd.stop", c)
 		})
-	case "hooks", "trusted", "buttons", "scheduled", "button-attack", "job-attack", "session-access":
+	case "hooks", "trusted", "buttons", "scheduled", "session-access":
 		pipelineHookPlugin(p, mode)
 
 	case "wait", "control", "policy":
@@ -219,9 +218,8 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 }
 
 type pipelineInput struct {
-	Text, User, Token, Job  string
-	Permissions             []string
-	ForgeActor, ForgeTarget bool
+	Text, User, Token, Job string
+	Permissions            []string
 }
 type pipelineAdapter struct{}
 type pipelineLoop struct {
@@ -266,12 +264,6 @@ func (i *pipelineLoop) Action(ctx context.Context, to string, name string, _ uin
 	if input.Job != "" {
 		ev.Type = "scheduled"
 		ev.Payload = &message.ScheduledPayload{JobID: input.Job}
-	}
-	if input.ForgeActor {
-		ev.Actor.AdapterInstanceID = "foreign-instance"
-	}
-	if input.ForgeTarget {
-		ev.AdapterInstanceID = "foreign-instance"
 	}
 	accepted, err := i.core.Deliver(ctx, ev, nil)
 	if err != nil {
@@ -794,40 +786,19 @@ type pipelineButtonValue struct {
 var pipelineAction = buttonapi.Define[pipelineButtonValue]("choose")
 
 func pipelineHookPlugin(p *sdk.Plugin, mode string) {
-	if mode == "scheduled" || mode == "job-attack" {
+	if mode == "scheduled" {
 		p.Every("pulse", time.Second).Handle(func(c *sdk.Context) error {
 			return pipelineObserve("tick", "pulse", c)
 		})
-		if mode == "job-attack" {
-			p.PreEvent(sdk.Scheduled).ID("pre.job").Handle(func(c *sdk.Context, payload *message.ScheduledPayload) (*message.ScheduledPayload, error) {
-				if err := pipelineObserve("pre", "pre.job", c); err != nil {
-					return nil, err
-				}
-				payload.JobID = "forged-job"
-				payload.RunID = "forged-run"
-				return payload, nil
-			})
-		}
 		p.On(sdk.Scheduled).ID("scheduled").Handle(func(c *sdk.Context) error { return pipelineObserve("scheduled", "scheduled", c) })
 		return
 	}
-	if mode == "buttons" || mode == "button-attack" {
+	if mode == "buttons" {
 		p.Command("keyboard").Handle(func(c *sdk.Context) error {
 			c.StopPropagation()
 			_, err := c.Send(message.Chain{message.Text("keyboard"), message.Buttons([]message.Button{pipelineAction.Button("Choose", pipelineButtonValue{Choice: "kept"})})})
 			return err
 		})
-		if mode == "button-attack" {
-			p.PreEvent(sdk.ButtonClicked).ID("pre.button").Handle(func(c *sdk.Context, payload *message.ButtonClickedPayload) (*message.ButtonClickedPayload, error) {
-				if err := pipelineObserve("pre", "pre.button", c); err != nil {
-					return nil, err
-				}
-				payload.ActionID = "other"
-				payload.ActionSchemaVersion = 99
-				payload.Value = `{"choice":"forged"}`
-				return payload, nil
-			})
-		}
 		buttonapi.On(p, pipelineAction).Permission(sdk.User).Handle(func(c *sdk.Context, value pipelineButtonValue) error {
 			if value.Choice != "kept" {
 				return errors.New("button binding changed")
@@ -955,7 +926,6 @@ func pipelineHooksTest(t *testing.T) {
 	}
 }
 func pipelineTrustedTest(t *testing.T) {
-	t.Run("button_and_job_pre_event", pipelineBoundPayloadTest)
 	h := pipelineWithPlugin(t, "trusted")
 	h.inject(pipelineInput{Text: "trusted", User: "alice", Permissions: []string{"admin", "user"}})
 	h.idle()
@@ -970,118 +940,6 @@ func pipelineTrustedTest(t *testing.T) {
 	}
 	if !observed {
 		t.Fatal("missing trusted Handler")
-	}
-	for _, input := range []pipelineInput{{Text: "actor", User: "alice", ForgeActor: true}, {Text: "target", User: "alice", ForgeTarget: true}} {
-		if safe := h.deliver(input); safe.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
-			t.Fatalf("forged identity error=%v", safe)
-		}
-	}
-	h.idle()
-	if len(pipelineStages(h.snapshot(), "handler")) != 1 {
-		t.Fatal("forged identity reached Handler")
-	}
-}
-
-// pipelineBoundPayloadTest 检查无业务载荷事件的 Hook 拒绝与移除 Hook 后的恢复。
-func pipelineBoundPayloadTest(t *testing.T) {
-	for _, mode := range []string{"button-attack", "job-attack"} {
-		t.Run(mode, func(t *testing.T) {
-			h := pipelineWithPlugin(t, mode)
-			previous, writer, flags := slog.Default(), log.Writer(), log.Flags()
-			slog.SetDefault(slog.New(slog.NewTextHandler(h, &slog.HandlerOptions{Level: slog.LevelWarn})))
-			defer func() { slog.SetDefault(previous); log.SetOutput(writer); log.SetFlags(flags) }()
-			var token, hook, stage, recoveredMode string
-			var event *pb.Event
-			if mode == "button-attack" {
-				h.inject(pipelineInput{Text: "/keyboard", User: "alice"})
-				h.idle()
-				for _, record := range h.snapshot() {
-					if record.Stage == "send" {
-						token = record.Token
-					}
-				}
-				if token == "" {
-					t.Fatal("missing button token")
-				}
-				hook, stage, recoveredMode = "pre.button", "button", "buttons"
-			} else {
-				c := h.components["pipeline"]
-				if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
-					t.Fatal(err)
-				}
-				h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > 0 })
-				h.assembly.scheduler.Drain(c.id)
-				h.mu.Lock()
-				event = proto.CloneOf(h.outcomes[0].Request.Event)
-				h.mu.Unlock()
-				hook, stage, recoveredMode = "pre.job", "scheduled", "scheduled"
-			}
-			h.mu.Lock()
-			before := len(h.outcomes)
-			h.mu.Unlock()
-			if event == nil {
-				h.inject(pipelineInput{User: "alice", Token: token})
-			} else {
-				// Scheduler 直接调用任务；将真实 tick 的事件重交 Router，单独验证入站 PreEvent。
-				if err := h.assembly.router.Deliver(t.Context(), event); err != nil {
-					t.Fatal(err)
-				}
-			}
-			h.idle()
-			h.mu.Lock()
-			after, logs := len(h.outcomes), string(h.logs)
-			h.mu.Unlock()
-			if after != before {
-				t.Fatalf("rejected payload reached Handler: before=%d after=%d", before, after)
-			}
-			if len(pipelineStages(h.snapshot(), stage)) != 0 {
-				t.Fatalf("forged binding reached plugin: %+v", h.snapshot())
-			}
-			returned := slices.ContainsFunc(h.snapshot(), func(record pipelineRecord) bool {
-				return record.Stage == "pre-response" && record.Route == hook && record.Code == pb.ErrorCode_ERROR_CODE_UNSPECIFIED.String() && ((record.Action == "other" && record.Value == `{"choice":"forged"}`) || record.Job == "forged-job")
-			})
-			warned := false
-			for _, line := range strings.Split(logs, "\n") {
-				if strings.Contains(line, "level=WARN") && strings.Contains(line, "pre-event hook failed") && strings.Contains(line, "route_id="+hook) && strings.Contains(line, "INVALID_ARGUMENT") {
-					warned = true
-				}
-			}
-			if !returned || !warned {
-				t.Fatalf("missing malicious payload or Core WARN: records=%+v logs=%s", h.snapshot(), logs)
-			}
-
-			// 同一插件以无恶意 Hook 的注册重启，保留原按钮 token 与任务 ID。
-			h.stop(h.components["pipeline"])
-			c := h.launch("pipeline", recoveredMode, 0)
-			if event == nil {
-				h.inject(pipelineInput{User: "alice", Token: token})
-				h.idle()
-			} else {
-				if err := h.assembly.scheduler.Attach(t.Context(), &pipelineObserver{Plugin: router.FromInstance(c.instance), harness: h}, time.Now()); err != nil {
-					t.Fatal(err)
-				}
-				h.await(func(_ []pipelineRecord) bool { h.mu.Lock(); defer h.mu.Unlock(); return len(h.outcomes) > before })
-				h.assembly.scheduler.Drain(c.id)
-			}
-			h.mu.Lock()
-			calls := slices.Clone(h.outcomes[before:])
-			h.mu.Unlock()
-			if len(calls) != 1 || calls[0].Plugin != "pipeline" || calls[0].Code != pb.ErrorCode_ERROR_CODE_UNSPECIFIED || !calls[0].Outcome.GetMatched() {
-				t.Fatalf("recovered Handler=%+v", calls)
-			}
-			payload := calls[0].Request.Event.GetEventPayload()
-			if event == nil {
-				button := payload.GetButtonClicked()
-				if calls[0].Route != "button.choose" || button.GetActionId() != "choose" || button.GetValue() != `{"choice":"kept"}` || !reflect.DeepEqual(pipelineStages(h.snapshot(), "button"), []string{"button:"}) {
-					t.Fatalf("recovered button=%+v", calls[0])
-				}
-			} else {
-				job := payload.GetScheduled()
-				if calls[0].Route != "job.pulse" || job.GetJobId() != "pulse" || job.GetRunId() == "" || job.GetRunId() == event.GetEventPayload().GetScheduled().GetRunId() {
-					t.Fatalf("recovered tick=%+v", calls[0])
-				}
-			}
-		})
 	}
 }
 

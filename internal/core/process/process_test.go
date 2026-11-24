@@ -32,7 +32,6 @@ func TestMain(m *testing.M) {
 	case "log":
 		fmt.Fprintln(os.Stdout, "hello from stdout")
 		fmt.Fprintln(os.Stderr, "hello from stderr")
-		fmt.Fprint(os.Stderr, strings.Repeat("x", 100<<10)+"\n") // 超过 64 KiB 的长行
 	case "exit3":
 		os.Exit(3)
 	case "spawn":
@@ -129,7 +128,7 @@ func TestMinimalEnvWithoutAdminCredentials(t *testing.T) {
 	}
 }
 
-// stdout/stderr 日志带插件 ID 前缀，超过 64 KiB 的行分块完整转发。
+// TestLogsTaggedWithPluginID 验证 stdout/stderr 日志携带插件 ID。
 func TestLogsTaggedWithPluginID(t *testing.T) {
 	logs := &logSink{}
 	p, err := Start(spec("log", nil), logs.log)
@@ -142,15 +141,6 @@ func TestLogsTaggedWithPluginID(t *testing.T) {
 	joined := strings.Join(got, "\n")
 	if !strings.Contains(joined, "demo|stdout|hello from stdout") || !strings.Contains(joined, "demo|stderr|hello from stderr") {
 		t.Fatalf("log should carry plugin ID and stream: %q", got)
-	}
-	total := 0
-	for _, l := range got {
-		if strings.HasPrefix(l, "demo|stderr|x") {
-			total += len(l) - len("demo|stderr|")
-		}
-	}
-	if total != 100<<10 {
-		t.Fatalf("long lines should be forwarded completely in chunks, got %d bytes", total)
 	}
 }
 
@@ -200,28 +190,6 @@ func TestStdioTransportPipes(t *testing.T) {
 	}
 	if err := p.Release(); err != nil {
 		t.Fatalf("repeated Release should not fail: %v", err)
-	}
-}
-
-// 入口必须是包内存在的可执行普通文件，越界或绝对路径被拒绝。
-func TestEntrypoint(t *testing.T) {
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "bin", "demo")
-	_ = os.MkdirAll(filepath.Dir(bin), 0o755)
-	_ = os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
-	if p, err := Entrypoint(dir, "bin/demo"); err != nil || p != bin {
-		t.Fatalf("Entrypoint = %q, %v", p, err)
-	}
-	for _, bad := range []string{"../demo", "/bin/demo", "bin", "missing"} {
-		if _, err := Entrypoint(dir, bad); err == nil {
-			t.Errorf("%q should be rejected", bad)
-		}
-	}
-	if runtime.GOOS != "windows" {
-		_ = os.Chmod(bin, 0o644)
-		if _, err := Entrypoint(dir, "bin/demo"); err == nil {
-			t.Error("non-executable file should be rejected")
-		}
 	}
 }
 

@@ -62,7 +62,7 @@ func (h *httpListener) start(boot *pb.Bootstrap) error {
 	h.server = &http.Server{Handler: http.HandlerFunc(h.serveHTTP), ErrorLog: slog.NewLogLogger(componentLogger(h.runtime.ctx).Handler(), slog.LevelError), ConnState: h.connectionState}
 	go func() {
 		if err := h.server.Serve(&httpNetworkListener{Listener: listener, owner: h}); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			componentLogger(h.runtime.ctx).Error("plugin HTTP listener failed", "err", err)
+			componentLogger(h.runtime.ctx).Error(fmt.Sprintf("The plugin HTTP listener failed: %v", err), "err", err)
 		}
 	}()
 	return nil
@@ -95,9 +95,9 @@ func (h *httpListener) close(deadline time.Time) {
 		ctx, cancel := context.WithDeadline(h.runtime.ctx, deadline)
 		defer cancel()
 		if err := h.server.Shutdown(ctx); err != nil {
-			componentLogger(h.runtime.ctx).Error("stop plugin HTTP listener failed", "err", err)
+			componentLogger(h.runtime.ctx).Error(fmt.Sprintf("Failed to stop the plugin HTTP listener: %v", err), "err", err)
 			if closeErr := h.server.Close(); closeErr != nil {
-				componentLogger(h.runtime.ctx).Error("close plugin HTTP connections failed", "err", closeErr)
+				componentLogger(h.runtime.ctx).Error(fmt.Sprintf("Failed to close the plugin HTTP connections: %v", closeErr), "err", closeErr)
 			}
 		}
 	})

@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -54,7 +55,7 @@ func (r *Router) observeMenuChatLocked(ev *pb.Event) {
 
 func (r *Router) runManagedMenus(worker *commandSync) {
 	if r.menuStore == nil {
-		slog.Error("command menu store is missing", "adapter_instance_id", worker.instance.InstanceID())
+		slog.Error(fmt.Sprintf("Command menu synchronization for instance %s requires a configured store", worker.instance.InstanceID()), "adapter_instance_id", worker.instance.InstanceID())
 		return
 	}
 	r.reconcileMenus(worker.ctx, worker)
@@ -195,7 +196,7 @@ func (r *Router) menuFailure(worker *commandSync, err error) error {
 	// 平台结果已发生时，请求取消仍需记录；数据库自身有现行 busy_timeout。
 	saveErr := r.menuStore.SaveMenuAccount(context.WithoutCancel(worker.ctx), worker.account)
 	err = errors.Join(err, saveErr)
-	slog.Error("command menu synchronization failed", "adapter_instance_id", worker.instance.InstanceID(), "account_id", worker.instance.AccountID(), "error", err)
+	slog.Error(fmt.Sprintf("Failed to synchronize the command menu for instance %s: %v", worker.instance.InstanceID(), err), "adapter_instance_id", worker.instance.InstanceID(), "account_id", worker.instance.AccountID(), "error", err)
 	return err
 }
 

@@ -15,7 +15,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
 )
 
-// traceDigits 是控制台显示的 trace_id 位数。
+// traceDigits 是旧版文本日志中 trace_id 的位数。
 const traceDigits = 8
 
 // continuationIndent 是多行值后续行的缩进。
@@ -40,9 +40,9 @@ type consoleWriter struct {
 
 // consoleHandler 以控制台格式输出记录：
 //
-//	[时:分:秒.毫秒] [来源] [级别] [目录/文件:行号]: 消息 key=value ...
+//	[时:分:秒.毫秒] [来源] [级别] [目录/文件:行号]: 自然语言摘要
 //
-// 它不按级别过滤。来源标签由 component 与来源 ID 决定，这些字段不再重复输出为 key=value。
+// 它不按级别过滤。来源标签由 component 与来源 ID 决定，完整属性写入结构化日志。
 type consoleHandler struct {
 	out    *consoleWriter
 	attrs  []slog.Attr // WithAttrs 累积的字段，键已带分组前缀
@@ -129,36 +129,23 @@ func (h *consoleHandler) Handle(_ context.Context, r slog.Record) error {
 	b.WriteString(": ")
 	b.WriteString(printable(r.Message))
 
-	// 3. key=value 按记录顺序输出在同一行；多行的值放到最后，后续行缩进输出。
-	hidden := hiddenKeys(fields[KeyComponent])
-	var multiline []slog.Attr
-	for _, a := range attrs {
-		if hidden[a.Key] {
-			continue
-		}
-		v := valueText(a.Value)
-		if a.Key == KeyTraceID {
-			b.WriteString(" trace=")
-			b.WriteString(printable(v[:min(len(v), traceDigits)]))
-			continue
-		}
-		if strings.Contains(strings.TrimRight(v, "\n"), "\n") {
-			multiline = append(multiline, a)
-			continue
-		}
-		b.WriteByte(' ')
-		b.WriteString(printable(a.Key))
-		b.WriteByte('=')
-		b.WriteString(quoteValue(v))
-	}
-	for _, a := range multiline {
-		b.WriteByte(' ')
-		b.WriteString(printable(a.Key))
-		b.WriteByte('=')
-		for _, line := range strings.Split(strings.TrimRight(valueText(a.Value), "\n"), "\n") {
-			b.WriteByte('\n')
-			b.WriteString(continuationIndent)
-			b.WriteString(printable(line))
+	// 3. 摘要保留异常原因和追踪，结构化属性由文件及管理 API 完整保存。
+	for _, attr := range attrs {
+		switch attr.Key {
+		case "error", "err":
+			text := valueText(attr.Value)
+			if attr.Value.Any() == nil || text == "" || strings.HasSuffix(r.Message, ": "+text) {
+				continue
+			}
+			b.WriteString(": ")
+			b.WriteString(printable(text))
+		case KeyTraceID:
+			if valueText(attr.Value) == "" {
+				continue
+			}
+			b.WriteString(" [trace ")
+			b.WriteString(printable(valueText(attr.Value)))
+			b.WriteByte(']')
 		}
 	}
 	b.WriteByte('\n')
@@ -182,16 +169,6 @@ func sourceTag(fields map[string]string) string {
 		return tag
 	}
 	return "Core"
-}
-
-// hiddenKeys 返回控制台不输出的字段：来源类别总是体现在标签中；插件与 Adapter 的记录
-// 由 Core 补充的来源字段也不重复输出。Core 关于某个插件的记录照常输出 plugin_id 等字段。
-func hiddenKeys(component string) map[string]bool {
-	switch component {
-	case ComponentPlugin, ComponentAdapter:
-		return sourceKeys
-	}
-	return map[string]bool{KeyComponent: true}
 }
 
 // levelLabel 返回级别缩写与颜色；介于标准级别之间的值归入较低的标准级别。
@@ -226,14 +203,6 @@ func valueText(v slog.Value) string {
 		return string(raw)
 	}
 	return v.String()
-}
-
-// quoteValue 在值为空、含空白、引号或不可打印字符时按 Go 的带引号字符串输出。
-func quoteValue(s string) string {
-	if s == "" || strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '"' || !unicode.IsPrint(r) }) {
-		return strconv.Quote(s)
-	}
-	return s
 }
 
 // printable 原样返回只含可打印字符的 s，否则返回带引号的形式。插件提供的消息、键与位置经过它，

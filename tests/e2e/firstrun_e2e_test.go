@@ -60,9 +60,9 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 	binary := filepath.Join(extracted, root, "alonabot")
 	data := filepath.Join(dir, "data")
 	c := startRecoveryCore(t, binary, data, "")
-	c.waitFor(`"msg":"Core started"`)
+	c.waitFor(`"msg":"Core started with data directory `)
 	if bundle {
-		c.waitFor(`"msg":"plugin activated"`)
+		c.waitFor(`"msg":"plugin activated: `)
 	}
 	tokenFile := filepath.Join(data, adminauth.FirstTokenFile)
 	info, err := os.Stat(tokenFile)
@@ -147,13 +147,13 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 		}
 	}
 	if bundle {
-		if strings.Count(c.log(), `"msg":"plugin activated"`) != 1 {
+		if strings.Count(c.log(), `"msg":"plugin activated: `) != 1 {
 			t.Fatalf("unexpected component processes:\n%s", c.log())
 		}
 		if raw := call(http.MethodGet, "/", ""); !bytes.Contains(raw, []byte("<html")) {
 			t.Fatalf("static WebUI: %s", raw)
 		}
-	} else if strings.Contains(c.log(), `"msg":"plugin activated"`) {
+	} else if strings.Contains(c.log(), `"msg":"plugin activated: `) {
 		t.Fatalf("unexpected component process:\n%s", c.log())
 	}
 	// 2. 登录后保留持久凭据；卸载选择跨真实进程重启保留。
@@ -170,7 +170,7 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 	}
 	stopTestCore(t, c)
 	c = startRecoveryCore(t, binary, data, "")
-	c.waitFor(`"msg":"Core started"`)
+	c.waitFor(`"msg":"Core started with data directory `)
 	// 重启改变实际监听地址，API 直接读取新 Core。
 	if err := json.Unmarshal(call(http.MethodGet, "/api/v1/packages", ""), &api); err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func verifyFirstRunDistribution(t *testing.T, out string, bundle bool) {
 			t.Fatalf("uninstall choice lost: %+v", item)
 		}
 	}
-	if strings.Count(c.log(), `"msg":"plugin activated"`) != 0 {
+	if strings.Count(c.log(), `"msg":"plugin activated: `) != 0 {
 		t.Fatalf("uninstalled WebUI restarted:\n%s", c.log())
 	}
 	stopTestCore(t, c)

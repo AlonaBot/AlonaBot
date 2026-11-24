@@ -68,7 +68,7 @@ func (r *Router) dispatchCommands(ctx context.Context, ev *pb.Event, event *trus
 			plugins = append(plugins, route.pluginID)
 		}
 		slices.Sort(plugins)
-		slog.Warn("read command prefixes failed", "target", event.retained.GetTarget(), "plugin_ids", slices.Compact(plugins), "error", err)
+		slog.Warn(fmt.Sprintf("Failed to read command prefixes for components %s: %v", strings.Join(slices.Compact(plugins), ", "), err), "target", event.retained.GetTarget(), "plugin_ids", slices.Compact(plugins), "error", err)
 		return false
 	}
 	if len(tokens) != 0 {
@@ -173,9 +173,9 @@ func (r *Router) commandPolicyFailure(ctx context.Context, c *candidate, ev *pb.
 	}
 	if commandPolicyResult(failure.GetCode()) == commandDenied {
 		r.metrics.Add(c.pluginID, "event", "denied")
-		slog.Debug("command policy denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode())
+		slog.Debug(fmt.Sprintf("Denied command %s of component %s with code %s", c.route.GetRouteId(), c.pluginID, failure.GetCode()), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode())
 	} else {
-		slog.Warn("command policy check failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode(), "error", failure.GetSafeMessage())
+		slog.Warn(fmt.Sprintf("Failed to check the policy for command %s of component %s: %s", c.route.GetRouteId(), c.pluginID, failure.GetSafeMessage()), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "code", failure.GetCode(), "error", failure.GetSafeMessage())
 	}
 	return failure
 }
@@ -291,14 +291,15 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
 	started := time.Now()
+	slog.Info(fmt.Sprintf("Command %s matched component %s", c.route.GetRouteId(), c.pluginID), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace))
 	response, callError := r.call(ctx, &c, event, bind, trace)
 	duration := time.Since(started)
 	if errors.Is(callError, errCommandArguments) {
-		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug(fmt.Sprintf("Rejected arguments for command %s of component %s: %v", c.route.GetRouteId(), c.pluginID, callError), "error", callError)
 		if c.route.GetCommand().GetUsageMode() != pb.UsageMode_USAGE_MODE_SILENT {
 			usage, err := commandUsage(c, ev, prefix)
 			if err != nil {
-				slog.Warn("format command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+				slog.Warn(fmt.Sprintf("Failed to format usage for command %s of component %s: %v", c.route.GetRouteId(), c.pluginID, err), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
 			} else {
 				r.sendReply(ctx, c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace, event.invocation)
 			}
@@ -306,6 +307,9 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 		return false
 	}
 	result := commandOK
+	defer func() {
+		slog.Info(fmt.Sprintf("Command %s finished: %s (%s)", c.route.GetRouteId(), result, duration.Round(time.Millisecond)), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "duration_ms", duration.Milliseconds(), "trace_id", hex.EncodeToString(trace), "result", result)
+	}()
 	if callError != nil || response.Err != nil {
 		result = commandError
 		if wire.CodeOf(callError) == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED || response.Err.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
@@ -313,10 +317,10 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 		}
 	}
 	if callError != nil {
-		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler call failed", "error", callError)
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn(fmt.Sprintf("Failed to call command handler %s of component %s: %v", c.route.GetRouteId(), c.pluginID, callError), "error", callError)
 	}
 	if response.Err != nil && callError == nil {
-		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn(fmt.Sprintf("Command handler %s of component %s returned an error: %s", c.route.GetRouteId(), c.pluginID, response.Err.GetSafeMessage()), "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 	}
 	if (callError != nil || response.Err != nil) && emptyOutcome(response.Payload) {
 		r.commandInvoked(c, ev, result, duration)
@@ -328,7 +332,7 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 			result = commandError
 		}
 		r.commandInvoked(c, ev, result, duration)
-		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("decode command handler outcome failed", "error", err)
+		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn(fmt.Sprintf("Failed to decode the outcome from command %s of component %s: %v", c.route.GetRouteId(), c.pluginID, err), "error", err)
 		return false
 	}
 	// SDK Rule 返回 false 时没有调用 Handler；保留实际调用错误与 Core 拒绝通知。
@@ -346,7 +350,7 @@ func (r *Router) sendReply(ctx context.Context, c candidate, ev *pb.Event, chain
 	if parent == nil {
 		profileID, _, err := r.Profile(ctx, c.pluginID, ev.GetTarget())
 		if err != nil {
-			slog.Warn("reply profile read failed", "plugin_id", c.pluginID, "error", err)
+			slog.Warn(fmt.Sprintf("Failed to read the reply profile for component %s: %v", c.pluginID, err), "plugin_id", c.pluginID, "error", err)
 			return
 		}
 		parent = &Invocation{ProfileID: profileID, Depth: 1, PluginID: c.pluginID, Event: ev, DefaultTarget: ev.GetTarget(), TraceID: trace}
@@ -355,18 +359,18 @@ func (r *Router) sendReply(ctx context.Context, c candidate, ev *pb.Event, chain
 	request := &pb.SendRequest{Chain: chain}
 	encoded, err := proto.Marshal(request)
 	if err != nil {
-		slog.Warn("encode reply failed", "error", err)
+		slog.Warn(fmt.Sprintf("Failed to encode the reply from component %s: %v", c.pluginID, err), "error", err)
 		return
 	}
 	response := r.send(ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: parent, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
-		slog.Warn("decode reply result failed", "error", err)
+		slog.Warn(fmt.Sprintf("Failed to decode the reply receipt for component %s: %v", c.pluginID, err), "error", err)
 	}
 	if response.Err != nil {
-		slog.Warn("reply failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", response.Err, "result", result)
+		slog.Warn(fmt.Sprintf("Failed to send the reply from route %s of component %s: %s", c.route.GetRouteId(), c.pluginID, response.Err.GetSafeMessage()), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", response.Err.GetSafeMessage(), "error_info", response.Err, "result", result)
 	} else {
-		slog.Debug("reply completed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "result", result)
+		slog.Debug(fmt.Sprintf("Completed the reply from route %s of component %s with status %s", c.route.GetRouteId(), c.pluginID, result.GetStatus()), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "result", result)
 	}
 }
 
@@ -389,7 +393,7 @@ func commandUsage(c candidate, ev *pb.Event, prefix string) (string, error) {
 		if err == nil {
 			return text, nil
 		}
-		slog.Warn("format custom command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+		slog.Warn(fmt.Sprintf("Failed to format custom usage for command %s of component %s: %v", c.route.GetRouteId(), c.pluginID, err), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
 	}
 	var aliases, arguments string
 	for _, alias := range names[1:] {

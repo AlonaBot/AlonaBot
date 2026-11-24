@@ -78,7 +78,7 @@ func (s *componentSession) changeLogLevel(in *wire.Inbound) wire.Response {
 // logPanic 把调用边界捕获的 panic 记为一条 ERROR，堆栈放在 stack 字段；
 // 只能在 recover 所在的 defer 中调用，堆栈才包含 panic 的位置。
 func logPanic(ctx context.Context, boundary string, p any) {
-	componentLogger(ctx).ErrorContext(ctx, boundary+" panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
+	componentLogger(ctx).ErrorContext(ctx, fmt.Sprintf("Recovered a panic in %s: %v", boundary, p), "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
 }
 
 func (s *componentSession) configure(l launch, ack *pb.HelloAck, component string) {

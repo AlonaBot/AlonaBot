@@ -172,7 +172,7 @@ func (m *Manager) run(inv *router.Invocation, call *continuation) {
 		if code == pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
 			code = wire.CodeOf(err)
 		}
-		slog.Warn("continuation call failed", "plugin_id", inv.PluginID, "route_id", inv.RouteID, "code", code)
+		slog.Warn(fmt.Sprintf("Continuation handler %s of component %s failed with code %s", inv.RouteID, inv.PluginID, code), "plugin_id", inv.PluginID, "route_id", inv.RouteID, "code", code)
 	}
 }
 

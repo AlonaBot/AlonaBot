@@ -40,7 +40,9 @@ func (r *Record) UnmarshalJSON(data []byte) error {
 		record
 		Level string `json:"level"`
 	}
-	if err := json.Unmarshal(data, &value); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		return err
 	}
 	if value.Level == "CRITICAL" {
@@ -192,10 +194,11 @@ func (o *Output) Subscribe(ctx context.Context) <-chan Record {
 
 // bufferedHandler 在共用输出后保存记录；来源身份由 Core 预绑定属性覆盖。
 type bufferedHandler struct {
-	output *Output
-	next   slog.Handler
-	attrs  []slog.Attr
-	groups []string
+	output     *Output
+	next       slog.Handler
+	stderrOnly bool // 文件故障报告留在 stderr 和缓冲，避免重入文件锁。
+	attrs      []slog.Attr
+	groups     []string
 }
 
 func (h *bufferedHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -333,6 +336,15 @@ func (h *bufferedHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	}
 	trace, _ := values[KeyTraceID].(string)
-	h.output.buffer.append(Record{Time: r.Time, Level: r.Level, Source: source, Message: r.Message, Attrs: values, TraceID: trace})
-	return nil
+	record := Record{Time: r.Time, Level: r.Level, Source: source, Message: r.Message, Attrs: values, TraceID: trace}
+	h.output.buffer.append(record)
+	if h.stderrOnly {
+		return nil
+	}
+	encodedRecord, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	_, err = h.output.file.Write(append(encodedRecord, '\n'))
+	return err
 }

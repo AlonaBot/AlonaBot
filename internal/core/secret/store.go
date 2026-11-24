@@ -188,7 +188,7 @@ func (s *Store) Collect(ctx context.Context, pluginID string, protected [][]byte
 		object, err := decodeObject(snapshot)
 		if err != nil {
 			if index == len(protected) {
-				slog.Warn("secret collection deferred: config snapshot is being edited", "plugin_id", pluginID, "error", err)
+				slog.Warn(fmt.Sprintf("Deferred secret collection for component %s because its configuration snapshot is being edited: %v", pluginID, err), "plugin_id", pluginID, "error", err)
 				return 0, nil
 			}
 			return 0, err
@@ -202,7 +202,7 @@ func (s *Store) Collect(ctx context.Context, pluginID string, protected [][]byte
 		})
 		if err != nil {
 			if index == len(protected) {
-				slog.Warn("secret collection deferred: config snapshot has invalid references", "plugin_id", pluginID, "error", err)
+				slog.Warn(fmt.Sprintf("Deferred secret collection for component %s because its configuration snapshot has invalid references: %v", pluginID, err), "plugin_id", pluginID, "error", err)
 				return 0, nil
 			}
 			return 0, err
