@@ -2,13 +2,9 @@
 
 ### Fixed
 
-- Core creates editable configuration snapshots after activation and restores missing snapshots from Active configuration before reload. Successful reloads save normalized configuration while preserving unapplied disk edits during reload, update and rollback.
-- Deleting an Adapter instance clears its persisted event cursor, so a replacement using the same instance name starts with a fresh cursor.
-- Deleting instances also removes their Profile session access-list entries, preserving the access mode and entries for other instances.
+- Core creates an editable configuration file when a component is first enabled. If the file is missing at reload, Core recreates it from the active configuration. A successful reload writes the active configuration back to disk. Reloading, updating or rolling back preserves any edits that have yet to be applied. See [#321](https://github.com/AlonaBot/AlonaBot/pull/321).
+- Deleting an adapter instance removes its event cursor and its entries in the profile's session access list. A replacement with the same name starts with a fresh cursor. The access mode and entries for other instances stay in place. See [#321](https://github.com/AlonaBot/AlonaBot/pull/321).
 
-### Upgrade and compatibility
-
-- Upgrade Core to v0.3.1; existing v0.3.0 official components remain supported. Compose uses `ghcr.io/alonabot/alonabot:0.3.1` with Agent and WebUI v0.3.0.
-- Existing configuration values, Secret references and managed data are retained. The state schema remains v3. Back up the complete data directory before upgrading.
+The `ghcr.io/alonabot/alonabot:0.3.1` Compose image includes Agent and WebUI v0.3.0.
 
 [0.3.1]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.1

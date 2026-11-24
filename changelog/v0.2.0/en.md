@@ -2,32 +2,24 @@
 
 ### Added
 
-- Add chat and account scoped command menus with typed Set/Get/Delete/Status/Sync, ready events, persisted ownership and lifecycle synchronization. See [PR #302](https://github.com/AlonaBot/AlonaBot/pull/302).
-- Preserve trusted MIME metadata when Core prepares media sources for adapters, including GIF identification.
-- Add bilingual documentation navigation, community contribution guidance and private security reporting links.
+- Telegram can show different command menus for each chat and account. Adapter authors can use `CommandMenuController` to set, read, delete or sync menus and check sync status. Scoped menus require this Core release and an adapter that implements the interface. See [#302](https://github.com/AlonaBot/AlonaBot/pull/302).
+- Adapters can use the trusted media type from Core to recognize GIFs and handle them according to platform capabilities.
+- Users and component authors have deployment, development and contribution guides in English and Simplified Chinese. The community docs also explain how to report security issues privately.
 
 ### Changed
 
-- Core installs and updates components directly from platform archives. Online installation selects GitHub Release assets and reads the inner `plugin.yaml`, retaining repository, identity, version, platform, build-info, resource, pin and dependency checks. Local installation and management uploads accept one archive. See [PR #305](https://github.com/AlonaBot/AlonaBot/pull/305).
-- Command registration registers handlers by default; add `.Menu()` to root commands that should appear automatically. Scoped Telegram menus require an adapter built with `CommandMenuController`; existing adapters retain `SyncCommands`.
-- Provide English and Simplified Chinese deployment, component development and contribution guides. Protocol and management API guidance now lives alongside usage instructions, with protocol fields defined in `.proto` sources.
-- Core, SDK and the official components use the MIT License.
-- Pin Agent, WebUI, help, Telegram and OneBot 11 to their independent v0.2.0 releases. Agent reads quoted and forwarded-message nodes with image sources; WebUI supports single-archive uploads; help explicitly registers its menu entries; Telegram adds scoped menus, media mappings and typed actions.
-- Publish five Core archives: four `.tar.gz` files and one Windows `.zip`; GitHub supplies source archives. Compose uses `ghcr.io/alonabot/alonabot:0.2.0`, with Agent v0.2.0 and WebUI v0.2.0.
+- A single platform archive is enough to upload a component in WebUI or install it locally with the CLI. For online installs and updates, Core selects the archive from GitHub Releases and checks the component and source against its `plugin.yaml`. Once official releases remove the old manifest and signature assets, Core versions that use those assets need this release for online installs and updates. Installed components can keep running. See [#305](https://github.com/AlonaBot/AlonaBot/pull/305).
+- Root commands appear in menus only when marked with `.Menu()`. To keep an existing plugin's commands visible in menus, mark them with `.Menu()` and rebuild with this SDK. Users can still invoke the commands directly. See [#302](https://github.com/AlonaBot/AlonaBot/pull/302).
+- Agent v0.2.0 can read quoted and forwarded messages and their images. WebUI v0.2.0 accepts single-archive uploads, help v0.2.0 declares its menu entries, and Telegram v0.2.0 adds media conversion and typed actions. The official OneBot 11 adapter also has a separate v0.2.0 release.
+- Core, the SDK and the official components now use the MIT License.
+- The release page provides five Core-only platform archives. The `ghcr.io/alonabot/alonabot:0.2.0` Compose image includes Agent and WebUI v0.2.0.
 
 ### Removed
 
-- Remove publisher signature requirements and standalone component manifests from the Core installation flow. Successful component updates or reinstallation clear the retired publisher fingerprint while preserving installed data and source bindings.
-- Remove `pack --key/--asset-base` and `install --release/--signature/--public-key`. Use `alonabot pack <directory> --out <output-directory>` and `alonabot install --source AlonaBot/<repository> --yes` or `alonabot install <archive> --yes`.
+- The single-archive workflow replaces `pack --key/--asset-base` and `install --release/--signature/--public-key`. In scripts, use `alonabot pack <directory> --out <output-directory>` to package a component and `alonabot install --source AlonaBot/<repository> --yes` or `alonabot install <archive> --yes` to install it. A successful update or reinstall clears the old publisher fingerprint and keeps the data and source binding.
 
-### Upgrade and compatibility
+### Recorded verification
 
-Stop Core normally and back up the complete data directory before upgrading. Replace the executable or update the pinned Compose image, then start with the same data directory. Installation records, component generations, source bindings and Adapter instance configuration are retained. Command menu persistence is added through a new state migration.
-
-Upgrade Core first, then update WebUI and the other components. This version reads existing component platform archives. Official component v0.2.0 Releases use platform archives alone; historical `release.json`, `release.json.sig` and `release.pub` assets are removed after Core and WebUI verification. Older Core versions require an upgrade for online installation and updates after that cleanup. Installed components continue to use their existing data.
-
-Automatic command menus now include only entries explicitly marked with `.Menu()`. Previously published plugins need a rebuild with the new SDK and `.Menu()` to restore those entries; their command handlers continue to work. Upgrade Core and the relevant Adapter to use scoped menu control.
-
-Windows execution, CGO and the approved resource-measurement deferrals carry forward from the [v0.1.0 release record](https://github.com/AlonaBot/AlonaBot/blob/main/changelog/v0.1.0/en.md). Cross-builds and simulated external services retain their original verification scope.
+Windows runtime, CGO and further resource measurements retain the deferrals recorded in [v0.1.0](https://github.com/AlonaBot/AlonaBot/blob/main/changelog/v0.1.0/en.md).
 
 [0.2.0]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.2.0
