@@ -6,7 +6,7 @@ This guide covers installation, authentication, configuration, component managem
 
 ## Choose an installation method
 
-Download official assets from [v0.3.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0). Five-platform archives and `install.sh` provide Core only; Docker Compose bundles Core, WebUI and Agent. Install Adapters and help as needed. See [release notes](../changelog/v0.3.0/en.md) for actual platform runs and known limitations.
+Download official assets from the [latest Core release](https://github.com/AlonaBot/AlonaBot/releases/latest). Five-platform archives and `install.sh` provide Core only; Docker Compose bundles Core, WebUI and Agent. Install Adapters and help as needed. See the [changelog](../changelog/README.md) for version changes and the [first release record](../changelog/v0.1.0/en.md) for historical platform checks.
 
 | Method | Use case |
 | --- | --- |
@@ -63,7 +63,7 @@ Uninstall stops/unregisters the service, removes its definition/program/bundled 
 Download the release Compose file and start the bundle:
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.2/docker-compose.yml
 docker compose up -d
 ```
 
@@ -238,7 +238,7 @@ Back up plugin-owned external databases/files outside framework directories usin
 
 Every log message, including DEBUG, states what happened in plain language. Component and route names, state transitions and failure reasons appear in the message itself. Structured fields support filtering and correlation. Errors already included in the message appear once in console output.
 
-Console and WebUI show business summaries by default. Expand Details on a WebUI record for full structured fields, Trace, source location and errors. New log files store complete management API Records as JSON lines (`time`, `level`, `source`, `message`, `attrs`, `trace_id`), independently of console formatting. History reads existing text and new JSON records, retaining source, level and Trace filtering. `--log-format=json` still provides structured stderr. INFO covers intake, processing, sending and sleep/wake summaries; internal transaction stages and intermediate states use DEBUG. Existing protections apply to message bodies, model inputs/outputs, tool arguments and credentials. Runtime `runtime/reply.sqlite` holds only the current Sessions’ reply decorations; startup removes old runtime data and Session release deletes its rows.
+The Core console shows summaries. For full structured fields, Trace, source location and errors, read the log files or query the management API. New log files store complete management API Records as JSON lines (`time`, `level`, `source`, `message`, `attrs`, `trace_id`), independently of console formatting. History reads existing text and new JSON records, retaining source, level and Trace filtering. `--log-format=json` still provides structured stderr. INFO covers intake, processing, sending and sleep/wake summaries; internal transaction stages and intermediate states use DEBUG. Existing protections apply to message bodies, model inputs/outputs, tool arguments and credentials. Runtime `runtime/reply.sqlite` holds only the current Sessions’ reply decorations; startup removes old runtime data and Session release deletes its rows.
 
 ## Management API
 
