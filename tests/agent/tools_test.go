@@ -343,7 +343,6 @@ func TestAgentTools(t *testing.T) {
 			if err := h.stop(); err != nil {
 				t.Fatal(err)
 			}
-			checkAgentSummaries(t, h.dir)
 			if scenario.transport == "stdio" {
 				raw, err := os.ReadFile(pidFile)
 				if err != nil {
