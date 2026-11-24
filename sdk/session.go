@@ -250,7 +250,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 			defer l.runtime.callbacks.Done()
 			loaded, err := root.onConfigLoad(ctx, raw)
 			if err != nil {
-				componentLogger(ctx).ErrorContext(ctx, "config OnConfigLoad rejected the configuration", "err", err)
+				componentLogger(ctx).ErrorContext(ctx, fmt.Sprintf("OnConfigLoad rejected the configuration: %v", err), "err", err)
 			}
 			return loaded, err
 		}
@@ -291,9 +291,9 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 		if errors.Is(migrationError, context.DeadlineExceeded) {
 			code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
 		}
-		componentLogger(l.runtime.ctx).Error("database migration failed", "err", migrationError)
+		componentLogger(l.runtime.ctx).Error(fmt.Sprintf("Plugin database migration failed: %v", migrationError), "err", migrationError)
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_MIGRATION, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
-			code, "database migration failed", migrationError)
+			code, fmt.Sprintf("Plugin database migration failed: %v", migrationError), migrationError)
 	}
 
 	if err := l.startHTTP(boot); err != nil {
@@ -318,12 +318,12 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 		cancel()
 		if err != nil {
 			// 用户错误原文可能含敏感信息：只写日志，SESSION_ERROR 中只放安全消息。
-			componentLogger(l.runtime.ctx).Error("OnStart failed", "err", err)
+			componentLogger(l.runtime.ctx).Error(fmt.Sprintf("Lifecycle callback OnStart failed: %v", err), "err", err)
 			return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
 				pb.ErrorCode_ERROR_CODE_INTERNAL, "OnStart returned an error", err)
 		}
 	case <-timer.C:
-		componentLogger(ctx).DebugContext(ctx, "lifecycle callback deadline observed", "phase", phase, "outcome", "timeout",
+		componentLogger(ctx).DebugContext(ctx, fmt.Sprintf("Lifecycle callback %s exceeded its execution deadline", phase), "phase", phase, "outcome", "timeout",
 			"observed_ns", time.Since(observedAt).Nanoseconds(), "lifecycle_session_id", hex.EncodeToString(sid))
 		cancel()
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_ON_START, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
@@ -367,7 +367,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 // runLifecycleCallback 只计实际用户回调的执行时间，返回及 panic 均在执行它的 goroutine 中记录。
 func runLifecycleCallback(ctx context.Context, phase string, sid []byte, callback func(context.Context) error) (err error) {
 	if callback == nil {
-		componentLogger(ctx).DebugContext(ctx, "lifecycle callback completed", "phase", phase, "executed", false,
+		componentLogger(ctx).DebugContext(ctx, fmt.Sprintf("Skipped lifecycle callback %s because no handler is registered", phase), "phase", phase, "executed", false,
 			"outcome", "not_executed", "lifecycle_session_id", hex.EncodeToString(sid))
 		return nil
 	}
@@ -387,7 +387,11 @@ func runLifecycleCallback(ctx context.Context, phase string, sid []byte, callbac
 		if err != nil {
 			attrs = append(attrs, "err", err)
 		}
-		componentLogger(ctx).DebugContext(ctx, "lifecycle callback completed", attrs...)
+		message := fmt.Sprintf("Lifecycle callback %s completed in %s", phase, elapsed.Round(time.Microsecond))
+		if err != nil {
+			message = fmt.Sprintf("Lifecycle callback %s failed after %s: %v", phase, elapsed.Round(time.Microsecond), err)
+		}
+		componentLogger(ctx).DebugContext(ctx, message, attrs...)
 	}()
 	return callback(ctx)
 }

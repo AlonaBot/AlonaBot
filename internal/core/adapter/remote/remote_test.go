@@ -1451,7 +1451,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 			logs.mu.Lock()
 			text := logs.b.String()
 			logs.mu.Unlock()
-			if strings.Count(text, "discard undeclared adapter permission") != 8 {
+			if strings.Count(text, "Discarded undeclared permission ") != 8 {
 				t.Fatalf("discard diagnostics=%s", text)
 			}
 			for _, name := range []string{"loop.unknown", "user", "admin", "chat_admin"} {
@@ -1459,7 +1459,7 @@ func TestRemotePermissionsAndEvents(t *testing.T) {
 					t.Errorf("missing discarded permission diagnostic %q", name)
 				}
 			}
-			if !strings.Contains(text, "level=WARN") || !strings.Contains(text, "plugin_id=loop-package instance_id=one") || !strings.Contains(text, "invalid adapter instance event") {
+			if !strings.Contains(text, "level=WARN") || !strings.Contains(text, "plugin_id=loop-package instance_id=one") || !strings.Contains(text, "Rejected an invalid event from instance one of component loop-package") {
 				t.Fatalf("missing rejection identity or level: %s", text)
 			}
 		})

@@ -146,7 +146,24 @@ func journalTransition(from, to string) bool {
 }
 
 func logJournal(record Journal) {
-	slog.Debug("candidate journal phase changed", "op_id", record.OpID, "plugin_id", record.PluginID, "kind", record.Kind, "phase", record.Phase)
+	var progress string
+	switch record.Phase {
+	case "started":
+		progress = "started preparing a candidate"
+	case "stopped_old":
+		progress = "is ready to prepare candidate resources after checking the previous runtime"
+	case "candidate_ready":
+		progress = "prepared the candidate resources"
+	case "prepared":
+		progress = "received a prepared candidate Session"
+	case "committed":
+		progress = "committed the new generation"
+	case "failed":
+		progress = "marked the candidate as failed"
+	case "cleaned":
+		progress = "finished cleaning up the failed candidate"
+	}
+	slog.Debug(fmt.Sprintf("Operation %s for component %s %s", record.OpID, record.PluginID, progress), "op_id", record.OpID, "plugin_id", record.PluginID, "kind", record.Kind, "phase", record.Phase)
 }
 
 // GetJournal 读取指定操作；缺记录返回 ErrNotFound。

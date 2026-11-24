@@ -2,6 +2,7 @@ package adminauth
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -33,6 +34,6 @@ func (a *Auth) currentSession(w http.ResponseWriter, r *http.Request) {
 		CSRFToken        string `json:"csrf_token"`
 		ExpiresAt        int64  `json:"expires_at_unix_ms"`
 	}{!confirmed && a.bootstrapConnection(r), session.CSRFToken, session.ExpiresAt}); err != nil {
-		slog.Error("write admin session response", "err", err)
+		slog.Error(fmt.Sprintf("Failed to write the admin Session response: %v", err), "err", err)
 	}
 }

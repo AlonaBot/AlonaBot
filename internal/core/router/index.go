@@ -2,6 +2,7 @@ package router
 
 import (
 	"cmp"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -162,7 +163,7 @@ func (r *Router) rebuildCommands() {
 			if len(previous) > 1 && sameRoute(previous[0], shadow.Winner) && slices.ContainsFunc(previous[1:], func(old CommandEntry) bool { return sameRoute(old, entry) }) {
 				continue
 			}
-			slog.Info("command route shadowed", "path", strings.Join(shadow.Path, " "), "winner_plugin_id", shadow.Winner.PluginID, "winner_route_id", shadow.Winner.RouteID, "shadowed_plugin_id", entry.PluginID, "shadowed_route_id", entry.RouteID)
+			slog.Info(fmt.Sprintf("Command %s uses route %s of component %s, shadowing route %s of component %s", strings.Join(shadow.Path, " "), shadow.Winner.RouteID, shadow.Winner.PluginID, entry.RouteID, entry.PluginID), "path", strings.Join(shadow.Path, " "), "winner_plugin_id", shadow.Winner.PluginID, "winner_route_id", shadow.Winner.RouteID, "shadowed_plugin_id", entry.PluginID, "shadowed_route_id", entry.RouteID)
 		}
 	}
 	r.commands = next

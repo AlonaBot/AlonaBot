@@ -307,7 +307,7 @@ func (r *Router) dispatch(ctx context.Context, event *trustedEvent) {
 			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
 				r.metrics.Add("", "event", "denied")
 			} else {
-				slog.Warn("event session admission failed", "event_id", ev.GetEventId(), "error", failure.GetSafeMessage())
+				slog.Warn(fmt.Sprintf("Failed to admit event %s to its Session: %s", ev.GetEventId(), failure.GetSafeMessage()), "event_id", ev.GetEventId(), "error", failure.GetSafeMessage())
 			}
 			return
 		}
@@ -327,14 +327,14 @@ func (r *Router) dispatch(ctx context.Context, event *trustedEvent) {
 	buttonClick := ev.GetEventType() == "button.clicked"
 	if buttonClick {
 		if r.buttons == nil {
-			slog.Info("discard button click without resolver")
+			slog.Info("Discarded a button click because no button resolver is registered")
 			return
 		}
 		// 先取 Session 快照再解析，解析后发生代次替换时 call 会拒绝旧快照。
 		snapshot := r.candidates(ev)
 		pluginID, routeID, err := r.buttons(ctx, ev)
 		if err != nil {
-			slog.Info("discard invalid button click", "error", err)
+			slog.Info(fmt.Sprintf("Discarded an invalid button click: %v", err), "error", err)
 			return
 		}
 		if pluginID == "" {
@@ -357,7 +357,7 @@ func (r *Router) dispatch(ctx context.Context, event *trustedEvent) {
 		if r.policy != nil {
 			admin, err := r.policy.IsAdmin(ctx, ev.GetAdapterId(), actor)
 			if err != nil {
-				slog.Warn("read Core Admin status failed", "adapter_instance_id", actor.GetAdapterInstanceId(), "error", err)
+				slog.Warn(fmt.Sprintf("Failed to read Core Admin status for instance %s: %v", actor.GetAdapterInstanceId(), err), "adapter_instance_id", actor.GetAdapterInstanceId(), "error", err)
 			} else if admin {
 				permissions = append(permissions, "admin")
 			}
@@ -374,7 +374,7 @@ func (r *Router) dispatch(ctx context.Context, event *trustedEvent) {
 	if r.preEvent != nil {
 		payload, stop, err := r.preEvent(ctx, ev)
 		if err != nil {
-			slog.Warn("pre-event hook failed", "event_id", event.retained.GetEventId(), "error", err)
+			slog.Warn(fmt.Sprintf("Pre-event processing failed for event %s: %v", event.retained.GetEventId(), err), "event_id", event.retained.GetEventId(), "error", err)
 			return
 		}
 		event.payload = payload
@@ -414,14 +414,14 @@ func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb
 		if failure := r.commandPolicyFailure(ctx, &candidate, ev); failure != nil {
 			r.recordDiagnostic(event.dispatch, candidate, nil, debugapi.PhaseAdmission, failure)
 			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_INTERNAL {
-				slog.Warn("event route admission failed", "plugin_id", candidate.pluginID, "route_id", candidate.route.GetRouteId(), "error", failure.GetSafeMessage())
+				slog.Warn(fmt.Sprintf("Failed to admit event to route %s of component %s: %s", candidate.route.GetRouteId(), candidate.pluginID, failure.GetSafeMessage()), "plugin_id", candidate.pluginID, "route_id", candidate.route.GetRouteId(), "error", failure.GetSafeMessage())
 			}
 			continue
 		}
 		routeID := candidate.route.GetRouteId()
 		matched, err := r.matchMessageFilter(ctx, candidate.pluginID, candidate.route.GetEvent().GetMessageFilter(), ev, toMe)
 		if err != nil {
-			slog.Warn("message filter config read failed", "plugin_id", candidate.pluginID, "route_id", routeID, "event_id", ev.GetEventId(), "error", err)
+			slog.Warn(fmt.Sprintf("Failed to read the message filter for route %s of component %s: %v", routeID, candidate.pluginID, err), "plugin_id", candidate.pluginID, "route_id", routeID, "event_id", ev.GetEventId(), "error", err)
 		}
 		if !matched {
 			continue
@@ -431,10 +431,10 @@ func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb
 		started := time.Now()
 		response, callError := r.call(ctx, &candidate, event, nil, trace)
 		if callError != nil {
-			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", callError)
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn(fmt.Sprintf("Failed to call event handler %s of component %s: %v", routeID, candidate.pluginID, callError), "error", callError)
 		}
 		if response.Err != nil && callError == nil {
-			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn(fmt.Sprintf("Event handler %s of component %s returned an error: %s", routeID, candidate.pluginID, response.Err.GetSafeMessage()), "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 		}
 		// 业务错误仍可能携带有效 STOP；先读取传播结果，再决定是否继续。
 		if (callError != nil || response.Err != nil) && emptyOutcome(response.Payload) {
@@ -442,7 +442,7 @@ func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb
 		}
 		outcome, err := decodeOutcome(response.Payload)
 		if err != nil {
-			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("decode event handler outcome failed", "error", err)
+			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn(fmt.Sprintf("Failed to decode the outcome from event handler %s of component %s: %v", routeID, candidate.pluginID, err), "error", err)
 			continue
 		}
 		if outcome.GetMatched() {
@@ -466,7 +466,7 @@ func (r *Router) permitted(c candidate, ev *pb.Event) bool {
 			return true
 		}
 	}
-	slog.Debug("route permission denied", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
+	slog.Debug(fmt.Sprintf("Skipped route %s of component %s because the actor lacks a required permission", c.route.GetRouteId(), c.pluginID), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId())
 	r.metrics.Add(c.pluginID, "event", "denied")
 	return false
 }

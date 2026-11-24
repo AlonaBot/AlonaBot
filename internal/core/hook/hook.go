@@ -177,7 +177,7 @@ func (h *Runner) PreEvent(ctx context.Context, ev *pb.Event) (*pb.EventPayload, 
 }
 
 func preEventFailure(candidate candidate, err error) error {
-	slog.Warn("pre-event hook failed", "plugin_id", candidate.caller.PluginID, "route_id", candidate.route.GetRouteId(), "error", err)
+	slog.Warn(fmt.Sprintf("Pre-event hook %s of component %s failed: %v", candidate.route.GetRouteId(), candidate.caller.PluginID, err), "plugin_id", candidate.caller.PluginID, "route_id", candidate.route.GetRouteId(), "error", err)
 	return fmt.Errorf("pre-event hook %s/%s: %w", candidate.caller.PluginID, candidate.route.GetRouteId(), err)
 }
 

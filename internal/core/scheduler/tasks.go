@@ -151,7 +151,7 @@ func (s *Scheduler) pump(pluginID string, plugin *pluginJobs) {
 		// 一次性定义先事务删除；失败保留持久定义，记录错误并放弃本轮。
 		if !task.definition.At.IsZero() {
 			if err := s.store.DeleteTask(context.Background(), pluginID, key.name, key.key); err != nil {
-				slog.Error("delete one-time task before dispatch failed", "plugin_id", pluginID, "task_name", key.name, "key", key.key, "error", err)
+				slog.Error(fmt.Sprintf("Failed to delete one-time task %s of component %s before dispatch: %v", key.name, pluginID, err), "plugin_id", pluginID, "task_name", key.name, "key", key.key, "error", err)
 				queued.reject(fmt.Errorf("delete one-time task before dispatch: %w", err))
 				continue
 			}

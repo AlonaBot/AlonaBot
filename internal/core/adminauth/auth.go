@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -83,13 +84,13 @@ func (a *Auth) Authorize(r *http.Request, pluginID string) bool {
 	credential, err := a.credential(r.Context())
 	if err != nil {
 		if !errors.Is(err, ErrNotInitialized) {
-			slog.Error("read plugin request authentication", "plugin_id", pluginID, "err", err)
+			slog.Error(fmt.Sprintf("Failed to read authentication for a request from component %s: %v", pluginID, err), "plugin_id", pluginID, "err", err)
 		}
 		return false
 	}
 	ok, err := a.authorized(r, credential)
 	if err != nil {
-		slog.Error("authorize plugin request", "plugin_id", pluginID, "err", err)
+		slog.Error(fmt.Sprintf("Failed to authorize a request from component %s: %v", pluginID, err), "plugin_id", pluginID, "err", err)
 	}
 	return ok && err == nil
 }
@@ -211,7 +212,7 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		CSRFToken string `json:"csrf_token"`
 	}{session.CSRFToken}); err != nil {
-		slog.Error("write admin login response", "err", err)
+		slog.Error(fmt.Sprintf("Failed to write the admin login response: %v", err), "err", err)
 	}
 }
 
@@ -315,12 +316,12 @@ func (a *Auth) cookie(value string) *http.Cookie {
 }
 
 func (a *Auth) loginFailed(r *http.Request) {
-	slog.Info("admin login failed", "remote_addr", r.RemoteAddr)
+	slog.Info(fmt.Sprintf("Admin login failed for a request from %s", r.RemoteAddr), "remote_addr", r.RemoteAddr)
 }
 
 func (a *Auth) lookupError(err error) {
 	if !errors.Is(err, ErrNotInitialized) {
-		slog.Error("read admin authentication", "err", err)
+		slog.Error(fmt.Sprintf("Failed to read admin authentication: %v", err), "err", err)
 	}
 }
 
@@ -329,6 +330,6 @@ func (a *Auth) respondError(w http.ResponseWriter, err error) {
 		http.Error(w, ErrNotInitialized.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	slog.Error("admin authentication failed", "err", err)
+	slog.Error(fmt.Sprintf("Admin authentication failed: %v", err), "err", err)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
 }

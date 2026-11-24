@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -274,6 +275,6 @@ func respond(w http.ResponseWriter, result any, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		slog.Error("write management response failed", "error", err)
+		slog.Error(fmt.Sprintf("Failed to write the management response: %v", err), "error", err)
 	}
 }

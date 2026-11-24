@@ -145,7 +145,7 @@ func (s *Service) streamLogs(w http.ResponseWriter, r *http.Request) {
 				if r.Context().Err() == nil {
 					encoded, err := json.Marshal(last)
 					if err != nil {
-						slog.Error("encode log overflow failed", "error", err)
+						slog.Error(fmt.Sprintf("Failed to encode the log stream overflow notification: %v", err), "error", err)
 						return
 					}
 					if _, err := fmt.Fprintf(w, "event: overflow\ndata: %s\n\n", encoded); err != nil {
@@ -160,7 +160,7 @@ func (s *Service) streamLogs(w http.ResponseWriter, r *http.Request) {
 			}
 			encoded, err := json.Marshal(record)
 			if err != nil {
-				slog.Error("encode log stream failed", "error", err)
+				slog.Error(fmt.Sprintf("Failed to encode a log stream record: %v", err), "error", err)
 				return
 			}
 			if _, err := fmt.Fprintf(w, "event: log\ndata: %s\n\n", encoded); err != nil {
@@ -284,7 +284,7 @@ func (s *Service) applyLogLevels(ctx context.Context, request logLevelUpdate, be
 			continue
 		}
 		if err := s.opt.NotifyLogLevel(ctx, id, logging.ProtoLevel(levels.Source(id))); err != nil {
-			slog.Error("notify log level failed", "plugin_id", id, "error", err)
+			slog.Error(fmt.Sprintf("Failed to notify component %s of its new log level: %v", id, err), "plugin_id", id, "error", err)
 			resultErr = errors.Join(resultErr, fmt.Errorf("notify log level for %s: %w", id, err))
 		}
 	}

@@ -96,7 +96,7 @@ func (p *Prepared) activate(ctx context.Context, commit func(context.Context) er
 		return p.activationFailed(ctx, in, err, handoffFailure)
 	}
 	// ACTIVATED 已核对；完整绑定及 Ready 的等待不计入冷启动耗时。
-	slog.Debug("cold start completed", append(p.coldStartAttrs(), "duration_ns", completedAt.Sub(p.startedAt).Nanoseconds(),
+	slog.Debug(fmt.Sprintf("Component %s completed its cold start in %s", p.spec.PluginID, completedAt.Sub(p.startedAt).Round(time.Millisecond)), append(p.coldStartAttrs(), "duration_ns", completedAt.Sub(p.startedAt).Nanoseconds(),
 		"prepare_ns", p.prepareElapsed.Nanoseconds(), "activate_ns", activateElapsed.Nanoseconds())...)
 	stage = "binding"
 	reason := "activated"
@@ -161,7 +161,7 @@ func (p *Prepared) logStartupFailure(err error, stage string, attrs ...any) {
 	case errors.As(err, &call):
 		fields = append(fields, "code", call.ErrorInfo.GetCode().String())
 	}
-	slog.Debug("cold start failed", append(fields, attrs...)...)
+	slog.Debug(fmt.Sprintf("Component %s failed to start during %s after %s: %v", p.spec.PluginID, stage, time.Since(p.startedAt).Round(time.Millisecond), err), append(fields, attrs...)...)
 }
 
 func (p *Prepared) checkActiveRoutes(ctx context.Context) error {

@@ -177,7 +177,7 @@ func (w *Waker) EnsureActive(ctx context.Context, pluginID string, payloadBytes 
 			if reason != "" {
 				w.mu.Unlock()
 				w.count(pluginID, metricReason)
-				slog.Warn("wake request rejected", "plugin_id", pluginID, "reason", reason)
+				slog.Warn(fmt.Sprintf("Rejected a wake request for component %s: %s", pluginID, reason), "plugin_id", pluginID, "reason", reason)
 				return nil, wakeError(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, reason)
 			}
 			p.count++
@@ -222,7 +222,32 @@ func (w *Waker) start(ctx context.Context, id string, p *wakePlugin) {
 func (w *Waker) count(id, reason string) {
 	if w.opt.Count != nil {
 		w.opt.Count(id, reason)
-		slog.Debug("wake metric", "plugin_id", id, "reason", reason)
+		var message string
+		switch reason {
+		case "cold_start":
+			message = "recorded a cold start"
+		case "started":
+			message = "started a shared wake"
+		case "ready":
+			message = "completed its shared wake"
+		case "failed":
+			message = "failed to complete its shared wake"
+		case "deadline":
+			message = "released a waiting request after its deadline elapsed"
+		case "cancelled":
+			message = "released a cancelled waiting request"
+		case "dropped_queue":
+			message = "rejected a request because its wake request queue is full"
+		case "dropped_bytes":
+			message = "rejected a request because its wake payload queue is full"
+		case "dropped_budget":
+			message = "rejected a request because the Core payload budget is full"
+		case "dropped_failed":
+			message = "released a waiting request because the component has failed"
+		case "dropped_other":
+			message = "released a waiting request after its admission failed"
+		}
+		slog.Debug(fmt.Sprintf("Wake activity for component %s: %s", id, message), "plugin_id", id, "reason", reason)
 	}
 }
 

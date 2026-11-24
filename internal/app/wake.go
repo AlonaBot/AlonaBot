@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -54,7 +55,7 @@ func (a *assembly) startWake(_ context.Context, id string) (*supervisor.Running,
 			err = errors.Join(err, readErr)
 			// 在运行循环内撤销失败的休眠计划，完整启动错误仍交给 Waker 发布。
 			a.scheduler.Detach(id)
-			slog.Error("plugin wake failed", "plugin_id", id, "error", err)
+			slog.Error(fmt.Sprintf("Failed to wake component %s: %v", id, err), "plugin_id", id, "error", err)
 		}()
 		in, err := c.store.GetInstall(ctx, id)
 		if err != nil {

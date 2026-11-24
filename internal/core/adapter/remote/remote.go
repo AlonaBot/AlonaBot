@@ -146,7 +146,7 @@ func (p *Process) unbind() {
 	for _, entry := range p.instances {
 		if entry.running {
 			if err := p.offline(context.Background(), entry, pb.BotOfflineReason_BOT_OFFLINE_REASON_ADAPTER_EXITED, nil); err != nil {
-				slog.Error("deliver adapter offline event failed", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "error", err)
+				slog.Error(fmt.Sprintf("Failed to deliver the offline event for instance %s of component %s: %v", entry.id, p.opt.PluginID, err), "plugin_id", p.opt.PluginID, "instance_id", entry.id, "error", err)
 			}
 		}
 	}
@@ -333,7 +333,7 @@ func (p *Process) deliver(ctx context.Context, entry *instance, ev *pb.Event) er
 	err := p.opt.Sink.Deliver(ctx, ev)
 	if errors.Is(err, adapter.ErrQueueFull) {
 		entry.dropped++
-		slog.Warn("adapter event dropped", "plugin_id", p.opt.PluginID, "instance_id", entry.id, "dropped", entry.dropped)
+		slog.Warn(fmt.Sprintf("Dropped an event from instance %s of component %s after %d total drops", entry.id, p.opt.PluginID, entry.dropped), "plugin_id", p.opt.PluginID, "instance_id", entry.id, "dropped", entry.dropped)
 		return adapter.ErrQueueFull
 	}
 	return err

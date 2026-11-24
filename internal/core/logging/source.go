@@ -6,14 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
 	"time"
 )
-
-// unstructuredMessage 是非结构化输出行的记录消息。
-const unstructuredMessage = "unstructured output"
 
 // streamStderr 是插件进程中写 JSON 记录的流；stdout 上的文本一律是非结构化输出。
 const streamStderr = "stderr"
@@ -42,7 +40,7 @@ func (s *Source) Line(_, stream string, line []byte) {
 		r, ok = parseRecord(line)
 	}
 	if !ok {
-		r = slog.NewRecord(time.Now(), slog.LevelWarn, unstructuredMessage, 0)
+		r = slog.NewRecord(time.Now(), slog.LevelWarn, fmt.Sprintf("Component %s wrote unstructured output to %s: %s", s.id, stream, line), 0)
 		r.AddAttrs(slog.String("stream", stream), slog.String("output", string(line)))
 	}
 	if r.Level < s.levels.Source(s.id) {

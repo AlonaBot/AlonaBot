@@ -495,7 +495,7 @@ func TestManagementLifecycle(t *testing.T) {
 			if json.Unmarshal([]byte(line), &record) != nil {
 				continue
 			}
-			if record.Level == "WARN" && record.PluginID == "demo" && record.Message == "package manifest warning" {
+			if record.Level == "WARN" && record.PluginID == "demo" && record.Message == "Component demo has a package manifest warning: "+record.Warning {
 				counts[record.Warning]++
 			}
 		}

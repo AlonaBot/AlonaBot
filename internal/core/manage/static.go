@@ -42,7 +42,7 @@ type staticFile struct {
 
 func (f *staticFile) close() {
 	if err := f.file.Close(); err != nil {
-		slog.Error("close component static file failed", "error", err)
+		slog.Error(fmt.Sprintf("Failed to close a component static file: %v", err), "error", err)
 	}
 }
 
@@ -230,7 +230,7 @@ func openStaticFile(fsys fs.FS, name string) (*staticFile, error) {
 		return &staticFile{content: content, info: info, file: file}, nil
 	}
 	// shortcut: 开发 FS 不支持 Seek 时整文件缓冲；大资源应使用可 Seek 的文件系统。
-	slog.Warn("development WebUI file does not support seeking; buffering entire file", "path", name)
+	slog.Warn(fmt.Sprintf("Buffering development WebUI file %s because it does not support seeking", name), "path", name)
 	body, readErr := io.ReadAll(file)
 	if readErr != nil {
 		return nil, errors.Join(readErr, file.Close())
@@ -302,6 +302,6 @@ func (s *Service) iconContent(ctx context.Context, id string) (*staticFile, stri
 }
 
 func staticError(w http.ResponseWriter, err error) {
-	slog.Error("read component static file failed", "error", err)
+	slog.Error(fmt.Sprintf("Failed to read a component static file: %v", err), "error", err)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
 }

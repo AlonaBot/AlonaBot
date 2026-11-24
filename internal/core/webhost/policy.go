@@ -1,6 +1,7 @@
 package webhost
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -42,12 +43,12 @@ func (h *Host) stripPluginHeaders(header http.Header, pluginID string) {
 			delete(header, key)
 		case "access-control-allow-credentials":
 			delete(header, key)
-			slog.Warn("removed plugin credential CORS header", "plugin_id", pluginID)
+			slog.Warn(fmt.Sprintf("Removed a credential CORS header from the response of component %s", pluginID), "plugin_id", pluginID)
 		case "set-cookie":
 			delete(header, key)
 			for _, value := range values {
 				name, _, _ := strings.Cut(value, "=")
-				slog.Warn("removed plugin cookie", "plugin_id", pluginID, "cookie_name", strings.TrimSpace(name))
+				slog.Warn(fmt.Sprintf("Removed cookie %s from the response of component %s", strings.TrimSpace(name), pluginID), "plugin_id", pluginID, "cookie_name", strings.TrimSpace(name))
 			}
 		}
 	}

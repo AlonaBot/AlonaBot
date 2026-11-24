@@ -145,7 +145,7 @@ func (o *Output) Close() error { return o.file.close() }
 
 // reportFileError 把日志文件的错误只写到 stderr，避免再次写入出错的文件。
 func (o *Output) reportFileError(err error) {
-	slog.New(&bufferedHandler{output: o, next: o.stderr, stderrOnly: true}).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
+	slog.New(&bufferedHandler{output: o, next: o.stderr, stderrOnly: true}).Error(fmt.Sprintf("The log file is unavailable: %v", err), KeyComponent, ComponentCore, "err", err)
 }
 
 // Plugin 为一次组件启动建立 [Source]；attrs 由 Core 按可信安装记录补充 Adapter 的来源类别与 ID。

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -252,7 +253,7 @@ func (s *Service) prepare(ctx context.Context, req InstallRequest) (_ *packages.
 		return nil, errors.Join(denied("package source differs from the official component repository"), candidate.Discard())
 	}
 	for _, warning := range candidate.Warnings {
-		slog.Warn("package manifest warning", "plugin_id", candidate.Manifest.ID, "warning", warning)
+		slog.Warn(fmt.Sprintf("Component %s has a package manifest warning: %s", candidate.Manifest.ID, warning), "plugin_id", candidate.Manifest.ID, "warning", warning)
 	}
 	return candidate, nil
 }

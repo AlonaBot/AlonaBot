@@ -104,7 +104,7 @@ func (p *Process) platformPermissions(instanceID string, permissions []string) [
 	for _, name := range permissions {
 		implied, declared := p.declarations.permissions[name]
 		if !declared {
-			slog.Warn("discard undeclared adapter permission", "plugin_id", p.opt.PluginID, "instance_id", instanceID, "name", name)
+			slog.Warn(fmt.Sprintf("Discarded undeclared permission %s from instance %s of component %s", name, instanceID, p.opt.PluginID), "plugin_id", p.opt.PluginID, "instance_id", instanceID, "name", name)
 			continue
 		}
 		expanded = append(expanded, implied...)

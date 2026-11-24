@@ -38,7 +38,7 @@ func (o *Orchestrator) Abort(ctx context.Context, r *Result, cause error) error 
 	// 1. 元数据失败也先关闭候选，防止未提交进程继续占有写入资源。
 	markErr := o.save(ctx, r, phaseFailed)
 	if cause != nil {
-		slog.Error("candidate preparation aborted", "op_id", r.OpID, "plugin_id", r.record.PluginID, "kind", r.record.Kind, "phase", phaseFailed, "error", cause)
+		slog.Error(fmt.Sprintf("Aborted operation %s for component %s during candidate preparation: %v", r.OpID, r.record.PluginID, cause), "op_id", r.OpID, "plugin_id", r.record.PluginID, "kind", r.record.Kind, "phase", phaseFailed, "error", cause)
 	}
 	if r.Session != nil {
 		if err := r.Session.Close(); err != nil {
@@ -87,7 +87,7 @@ func (o *Orchestrator) Abort(ctx context.Context, r *Result, cause error) error 
 		}
 	}
 	if err := errors.Join(cleanupErr, resumeErr); err != nil {
-		slog.Error("candidate cleanup or recovery failed", "op_id", r.OpID, "plugin_id", r.record.PluginID, "kind", r.record.Kind, "phase", phaseFailed, "error", err)
+		slog.Error(fmt.Sprintf("Failed to clean up or recover operation %s for component %s: %v", r.OpID, r.record.PluginID, err), "op_id", r.OpID, "plugin_id", r.record.PluginID, "kind", r.record.Kind, "phase", phaseFailed, "error", err)
 		return errors.Join(cause, err)
 	}
 	r.record.PackageDir = ""

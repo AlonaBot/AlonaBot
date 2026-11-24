@@ -205,7 +205,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 		s.observe(in.TraceID, "send", target, request.Chain, result, sendError)
 	}
 	if err := s.rememberReply(caller, session, target, request.Chain, result, decoration); err != nil {
-		slog.Error("save reply decoration failed after platform send", "error", err)
+		slog.Error(fmt.Sprintf("The platform send completed, but saving its reply decoration failed: %v", err), "error", err)
 		if sendError == nil {
 			sendError = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "platform send completed; save reply decoration: " + err.Error()}
 		}
@@ -327,7 +327,7 @@ func logPlatformResult(ctx context.Context, operation string, target *pb.Target,
 	text := fmt.Sprintf("Message %s completed for %s/%s", operation, target.GetAdapterInstanceId(), target.GetChatId())
 	if safe != nil {
 		level = slog.LevelWarn
-		text = fmt.Sprintf("Message %s failed for %s/%s", operation, target.GetAdapterInstanceId(), target.GetChatId())
+		text = fmt.Sprintf("Message %s failed for %s/%s: %s", operation, target.GetAdapterInstanceId(), target.GetChatId(), safe.GetSafeMessage())
 	}
 	attrs := []any{"operation", operation, "adapter_id", target.GetAdapterId(), "instance_id", target.GetAdapterInstanceId(), "status", result.GetStatus(), "duration_ms", duration.Milliseconds(), "trace_id", wire.TraceID(ctx)}
 	if safe != nil {

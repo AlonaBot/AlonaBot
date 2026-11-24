@@ -174,7 +174,7 @@ func (r *Router) run(event *trustedEvent) {
 		}
 		r.metrics.Add("", "event", reason)
 		r.recordDiagnostic(event.dispatch, candidate{}, nil, debugapi.PhaseAdmission, invocationError(err))
-		slog.Debug("Discard queued event after its budget ended", "event_id", event.retained.GetEventId(), "error", err)
+		slog.Debug(fmt.Sprintf("Discarded queued event %s because its processing budget ended: %v", event.retained.GetEventId(), err), "event_id", event.retained.GetEventId(), "error", err)
 	} else {
 		if event.retained.GetEventType() != commandInvokedEvent {
 			slog.Info(fmt.Sprintf("Received %s from %s", event.retained.GetEventType(), event.retained.GetAdapterInstanceId()), "event_id", event.retained.GetEventId(), "adapter_id", event.retained.GetAdapterId(), "instance_id", event.retained.GetAdapterInstanceId())

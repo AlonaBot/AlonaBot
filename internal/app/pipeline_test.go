@@ -1042,7 +1042,7 @@ func pipelineBoundPayloadTest(t *testing.T) {
 			})
 			warned := false
 			for _, line := range strings.Split(logs, "\n") {
-				if strings.Contains(line, "level=WARN") && strings.Contains(line, "pre-event hook failed") && strings.Contains(line, "route_id="+hook) && strings.Contains(line, "INVALID_ARGUMENT") {
+				if strings.Contains(line, "level=WARN") && strings.Contains(line, "Pre-event hook "+hook+" of component pipeline failed") && strings.Contains(line, "route_id="+hook) && strings.Contains(line, "INVALID_ARGUMENT") {
 					warned = true
 				}
 			}

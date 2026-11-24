@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -141,7 +142,7 @@ func (i *invoker) ask(ctx context.Context, caller router.Caller, parent *router.
 		i.mu.Unlock()
 		// 即使父调用已结束，持久化的 token 仍须实际删除。
 		if err := i.options.Buttons.RevokeConfirm(context.WithoutCancel(ctx), id); err != nil {
-			slog.Error("revoke confirmation tokens failed", "plugin_id", caller.PluginID, "error", err)
+			slog.Error(fmt.Sprintf("Failed to revoke confirmation tokens for component %s: %v", caller.PluginID, err), "plugin_id", caller.PluginID, "error", err)
 			if result == nil {
 				result = failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "revoke confirmation tokens: "+err.Error()).Err
 			}
@@ -180,7 +181,7 @@ func (i *invoker) ask(ctx context.Context, caller router.Caller, parent *router.
 	}
 	if editor, ok := instance.(adapter.Editor); ok && supports(instance, editCapability) {
 		if _, err := editor.Edit(ctx, target, sent.GetPrimaryPlatformMessageId(), textChain(conclusion)); err != nil {
-			slog.Warn("edit confirmation result failed", "plugin_id", caller.PluginID, "error", err.GetSafeMessage())
+			slog.Warn(fmt.Sprintf("Failed to edit the confirmation result for component %s: %s", caller.PluginID, err.GetSafeMessage()), "plugin_id", caller.PluginID, "error", err.GetSafeMessage())
 		}
 	}
 	if !allowed {
@@ -194,7 +195,7 @@ func (i *invoker) clicked(ctx context.Context, id string, allow bool, ev *pb.Eve
 	if i.options.CheckSessionAccess != nil {
 		if safe := i.options.CheckSessionAccess(ctx, ev.GetTarget()); safe != nil {
 			if safe.GetCode() != pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
-				slog.Warn("confirmation session admission failed", "event_id", ev.GetEventId(), "error", safe.GetSafeMessage())
+				slog.Warn(fmt.Sprintf("Failed to admit confirmation event %s to its Session: %s", ev.GetEventId(), safe.GetSafeMessage()), "event_id", ev.GetEventId(), "error", safe.GetSafeMessage())
 			}
 			return
 		}
@@ -206,7 +207,7 @@ func (i *invoker) clicked(ctx context.Context, id string, allow bool, ev *pb.Eve
 		return
 	}
 	if record.actor.GetExternalUserId() != ev.GetActor().GetExternalUserId() || record.actor.GetAdapterInstanceId() != ev.GetActor().GetAdapterInstanceId() {
-		slog.Info("discard confirmation click from another actor", "plugin_id", record.caller.PluginID, "adapter_instance_id", ev.GetActor().GetAdapterInstanceId(), "external_user_id", ev.GetActor().GetExternalUserId())
+		slog.Info(fmt.Sprintf("Discarded a confirmation click for component %s because it came from another actor", record.caller.PluginID), "plugin_id", record.caller.PluginID, "adapter_instance_id", ev.GetActor().GetAdapterInstanceId(), "external_user_id", ev.GetActor().GetExternalUserId())
 		return
 	}
 	delete(i.pending, id)

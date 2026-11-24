@@ -133,11 +133,12 @@ func (h *consoleHandler) Handle(_ context.Context, r slog.Record) error {
 	for _, attr := range attrs {
 		switch attr.Key {
 		case "error", "err":
-			if attr.Value.Any() == nil || valueText(attr.Value) == "" {
+			text := valueText(attr.Value)
+			if attr.Value.Any() == nil || text == "" || strings.HasSuffix(r.Message, ": "+text) {
 				continue
 			}
 			b.WriteString(": ")
-			b.WriteString(printable(valueText(attr.Value)))
+			b.WriteString(printable(text))
 		case KeyTraceID:
 			if valueText(attr.Value) == "" {
 				continue

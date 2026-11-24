@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -420,7 +421,7 @@ func (s *Service) callProfile(ctx context.Context, caller router.Caller, in *wir
 				// 父调用结束会取消请求 context；reload 沿独立管理操作完成并留存实际错误。
 				go func() {
 					if err := s.Reload(context.WithoutCancel(ctx), caller.PluginID, false); err != nil {
-						slog.Error("profile config reload failed", "plugin_id", caller.PluginID, "error", err)
+						slog.Error(fmt.Sprintf("Failed to reload profile configuration for component %s: %v", caller.PluginID, err), "plugin_id", caller.PluginID, "error", err)
 					}
 				}()
 			})

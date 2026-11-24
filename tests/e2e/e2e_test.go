@@ -231,7 +231,7 @@ var lifecycleLogRe = []string{
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnReady$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStop$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: exiting normally$`,
-	`(?m)\[Core\] \[INFO\] \[[^\]]+/assembly\.go:\d+\]: Component demo stopped \(drained: true, killed: false\)$`,
+	`(?m)\[Core\] \[INFO\] \[[^\]]+/assembly\.go:\d+\]: Component demo stopped after draining its active requests$`,
 }
 
 // 完整生命周期：TCP 走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出；

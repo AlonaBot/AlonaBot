@@ -33,7 +33,7 @@ func (s *Service) uploadPackage(r *http.Request, update bool) (result any, err e
 	defer func() {
 		if cleanupErr := os.RemoveAll(directory); cleanupErr != nil {
 			cleanupErr = fmt.Errorf("remove upload directory: %w", cleanupErr)
-			slog.Error("clean management upload", "err", cleanupErr)
+			slog.Error(fmt.Sprintf("Failed to clean up the management upload: %v", cleanupErr), "err", cleanupErr)
 			err = errors.Join(err, cleanupErr)
 		}
 	}()
@@ -139,7 +139,7 @@ func writeUploadArchive(content io.Reader, directory string, limit int64) (name 
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
 			closeErr = fmt.Errorf("close upload archive: %w", closeErr)
-			slog.Error("close management upload", "err", closeErr)
+			slog.Error(fmt.Sprintf("Failed to close the management upload: %v", closeErr), "err", closeErr)
 			err = errors.Join(err, closeErr)
 		}
 	}()

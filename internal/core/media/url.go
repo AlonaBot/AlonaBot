@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -101,7 +102,7 @@ func (s *Store) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open(e.file.Path)
 	if err != nil {
 		s.mu.Unlock()
-		slog.Error("open media file failed", "err", err)
+		slog.Error(fmt.Sprintf("Failed to open the media file: %v", err), "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -123,7 +124,7 @@ func (s *Store) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer activity()
 	defer func() {
 		if err := f.Close(); err != nil {
-			slog.Error("close media file failed", "err", err)
+			slog.Error(fmt.Sprintf("Failed to close the media file: %v", err), "err", err)
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()

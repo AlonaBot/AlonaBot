@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -64,6 +65,6 @@ func (r *Router) commandInvoked(c candidate, original *pb.Event, result string, 
 	}
 	// Deliver 不等待空闲分发槽，事件订阅者可以继续调用插件而不占住原命令链。
 	if err := r.Deliver(r.ctx, ev); err != nil {
-		slog.Warn("deliver command invocation event failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
+		slog.Warn(fmt.Sprintf("Failed to deliver the invocation event for command %s of component %s: %v", c.route.GetRouteId(), c.pluginID, err), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
 	}
 }

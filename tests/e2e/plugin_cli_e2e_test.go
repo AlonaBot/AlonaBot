@@ -353,7 +353,7 @@ func TestPluginStorageCLI(t *testing.T) {
 		c.management(t, dir, "", "install", archive, "--yes")
 		c.management(t, dir, "", "enable", id)
 		deliver("/note kvget topic")
-		c.waitFor(`"msg":"command handler returned an error".*"error":"KV key does not exist"`)
+		c.waitFor(`"route_id":"cmd.note.kvget"[^\n]*"error":"ERROR_CODE_NOT_FOUND: KV key does not exist"`)
 		stopTestCore(t, c)
 	})
 }

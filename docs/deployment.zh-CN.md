@@ -236,6 +236,8 @@ alonabot sleep-policy my-plugin auto
 
 ## 日志摘要与详情
 
+每条日志正文（包括 DEBUG）用自然语言说明发生了什么，直接包含组件或路由、状态变化与失败原因。结构化字段用于筛选和关联。正文已包含的错误在控制台只显示一次。
+
 控制台与 WebUI 默认展示业务摘要；WebUI 每条记录的「详情」展开完整结构化字段、Trace、源码位置和错误。新写入的日志以 JSON 行保存完整管理 API Record（`time`、`level`、`source`、`message`、`attrs`、`trace_id`），控制台格式与文件格式独立。历史查询同时读取既有文本记录和新 JSON 记录，保留来源、级别及 Trace 筛选。`--log-format=json` 继续提供完整结构化 stderr。INFO 记录接入、处理、发送及休眠唤醒摘要，内部事务与中间状态为 DEBUG；正文、模型输入输出、工具参数和凭据沿用现有保护规则。运行期 `runtime/reply.sqlite` 只保存本次 Session 的回复修饰关联，启动时清理旧运行数据，Session 结束时删除对应行。
 
 ## 管理 API

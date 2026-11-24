@@ -348,11 +348,11 @@ func (s *Store) release(entries map[string]*entry, id string, e *entry) {
 
 func (s *Store) remove(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		slog.Warn("remove media file failed", "path", path, "err", err)
+		slog.Warn(fmt.Sprintf("Failed to remove media file %s: %v", path, err), "path", path, "err", err)
 	}
 }
 
 func (s *Store) storageFailure(path string, err error) wire.Response {
-	slog.Error("media storage failed", "path", path, "err", err)
+	slog.Error(fmt.Sprintf("Failed to store media at %s: %v", path, err), "path", path, "err", err)
 	return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, errors.New("media storage failed"))
 }

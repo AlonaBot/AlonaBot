@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -123,7 +124,7 @@ func (s *Server) Bind(pluginID, generationID string, endpoint *pb.HttpListener, 
 			request.Out.Header.Set(wire.HeaderProxyAuth, auth)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			slog.Error("plugin HTTP proxy failed", "plugin_id", pluginID, "err", err)
+			slog.Error(fmt.Sprintf("HTTP proxy request to component %s failed: %v", pluginID, err), "plugin_id", pluginID, "err", err)
 			if role == state.RoleWebUI {
 				w.Header().Set("Cache-Control", "no-store")
 			}
@@ -264,7 +265,7 @@ func (s *Server) ServeWithIsolation(w http.ResponseWriter, r *http.Request, isol
 			case pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED:
 				status = http.StatusGatewayTimeout
 			}
-			slog.Warn("plugin HTTP wake failed", "plugin_id", pluginID, "error", err)
+			slog.Warn(fmt.Sprintf("Failed to wake component %s for an HTTP request: %v", pluginID, err), "plugin_id", pluginID, "error", err)
 			http.Error(w, http.StatusText(status), status)
 			return
 		}

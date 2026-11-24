@@ -111,7 +111,7 @@ func (s *Service) configRoutes(mux *http.ServeMux, auth *adminauth.Auth) {
 		value, err := s.reveal(r.Context(), r.PathValue("plugin"), r.PathValue("path"))
 		if err == nil {
 			w.Header().Set("Cache-Control", "no-store")
-			slog.Info("secret revealed", "plugin_id", r.PathValue("plugin"), "path", r.PathValue("path"))
+			slog.Info(fmt.Sprintf("Revealed the secret at %s for component %s through the management API", r.PathValue("path"), r.PathValue("plugin")), "plugin_id", r.PathValue("plugin"), "path", r.PathValue("path"))
 		}
 		respond(w, struct {
 			Value string `json:"value"`
