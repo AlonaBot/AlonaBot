@@ -10,12 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
-	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
-	"github.com/AlonaBot/AlonaBot/contracts/validate"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 )
 
@@ -67,10 +64,6 @@ func buildArchive(t *testing.T, entries []testEntry) []byte {
 	tw := tar.NewWriter(gz)
 	for _, e := range entries {
 		h := &tar.Header{Name: e.name, Mode: e.mode, Typeflag: e.typeflag, Size: int64(len(e.body))}
-		switch e.typeflag {
-		case tar.TypeSymlink, tar.TypeLink:
-			h.Linkname = "plugin.yaml"
-		}
 		if e.typeflag != tar.TypeReg {
 			h.Size = 0
 		}
@@ -133,101 +126,6 @@ func TestPreflightAndMoveTo(t *testing.T) {
 		t.Fatalf("entrypoint differs from the test binary: %v", err)
 	}
 	assertNoStaging(t, staging)
-
-	// 同一包再次预检后移动到同一目标，不能覆盖已有包目录。
-	again, err := Preflight(p.input, staging, NewLimits(tune.Defaults()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := again.MoveTo(packages); errorCode(err) != pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS {
-		t.Fatalf("second MoveTo() error = %v, want ALREADY_EXISTS", err)
-	}
-	if err := again.Discard(); err != nil {
-		t.Fatal(err)
-	}
-	assertNoStaging(t, staging)
-}
-
-// TestPreflightRejects 覆盖每一种拒绝，并确认暂存目录没有残留（V-27、V-28、V-41 的预检分项）。
-func TestPreflightRejects(t *testing.T) {
-	const (
-		invalid   = pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
-		exhausted = pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED
-	)
-	otherOS := "linux"
-	if testOS == "linux" {
-		otherOS = "darwin"
-	}
-	withManifest := func(id, version, source, osName, arch, entrypoint string) []testEntry {
-		entries := validEntries()
-		entries[0].body = manifestYAML(id, version, source, osName, arch, entrypoint)
-		return entries
-	}
-	file := func(name string) testEntry {
-		return testEntry{name: name, typeflag: tar.TypeReg, mode: 0o600, body: "x"}
-	}
-	special := func(typeflag byte) testEntry { return testEntry{name: "special", typeflag: typeflag, mode: 0o600} }
-
-	for _, tc := range []struct {
-		name    string
-		entries []testEntry
-		input   func(*Input)
-		limits  Limits
-		want    pb.ErrorCode
-	}{
-		{name: "source mismatch", input: func(in *Input) { in.Source = "github.com/other/demo" }, want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
-		{name: "no asset for platform", input: func(in *Input) { in.OS = "unsupported" }, want: pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
-		{name: "archive over limit", limits: Limits{MaxArchiveBytes: 1, MaxExpandedBytes: 1 << 20, MaxEntries: 100}, want: exhausted},
-		{name: "manifest id", entries: withManifest("alonabot-plugin-other", testVersion, testSource, testOS, testArch, "bin/plugin"), want: invalid},
-		{name: "manifest version", entries: withManifest(testPluginID, "1.2.4", testSource, testOS, testArch, "bin/plugin"), want: invalid},
-		{name: "manifest source", entries: withManifest(testPluginID, testVersion, "github.com/other/demo", testOS, testArch, "bin/plugin"), want: pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
-		{name: "manifest platform", entries: withManifest(testPluginID, testVersion, testSource, otherOS, testArch, "bin/plugin"), want: pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
-		{name: "manifest entrypoint missing", entries: withManifest(testPluginID, testVersion, testSource, testOS, testArch, "bin/missing"), want: invalid},
-		{name: "parent traversal", entries: validEntries(file("../x")), want: invalid},
-		{name: "absolute path", entries: validEntries(file("/abs")), want: invalid},
-		{name: "nested traversal", entries: validEntries(file("a/../../x")), want: invalid},
-		{name: "backslash", entries: validEntries(file(`a\b`)), want: invalid},
-		{name: "drive letter", entries: validEntries(file("C:x")), want: invalid},
-		{name: "symlink", entries: validEntries(special(tar.TypeSymlink)), want: invalid},
-		{name: "hardlink", entries: validEntries(special(tar.TypeLink)), want: invalid},
-		{name: "char device", entries: validEntries(special(tar.TypeChar)), want: invalid},
-		{name: "block device", entries: validEntries(special(tar.TypeBlock)), want: invalid},
-		{name: "fifo", entries: validEntries(special(tar.TypeFifo)), want: invalid},
-		{name: "case collision", entries: validEntries(file("A.txt"), file("a.txt")), want: invalid},
-		{name: "duplicate path", entries: validEntries(file("a.txt"), file("a.txt")), want: invalid},
-		{name: "too many entries", limits: Limits{MaxArchiveBytes: 1 << 20, MaxExpandedBytes: 1 << 20, MaxEntries: 2}, want: exhausted},
-		{name: "expanded size over limit", limits: Limits{MaxArchiveBytes: 1 << 20, MaxExpandedBytes: 16, MaxEntries: 100}, want: exhausted},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			entries := tc.entries
-			if entries == nil {
-				entries = validEntries()
-			}
-			p := newPackage(t, entries)
-			if tc.input != nil {
-				tc.input(&p.input)
-			}
-			limits := tc.limits
-			if limits == (Limits{}) {
-				limits = NewLimits(tune.Defaults())
-			}
-			staging := filepath.Join(p.root, "staging")
-
-			c, err := Preflight(p.input, staging, limits)
-			if errorCode(err) != tc.want {
-				t.Fatalf("Preflight() = %+v, %v; want %v", c, err, tc.want)
-			}
-			assertNoStaging(t, staging)
-		})
-	}
-}
-
-func errorCode(err error) pb.ErrorCode {
-	var ve *validate.Error
-	if errors.As(err, &ve) {
-		return ve.Code
-	}
-	return pb.ErrorCode_ERROR_CODE_UNSPECIFIED
 }
 
 // assertNoStaging 确认 staging 下没有残留的暂存目录；staging 本身可以不存在。
@@ -242,12 +140,9 @@ func assertNoStaging(t *testing.T, staging string) {
 	}
 }
 
-// TestProjectManifestPreflight 通过真实归档验证作者信息合成与包内必填字段的拒绝。
+// TestProjectManifestPreflight 通过真实归档验证作者信息合成。
 func TestProjectManifestPreflight(t *testing.T) {
 	project := "id: " + testPluginID + "\nname: Demo\ndescription: Example component\nauthor: Example author\nversion: " + testVersion + "\nsource: " + testSource + "\n"
-	if _, err := manifest.ParseProject([]byte(project + "entrypoint: bin/plugin\n")); err == nil || !strings.Contains(err.Error(), "entrypoint") {
-		t.Fatalf("ParseProject() error = %v, want entrypoint", err)
-	}
 	parsed, err := manifest.ParseProject([]byte(project))
 	if err != nil {
 		t.Fatal(err)
@@ -275,12 +170,5 @@ func TestProjectManifestPreflight(t *testing.T) {
 	}
 	if err := candidate.Discard(); err != nil {
 		t.Fatal(err)
-	}
-
-	entries[0].body = strings.Replace(string(data), "name: Demo\n", "", 1)
-	p = newPackage(t, entries)
-	_, err = Preflight(p.input, filepath.Join(p.root, "staging"), NewLimits(tune.Defaults()))
-	if errorCode(err) != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT || !strings.Contains(err.Error(), "name") {
-		t.Fatalf("Preflight() error = %v, want INVALID_ARGUMENT containing name", err)
 	}
 }

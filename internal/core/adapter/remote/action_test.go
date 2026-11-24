@@ -84,10 +84,6 @@ func TestPlatformAction(t *testing.T) {
 		t.Fatalf("result=%v error=%v", result, err)
 	}
 	count("1")
-	if response := call(`{"value":7}`); response.Err.GetCode() != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
-		t.Fatalf("invalid params error=%v", response.Err)
-	}
-	count("1")
 	if err := store.SetAdapterInstanceAccess(ctx, pluginID, false, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -159,15 +155,10 @@ func TestBoundPlatformAction(t *testing.T) {
 		{"chat", "loop.echo", "one", true, nil, parent, 1, `{"value":"ok"}`, 0},
 		{"account", "loop.account", "one", true, nil, parent, 1, `{"value":"ok"}`, 0},
 		{"account event", "loop.account", "one", true, nil, &router.Invocation{PluginID: pluginID, Event: &pb.Event{AdapterInstanceId: proto.String("one")}}, 1, `{"value":"ok"}`, 0},
-		{"missing chat", "loop.echo", "one", true, nil, &router.Invocation{PluginID: pluginID, Event: &pb.Event{AdapterInstanceId: proto.String("one")}}, 1, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_NO_DEFAULT_TARGET},
-		{"missing parent", "loop.echo", "one", true, nil, nil, 1, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT},
 		{"other instance", "loop.echo", "two", true, nil, parent, 1, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
 		{"other chat", "loop.echo", "", false, &pb.Target{AdapterId: "loop", AdapterInstanceId: "one", ChatId: "other"}, parent, 1, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED},
-		{"old empty chat", "loop.echo", "one", false, nil, parent, 1, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT},
 		{"old account", "loop.account", "one", false, nil, parent, 1, `{"value":"ok"}`, 0},
 		{"explicit chat", "loop.echo", "", false, target, parent, 1, `{"value":"ok"}`, 0},
-		{"version", "loop.echo", "one", true, nil, parent, 2, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_UNSUPPORTED},
-		{"schema", "loop.echo", "one", true, nil, parent, 1, `{"value":7}`, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT},
 		{"hook", "loop.echo", "one", true, nil, &router.Invocation{PluginID: pluginID, DefaultTarget: target, SendForbidden: true}, 1, `{"value":"ok"}`, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

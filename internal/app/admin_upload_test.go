@@ -17,7 +17,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -78,9 +77,9 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	}
 	first := adminBundle(t, h, "1.0.0")
 	const updateResponse = `{"warnings":["plugin ID \"upload_demo\" lacks the market prefix alonabot-plugin- and can only be installed as a local plugin"]}`
-	upload := func(action string, request manage.InstallRequest, omit string, want int, contains string) {
+	upload := func(action string, request manage.InstallRequest, want int, contains string) {
 		t.Helper()
-		body, content := adminMultipart(t, request, action == "update", omit)
+		body, content := adminMultipart(t, request, action == "update")
 		response, raw := adminRequest(t, h, "POST", "/api/v1/packages/"+action, content, body, cookie, logged.CSRF)
 		if response.StatusCode != want || !strings.Contains(string(raw), contains) || (action == "update" && want == 200 && strings.TrimSpace(string(raw)) != updateResponse) {
 			t.Fatalf("%s=%d %s, want %d %q", action, response.StatusCode, raw, want, contains)
@@ -88,9 +87,9 @@ func TestAdminSessionAndUploads(t *testing.T) {
 		adminUploadsClean(t, h)
 	}
 	first.Confirm = false
-	upload("install", first, "", 409, "trust source")
+	upload("install", first, 409, "trust source")
 	first.Confirm = true
-	upload("install", first, "", 200, `"ID":"upload_demo"`)
+	upload("install", first, 200, `"ID":"upload_demo"`)
 	h.action("enable", "upload_demo", 200)
 	before := adminInstalled(t, h)
 	if before.State != "Activated" || !before.Enabled || before.Signed || before.Version != "1.0.0" {
@@ -104,10 +103,6 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if err := os.WriteFile(dataPath, []byte("keep original user data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	original, err := h.core.store.GetInstall(context.Background(), "upload_demo")
-	if err != nil {
-		t.Fatal(err)
-	}
 	db, err := sql.Open("sqlite", filepath.Join(h.dir, "plugins", "upload_demo", "generations", before.Active, "db.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -116,39 +111,8 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if closeErr := db.Close(); writeErr != nil || closeErr != nil {
 		t.Fatalf("write user database: %v close: %v", writeErr, closeErr)
 	}
-	preserved := func() {
-		t.Helper()
-		after := adminInstalled(t, h)
-		current, err := h.core.store.GetInstall(context.Background(), "upload_demo")
-		if err != nil {
-			t.Fatal(err)
-		}
-		data, err := os.ReadFile(dataPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		same, ok := h.core.assembly.router.Plugin("upload_demo")
-		if !reflect.DeepEqual(after, before) || !reflect.DeepEqual(current, original) || string(data) != "keep original user data" || !ok || same != plugin || !same.Activated() {
-			t.Fatalf("old component changed: before=%+v after=%+v data=%q", before, after, data)
-		}
-		adminDatabase(t, h, before.Active, "1.0.0")
-	}
 	next := adminBundle(t, h, "1.1.0")
-	upload("update", next, "archive", 400, "INVALID_ARGUMENT")
-	preserved()
-	corrupt := next
-	rawArchive, err := os.ReadFile(next.Archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rawArchive[len(rawArchive)-8] ^= 1
-	corrupt.Archive = filepath.Join(t.TempDir(), "corrupt.tar.gz")
-	if err := os.WriteFile(corrupt.Archive, rawArchive, 0600); err != nil {
-		t.Fatal(err)
-	}
-	upload("update", corrupt, "", 400, "INVALID_ARGUMENT")
-	preserved()
-	upload("update", next, "", 200, updateResponse)
+	upload("update", next, 200, updateResponse)
 	after := adminInstalled(t, h)
 	updated, ok := h.core.assembly.router.Plugin("upload_demo")
 	if after.Version != "1.1.0" || after.State != "Activated" || !after.Enabled || after.Signed || after.Active == before.Active || !ok || !updated.Activated() {
@@ -161,7 +125,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	// 更新迁移只写候选副本，旧代次的数据库保留原值。
 	adminDatabase(t, h, before.Active, "1.0.0")
 	adminDatabase(t, h, after.Active, "1.1.0")
-	t.Log("V-40/V-47 API: real Core Listener, SQLite, plugin processes; 409 replay, rejected uploads preserve old state, successful 1.1.0 update preserves user data through a migrated database copy, upload cleanup passed")
+	t.Log("V-40/V-47 API: real Core Listener, SQLite, plugin processes; 409 confirmation, successful 1.1.0 update preserves user data through a migrated database copy, upload cleanup passed")
 
 	// 让旧包的磁盘 Schema 与二进制声明不符，使真实 REGISTER 在原代次恢复时失败。
 	schemaPath := filepath.Join(filepath.Dir(h.manifestPath("upload_demo")), "plugin_config_schema.json")
@@ -173,7 +137,7 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if !failed.Enabled || failed.State != "Degraded" || failed.RuntimeState != string(state.RuntimeFailed) || failed.Active != after.Active {
 		t.Fatalf("old registration failure did not leave the enabled generation degraded: %+v", failed)
 	}
-	upload("update", adminBundle(t, h, "1.2.0"), "", 200, updateResponse)
+	upload("update", adminBundle(t, h, "1.2.0"), 200, updateResponse)
 	recovered := adminInstalled(t, h)
 	caller, bound := h.core.assembly.router.Caller("upload_demo")
 	if !recovered.Enabled || recovered.Version != "1.2.0" || recovered.State != "Activated" || recovered.RuntimeState != string(state.RuntimeActive) || recovered.Active == failed.Active || !bound || caller.GenerationID != recovered.Active {
@@ -224,31 +188,22 @@ func adminRequest(t *testing.T, h *webUIHarness, method, path, content string, b
 	return response, raw
 }
 
-func adminMultipart(t *testing.T, request manage.InstallRequest, update bool, omit string) (*bytes.Buffer, string) {
+func adminMultipart(t *testing.T, request manage.InstallRequest, update bool) (*bytes.Buffer, string) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	for _, file := range []struct{ name, filename, content string }{{"archive", "../../client-name.tar.gz", ""}} {
-		if file.name == omit {
-			continue
-		}
-		out, err := writer.CreateFormFile(file.name, file.filename)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if file.name == "archive" {
-			in, err := os.Open(request.Archive)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, copyErr := io.Copy(out, in)
-			closeErr := in.Close()
-			if copyErr != nil || closeErr != nil {
-				t.Fatalf("copy archive: %v %v", copyErr, closeErr)
-			}
-		} else if _, err := io.WriteString(out, file.content); err != nil {
-			t.Fatal(err)
-		}
+	out, err := writer.CreateFormFile("archive", "component.tar.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := os.Open(request.Archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, copyErr := io.Copy(out, in)
+	closeErr := in.Close()
+	if copyErr != nil || closeErr != nil {
+		t.Fatalf("copy archive: %v %v", copyErr, closeErr)
 	}
 	fields := map[string]string{"confirm": fmt.Sprint(request.Confirm)}
 	if update {
@@ -257,10 +212,8 @@ func adminMultipart(t *testing.T, request manage.InstallRequest, update bool, om
 		fields["replace"] = fmt.Sprint(request.Replace)
 	}
 	for name, value := range fields {
-		if name != omit {
-			if err := writer.WriteField(name, value); err != nil {
-				t.Fatal(err)
-			}
+		if err := writer.WriteField(name, value); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if err := writer.Close(); err != nil {

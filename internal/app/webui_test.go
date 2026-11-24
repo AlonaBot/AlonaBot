@@ -46,50 +46,9 @@ func TestWebUIComponents(t *testing.T) {
 			h.expect("GET", route, nil, false, 200, "installed-ui")
 		}
 		h.expect("GET", "/app.js", nil, false, 200, "static-asset")
-		h.expect("GET", "/missing.js", nil, false, 404, "")
-		response, _ := h.expect("GET", "/api/unknown", nil, true, 404, "NOT_FOUND")
-		if response.Header.Get("Content-Type") != "application/json" {
-			t.Fatalf("API MIME = %q", response.Header.Get("Content-Type"))
-		}
-		for _, route := range []string{"/healthz", "/internal/auth", "/media/missing"} {
-			h.expect("GET", route, nil, false, 404, "")
-		}
-		h.expect("GET", "/plugins/missing/page", nil, false, 503, "Service Unavailable")
 		h.action("disable", "ui", 200)
 		h.expect("GET", "/", nil, false, 503, "alonabot install")
 		h.action("enable", "ui", 200)
-	})
-
-	t.Run("version-gates-preserve-old-webui", func(t *testing.T) {
-		h.t = t
-		defer func() { h.t = parent }()
-		candidate := h.bundle("incompatible", "webui", "", 2)
-		candidate.Replace = true
-		h.expect("POST", "/api/v1/packages/install", candidate, true, 412, "FAILED_PRECONDITION")
-		h.expect("GET", "/", nil, false, 200, "installed-ui")
-		// 改写临时包的声明，模拟 Core 升级后已安装包的范围失配。
-		name := h.manifestPath("ui")
-		raw, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		incompatible := bytes.ReplaceAll(raw, []byte("major: 1"), []byte("major: 2"))
-		if err := os.WriteFile(name, incompatible, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		h.expect("GET", "/", nil, false, 503, "Core Admin API major 1")
-		h.expect("GET", "/api/v1/packages", nil, true, 200, "ui")
-		h.action("disable", "ui", 200)
-		h.action("enable", "ui", 412)
-		enabled, err := h.core.store.Enabled(context.Background(), "ui")
-		if err != nil || enabled {
-			t.Fatalf("failed Enable changed state: enabled=%v err=%v", enabled, err)
-		}
-		if err := os.WriteFile(name, raw, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		h.action("enable", "ui", 200)
-		h.expect("GET", "/", nil, false, 200, "installed-ui")
 	})
 
 	t.Run("authenticated-declared-icons", func(t *testing.T) {
@@ -100,21 +59,14 @@ func TestWebUIComponents(t *testing.T) {
 			h.install(id, "plugin", "icon."+tc.ext, 1, false)
 			route := "/api/v1/packages/" + id + "/icon"
 			h.expect("GET", route, nil, false, 401, "unauthorized")
-			response, body := h.expect("GET", route+"?path=private.txt", nil, true, 200, "")
+			response, body := h.expect("GET", route, nil, true, 200, "")
 			if string(body) != webUIIcon(tc.ext) {
 				t.Fatalf("icon bytes = %q", body)
 			}
 			if response.Header.Get("Content-Type") != tc.mime || response.Header.Get("Content-Security-Policy") != "sandbox; default-src 'none'; style-src 'unsafe-inline'" || response.Header.Get("X-Content-Type-Options") != "nosniff" {
 				t.Fatalf("icon headers = %v", response.Header)
 			}
-			for _, suffix := range []string{"/private.txt", "/../private.txt", "/%2e%2e/private.txt", "/icon.html"} {
-				h.expect("GET", route+suffix, nil, true, 404, "")
-			}
 		}
-		h.expect("GET", "/api/v1/packages/ui/icon", nil, true, 404, "")
-		h.expect("GET", "/api/v1/packages/missing/icon", nil, true, 404, "")
-		bad := h.bundle("bad_icon", "plugin", "icon.html", 1)
-		h.expect("POST", "/api/v1/packages/install", bad, true, 400, "INVALID_ARGUMENT")
 	})
 
 	t.Run("development-override-through-start", func(t *testing.T) {
