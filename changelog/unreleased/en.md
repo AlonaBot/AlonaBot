@@ -3,3 +3,4 @@
 ### Fixed
 
 - Return Send/Edit receipts independently; manage ordered AfterSend batches with bounded admission and Core draining (#325).
+- Apply event deadlines to queueing and PreEvent; skip business processing for expired queued events (#324).

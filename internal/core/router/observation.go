@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -157,7 +158,13 @@ func invocationError(err error) *pb.ErrorInfo {
 	if errors.As(err, &callError) {
 		return callError.ErrorInfo
 	}
-	return &pb.ErrorInfo{Code: wire.CodeOf(err), SafeMessage: err.Error()}
+	code := wire.CodeOf(err)
+	if errors.Is(err, context.DeadlineExceeded) {
+		code = pb.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED
+	} else if errors.Is(err, context.Canceled) {
+		code = pb.ErrorCode_ERROR_CODE_CANCELLED
+	}
+	return &pb.ErrorInfo{Code: code, SafeMessage: err.Error()}
 }
 
 func (r *Router) completeDispatch(state *dispatchState) {

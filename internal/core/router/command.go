@@ -46,7 +46,7 @@ func (r *Router) cacheCommands(pluginID string, source routeSnapshot) {
 	r.matches[pluginID] = routes
 }
 
-func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
+func (r *Router) dispatchCommands(ctx context.Context, ev *pb.Event, event *trustedEvent) bool {
 	// 1. 同时读取路径索引和插件路由快照，插件调用期间不持注册锁。
 	r.mu.Lock()
 	index := r.commands
@@ -61,7 +61,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 	}
 	text := content.String()
 	head := commandHead(ev.GetEventPayload().GetMessageCreated().GetChain(), ev.GetAccountId())
-	tokens, prefix, err := r.commandTokens(head, ev)
+	tokens, prefix, err := r.commandTokens(ctx, head, ev)
 	if err != nil {
 		plugins := make([]string, 0, len(routes))
 		for _, route := range routes {
@@ -79,7 +79,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 					continue
 				}
 				route.names = entry.Names
-				if !r.commandAllowed(&route.candidate, ev, event.dispatch) {
+				if !r.commandAllowed(ctx, &route.candidate, ev, event.dispatch) {
 					return false
 				}
 				tail := strings.TrimPrefix(head, prefix)
@@ -103,7 +103,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 					invocation.Path = entry.Path
 					return invocation, nil
 				}
-				return r.invokeCommand(route.candidate, ev, event, bind, prefix)
+				return r.invokeCommand(ctx, route.candidate, ev, event, bind, prefix)
 			}
 			return false
 		}
@@ -141,7 +141,7 @@ func (r *Router) dispatchCommands(ev *pb.Event, event *trustedEvent) bool {
 				}
 			}
 		}
-		if matched && r.commandAllowed(&route.candidate, ev, event.dispatch) && r.invokeCommand(route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
+		if matched && r.commandAllowed(ctx, &route.candidate, ev, event.dispatch) && r.invokeCommand(ctx, route.candidate, ev, event, func(*pb.Event) (*pb.CommandInvocation, error) { return invocation, nil }, "") {
 			return true
 		}
 	}
@@ -215,8 +215,8 @@ func commandHead(chain *pb.MessageChain, accountID string) string {
 	return head.String()
 }
 
-func (r *Router) commandTokens(text string, ev *pb.Event) ([]string, string, error) {
-	prefixes, err := r.prefixes(r.ctx, ev.GetTarget())
+func (r *Router) commandTokens(ctx context.Context, text string, ev *pb.Event) ([]string, string, error) {
+	prefixes, err := r.prefixes(ctx, ev.GetTarget())
 	if err != nil {
 		return nil, "", fmt.Errorf("read platform for target %v: %w", ev.GetTarget(), err)
 	}
@@ -284,14 +284,14 @@ func foldText(text string) string {
 	}, text)
 }
 
-func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
-	if r.ctx.Err() != nil || !r.available(c) {
+func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), prefix string) bool {
+	if ctx.Err() != nil || !r.available(c) {
 		return false
 	}
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
 	started := time.Now()
-	response, callError := r.call(&c, event, bind, trace)
+	response, callError := r.call(ctx, &c, event, bind, trace)
 	duration := time.Since(started)
 	if errors.Is(callError, errCommandArguments) {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Debug("command arguments rejected", "error", callError)
@@ -300,7 +300,7 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 			if err != nil {
 				slog.Warn("format command usage failed", "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "error", err)
 			} else {
-				r.sendReply(c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace, event.invocation)
+				r.sendReply(ctx, c, ev, &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: usage}}}}}, trace, event.invocation)
 			}
 		}
 		return false
@@ -333,14 +333,14 @@ func (r *Router) invokeCommand(c candidate, ev *pb.Event, event *trustedEvent, b
 	}
 	event.commandConsumed = event.commandConsumed || outcome.GetMatched()
 	if callError == nil && response.Err == nil && outcome.GetMatched() && c.route.GetCommand().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
-		r.sendReply(c, ev, outcome.Chain, trace, event.invocation)
+		r.sendReply(ctx, c, ev, outcome.Chain, trace, event.invocation)
 	}
 	return outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP
 }
 
-func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, trace []byte, parent *Invocation) {
+func (r *Router) sendReply(ctx context.Context, c candidate, ev *pb.Event, chain *pb.MessageChain, trace []byte, parent *Invocation) {
 	if parent == nil {
-		profileID, _, err := r.Profile(r.ctx, c.pluginID, ev.GetTarget())
+		profileID, _, err := r.Profile(ctx, c.pluginID, ev.GetTarget())
 		if err != nil {
 			slog.Warn("reply profile read failed", "plugin_id", c.pluginID, "error", err)
 			return
@@ -354,7 +354,7 @@ func (r *Router) sendReply(c candidate, ev *pb.Event, chain *pb.MessageChain, tr
 		slog.Warn("encode reply failed", "error", err)
 		return
 	}
-	response := r.send(r.ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: parent, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
+	response := r.send(ctx, c.caller, &wire.Inbound{TraceID: trace, ParentAttach: parent, Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: handlerSchemaVersion, Bytes: encoded}})
 	result := &pb.SendResult{}
 	if err := proto.Unmarshal(response.Payload.Bytes, result); err != nil {
 		slog.Warn("decode reply result failed", "error", err)

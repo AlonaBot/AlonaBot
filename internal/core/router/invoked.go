@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
@@ -20,11 +21,11 @@ const (
 	commandDenied       = "denied"
 )
 
-func (r *Router) commandAllowed(c *candidate, ev *pb.Event, state *dispatchState) bool {
-	if !r.available(*c) {
+func (r *Router) commandAllowed(ctx context.Context, c *candidate, ev *pb.Event, state *dispatchState) bool {
+	if ctx.Err() != nil || !r.available(*c) {
 		return false
 	}
-	if failure := r.commandPolicyFailure(profile.WithView(r.ctx), c, ev); failure != nil {
+	if failure := r.commandPolicyFailure(profile.WithView(ctx), c, ev); failure != nil {
 		r.recordDiagnostic(state, *c, nil, debugapi.PhaseAdmission, failure)
 		r.commandInvoked(*c, ev, commandPolicyResult(failure.GetCode()), 0)
 		return false

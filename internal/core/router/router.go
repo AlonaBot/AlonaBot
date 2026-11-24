@@ -300,10 +300,10 @@ func (r *Router) candidates(ev *pb.Event) []candidate {
 	return candidates
 }
 
-func (r *Router) dispatch(event *trustedEvent) {
+func (r *Router) dispatch(ctx context.Context, event *trustedEvent) {
 	ev := event.retained
 	if r.policy != nil {
-		if failure := r.policy.CheckSessionAccess(r.ctx, ev.GetTarget()); failure != nil {
+		if failure := r.policy.CheckSessionAccess(ctx, ev.GetTarget()); failure != nil {
 			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
 				r.metrics.Add("", "event", "denied")
 			} else {
@@ -315,12 +315,12 @@ func (r *Router) dispatch(event *trustedEvent) {
 	if event.recipient != "" {
 		candidates := r.candidates(ev)
 		candidates = slices.DeleteFunc(candidates, func(c candidate) bool { return c.pluginID != event.recipient })
-		r.dispatchEvents(event, event.rebuild(), candidates, false, false)
+		r.dispatchEvents(ctx, event, event.rebuild(), candidates, false, false)
 		return
 	}
 	if ev.GetEventType() == commandInvokedEvent {
 		// 命令通知保留原消息的 Actor，直接交给订阅的事件路由。
-		r.dispatchEvents(event, event.rebuild(), r.candidates(ev), false, false)
+		r.dispatchEvents(ctx, event, event.rebuild(), r.candidates(ev), false, false)
 		return
 	}
 	var candidates []candidate
@@ -332,7 +332,7 @@ func (r *Router) dispatch(event *trustedEvent) {
 		}
 		// 先取 Session 快照再解析，解析后发生代次替换时 call 会拒绝旧快照。
 		snapshot := r.candidates(ev)
-		pluginID, routeID, err := r.buttons(r.ctx, ev)
+		pluginID, routeID, err := r.buttons(ctx, ev)
 		if err != nil {
 			slog.Info("discard invalid button click", "error", err)
 			return
@@ -355,7 +355,7 @@ func (r *Router) dispatch(event *trustedEvent) {
 			}
 		}
 		if r.policy != nil {
-			admin, err := r.policy.IsAdmin(r.ctx, ev.GetAdapterId(), actor)
+			admin, err := r.policy.IsAdmin(ctx, ev.GetAdapterId(), actor)
 			if err != nil {
 				slog.Warn("read Core Admin status failed", "adapter_instance_id", actor.GetAdapterInstanceId(), "error", err)
 			} else if admin {
@@ -368,8 +368,11 @@ func (r *Router) dispatch(event *trustedEvent) {
 	ev = event.rebuild()
 	toMe := ev.GetEventPayload().GetMessageCreated().GetToMe()
 	// 2. 预处理只回写业务载荷；后继路由从原绑定重建可信字段。
+	if ctx.Err() != nil {
+		return
+	}
 	if r.preEvent != nil {
-		payload, stop, err := r.preEvent(r.ctx, ev)
+		payload, stop, err := r.preEvent(ctx, ev)
 		if err != nil {
 			slog.Warn("pre-event hook failed", "event_id", event.retained.GetEventId(), "error", err)
 			return
@@ -380,31 +383,34 @@ func (r *Router) dispatch(event *trustedEvent) {
 		}
 		ev = event.rebuild()
 	}
+	if ctx.Err() != nil {
+		return
+	}
 	// 3. 多轮等待先于命令匹配取走匹配的消息。
 	if ev.GetEventType() == "message.created" && r.continuations != nil && r.continuations.Match(ev) {
 		return
 	}
 	// 4. 命令层的 STOP 终止整条分发链；消费但继续的命令仍进入事件层。
-	if ev.GetEventType() == "message.created" && r.dispatchCommands(ev, event) {
+	if ev.GetEventType() == "message.created" && r.dispatchCommands(ctx, ev, event) {
 		return
 	}
 	// 5. 事件路由独立判断权限，拒绝当前候选后继续后继路由。
 	if !buttonClick {
 		candidates = r.candidates(ev)
 	}
-	r.dispatchEvents(event, ev, candidates, buttonClick, toMe)
+	r.dispatchEvents(ctx, event, ev, candidates, buttonClick, toMe)
 }
 
 // toMe 取预处理前可信的 message.created 标记，供消息过滤判断。
-func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []candidate, buttonClick, toMe bool) {
+func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb.Event, candidates []candidate, buttonClick, toMe bool) {
 	for _, candidate := range candidates {
-		if r.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return
 		}
 		if !r.available(candidate) {
 			continue
 		}
-		ctx := profile.WithView(r.ctx)
+		ctx := profile.WithView(ctx)
 		if failure := r.commandPolicyFailure(ctx, &candidate, ev); failure != nil {
 			r.recordDiagnostic(event.dispatch, candidate, nil, debugapi.PhaseAdmission, failure)
 			if failure.GetCode() == pb.ErrorCode_ERROR_CODE_INTERNAL {
@@ -422,7 +428,7 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 		}
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
-		response, callError := r.call(&candidate, event, nil, trace)
+		response, callError := r.call(ctx, &candidate, event, nil, trace)
 		if callError != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", callError)
 		}
@@ -436,7 +442,7 @@ func (r *Router) dispatchEvents(event *trustedEvent, ev *pb.Event, candidates []
 			continue
 		}
 		if callError == nil && response.Err == nil && outcome.GetMatched() && candidate.route.GetEvent().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
-			r.sendReply(candidate, ev, outcome.Chain, trace, event.invocation)
+			r.sendReply(ctx, candidate, ev, outcome.Chain, trace, event.invocation)
 		}
 		if outcome.GetPropagation() == pb.Propagation_PROPAGATION_STOP {
 			return
@@ -463,7 +469,7 @@ func (r *Router) current(c candidate) bool {
 	return c.pluginSession != nil && r.ctx.Err() == nil && r.plugins[c.pluginID] == c.pluginSession && c.plugin.Activated()
 }
 
-func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (response wire.Response, callErr error) {
+func (r *Router) call(ctx context.Context, c *candidate, event *trustedEvent, bind func(*pb.Event) (*pb.CommandInvocation, error), trace []byte) (response wire.Response, callErr error) {
 	phase := debugapi.PhaseAdmission
 	called := false
 	// 调用前失败保留独立诊断；实际 Call 的业务错误继续由 recordOutcome 记录。
@@ -480,7 +486,6 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 	event.invocation = nil
 	ev := event.rebuild()
 	profileID := c.profileID
-	ctx := r.ctx
 	if !event.deadline.IsZero() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, event.deadline)
@@ -559,6 +564,9 @@ func (r *Router) call(c *candidate, event *trustedEvent, bind func(*pb.Event) (*
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		return wire.Response{}, fmt.Errorf("encode handler request: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return wire.Response{}, err
 	}
 	// 2. prepare 期间可能发生替换或移除；实际调用前再核对，并只为本次 Call 登记关联。
 	key := inFlightKey{caller: c.caller, eventID: event.retained.GetEventId()}
@@ -650,7 +658,7 @@ func (r *Router) CallContinuation(ctx context.Context, inv *Invocation, continua
 			mode = inv.candidate.route.GetEvent().GetHandlerMode()
 		}
 		if decodeErr == nil && outcome.GetMatched() && mode == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
-			r.sendReply(inv.candidate, next.Event, outcome.Chain, next.TraceID, next)
+			r.sendReply(ctx, inv.candidate, next.Event, outcome.Chain, next.TraceID, next)
 		}
 	}
 	return response, err
