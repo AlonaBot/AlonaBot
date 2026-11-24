@@ -980,15 +980,17 @@ func (c *Core) shutdown() error {
 	timing := host.NewStopTiming(c.values)
 	var wg sync.WaitGroup
 	errs := make(chan error, len(c.components)+1)
-	// Router 的排空与组件冻结并行，避免把停止预算逐个累加。
+	// 已接纳的观察仍需使用候选 Session；先共用排空截止，再冻结组件。
+	// 所有阶段沿用同一个 t0，保持总停止预算。
 	if c.assembly != nil {
-		wg.Go(func() {
-			ctx, cancel := context.WithDeadline(context.Background(), t0.Add(timing.Drain))
-			defer cancel()
-			if err := c.assembly.router.Close(ctx); err != nil {
-				slog.Warn("event router drain ended", "error", err)
-			}
-		})
+		ctx, cancel := context.WithDeadline(context.Background(), t0.Add(timing.Drain))
+		if err := c.assembly.router.Close(ctx); err != nil {
+			slog.Warn("event router drain ended", "error", err)
+		}
+		if err := c.assembly.hooks.Close(ctx); err != nil {
+			slog.Warn("after-send drain ended", "error", err)
+		}
+		cancel()
 	}
 	for _, running := range c.components {
 		if running == nil {

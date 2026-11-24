@@ -7,11 +7,14 @@ package hook
 import (
 	"cmp"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/validate"
@@ -24,19 +27,35 @@ const schemaVersion = 1
 
 // Runner 通过 Router 的当前插件绑定执行 Hook；各次执行独立收集候选。
 type Runner struct {
-	router *router.Router
-	opt    Options
+	router   *router.Router
+	opt      Options
+	ctx      context.Context
+	cancel   context.CancelFunc
+	slots    chan struct{}
+	workers  chan struct{}
+	mu       sync.Mutex
+	closed   bool
+	stopping chan struct{}
+	drained  chan struct{}
+	pending  sync.WaitGroup
 }
 
 // Options 接入按接收 Session 准备事件和按 Adapter 声明复检改写的 Core 流程。
 type Options struct {
+	AfterSendConcurrency int
+	AfterSendCapacity    int
+	RequestTimeout       time.Duration
+	AcquireActivity      func(router.Caller) (func(), error)
 	// Prepare 只替换媒体来源，保持链结构与遍历顺序；nil 时交付原业务副本。
 	Prepare    func(*pb.Event, router.Caller) (*pb.Event, error)
 	CheckEvent func(*pb.Event) error // 扩展事件改写必须提供当前实例的声明校验
 }
 
 // New 创建使用指定 Router 的 Hook 执行器。
-func New(r *router.Router, opt Options) *Runner { return &Runner{router: r, opt: opt} }
+func New(r *router.Router, opt Options) *Runner {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Runner{router: r, opt: opt, ctx: ctx, cancel: cancel, slots: make(chan struct{}, opt.AfterSendCapacity), workers: make(chan struct{}, opt.AfterSendConcurrency), stopping: make(chan struct{}), drained: make(chan struct{})}
+}
 
 type candidate struct {
 	plugin router.Plugin
@@ -232,23 +251,6 @@ func (h *Runner) BeforeSend(ctx context.Context, op pb.SendOperation, edited str
 	return chain, nil
 }
 
-// AfterSend 将最终回执和错误逐个交给观察 Hook；其失败只记录日志。
-func (h *Runner) AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation) {
-	for _, candidate := range h.candidates(pb.HookPhase_HOOK_PHASE_AFTER_SEND) {
-		if !h.current(candidate) {
-			continue
-		}
-		request := &pb.AfterSendRequest{
-			RouteId: candidate.route.GetRouteId(), Context: invocationContext(parent, true),
-			Target: target, Chain: chain, Result: result, Error: errInfo,
-			Operation: op, EditedPlatformMessageId: editedMessageID(op, edited),
-		}
-		if safe := call(ctx, candidate, request, &pb.AfterSendResult{}, parent, true); safe != nil {
-			slog.Warn("after-send hook failed", "plugin_id", candidate.caller.PluginID, "route_id", request.RouteId, "code", safe.Code, "error", safe.SafeMessage)
-		}
-	}
-}
-
 func invocationContext(parent *router.Invocation, forbidden bool) *pb.InvocationContext {
 	trusted := &pb.InvocationContext{SendForbidden: forbidden}
 	if parent != nil {
@@ -283,13 +285,16 @@ func call(ctx context.Context, candidate candidate, request, result proto.Messag
 		invocation.Depth = parent.Depth + 1
 		invocation.ProfileID, invocation.Root = parent.ProfileID, parent.Root
 	}
+	if parent == nil {
+		invocation.TraceID, _ = hex.DecodeString(wire.TraceID(ctx))
+	}
 	defer invocation.Begin()()
 	encoded, err := proto.Marshal(request)
 	if err != nil {
 		return failure(pb.ErrorCode_ERROR_CODE_INTERNAL, "encode hook request: "+err.Error())
 	}
 	response, err := candidate.plugin.Call(ctx, wire.Request{
-		Target: candidate.route.GetRouteId(), Attach: invocation,
+		Target: candidate.route.GetRouteId(), Attach: invocation, TraceID: invocation.TraceID,
 		Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(request), SchemaVersion: schemaVersion, Bytes: encoded},
 	})
 	if response.Err != nil {

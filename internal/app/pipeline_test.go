@@ -138,6 +138,8 @@ func pipelinePlugin(mode string) *sdk.Plugin {
 	p := sdk.NewPlugin()
 	genresources.Bind(p, genresources.Resources{})
 	switch mode {
+	case "after-send":
+		return afterSendPlugin()
 	case "service-chain":
 		return serviceChainPlugin()
 	case chainBackgroundMode:
@@ -449,6 +451,9 @@ func newPipelineWithMessageConfig(t *testing.T, dir string, values tune.Values, 
 		if err := h.assembly.router.Close(ctx); err != nil {
 			t.Error(err)
 		}
+		if err := h.assembly.hooks.Close(ctx); err != nil {
+			t.Error(err)
+		}
 		h.server.Close()
 		h.mu.Lock()
 		decodeErr := h.decodeErr
@@ -747,9 +752,10 @@ func TestPipeline(t *testing.T) {
 				h.inject(pipelineInput{Text: text, User: "alice"})
 				h.idle()
 			}
+			h.await(func(records []pipelineRecord) bool { return len(pipelineStages(records[before:], "after")) == 3 })
 			records := h.snapshot()[before:]
-			got := pipelineStages(records, "before", "send", "after")
-			want := []string{"before:explicit", "send:explicit", "after:", "before:automatic-after-explicit", "send:automatic-after-explicit", "after:", "before:explicit", "send:explicit", "after:"}
+			got := pipelineStages(records, "before", "send")
+			want := []string{"before:explicit", "send:explicit", "before:automatic-after-explicit", "send:automatic-after-explicit", "before:explicit", "send:explicit"}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("explicit and automatic Hook sequence=%v want=%v", got, want)
 			}
@@ -762,6 +768,8 @@ func TestPipeline(t *testing.T) {
 					hooked = append(hooked, record.MessageID)
 				}
 			}
+			slices.Sort(sent)
+			slices.Sort(hooked)
 			if !reflect.DeepEqual(sent, hooked) {
 				t.Fatalf("AfterSend receipts=%v sends=%v", hooked, sent)
 			}
@@ -927,8 +935,9 @@ func pipelineHooksTest(t *testing.T) {
 		h.inject(pipelineInput{Text: text, User: "alice"})
 		h.idle()
 	}
-	got := pipelineStages(h.snapshot(), "before", "send", "edit", "after", "rejected")
-	want := []string{"before:rewritten", "send:before:rewritten", "after:", "before:rewritten-again", "send:before:rewritten-again", "after:", "before:edit", "send:before:edit", "after:", "before:edited", "edit:before:edited", "after:", "before:reject", "rejected:", "before:automatic", "send:before:automatic", "after:"}
+	h.await(func(records []pipelineRecord) bool { return len(pipelineStages(records, "after")) == 5 })
+	got := pipelineStages(h.snapshot(), "before", "send", "edit", "rejected")
+	want := []string{"before:rewritten", "send:before:rewritten", "before:rewritten-again", "send:before:rewritten-again", "before:edit", "send:before:edit", "before:edited", "edit:before:edited", "before:reject", "rejected:", "before:automatic", "send:before:automatic"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("hook sequence=%v want=%v", got, want)
 	}
