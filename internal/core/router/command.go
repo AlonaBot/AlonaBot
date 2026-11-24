@@ -315,8 +315,12 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 	if callError != nil {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler call failed", "error", callError)
 	}
-	if response.Err != nil {
+	if response.Err != nil && callError == nil {
 		slog.With("plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace)).Warn("command handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
+	}
+	if (callError != nil || response.Err != nil) && emptyOutcome(response.Payload) {
+		r.commandInvoked(c, ev, result, duration)
+		return false
 	}
 	outcome, err := decodeOutcome(response.Payload)
 	if err != nil {

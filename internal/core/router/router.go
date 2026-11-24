@@ -436,6 +436,9 @@ func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler returned an error", "code", response.Err.GetCode(), "error", response.Err.GetSafeMessage())
 		}
 		// 业务错误仍可能携带有效 STOP；先读取传播结果，再决定是否继续。
+		if (callError != nil || response.Err != nil) && emptyOutcome(response.Payload) {
+			continue
+		}
 		outcome, err := decodeOutcome(response.Payload)
 		if err != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("decode event handler outcome failed", "error", err)
@@ -695,4 +698,9 @@ func decodeOutcome(payload wire.Payload) (*pb.HandlerOutcome, error) {
 		return nil, fmt.Errorf("decode HandlerOutcome: %w", err)
 	}
 	return outcome, nil
+}
+
+// emptyOutcome 只识别未提供载荷的响应，已提供的元数据仍接受协议校验。
+func emptyOutcome(p wire.Payload) bool {
+	return p.Encoding == pb.PayloadEncoding_PAYLOAD_ENCODING_UNSPECIFIED && p.SchemaID == "" && p.SchemaVersion == 0 && len(p.Bytes) == 0
 }
