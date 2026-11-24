@@ -133,7 +133,7 @@ func TestRecoveryEndToEnd(t *testing.T) {
 					t.Fatal(err)
 				}
 				c = start(t, dir, "")
-				c.waitFor(`old process may still be running`)
+				c.waitFor(`The previous process of component recovery may still be running`)
 				item := findPackage(t, c, dir, "recovery")
 				after, err := os.ReadFile(filepath.Join(pluginDir, "starts"))
 				if err != nil || item.State != "Degraded" || item.Active != old || string(before) != string(after) {

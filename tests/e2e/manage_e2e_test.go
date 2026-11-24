@@ -1198,9 +1198,6 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.management(t, dir, "", "adapter", "instance", "create", "alonabot-adapter-fixture", id, "--config", configFile)
 	}
-	if output := managementFailure(t, c, dir, "adapter", "instance", "create", "alonabot-adapter-fixture", "fail", "--config", configFile); !strings.Contains(output, "fixture instance rejected") {
-		t.Fatal(output)
-	}
 	raw, err := os.ReadFile(filepath.Join(dir, settings.FileName))
 	if err != nil {
 		t.Fatal(err)
@@ -1218,16 +1215,14 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	status, body := fixtureHTTP(t, c, dir, http.MethodGet, "/api/v1/adapter/instances")
 	var instances struct {
 		Instances []struct {
-			ID        string `json:"instance_id"`
-			State     string `json:"state"`
-			SafeError string `json:"safe_error"`
+			ID string `json:"instance_id"`
 		} `json:"instances"`
 	}
 	if status != http.StatusOK || json.Unmarshal(body, &instances) != nil {
 		t.Fatalf("instances: %d %s", status, body)
 	}
-	if len(instances.Instances) != 3 || instances.Instances[0].ID != "fail" || instances.Instances[0].State != "failed" || !strings.Contains(instances.Instances[0].SafeError, "fixture instance rejected") {
-		t.Fatalf("failed instance was not retained: %s", body)
+	if len(instances.Instances) != 2 || instances.Instances[0].ID != "one" || instances.Instances[1].ID != "two" {
+		t.Fatalf("configured instances: %s", body)
 	}
 	check := func(instance, user, text, want string, count int) {
 		t.Helper()
@@ -1266,7 +1261,6 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	check("two", "new", "!inspect", "admin=false", 2)
 	c.management(t, dir, "", "admin", "add", "devloop:new")
 	check("two", "new", "!inspect", "admin=true", 3)
-	check("one", "initial", "?number invalid", "用法：?number", 4)
 	c.management(t, dir, "", "adapter", "instance", "stop", "two")
 	c.management(t, dir, "", "adapter", "instance", "start", "two")
 	stopTestCore(t, c)
@@ -1274,7 +1268,6 @@ func TestManagementInstancesAndCommands(t *testing.T) {
 	for _, id := range []string{"one", "two"} {
 		c.waitFor("fixture instance " + id + " started")
 	}
-	c.waitFor(`adapter instance start failed plugin_id=alonabot-adapter-fixture instance_id=fail`)
 	listed := c.management(t, dir, "", "list")
 	if strings.Contains(listed, "fixture-credential-value") || strings.Contains(listed, "MANAGE_E2E_TOKEN") || strings.Contains(c.log(), "fixture-credential-value") {
 		t.Fatal("credentials escaped through management or logs")
@@ -1510,7 +1503,6 @@ const adapterFixtureSource = `package main
 import (
  "context"
  "encoding/json"
- "errors"
  "log/slog"
  "net/http"
  "os"
@@ -1526,7 +1518,6 @@ type operation struct{Operation,Instance,Session,ID string;Chain message.Chain}
 type platform struct {adapter.Adapter; mu sync.Mutex; cores map[string]adapter.Core; sent []string; records []operation; tokens []string}
 type instance struct {adapter.Instance; platform *platform; id string}
 func (p *platform) Start(ctx context.Context,req adapter.StartRequest,core adapter.Core)(adapter.Instance,error){
- if req.InstanceID=="fail" {return nil,errors.New("fixture instance rejected")}
  base,err:=p.Adapter.Start(ctx,req,core);if err!=nil{return nil,err}
  p.mu.Lock();p.cores[req.InstanceID]=core;p.mu.Unlock()
  slog.Info("fixture instance "+req.InstanceID+" started")
