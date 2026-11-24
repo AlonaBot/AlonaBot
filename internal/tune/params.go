@@ -14,6 +14,8 @@ type Values struct {
 	CoreMaxPayload        int64 // 字节
 	RequestTimeout        time.Duration
 	CallChainMaxDepth     int
+	AfterSendConcurrency  int
+	AfterSendCapacity     int
 	DispatchConcurrency   int
 	DispatchQueueEvents   int
 	DispatchQueueBytes    int64 // 字节
@@ -109,6 +111,8 @@ var parameters = []parameter{
 	param("CORE_MAX_PAYLOAD", bytesUnit, int64(64<<20), true, ">= SESSION_MAX_PAYLOAD", "internal/tune/params.go", func(v *Values) *int64 { return &v.CoreMaxPayload }),
 	param("REQUEST_TIMEOUT", durationUnit, time.Duration(30*time.Second), true, "> 0", "internal/tune/params.go", func(v *Values) *time.Duration { return &v.RequestTimeout }),
 	param("CALL_CHAIN_MAX_DEPTH", integerUnit, int(16), true, ">= 1", "internal/tune/params.go", func(v *Values) *int { return &v.CallChainMaxDepth }),
+	param("AFTER_SEND_CONCURRENCY", integerUnit, int(4), true, ">= 1", "internal/tune/params.go", func(v *Values) *int { return &v.AfterSendConcurrency }),
+	param("AFTER_SEND_CAPACITY", integerUnit, int(64), true, ">= 1", "internal/tune/params.go", func(v *Values) *int { return &v.AfterSendCapacity }),
 	param("DISPATCH_CONCURRENCY", integerUnit, int(64), true, ">= 1", "internal/tune/params.go", func(v *Values) *int { return &v.DispatchConcurrency }),
 	param("DISPATCH_QUEUE_EVENTS", integerUnit, int(256), true, ">= 1", "internal/tune/params.go", func(v *Values) *int { return &v.DispatchQueueEvents }),
 	param("DISPATCH_QUEUE_BYTES", bytesUnit, int64(8<<20), true, ">= frame limit 4MiB", "internal/tune/params.go", func(v *Values) *int64 { return &v.DispatchQueueBytes }),

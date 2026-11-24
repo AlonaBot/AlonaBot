@@ -16,6 +16,9 @@ const editCapability = "message.edit"
 // Edit 按 Send 的目标准入规则校验编辑请求，再由支持编辑的实例修改原消息。
 // Adapter 返回的回执和错误完整转发；失败时保持单次编辑，不发送新消息。
 func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	ctx, cancel := s.requestContext(ctx, in)
+	defer cancel()
+	ctx = wire.WithTraceID(ctx, in.TraceID)
 	// 1. 取得可信默认目标，校验协议载荷。
 	invocation, _ := in.ParentAttach.(*router.Invocation)
 	var defaultTarget *pb.Target
@@ -105,13 +108,26 @@ func (s *Service) Edit(ctx context.Context, caller router.Caller, in *wire.Inbou
 			return editRejected(target, rejectError(target, err).Err)
 		}
 	}
+	var complete func(*pb.SendResult, *pb.ErrorInfo)
+	if s.hooks != nil {
+		var release func()
+		var err error
+		complete, release, err = s.hooks.PrepareAfterSend(ctx, caller, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, invocation)
+		if err != nil {
+			return editRejected(target, rejectError(target, err).Err)
+		}
+		defer release()
+	}
+	if err := ctx.Err(); err != nil {
+		return editRejected(target, rejectError(target, err).Err)
+	}
 	// 7. 执行唯一一次编辑，观察 Hook 的结果不改变平台回执与错误。
 	result, safe := editor.Edit(ctx, target, request.PlatformMessageId, request.Chain)
+	if complete != nil {
+		complete(result, safe)
+	}
 	if s.observe != nil {
 		s.observe(in.TraceID, "edit", target, request.Chain, result, safe)
-	}
-	if s.hooks != nil {
-		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_EDIT, request.PlatformMessageId, target, request.Chain, result, safe, invocation)
 	}
 	return response(result, safe)
 }

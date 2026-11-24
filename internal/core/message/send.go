@@ -28,8 +28,8 @@ const schemaVersion = 1
 type Hooks interface {
 	// BeforeSend 每次改写后立即调用 check；nil 表示保留原 Chain，检查失败即终止。
 	BeforeSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation, check func(*pb.MessageChain) *pb.ErrorInfo) (*pb.MessageChain, *pb.ErrorInfo)
-	// AfterSend 只观察本次平台操作的回执与错误。
-	AfterSend(ctx context.Context, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, errInfo *pb.ErrorInfo, parent *router.Invocation)
+	// PrepareAfterSend 在平台副作用前预留观察容量；complete 与 release 共享一次释放所有权。
+	PrepareAfterSend(ctx context.Context, source router.Caller, op pb.SendOperation, edited string, target *pb.Target, chain *pb.MessageChain, parent *router.Invocation) (complete func(*pb.SendResult, *pb.ErrorInfo), release func(), err error)
 }
 
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
@@ -59,6 +59,8 @@ func New(adapters *adapter.Registry, p *policy.Policy, lease func(context.Contex
 // Send 按载荷、可信目标、消息链和实例绑定依次准入，不自动重试平台发送。
 // 拒绝时同时返回 REJECTED 回执与错误，发送后保留 Adapter 返回的二者。
 func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
+	ctx, cancel := s.requestContext(ctx, in)
+	defer cancel()
 	ctx = wire.WithTraceID(ctx, in.TraceID)
 	// 1. 取得已知的可信目标供拒绝回执使用，再校验协议载荷。
 	invocation, _ := in.ParentAttach.(*router.Invocation)
@@ -174,15 +176,29 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			return rejectError(target, err)
 		}
 	}
-	// 8. 所有媒体已就绪后执行唯一一次发送，Hook 观察结果后完整转发回执与错误。
+	// 8. 平台操作前预留容量，等待失败时保持零平台副作用。
+	var complete func(*pb.SendResult, *pb.ErrorInfo)
+	if s.hooks != nil {
+		var release func()
+		var err error
+		complete, release, err = s.hooks.PrepareAfterSend(ctx, caller, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation)
+		if err != nil {
+			return rejectError(target, err)
+		}
+		defer release()
+	}
+	if err := ctx.Err(); err != nil {
+		return rejectError(target, err)
+	}
+	// 9. 唯一一次发送完成后，观察任务独立处理，回执立即交给调用者。
 	result, sendError := instance.Send(ctx, target, request.Chain)
+	if complete != nil {
+		complete(result, sendError)
+	}
 	if s.observe != nil {
 		s.observe(in.TraceID, "send", target, request.Chain, result, sendError)
 	}
 	s.rememberReply(caller, session, target, request.Chain, result, decoration)
-	if s.hooks != nil {
-		s.hooks.AfterSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, result, sendError, invocation)
-	}
 	return response(result, sendError)
 }
 
@@ -281,4 +297,16 @@ func response(result *pb.SendResult, sendError *pb.ErrorInfo) wire.Response {
 // SetObserver 在开始接纳请求前绑定平台回执观察器。
 func (s *Service) SetObserver(observe func([]byte, string, *pb.Target, *pb.MessageChain, *pb.SendResult, *pb.ErrorInfo)) {
 	s.observe = observe
+}
+
+// requestContext 统一媒体与普通 Send/Edit 的请求预算，显式期限取最早值。
+func (s *Service) requestContext(ctx context.Context, in *wire.Inbound) (context.Context, context.CancelFunc) {
+	deadline := in.Deadline
+	if parent, ok := ctx.Deadline(); ok && (deadline.IsZero() || parent.Before(deadline)) {
+		deadline = parent
+	}
+	if deadline.IsZero() {
+		deadline = time.Now().Add(s.requestTimeout)
+	}
+	return context.WithDeadline(ctx, deadline)
 }

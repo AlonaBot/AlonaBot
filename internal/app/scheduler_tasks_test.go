@@ -227,6 +227,9 @@ func taskPipelineAt(t *testing.T, dir string) *pipelineHarness {
 		if err := h.assembly.router.Close(ctx); err != nil {
 			t.Error(err)
 		}
+		if err := h.assembly.hooks.Close(ctx); err != nil {
+			t.Error(err)
+		}
 		h.server.Close()
 		if err := store.Close(); err != nil {
 			t.Error(err)

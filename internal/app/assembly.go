@@ -213,6 +213,7 @@ type assembly struct {
 	bus          *bus.Bus
 	broker       *broker.Broker
 	messages     *message.Service
+	hooks        *hook.Runner
 	scheduler    *scheduler.Scheduler
 	http         *httpproxy.Server
 	global       *wire.Budget
@@ -316,7 +317,8 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 			return hooks.PreEvent(ctx, ev)
 		}})
 	a.router.RegisterCommandList(a.mux)
-	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent})
+	hooks = hook.New(a.router, hook.Options{Prepare: a.media.PrepareIncoming, CheckEvent: a.checkAdapterEvent, AfterSendConcurrency: v.AfterSendConcurrency, AfterSendCapacity: v.AfterSendCapacity, RequestTimeout: v.RequestTimeout, AcquireActivity: a.acquireActivity})
+	a.hooks = hooks
 	messages = message.New(a.adapters, p, a.media.LeaseForSend, a.buttons.Issue, v.RequestTimeout, hooks)
 	messages.SetObserver(a.router.ObserveReply)
 	messages.SetReply(a.replySettings)

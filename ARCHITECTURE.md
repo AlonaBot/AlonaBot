@@ -42,6 +42,8 @@ Router 与 Broker 的 `Options.EnsureActive`、HTTP 的 `Server.SetWake(snapshot
 
 `scheduler.Options.EnsureActive func(ctx context.Context, pluginID string, payloadBytes int64) (release func(), err error)` 由 app 注入同一 `assembly.ensureActive`；`func (s *Scheduler) Suspend(pluginID string)` 保留正常 IDLE 计划。静态绝对期限为原 scheduled_at 加 JOB_TIMEOUT，动态从取得并发名额、开始交付或唤醒等待时计算；等待保留运行槽与动态并发名额，按完整 HandlerRequest 编码字节占用既有唤醒预算。相同代次与路由的 resume Attach 保留计划、已接纳项、已消费 at 的待交付所有权、起点和暂停状态；清理未注册的过期 at 并更新 Expired/Unregistered、归还配额。Supervisor 独占独立进程的调度撤销与 Released，旧树退出只释放旧 Session 的实际槽；app 在 Core.operation 内撤销唤醒失败的计划并保留完整错误。
 
+`internal/core/hook.Runner` 拥有 AfterSend 的接纳、批次执行与排空。消息服务在平台操作前通过 `PrepareAfterSend` 固定快照并预留容量，平台完成后异步提交；调用方返回独立于观察执行。批次沿用 Hook 顺序，独享 REQUEST_TIMEOUT；Core 停止时调用 `Close` 排空或取消，归还活动及根调用引用。调优表定义并发和总容量。
+
 `internal/core/idle/` 提供：`Resolve(s settings.Sleep, m *manifest.Manifest, independent bool, routes []*pb.RouteDescriptor) Policy` 只读判定准入、原因与全路由 warnings；`New(values tune.Values) *Controller` 与 `CanStop(pluginID string, policy Policy, runtime state.RuntimeStatus, activity supervisor.ActivityStatus, now time.Time) bool` 判定实际空闲、最短运行及固定冷却，由 `internal/app` 的生命周期循环每秒检查并调用 StopIdle。管理设置使用 `File.WithPublisher(publish func(change func() error) error) *File` 共享文档、快照与锁，Update/Reload 交给 Core.operation 串行发布；有效 sleep 变化后，在循环及文件锁、插件锁外等待原代次恢复并聚合错误。
 
 S-06.1 的 `manage.Options.SleepPolicy` 由 app 注入只读策略：复用 `idle.Resolve` 与已提交的身份匹配快照，管理层沿用原依赖方向。六个休眠管理端点共享管理认证和受管设置发布；CLI 经同一 HTTP 管理服务查询/写入。查询不启动组件，缺有效快照时返回实际 412；写入沿既有锁外恢复并完整返回持久化和唤醒错误。
