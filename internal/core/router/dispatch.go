@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"time"
 
+	"github.com/AlonaBot/AlonaBot/contracts/debugapi"
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/internal/core/adapter"
 	"github.com/AlonaBot/AlonaBot/internal/core/metrics"
@@ -52,8 +54,8 @@ type Continuations interface {
 
 // Stats 记录本次 Router 运行的准入计数与当前链、等待事件数。
 type Stats struct {
-	Accepted, DroppedQueueFull, DroppedBudget uint64
-	Running, Queued                           int
+	Accepted, DroppedQueueFull, DroppedBudget, Expired uint64
+	Running, Queued                                    int
 }
 
 type queuedEvent struct {
@@ -155,7 +157,26 @@ func (r *Router) startLocked() {
 
 func (r *Router) run(event *trustedEvent) {
 	r.observe(event)
-	r.dispatch(event)
+	ctx := r.ctx
+	if !event.deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, event.deadline)
+		defer cancel()
+	}
+	if err := ctx.Err(); err != nil {
+		reason := metrics.Reason("cancelled")
+		if errors.Is(err, context.DeadlineExceeded) {
+			reason = "expired"
+			r.mu.Lock()
+			r.stats.Expired++
+			r.mu.Unlock()
+		}
+		r.metrics.Add("", "event", reason)
+		r.recordDiagnostic(event.dispatch, candidate{}, nil, debugapi.PhaseAdmission, invocationError(err))
+		slog.Debug("Discard queued event after its budget ended", "event_id", event.retained.GetEventId(), "error", err)
+	} else {
+		r.dispatch(ctx, event)
+	}
 	for _, finish := range event.finished {
 		finish()
 	}
