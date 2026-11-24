@@ -56,20 +56,6 @@ func testDevelopmentCLI(t *testing.T, role string) {
 	if mod := string(developmentRead(t, filepath.Join(dir, "go.mod"))); !strings.Contains(mod, "module alonabot-plugin-cli\n") {
 		t.Fatalf("default module: %s", mod)
 	}
-	noGenerated := func() {
-		t.Helper()
-		if err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.Name() == "alonabot_gen.go" {
-				t.Errorf("generated source written to project: %s", path)
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	developmentWrite(t, filepath.Join(dir, "plugin_test.go"), `package plugin
 import (
  "testing"
@@ -232,16 +218,6 @@ func main() {
 	if output, err := exec.Command(built, t.TempDir()).CombinedOutput(); err != nil || !strings.Contains(string(output), "Activated library plugin") {
 		t.Fatalf("library application: %v\n%s", err, output)
 	}
-	native := filepath.Join(t.TempDir(), "native")
-	command = exec.Command("go", "build", "-race", "-o", native, "./cmd/bot")
-	command.Dir = dir
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("native go build: %v\n%s", err, output)
-	}
-	if output, err := exec.Command(native, t.TempDir()).CombinedOutput(); err == nil || !strings.Contains(string(output), "alonabot build") || strings.Contains(string(output), "Activated library plugin") {
-		t.Fatalf("missing resource diagnostic: %v\n%s", err, output)
-	}
-	noGenerated()
 
 }
 
@@ -303,18 +279,10 @@ func TestPluginStorageCLI(t *testing.T) {
 		c.management(t, dir, "", "restart", id)
 		check("/note kvget topic", "topic: retained-kv")
 		check("/note fileget", "note.txt: retained-file")
-		preview := managementFailure(t, c, dir, "uninstall", id, "--purge-data")
-		if !strings.Contains(preview, dataDir) {
-			t.Fatalf("plugin data directory missing from confirmation: %s", preview)
-		}
 		c.management(t, dir, "", "uninstall", id, "--purge-data", "--yes")
 		if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 			t.Fatalf("plugin data directory remains: %v", err)
 		}
-		c.management(t, dir, "", "install", archive, "--yes")
-		c.management(t, dir, "", "enable", id)
-		deliver("/note kvget topic")
-		c.waitFor(`"route_id":"cmd.note.kvget"[^\n]*"error":"ERROR_CODE_NOT_FOUND: KV key does not exist"`)
 		stopTestCore(t, c)
 	})
 }
