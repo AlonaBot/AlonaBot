@@ -127,7 +127,7 @@ func startEmptyCore(t *testing.T, dataDir string, extra ...string) *core {
 }
 
 func (c *core) address() string {
-	m := c.waitFor(`HTTP listener started listen=(\S+)|"msg":"HTTP listener started"[^\n]*"listen":"([^"]+)"`)
+	m := c.waitFor(`HTTP listener started at ([^\s"]+)|"msg":"HTTP listener started[^\n]*"listen":"([^"]+)"`)
 	if m[1] != "" {
 		return m[1]
 	}
@@ -222,16 +222,16 @@ func pluginExited(pid int, within time.Duration) bool {
 }
 
 // activatedRe 匹配激活日志，子匹配依次为代次、mode（new/restart）与插件 pid。
-const activatedRe = `plugin activated plugin_id=demo generation_id=(\S+) mode=(\w+) pid=(\d+)`
+const activatedRe = `plugin activated: demo \(generation (\S+), (\w+), PID (\d+)\)`
 
 // lifecycleLogRe 是一次完整生命周期在控制台格式中必须出现的行，覆盖 Core 与插件两类来源。
 var lifecycleLogRe = []string{
-	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Core\] \[INFO\] \[[^\]]+/alonabot\.go:\d+\]: Core started data_dir=`,
+	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Core\] \[INFO\] \[[^\]]+/alonabot\.go:\d+\]: Core started with data directory `,
 	`(?m)^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStart$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnReady$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: OnStop$`,
 	`(?m)\[Plug:demo\] \[INFO\] \[lifecycle/main\.go:\d+\]: exiting normally$`,
-	`(?m)\[Core\] \[INFO\] \[[^\]]+/assembly\.go:\d+\]: plugin stopped plugin_id=demo drained=true killed=false$`,
+	`(?m)\[Core\] \[INFO\] \[[^\]]+/assembly\.go:\d+\]: Component demo stopped \(drained: true, killed: false\)$`,
 }
 
 // 完整生命周期：TCP 走完 OnStart → OnReady → 激活 → SIGTERM → STOPPING/OnStop → 正常退出；
@@ -268,15 +268,31 @@ func TestLifecycleOverTCPAndStdio(t *testing.T) {
 				}
 				file = append(file, b...)
 			}
-			for name, log := range map[string]string{"stderr": c.log(), "log file": string(file)} {
-				for _, re := range lifecycleLogRe {
-					if !regexp.MustCompile(re).MatchString(log) {
-						t.Fatalf("%s does not match %s:\n%s", name, re, log)
-					}
+			for _, re := range lifecycleLogRe {
+				if !regexp.MustCompile(re).MatchString(c.log()) {
+					t.Fatalf("stderr does not match %s:\n%s", re, c.log())
 				}
-				if strings.Contains(log, "\x1b[") {
-					t.Fatalf("%s should not be colored:\n%s", name, log)
+			}
+			messages := map[string]bool{}
+			for _, line := range strings.Split(strings.TrimSpace(string(file)), "\n") {
+				var record struct {
+					Message string
+					Attrs   map[string]any
 				}
+				if err := json.Unmarshal([]byte(line), &record); err != nil {
+					t.Fatalf("invalid structured file record: %v: %s", err, line)
+				}
+				if record.Attrs["plugin_id"] == "demo" {
+					messages[record.Message] = true
+				}
+			}
+			for _, message := range []string{"OnStart", "OnReady", "OnStop", "exiting normally"} {
+				if !messages[message] {
+					t.Fatalf("structured file missing %s: %s", message, file)
+				}
+			}
+			if strings.Contains(c.log(), "\x1b[") || strings.Contains(string(file), "\x1b[") {
+				t.Fatal("logs should not be colored")
 			}
 			if !pluginExited(pid, 2*time.Second) {
 				t.Fatalf("plugin process %d did not exit", pid)
@@ -393,7 +409,7 @@ func TestSettingsAndListenOverride(t *testing.T) {
 	dir := t.TempDir()
 	c := startCore(t, dir, "--listen", "127.0.0.1:0")
 	c.waitFor(activatedRe)
-	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	address := c.address()
 	request, err := http.NewRequest(http.MethodGet, "http://"+address+"/plugins/absent/unknown", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -586,7 +602,7 @@ func TestAdminAuthRun(t *testing.T) {
 			}
 			c := startCoreWithToken(t, dir, token)
 			c.waitFor(activatedRe)
-			address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+			address := c.address()
 			send := func(method, path, host, source, body string, cookie *http.Cookie, csrf, bearer string, want int) (*http.Response, []byte) {
 				t.Helper()
 				req, err := http.NewRequest(method, "http://"+address+path, strings.NewReader(body))
@@ -683,7 +699,7 @@ func TestPluginPageSandbox(t *testing.T) {
 	}
 	c := startCore(t, dir)
 	c.waitFor(activatedRe)
-	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	address := c.address()
 	send := func(method, path, host string, headers http.Header, cookie *http.Cookie, body string, want int) (*http.Response, []byte) {
 		t.Helper()
 		r, err := http.NewRequest(method, "http://"+address+path, strings.NewReader(body))
@@ -790,7 +806,7 @@ func TestFirstAdminToken(t *testing.T) {
 	dir := t.TempDir()
 	c := startCore(t, dir, "--listen", "127.0.0.1:0")
 	c.waitFor(activatedRe)
-	address := c.waitFor(`HTTP listener started listen=(\S+)`)[1]
+	address := c.address()
 	name := filepath.Join(dir, adminauth.FirstTokenFile)
 	stat, err := os.Stat(name)
 	if err != nil {

@@ -1,6 +1,6 @@
 // Package logging 汇集 Core 进程的全部日志：Core 自己的记录与插件进程输出的记录。
 //
-// 每条记录写到 Core 的 stderr（控制台格式或 JSON），启用日志文件后同时以不着色的控制台格式写入
+// 每条记录写到 Core 的 stderr（控制台格式或 JSON），启用日志文件后同时以完整 JSON 记录写入
 // 按日期轮转的文件。记录的来源由 component 字段区分：core、plugin 或 adapter；插件与 Adapter 的记录
 // 另带 plugin_id 或 adapter_id，以及 Core 补充的 session_id 与 generation_id。插件以 JSON 行写 stderr，
 // [Source] 逐行解析后转成同样的记录，插件给出的同名字段被丢弃，不能覆盖 Core 补充的来源字段。
@@ -36,7 +36,7 @@ const (
 	KeyInstanceID   = "instance_id"
 	KeySessionID    = "session_id" // 十六进制
 	KeyGenerationID = "generation_id"
-	KeyTraceID      = "trace_id" // 控制台只显示前 traceDigits 位
+	KeyTraceID      = "trace_id" // 控制台与结构化记录均保留完整追踪标识
 )
 
 // 来源类别。
@@ -112,7 +112,7 @@ func Open(opt Options) (*Output, error) {
 	o := &Output{levels: &Levels{sources: map[string]slog.Level{}}, stderr: stderr, buffer: &recordBuffer{limit: opt.BufferRecords, sources: map[string]*recordRing{}, subscribers: map[*subscription]struct{}{}}}
 	o.levels.global.Set(opt.Level)
 	o.file = &fileWriter{report: o.reportFileError}
-	o.handler = &bufferedHandler{output: o, next: slog.NewMultiHandler(stderr, newConsoleHandler(o.file, false))}
+	o.handler = &bufferedHandler{output: o, next: stderr}
 	return o, nil
 }
 
@@ -145,7 +145,7 @@ func (o *Output) Close() error { return o.file.close() }
 
 // reportFileError 把日志文件的错误只写到 stderr，避免再次写入出错的文件。
 func (o *Output) reportFileError(err error) {
-	slog.New(&bufferedHandler{output: o, next: o.stderr}).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
+	slog.New(&bufferedHandler{output: o, next: o.stderr, stderrOnly: true}).Error("log file unavailable", KeyComponent, ComponentCore, "err", err)
 }
 
 // Plugin 为一次组件启动建立 [Source]；attrs 由 Core 按可信安装记录补充 Adapter 的来源类别与 ID。

@@ -291,6 +291,7 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 	trace := make([]byte, traceIDBytes)
 	rand.Read(trace)
 	started := time.Now()
+	slog.Info(fmt.Sprintf("Command %s matched component %s", c.route.GetRouteId(), c.pluginID), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "trace_id", hex.EncodeToString(trace))
 	response, callError := r.call(ctx, &c, event, bind, trace)
 	duration := time.Since(started)
 	if errors.Is(callError, errCommandArguments) {
@@ -306,6 +307,9 @@ func (r *Router) invokeCommand(ctx context.Context, c candidate, ev *pb.Event, e
 		return false
 	}
 	result := commandOK
+	defer func() {
+		slog.Info(fmt.Sprintf("Command %s finished: %s (%s)", c.route.GetRouteId(), result, duration.Round(time.Millisecond)), "plugin_id", c.pluginID, "route_id", c.route.GetRouteId(), "duration_ms", duration.Milliseconds(), "trace_id", hex.EncodeToString(trace), "result", result)
+	}()
 	if callError != nil || response.Err != nil {
 		result = commandError
 		if wire.CodeOf(callError) == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED || response.Err.GetCode() == pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED {

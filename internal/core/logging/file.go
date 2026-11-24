@@ -41,7 +41,7 @@ type FileOptions struct {
 	MaxAgeDays int    // 日期早于这么多天之前的文件被删除
 }
 
-// fileWriter 把控制台格式的记录追加到当天的日志文件：跨过零点或达到单文件上限时换文件，
+// fileWriter 把完整 JSON 记录追加到当天的日志文件：跨过零点或达到单文件上限时换文件，
 // 换文件时按合计与天数上限删除最旧的文件。写入失败时丢弃记录并只报告一次，到下一次换日期时重新打开。
 type fileWriter struct {
 	report func(error)      // 报告文件错误；不能写回本文件

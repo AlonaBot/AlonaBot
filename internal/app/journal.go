@@ -48,7 +48,11 @@ func (c *Core) recordRuntime(ctx context.Context, in state.Install, next state.R
 		return err
 	}
 	if previous != next {
-		slog.Info("plugin runtime state changed", "plugin_id", in.PluginID, "previous_state", previous, "state", next, "reason", reason)
+		level := slog.LevelDebug
+		if next == state.RuntimeFailed {
+			level = slog.LevelError
+		}
+		slog.Log(ctx, level, fmt.Sprintf("Component %s changed to %s", in.PluginID, next), "plugin_id", in.PluginID, "previous_state", previous, "state", next, "reason", reason)
 	}
 	return nil
 }

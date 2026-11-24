@@ -234,6 +234,10 @@ alonabot sleep-policy my-plugin auto
 
 插件自管的外部数据库与框架目录之外的文件，按插件的维护说明单独备份。恢复时保持 Core 和插件停止，还原完整的 `data_dir`，并同步恢复插件自管的外部数据，再启动 Core。恢复旧备份会丢弃备份之后的新写入，执行前须确认要恢复的数据时点。
 
+## 日志摘要与详情
+
+控制台与 WebUI 默认展示业务摘要；WebUI 每条记录的「详情」展开完整结构化字段、Trace、源码位置和错误。新写入的日志以 JSON 行保存完整管理 API Record（`time`、`level`、`source`、`message`、`attrs`、`trace_id`），控制台格式与文件格式独立。历史查询同时读取既有文本记录和新 JSON 记录，保留来源、级别及 Trace 筛选。`--log-format=json` 继续提供完整结构化 stderr。INFO 记录接入、处理、发送及休眠唤醒摘要，内部事务与中间状态为 DEBUG；正文、模型输入输出、工具参数和凭据沿用现有保护规则。运行期 `runtime/reply.sqlite` 只保存本次 Session 的回复修饰关联，启动时清理旧运行数据，Session 结束时删除对应行。
+
 ## 管理 API
 
 使用前文的受控 `base_url` 与认证方式。Core API 主版本 1 位于 `/api/v1/`，认证位于 `/api/auth/`。JSON 写请求使用 `Content-Type: application/json`。CLI 发送 `Authorization: Bearer <管理 token>`；浏览器使用管理 Cookie，GET/HEAD 之外再带受控 `Origin` 与 `X-Alonabot-CSRF`。`POST /api/auth/login` 接收 `{"token":"…","remember":true}`，返回 `{"csrf_token":"…"}` 并设置 Cookie：`remember` 为真时会话 30 天且 Cookie 持久，省略或为假时会话 8 小时、Cookie 随浏览器关闭失效；刷新后用 `GET /api/auth/session` 恢复 CSRF，`POST /api/auth/logout` 撤销会话。登录和确认保留持久 token 文件。

@@ -7,3 +7,4 @@
 - Preserve original Handler failures and valid STOP outcomes consistently for commands and events (#326).
 - Store reply decorations in Session-isolated runtime SQLite, preserving historical edits without a growing in-memory message map (#323).
 - Default omitted plugin/agent `sleep_capable` to true, preserve omission when building, and document rebuilding old packages (#322).
+- Show concise console/WebUI summaries while preserving complete JSON files, searchable details, legacy history and Agent model/tool diagnostics (#327).

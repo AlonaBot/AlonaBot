@@ -210,7 +210,7 @@ func TestLogManagement(t *testing.T) {
 	readSettings()
 	stopTestCore(t, c)
 	c = startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
-	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"log-fixture"`)
+	c.waitFor(`"msg":"plugin activated: [^\n]*"plugin_id":"log-fixture"`)
 	if value := strings.TrimSpace(c.management(t, dir, "", "log-level", "global")); value != "debug" {
 		t.Fatal(value)
 	}
@@ -218,7 +218,7 @@ func TestLogManagement(t *testing.T) {
 	waitLog("persisted-debug-debug", "--source", "log-fixture")
 	stopTestCore(t, c)
 	c = startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-level", "info", "--log-format", "json")
-	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"log-fixture"`)
+	c.waitFor(`"msg":"plugin activated: [^\n]*"plugin_id":"log-fixture"`)
 	if value := strings.TrimSpace(c.management(t, dir, "", "log-level", "global")); value != "info" {
 		t.Fatal(value)
 	}
@@ -226,13 +226,13 @@ func TestLogManagement(t *testing.T) {
 	readSettings()
 	stopTestCore(t, c)
 	c = startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
-	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"log-fixture"`)
+	c.waitFor(`"msg":"plugin activated: [^\n]*"plugin_id":"log-fixture"`)
 	probe("override-ended", true, true)
 	waitLog("override-ended-debug", "--source", "log-fixture")
 	stopTestCore(t, c)
 	t.Run("diagnostics", func(t *testing.T) {
 		c := startEmptyCore(t, dir, "--listen", "127.0.0.1:0", "--log-format", "json")
-		c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"log-fixture"`)
+		c.waitFor(`"msg":"plugin activated: [^\n]*"plugin_id":"log-fixture"`)
 		checkArchive := func(raw []byte, running bool) {
 			t.Helper()
 			archive, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))

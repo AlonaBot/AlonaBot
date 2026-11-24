@@ -428,6 +428,7 @@ func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb
 		}
 		trace := make([]byte, traceIDBytes)
 		rand.Read(trace)
+		started := time.Now()
 		response, callError := r.call(ctx, &candidate, event, nil, trace)
 		if callError != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("event handler call failed", "error", callError)
@@ -443,6 +444,9 @@ func (r *Router) dispatchEvents(ctx context.Context, event *trustedEvent, ev *pb
 		if err != nil {
 			slog.With("plugin_id", candidate.pluginID, "route_id", routeID, "trace_id", hex.EncodeToString(trace)).Warn("decode event handler outcome failed", "error", err)
 			continue
+		}
+		if outcome.GetMatched() {
+			slog.Info(fmt.Sprintf("Component %s handled %s via %s", candidate.pluginID, ev.GetEventType(), routeID), "plugin_id", candidate.pluginID, "route_id", routeID, "event_id", ev.GetEventId(), "trace_id", hex.EncodeToString(trace), "duration_ms", time.Since(started).Milliseconds(), "propagation", outcome.GetPropagation())
 		}
 		if callError == nil && response.Err == nil && outcome.GetMatched() && candidate.route.GetEvent().GetHandlerMode() == pb.HandlerMode_HANDLER_MODE_AUTO_REPLY && len(outcome.GetChain().GetSegments()) != 0 {
 			r.sendReply(ctx, candidate, ev, outcome.Chain, trace, event.invocation)

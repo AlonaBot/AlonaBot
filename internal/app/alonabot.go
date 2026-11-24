@@ -264,7 +264,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		}
 		harness.DebugToken = strings.TrimSpace(string(token))
 	}
-	slog.Info("admin credentials", "url", configuration.BaseURL, "path", filepath.Join(dir, adminauth.FirstTokenFile))
+	slog.Info(fmt.Sprintf("Manage Core at %s; initial token file: %s", configuration.BaseURL, filepath.Join(dir, adminauth.FirstTokenFile)), "url", configuration.BaseURL, "path", filepath.Join(dir, adminauth.FirstTokenFile))
 	if configuration.Proxy != "" {
 		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
 			if err := os.Setenv(name, configuration.Proxy); err != nil {
@@ -550,8 +550,8 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if nonLoopback && containerHTTP && len(configuration.TrustedProxies) == 0 {
 		slog.Warn("listening on all interfaces inside a container; publish the port to the host loopback only")
 	}
-	slog.Info("HTTP listener started", "listen", listener.Addr().String())
-	slog.Info("Core started", "data_dir", dir)
+	slog.Info("HTTP listener started at "+listener.Addr().String(), "listen", listener.Addr().String())
+	slog.Info("Core started with data directory "+dir, "data_dir", dir)
 	for _, install := range installs {
 		if install.Source == devSource || install.Uninstalled || install.Role == state.RoleWebUI && install.Entrypoint == "" {
 			continue

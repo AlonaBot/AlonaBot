@@ -776,7 +776,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		if err := c.store.SetEnabled(ctx, id, true); err != nil {
 			return err
 		}
-		slog.Info("plugin activated", "plugin_id", id, "generation_id", generation, "mode", mode, "pid", running.process.Process.Pid())
+		logActivation(id, generation, mode, running.process.Process.Pid())
 		return nil
 	}
 	// 4. 同进程调用经内部入口复用 SDK 的握手、激活和停止流程。
@@ -941,7 +941,7 @@ func (c *Core) stopComponentWithActivity(r *runningComponent, t0 time.Time, timi
 		if reason == pb.StopReason_STOP_REASON_IDLE && result.Err != nil && (!r.activity || a.waker.Activity(r.id).Session == r.instance.Session) {
 			return result.Err
 		}
-		slog.Info("plugin stopped", "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)
+		slog.Info(fmt.Sprintf("Component %s stopped (drained: %t, killed: %t)", r.id, result.Drained, result.Killed), "plugin_id", r.id, "drained", result.Drained, "killed", result.Killed)
 		err = result.Err
 		detach()
 	} else if r.instance != nil {
@@ -1060,7 +1060,7 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := c.startInstances(ctx, running, instanceSchema); err != nil {
 		return running, err
 	}
-	slog.Info("plugin activated", "plugin_id", running.id, "generation_id", generation, "mode", "restart", "pid", running.process.Process.Pid())
+	logActivation(running.id, generation, "restart", running.process.Process.Pid())
 	return running, nil
 }
 
@@ -1142,7 +1142,7 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 	if kind == journal.KindFirstInstall {
 		mode = "new"
 	}
-	slog.Info("plugin activated", "plugin_id", id, "generation_id", r.Generation, "mode", mode, "pid", process.Process.Pid())
+	logActivation(id, r.Generation, mode, process.Process.Pid())
 	return running, err
 }
 

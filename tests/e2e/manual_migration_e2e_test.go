@@ -124,7 +124,7 @@ func TestManualMigrationApproval(t *testing.T) {
 	before = effects()
 	stopTestCore(t, c)
 	c = start()
-	c.waitFor(`"msg":"plugin activated"`)
+	c.waitFor(`"msg":"plugin activated: `)
 	checkBoot("ACTIVATION_REASON_RESUME", false, second)
 	if effects() != before {
 		t.Fatal("Core restart reran migration")

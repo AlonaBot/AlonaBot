@@ -134,7 +134,14 @@ data: [DONE]
 		t.Fatalf("skill diagnostics = %v, want 3", diagnostics)
 	}
 	for i, name := range []string{"c-no-yaml", "d-no-desc", "e-large"} {
-		if !strings.Contains(diagnostics[i], "WARN") || !strings.Contains(diagnostics[i], filepath.Join(directory, name, "SKILL.md")) || !strings.Contains(diagnostics[i], "error=") {
+		var record struct {
+			Level string
+			Attrs struct{ Path, Error string }
+		}
+		if err := json.Unmarshal([]byte(diagnostics[i]), &record); err != nil {
+			t.Fatal(err)
+		}
+		if record.Level != "WARN" || record.Attrs.Path != filepath.Join(directory, name, "SKILL.md") || record.Attrs.Error == "" {
 			t.Errorf("missing warning path or reason: %s", diagnostics[i])
 		}
 	}

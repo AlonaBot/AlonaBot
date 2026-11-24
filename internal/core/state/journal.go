@@ -146,7 +146,7 @@ func journalTransition(from, to string) bool {
 }
 
 func logJournal(record Journal) {
-	slog.Info("candidate journal phase changed", "op_id", record.OpID, "plugin_id", record.PluginID, "kind", record.Kind, "phase", record.Phase)
+	slog.Debug("candidate journal phase changed", "op_id", record.OpID, "plugin_id", record.PluginID, "kind", record.Kind, "phase", record.Phase)
 }
 
 // GetJournal 读取指定操作；缺记录返回 ErrNotFound。

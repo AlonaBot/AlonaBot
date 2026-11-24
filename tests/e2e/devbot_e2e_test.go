@@ -146,7 +146,7 @@ func t13Reply(t *testing.T, c *core, dir, text, want string) {
 
 func t13PID(t *testing.T, c *core, id string) int {
 	t.Helper()
-	c.waitFor(`"msg":"plugin activated"[^\n]*"plugin_id":"` + id + `"`)
+	c.waitFor(`"msg":"plugin activated: [^\n]*"plugin_id":"` + id + `"`)
 	var pid int
 	for _, line := range strings.Split(c.log(), "\n") {
 		var record struct {
