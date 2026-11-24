@@ -8,4 +8,4 @@
 
 执行 `go run ./scripts/release-notes --version 0.1.0`，按英文、简体中文顺序生成正文并去掉 HTML 注释。`scripts/dist` 将同一正文写到 `release-notes.md`。创建 GitHub Release 时用 `--notes-file` 读取该文件。更正已发布的说明时，先合入源文案，再用同一份内容重新生成并同步 GitHub Release 正文。
 
-[English](README.md) · [v0.1.0 发布说明](v0.1.0/zh-CN.md) · [发行维护](../docs/releasing.md)
+[English](README.md) · [v0.3.2](v0.3.2/zh-CN.md) · [v0.1.0](v0.1.0/zh-CN.md) · [发行维护](../docs/releasing.md)

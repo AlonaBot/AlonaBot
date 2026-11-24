@@ -8,4 +8,4 @@ Each `v<SemVer>/{en,zh-CN}.md` file contains one Keep a Changelog version sectio
 
 `go run ./scripts/release-notes --version 0.1.0` renders English followed by Simplified Chinese and strips HTML comments. `scripts/dist` writes the same text to `release-notes.md`. Release creation uses that generated file through `--notes-file`; generated GitHub commit summaries are not the release body. When correcting published notes, update the repository first and regenerate the GitHub Release body from the merged text.
 
-[简体中文](README.zh-CN.md) · [v0.1.0](v0.1.0/en.md)
+[简体中文](README.zh-CN.md) · [v0.3.2](v0.3.2/en.md) · [v0.1.0](v0.1.0/en.md)

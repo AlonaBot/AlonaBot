@@ -6,7 +6,7 @@
 
 ## 选择安装方式
 
-从 [v0.3.0 Release](https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.0) 下载正式资产。五平台归档与 `install.sh` 提供纯 Core；Docker Compose 提供 Core、WebUI 与 Agent 整合包。Adapter 和 help 插件按需安装。具体平台实跑与已知限制见[发布说明](../changelog/v0.3.0/zh-CN.md)。
+从 [Core 最新发行页](https://github.com/AlonaBot/AlonaBot/releases/latest)下载正式资产。五平台归档与 `install.sh` 提供纯 Core；Docker Compose 提供 Core、WebUI 与 Agent 整合包。Adapter 和 help 插件按需安装。版本变更见[更新日志](../changelog/README.zh-CN.md)，历史平台实跑结果见[首发记录](../changelog/v0.1.0/zh-CN.md)。
 
 | 方式 | 适用场景 |
 | --- | --- |
@@ -63,7 +63,7 @@ sh install.sh --uninstall
 下载发行的 Compose 文件并启动整合包：
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.0/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.2/docker-compose.yml
 docker compose up -d
 ```
 
@@ -238,7 +238,7 @@ alonabot sleep-policy my-plugin auto
 
 每条日志正文（包括 DEBUG）用自然语言说明发生了什么，直接包含组件或路由、状态变化与失败原因。结构化字段用于筛选和关联。正文已包含的错误在控制台只显示一次。
 
-控制台与 WebUI 默认展示业务摘要；WebUI 每条记录的「详情」展开完整结构化字段、Trace、源码位置和错误。新写入的日志以 JSON 行保存完整管理 API Record（`time`、`level`、`source`、`message`、`attrs`、`trace_id`），控制台格式与文件格式独立。历史查询同时读取既有文本记录和新 JSON 记录，保留来源、级别及 Trace 筛选。`--log-format=json` 继续提供完整结构化 stderr。INFO 记录接入、处理、发送及休眠唤醒摘要，内部事务与中间状态为 DEBUG；正文、模型输入输出、工具参数和凭据沿用现有保护规则。运行期 `runtime/reply.sqlite` 只保存本次 Session 的回复修饰关联，启动时清理旧运行数据，Session 结束时删除对应行。
+Core 控制台展示摘要。如需查看完整的结构化字段、Trace、源码位置和错误，可读取日志文件或查询管理 API。新写入的日志以 JSON 行保存完整管理 API Record（`time`、`level`、`source`、`message`、`attrs`、`trace_id`），控制台格式与文件格式独立。历史查询同时读取既有文本记录和新 JSON 记录，保留来源、级别及 Trace 筛选。`--log-format=json` 继续提供完整结构化 stderr。INFO 记录接入、处理、发送及休眠唤醒摘要，内部事务与中间状态为 DEBUG；正文、模型输入输出、工具参数和凭据沿用现有保护规则。运行期 `runtime/reply.sqlite` 只保存本次 Session 的回复修饰关联，启动时清理旧运行数据，Session 结束时删除对应行。
 
 ## 管理 API
 
