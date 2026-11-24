@@ -293,7 +293,7 @@ func prepare(conn *wire.Conn, l launch, ack *pb.HelloAck, root *Plugin, reg *reg
 		}
 		componentLogger(l.runtime.ctx).Error(fmt.Sprintf("Plugin database migration failed: %v", migrationError), "err", migrationError)
 		return nil, sessionFailure(conn, sid, minor, l.pluginID, pb.SessionPhase_SESSION_PHASE_MIGRATION, pb.FrameKind_FRAME_KIND_UNSPECIFIED,
-			code, fmt.Sprintf("Plugin database migration failed: %v", migrationError), migrationError)
+			code, "database migration failed", migrationError)
 	}
 
 	if err := l.startHTTP(boot); err != nil {
