@@ -31,7 +31,7 @@ bin/alonabot pack ./alonabot-plugin-hello --target darwin/arm64 --out ./alonabot
 
 - 独立进程部署时，每个插件是一个通过 SDK 与 Core 通信的 Native Go 进程，崩溃只影响该组件。插件仍是需要审查来源的可信本地代码。库模式组件与 Core 共用进程，详见[库模式](development.zh-CN.md#库模式运行同一进程)。
 - 没有启用的插件不运行进程，启用后它的常驻内存全部算在用户机器上。2026-11-20 的固定 linux/amd64 实测中，echo 插件 PSS 三轮中位数约 10.094 MiB；链接库和初始化都会增加开销。官方组件的现有实测与维护者接受决定见 [发布说明](../changelog/v0.1.0/zh-CN.md#资源与依赖)。
-- 可按重启语义恢复、没有独立后台活动的 plugin/agent 可在 manifest 声明 `sleep_capable: true`。支持 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒、自动空闲退出、即时休眠策略，以及静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
+- plugin/agent 缺省 `sleep_capable: true`；构建时省略的字段保持省略，安装使用同一默认值。需要保留进程内状态或独立后台活动的组件应显式声明 `sleep_capable: false`。可按重启语义恢复的组件继续遵循路由、活动引用与休眠策略准入。支持 SUSPENDED 后的命令/事件、Service 与 HTTP 按需唤醒、自动空闲退出、即时休眠策略，以及静态 interval/cron 与动态 at/interval/cron 自然到期唤醒。原计划、静态起点、暂停状态、动态实例与已接纳项跨同代次恢复保持；静态期限从原到期时刻计算，动态从取得并发名额开始计算，冷启动占用原 JOB_TIMEOUT。Handler 执行期间持有活动引用，异常离线期间的触发沿用跳过规则，过期 at 删除并记录 WARN。开发组件、Adapter 与 WebUI 保持常驻。
 
 ## 2. 依赖
 

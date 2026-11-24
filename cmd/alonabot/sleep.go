@@ -19,7 +19,7 @@ type sleepPlugin struct {
 
 func sleepPolicyCommand(code *int) *cobra.Command {
 	options := &managementOptions{}
-	command := &cobra.Command{Use: "sleep-policy [ID] [never|auto|duration]", Short: "Read or change plugin sleep policies", Args: cobra.RangeArgs(0, 2)}
+	command := &cobra.Command{Use: "sleep-policy [ID] [never|auto|duration]", Short: "Read or change plugin sleep policies", Long: "Read or change plugin/agent sleep policies. Omitted sleep_capable defaults to true; explicit false requires residency. Automatic admission also checks routes and activity. A positive per-component duration overrides resident-route restrictions with warnings.", Args: cobra.RangeArgs(0, 2)}
 	options.flags(command)
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 2 {
