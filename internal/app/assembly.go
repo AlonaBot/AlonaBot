@@ -413,6 +413,9 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 		},
 		Resume: func(ctx context.Context, id string) error { return a.core.startManaged(ctx, id) },
 	})
+	if err := messages.OpenReplyStore(filepath.Join(dir, "runtime")); err != nil {
+		return nil, err
+	}
 	return a, nil
 }
 
@@ -898,7 +901,9 @@ func (a *assembly) detach(r *runningComponent) {
 		}
 	}
 	a.broker.Release(r.caller)
-	a.messages.Release(r.caller)
+	if err := a.messages.Release(r.caller); err != nil {
+		slog.Error("release reply decorations failed", "plugin_id", r.id, "error", err)
+	}
 }
 
 func (c *Core) stopComponent(r *runningComponent, t0 time.Time, timing host.StopTiming, reason pb.StopReason) error {

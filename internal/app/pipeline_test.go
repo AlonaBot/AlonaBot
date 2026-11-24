@@ -454,6 +454,9 @@ func newPipelineWithMessageConfig(t *testing.T, dir string, values tune.Values, 
 		if err := h.assembly.hooks.Close(ctx); err != nil {
 			t.Error(err)
 		}
+		if err := h.assembly.messages.Close(); err != nil {
+			t.Error(err)
+		}
 		h.server.Close()
 		h.mu.Lock()
 		decodeErr := h.decodeErr

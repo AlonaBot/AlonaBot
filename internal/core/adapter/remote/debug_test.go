@@ -75,7 +75,11 @@ func TestDebugAdapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	base, _ := url.Parse("http://localhost")
-	manager := manage.New(manage.Options{Store: store, Adapters: registry, DebugCall: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response { return mux.For(c)(ctx, in) }, DebugRelease: messages.Release, DebugMedia: media.ReadDebugIncoming})
+	manager := manage.New(manage.Options{Store: store, Adapters: registry, DebugCall: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response { return mux.For(c)(ctx, in) }, DebugRelease: func(c router.Caller) {
+		if err := messages.Release(c); err != nil {
+			t.Error(err)
+		}
+	}, DebugMedia: media.ReadDebugIncoming})
 	client := &debug.Client{URL: base.String(), Token: token, HTTP: &http.Client{Transport: debugTransport{manager.Handler(adminauth.New(store, time.Now, base, credentials))}}}
 	operations, err := client.Operations(ctx, "one", "")
 	if err != nil {

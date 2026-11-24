@@ -9,6 +9,7 @@ package message
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
 	"google.golang.org/protobuf/proto"
+	"gorm.io/gorm"
 )
 
 const schemaVersion = 1
@@ -40,6 +42,7 @@ type Service struct {
 	resolveReply    func(context.Context, *pb.Target) (settings.Reply, error)
 	replyRoots      map[*router.Invocation]struct{}
 	replySessions   map[router.Caller]*replySession
+	replyDB         *gorm.DB
 	requestTimeout  time.Duration
 	adapters        *adapter.Registry
 	policy          *policy.Policy
@@ -198,7 +201,12 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if s.observe != nil {
 		s.observe(in.TraceID, "send", target, request.Chain, result, sendError)
 	}
-	s.rememberReply(caller, session, target, request.Chain, result, decoration)
+	if err := s.rememberReply(caller, session, target, request.Chain, result, decoration); err != nil {
+		slog.Error("save reply decoration failed after platform send", "error", err)
+		if sendError == nil {
+			sendError = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "platform send completed; save reply decoration: " + err.Error()}
+		}
+	}
 	return response(result, sendError)
 }
 
