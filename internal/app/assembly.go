@@ -776,7 +776,8 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		if err := c.store.SetEnabled(ctx, id, true); err != nil {
 			return err
 		}
-		logActivation(id, generation, mode, running.process.Process.Pid())
+		pid := running.process.Process.Pid()
+		slog.Info(fmt.Sprintf("plugin activated: %s (generation %s, %s, PID %d)", id, generation, mode, pid), "plugin_id", id, "generation_id", generation, "mode", mode, "pid", pid)
 		return nil
 	}
 	// 4. 同进程调用经内部入口复用 SDK 的握手、激活和停止流程。
@@ -1067,7 +1068,8 @@ func (c *Core) startInstalled(ctx context.Context, dir string, install state.Ins
 	if err := c.startInstances(ctx, running, instanceSchema); err != nil {
 		return running, err
 	}
-	logActivation(running.id, generation, "restart", running.process.Process.Pid())
+	pid := running.process.Process.Pid()
+	slog.Info(fmt.Sprintf("plugin activated: %s (generation %s, restart, PID %d)", running.id, generation, pid), "plugin_id", running.id, "generation_id", generation, "mode", "restart", "pid", pid)
 	return running, nil
 }
 
@@ -1149,7 +1151,8 @@ func (c *Core) prepareCandidate(ctx context.Context, id string, prepare func(con
 	if kind == journal.KindFirstInstall {
 		mode = "new"
 	}
-	logActivation(id, r.Generation, mode, process.Process.Pid())
+	pid := process.Process.Pid()
+	slog.Info(fmt.Sprintf("plugin activated: %s (generation %s, %s, PID %d)", id, r.Generation, mode, pid), "plugin_id", id, "generation_id", r.Generation, "mode", mode, "pid", pid)
 	return running, err
 }
 
