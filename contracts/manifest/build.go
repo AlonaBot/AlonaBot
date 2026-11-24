@@ -70,7 +70,7 @@ func Generate(project *Manifest, build BuildInfo) ([]byte, error) {
 				continue
 			}
 		case "sleep_capable":
-			if !m.SleepCapable && m.Role != rolePlugin && m.Role != roleAgent {
+			if !m.sleepCapableDeclared {
 				continue
 			}
 		case "adapter_dependencies", "plugin_dependencies", "migration_mode", "prepare_effects":

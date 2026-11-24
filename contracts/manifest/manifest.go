@@ -98,11 +98,12 @@ type Manifest struct {
 	Arch                 string              `yaml:"arch"`                  // 包的目标 GOARCH
 	Entrypoint           string              `yaml:"entrypoint"`            // 包内可执行文件的相对路径，规则见 ValidateRelPath
 	// 包的来源（例如 github.com/owner/repo），不能为空。
-	Source            string `yaml:"source"`
-	MigrationMode     string `yaml:"migration_mode"`  // 数据库迁移方式（Migration*）；空串表示未声明
-	PrepareEffects    string `yaml:"prepare_effects"` // 准备期副作用声明（Effects*）；空串表示未声明
-	SleepCapable      bool   `yaml:"sleep_capable"`   // 插件与 Agent 是否声明支持按需休眠
-	webUIProcessField string // 保留工程字段的显式出现，静态构建仍拒绝空列表与 null。
+	Source               string `yaml:"source"`
+	MigrationMode        string `yaml:"migration_mode"`  // 数据库迁移方式（Migration*）；空串表示未声明
+	PrepareEffects       string `yaml:"prepare_effects"` // 准备期副作用声明（Effects*）；空串表示未声明
+	SleepCapable         bool   `yaml:"sleep_capable"`   // 插件与 Agent 缺省支持按需休眠；显式 false 要求常驻
+	sleepCapableDeclared bool   // 保留作者是否声明该字段，构建产物沿用省略语义。
+	webUIProcessField    string // 保留工程字段的显式出现，静态构建仍拒绝空列表与 null。
 }
 
 // Result 保存解析成功的 manifest 及其非致命警告。
@@ -161,12 +162,16 @@ func (m *Manifest) validate(declared map[string]yaml.Node, project bool) ([]stri
 		return nil, fmt.Errorf("unknown role %q", m.Role)
 	}
 	if node, ok := declared["sleep_capable"]; ok {
+		m.sleepCapableDeclared = true
 		if m.Role == roleAdapter || m.Role == roleWebUI {
 			return nil, forbidFields(declared, m.Role, "sleep_capable")
 		}
 		if node.ShortTag() != "!!bool" {
 			return nil, errors.New("sleep_capable must be a boolean")
 		}
+	}
+	if !m.sleepCapableDeclared {
+		m.SleepCapable = m.Role == rolePlugin || m.Role == roleAgent
 	}
 	warnings, err := componentID(m.ID, m.Role)
 	if err != nil {
