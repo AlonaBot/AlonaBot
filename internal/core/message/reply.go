@@ -2,6 +2,8 @@ package message
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf16"
@@ -12,6 +14,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/router"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"google.golang.org/protobuf/proto"
+	"gorm.io/gorm"
 )
 
 type replyKey struct {
@@ -25,7 +28,7 @@ type replyDecoration struct {
 }
 
 type replySession struct {
-	messages map[replyKey]replyDecoration // Service.replyMu 保护；Release 后在途结果不再发布。
+	active bool // 非零大小的 Session 标记；Release 后迟到回执不再发布。
 }
 
 // SetReply 注入按可信会话读取平台回复设置的入口；nil 关闭回复处理。
@@ -36,10 +39,11 @@ func (s *Service) SetReply(resolve func(context.Context, *pb.Target) (settings.R
 }
 
 // Release 删除本次 Caller Session 的首条回执关联。
-func (s *Service) Release(c router.Caller) {
+func (s *Service) Release(c router.Caller) error {
 	s.replyMu.Lock()
 	defer s.replyMu.Unlock()
 	delete(s.replySessions, c)
+	return s.deleteReplies(c)
 }
 
 func messageReplyKey(target *pb.Target, id string) replyKey {
@@ -75,7 +79,7 @@ func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *r
 	}
 	session := s.replySessions[caller]
 	if session == nil {
-		session = &replySession{messages: make(map[replyKey]replyDecoration)}
+		session = &replySession{active: true}
 		s.replySessions[caller] = session
 	}
 	s.replyMu.Unlock()
@@ -236,16 +240,16 @@ func supportsReplyForward(instance adapter.Instance) bool {
 }
 
 // rememberReply 在 Hook 和平台发送后只记录实际保留的修饰；部分成功仍可提供可编辑 ID。
-func (s *Service) rememberReply(caller router.Caller, session *replySession, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, decoration replyDecoration) {
+func (s *Service) rememberReply(caller router.Caller, session *replySession, target *pb.Target, chain *pb.MessageChain, result *pb.SendResult, decoration replyDecoration) error {
 	if session == nil {
-		return
+		return nil
 	}
 	id := result.GetPrimaryPlatformMessageId()
 	if id == "" && len(result.GetPlatformMessageIds()) > 0 {
 		id = result.PlatformMessageIds[0]
 	}
 	if id == "" {
-		return
+		return nil
 	}
 	// 只把该平台 ID 已确认接受的片段关联到它，后续失败或未尝试部分不计入。
 	confirmed := make(map[uint32]bool)
@@ -301,11 +305,24 @@ func (s *Service) rememberReply(caller router.Caller, session *replySession, tar
 			break
 		}
 	}
+	if decoration.mention == nil && decoration.prefix == "" {
+		return nil
+	}
+	row := storedReplyKey(caller, messageReplyKey(target, id))
+	row.Prefix = decoration.prefix
+	if decoration.mention != nil {
+		var err error
+		row.Mention, err = proto.Marshal(decoration.mention)
+		if err != nil {
+			return fmt.Errorf("encode reply mention: %w", err)
+		}
+	}
 	s.replyMu.Lock()
 	defer s.replyMu.Unlock()
 	if s.replySessions[caller] == session {
-		session.messages[messageReplyKey(target, id)] = decoration
+		return s.saveReply(&row)
 	}
+	return nil
 }
 
 // replyMentionEnd 定位合并进 text 开头的自动提及，分别返回 UTF-8 字节与 UTF-16 码元边界。
@@ -324,7 +341,26 @@ func (s *Service) preserveReply(caller router.Caller, target *pb.Target, id stri
 	s.replyMu.Lock()
 	var decoration replyDecoration
 	if session := s.replySessions[caller]; session != nil {
-		decoration = session.messages[messageReplyKey(target, id)]
+		row := storedReplyKey(caller, messageReplyKey(target, id))
+		if s.replyDB == nil {
+			s.replyMu.Unlock()
+			return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "reply database is not open"}
+		}
+		err := s.replyDB.Where(&row).Take(&row).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			s.replyMu.Unlock()
+			return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read reply decoration: " + err.Error()}
+		}
+		if err == nil {
+			decoration.prefix = row.Prefix
+			if len(row.Mention) > 0 {
+				decoration.mention = &pb.MentionSegment{}
+				if err := proto.Unmarshal(row.Mention, decoration.mention); err != nil {
+					s.replyMu.Unlock()
+					return nil, &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "decode reply mention: " + err.Error()}
+				}
+			}
+		}
 	}
 	s.replyMu.Unlock()
 	if decoration.mention == nil && decoration.prefix == "" {

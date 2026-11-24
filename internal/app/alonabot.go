@@ -347,7 +347,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	management := manage.New(manage.Options{DebugEvent: c.assembly.router.DebugEvent, DebugCall: func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
 		return c.assembly.mux.For(caller)(ctx, in)
 	}, DebugRelease: func(caller router.Caller) {
-		c.assembly.messages.Release(caller)
+		if err := c.assembly.messages.Release(caller); err != nil {
+			slog.Error("release reply decorations failed", "error", err)
+		}
 		c.assembly.media.ReleaseSession(caller.SessionKey)
 	}, DebugMenu: c.assembly.router.DebugCommandMenu, DebugMedia: c.assembly.media.ReadDebugIncoming, NotifyProfileOverrides: func(ctx context.Context, id string) error {
 		return c.operation(ctx, func(ctx context.Context) error { return c.assembly.notifyProfileOverrides(ctx, id) })
@@ -1046,7 +1048,11 @@ func (c *Core) shutdown() error {
 }
 
 func (c *Core) close() error {
-	err := c.store.Close()
+	var err error
+	if c.assembly != nil {
+		err = c.assembly.messages.Close()
+	}
+	err = errors.Join(err, c.store.Close())
 	if c.output != nil {
 		err = errors.Join(err, c.output.Close())
 	}
