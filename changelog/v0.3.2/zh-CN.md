@@ -9,6 +9,4 @@
 - 插件和 Agent 省略 `sleep_capable` 时，默认允许 Core 在符合休眠条件时让组件休眠；显式设置为 `false` 时仍保持常驻。如果旧构建器把源码中省略的值写成了 `false`，请用修复后的构建器重新打包，让该组件采用默认行为 ([#332](https://github.com/AlonaBot/AlonaBot/pull/332))。
 - Core 和 SDK 的日志正文会直接写明哪个组件执行了什么操作、状态如何变化，以及失败的原因。完整的结构化字段保存在 JSON 日志文件中，旧的文本历史仍可查询 ([#333](https://github.com/AlonaBot/AlonaBot/pull/333))。
 
-Compose 镜像 `ghcr.io/alonabot/alonabot:0.3.2` 包含 Agent 和 WebUI v0.3.0。
-
 [0.3.2]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.2

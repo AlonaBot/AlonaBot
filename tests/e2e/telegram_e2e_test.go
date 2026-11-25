@@ -28,7 +28,7 @@ func TestTelegramDevelopment(t *testing.T) {
 			"tg_a":{"token":"development-token-a","api_base_url":%q,"proxy_mode":"none"},
 			"tg_b":{"token":"development-token-b","api_base_url":%q,"proxy_mode":"none"}
 		}}}}`, a.URL(), b.URL()))
-	c := startEmptyCore(t, dir, componentDirectories["telegram"], "../../examples/plugins/echo", "../../examples/plugins/media")
+	c := startEmptyCore(t, dir, telegramSource(t), "../../examples/plugins/echo", "../../examples/plugins/media")
 	for _, id := range []string{"alonabot-adapter-telegram", "echo", "media"} {
 		developmentPID(t, c, id)
 	}

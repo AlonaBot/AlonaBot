@@ -63,7 +63,7 @@ Uninstall stops/unregisters the service, removes its definition/program/bundled 
 Download the release Compose file and start the bundle:
 ```fish
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.2/docker-compose.yml
+  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.3/docker-compose.yml
 docker compose up -d
 ```
 

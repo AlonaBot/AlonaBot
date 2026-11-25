@@ -59,9 +59,9 @@ func TestCollectPublishedComponent(t *testing.T) {
 	}
 	archive = content.Bytes()
 	root, out := t.TempDir(), t.TempDir()
-	component := component{"agent", "alonabot-agent-official"}
+	component := component{"agent", "alonabot-agent-official", source}
 	target := runtime.GOOS + "/" + runtime.GOARCH
-	if err := collectComponent(t.Context(), component, source, "v0.1.0", out, []string{target}, map[string]string{target: root}); err != nil {
+	if err := collectComponent(t.Context(), component, "v0.1.0", out, []string{target}, map[string]string{target: root}); err != nil {
 		t.Fatal(err)
 	}
 	name := fmt.Sprintf("%s-0.1.0-%s-%s.tar.gz", component.id, runtime.GOOS, runtime.GOARCH)

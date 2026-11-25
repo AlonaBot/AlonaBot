@@ -1,6 +1,6 @@
 # 整合测试
 
-`agent/` 保留官方 Agent 与真实 Core 的协作断言；`e2e/` 保留 CLI、恢复和跨组件端到端测试。两组测试共用独立的 `go.mod`，组件版本由 `components.lock.json` 固定，Core 使用当前 checkout。Core module 的产品依赖保持独立。
+`agent/` 保留官方 Agent 与真实 Core 的协作断言；`e2e/` 保留 CLI、恢复和跨组件端到端测试。两组测试共用独立的 `go.mod`，组件源码取自该 module 选定的版本，Core 使用当前 checkout。Core module 的产品依赖保持独立。
 
 执行命令统一见[开发指南](../docs/development.zh-CN.md#官方组件开发)。
 
