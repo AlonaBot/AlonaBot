@@ -12,7 +12,7 @@ AlonaBot 首次正式发布。你可以用 Core 搭建机器人，再按需安�
 
 ### Changed
 
-- 11 月 21 日，五个平台归档原地重包，只包含 Core 程序、`LICENSE` 和 `source.json`。Core 二进制、tag 和整合镜像保持原样，已经安装的组件继续保留。**如果手里仍是旧归档，请重新下载，旧摘要已失效。** 安装器会按 GitHub Release API 提供的摘要校验下载。见 [#291](https://github.com/AlonaBot/AlonaBot/pull/291)、[#292](https://github.com/AlonaBot/AlonaBot/pull/292)。
+- 11 月 21 日，五个平台归档原地重包，只包含 Core 程序、`LICENSE` 和 `source.json`。Core 二进制、tag 和整合镜像保持原样，已经安装的组件继续保留。**如果手里仍是旧归档，请重新下载，旧摘要已失效。** 安装器会按 GitHub Release API 提供的摘要校验下载 ([#291](https://github.com/AlonaBot/AlonaBot/pull/291), [#292](https://github.com/AlonaBot/AlonaBot/pull/292))。
 - 发行页提供 Linux 和 macOS 的 amd64、arm64 tar.gz 归档，以及 Windows amd64 ZIP 归档。五个归档均使用 `CGO_ENABLED=0` 构建，源码压缩包由 GitHub 提供。安装脚本从 `main` 获取，Compose 文件从版本 tag 获取。
 
 ### 已知限制
