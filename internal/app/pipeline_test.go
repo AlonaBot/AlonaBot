@@ -741,6 +741,9 @@ func TestPipeline(t *testing.T) {
 				t.Fatalf("Handler reply chain=%+v", call)
 			}
 		}
+		// Router 排空后，上一批 AfterSend 仍可能在后台；先等它们记录完再切分审计。
+		h.await(func(records []pipelineRecord) bool { return len(pipelineStages(records, "after")) >= 3 })
+
 		t.Run("automatic_explicit_send", func(t *testing.T) {
 			before := len(h.snapshot())
 			for _, text := range []string{"/explicit", "/empty"} {
