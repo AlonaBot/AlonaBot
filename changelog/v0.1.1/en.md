@@ -9,13 +9,13 @@
 ### Changed
 
 - Core stores the management token in `admin_token` with mode `0600`. Startup, initialization and reset show only the file path. Local WebUI can claim and confirm the token; management commands read it from the directory selected with `--data-dir`. Update scripts that use `--token-file` or `ALONABOT_ADMIN_TOKEN` to select the data directory instead. If an older sign-in removed the token file, stop Core and run `alonabot admin-token reset --data-dir <data_dir>` to regain access. A reset revokes existing management sessions.
-- Plugin and agent examples created with `alonabot init` reply with `Hello AlonaBot` out of the box. Add i18n files as needed. See [#295](https://github.com/AlonaBot/AlonaBot/pull/295).
+- Plugin and agent examples created with `alonabot init` reply with `Hello AlonaBot` out of the box. Add i18n files as needed ([#295](https://github.com/AlonaBot/AlonaBot/pull/295)).
 - Readers can switch between the English and Simplified Chinese READMEs and their documentation homepages.
 - The `ghcr.io/alonabot/alonabot:0.1.1` Compose image includes WebUI v0.1.1 and Agent v0.1.0. The official OneBot 11 adapter was released separately at v0.1.1; help and Telegram stayed at v0.1.0.
 
 ### Fixed
 
-- The management UI can read published Core notes through the changelog API. It serves English or Simplified Chinese based on `Accept-Language`, defaults to English when there is no match, and leaves unreleased entries in the repository. See [#295](https://github.com/AlonaBot/AlonaBot/pull/295).
+- The management UI can read published Core notes through the changelog API. It serves English or Simplified Chinese based on `Accept-Language`, defaults to English when there is no match, and leaves unreleased entries in the repository ([#295](https://github.com/AlonaBot/AlonaBot/pull/295)).
 
 ### Recorded verification
 

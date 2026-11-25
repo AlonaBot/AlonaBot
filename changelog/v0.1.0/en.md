@@ -10,7 +10,7 @@ This is the first official AlonaBot release. Run Core to host a bot, then instal
 
 ### Changed
 
-- On November 21, the five platform archives were repackaged in place to contain only the Core executable, `LICENSE` and `source.json`. The Core binaries, tag and bundled Compose image stayed the same, and existing installations kept their components. **If you still have an old archive, download it again; the previous digest is obsolete.** The installer verifies downloads against the digest reported by the GitHub Release API. See [#291](https://github.com/AlonaBot/AlonaBot/pull/291) and [#292](https://github.com/AlonaBot/AlonaBot/pull/292).
+- On November 21, the five platform archives were repackaged in place to contain only the Core executable, `LICENSE` and `source.json`. The Core binaries, tag and bundled Compose image stayed the same, and existing installations kept their components. **If you still have an old archive, download it again; the previous digest is obsolete.** The installer verifies downloads against the digest reported by the GitHub Release API ([#291](https://github.com/AlonaBot/AlonaBot/pull/291), [#292](https://github.com/AlonaBot/AlonaBot/pull/292)).
 - The release page provides tar.gz archives for Linux and macOS on amd64 and arm64, and a ZIP archive for Windows amd64. All five use `CGO_ENABLED=0`; GitHub provides the source archives. Get the install script from `main` and the Compose file from the version tag.
 
 ### Known limitations

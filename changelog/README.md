@@ -1,6 +1,6 @@
 # Changelog
 
-Version directories contain `en.md` and `zh-CN.md`. Add user-visible changes to `unreleased/`; prepare the version directory before building a release. Keep entries under Added, Changed, Deprecated, Removed, Fixed or Security, omitting empty sections. Link source PRs beside the relevant entry.
+Version directories contain `en.md` and `zh-CN.md`. Add user-visible changes to `unreleased/`; prepare the version directory before building a release. Keep entries under Added, Changed, Deprecated, Removed, Fixed or Security, omitting empty sections. Put linked PR numbers in parentheses at the end of the relevant entry, before the final punctuation.
 
 Write each entry as a complete sentence. Start with what users or developers can do, or what works differently. Use API names when they help readers find the change. Keep implementation details in the source PR. If a change requires readers to update a command, configuration or component, say who needs to act and what to do in that entry. Leave routine deployment steps to the deployment guide. For changes that need no action, describe the result and omit compatibility boilerplate.
 

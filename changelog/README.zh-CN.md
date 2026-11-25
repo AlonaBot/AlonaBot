@@ -1,6 +1,6 @@
 # 更新日志
 
-每个版本目录包含 `en.md` 与 `zh-CN.md`。日常变更写入 `unreleased/`；发行准备时整理到对应版本目录。条目说明用户可见的变化，按 Added、Changed、Deprecated、Removed、Fixed、Security 分类，省略空分类，相关 PR 链接放在条目旁。
+每个版本目录包含 `en.md` 与 `zh-CN.md`。日常变更写入 `unreleased/`；发行准备时整理到对应版本目录。条目说明用户可见的变化，按 Added、Changed、Deprecated、Removed、Fixed、Security 分类，省略空分类，在条目末尾用括号列出相关 PR 的编号链接，括号放在句末标点前。
 
 每条用完整句先写用户或开发者现在能做什么、行为有何变化。能帮助读者定位时再写 API 名称；实现细节放在关联 PR。确实要改命令、配置或组件时，在对应条目写清谁需要操作、怎么做。常规部署步骤留在部署指南；无需操作的变更直接写结果。
 
