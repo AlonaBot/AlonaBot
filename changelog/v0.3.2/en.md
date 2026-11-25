@@ -9,6 +9,4 @@
 - Plugins and agents that omit `sleep_capable` allow Core to put them to sleep when eligible. An explicit `false` keeps them resident. If an older builder wrote `false` for an omitted value, rebuild the package with the fixed builder to get the default behavior ([#332](https://github.com/AlonaBot/AlonaBot/pull/332)).
 - Core and SDK log messages identify the component, action, state change or reason for failure in plain language. JSON log files retain the full structured fields, and older text logs remain available for queries ([#333](https://github.com/AlonaBot/AlonaBot/pull/333)).
 
-The `ghcr.io/alonabot/alonabot:0.3.2` Compose image includes Agent and WebUI v0.3.0.
-
 [0.3.2]: https://github.com/AlonaBot/AlonaBot/releases/tag/v0.3.2

@@ -7,7 +7,7 @@
 
 ## 模块与职责
 
-Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用独立仓库与 module；`tests/` 隔离跨组件测试依赖，`components.lock.json` 固定整合发行源码。
+Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用独立仓库与 module；`tests/` 隔离跨组件测试依赖。整合发行从官方组件仓库取最新正式资产，并在 `source.json` 记录实际版本。
 
 | 模块（路径） | 负责 | 不负责 |
 | --- | --- | --- |

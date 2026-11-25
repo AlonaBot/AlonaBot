@@ -12,7 +12,7 @@
 
 ### Changed
 
-- 插件和 Agent 作者应将配置 Schema 文件改名为 `plugin_config_schema.json` 后重新构建；Adapter 继续使用 `adapter_config_schema.json`。旧版 Agent 在本版 Core 上无法运行；使用独立部署的管理员应更新到 Agent v0.3.0 后再启用。现有配置和受管数据会保留。Compose 镜像 `ghcr.io/alonabot/alonabot:0.3.0` 已包含 Agent 和 WebUI v0.3.0。
+- 插件和 Agent 作者应将配置 Schema 文件改名为 `plugin_config_schema.json` 后重新构建；Adapter 继续使用 `adapter_config_schema.json`。如果单独安装了 Agent，请换用针对本版 Core 构建的包后再启用。现有配置和受管数据会保留。
 - SDK 的单次模型调用改用接收结构化请求的 `llm.Generate`。使用 `llm.Ask` 或旧 `agent.Generate` 的组件应改用新入口。只有路径命令的 Builder 提供 `Menu`、参数和别名 ([#308](https://github.com/AlonaBot/AlonaBot/pull/308))。
 - 源码构建改为串行编译。可用内存不足或构建长时间没有输出时，日志会给出提示；如果编译进程被终止，任务会报告可能的内存不足并给出替代做法。Linux 上内存耗尽时会优先结束编译进程，降低 Core 同时退出的风险 ([#316](https://github.com/AlonaBot/AlonaBot/pull/316))。
 - 管理 API 在组件列表中提供名称和简介，并在账号实例中提供所属组件的状态 ([#312](https://github.com/AlonaBot/AlonaBot/pull/312))。

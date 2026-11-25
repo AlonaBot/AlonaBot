@@ -4,41 +4,30 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"testing"
 )
 
-var (
-	componentDirectories = map[string]string{}
-	componentLock        map[string]struct{ Module, Version string }
-)
-
-// loadComponentDirectories 使用发行锁的精确版本，避免整合测试隐式读取邻接 checkout。
-func loadComponentDirectories() {
-	raw, err := os.ReadFile("../../components.lock.json")
+// telegramSource 复制 tests module 已选定的 Telegram 源码，供开发模式编译。
+func telegramSource(t *testing.T) string {
+	t.Helper()
+	const module = "github.com/AlonaBot/alonabot-adapter-telegram"
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", module)
+	output, err := cmd.Output()
 	if err != nil {
-		panic(err)
-	}
-	if err := json.Unmarshal(raw, &componentLock); err != nil {
-		panic(err)
-	}
-	for name, source := range componentLock {
-		output, err := exec.Command("go", "mod", "download", "-json", source.Module+"@"+source.Version).CombinedOutput()
-		if err != nil {
-			panic(fmt.Sprintf("download %s: %v\n%s", name, err, output))
+		if exit, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("locate %s: %v\n%s", module, err, exit.Stderr)
 		}
-		var downloaded struct{ Dir string }
-		if err := json.Unmarshal(output, &downloaded); err != nil {
-			panic(err)
-		}
-		directory := filepath.Join(binDir, "sources", name)
-		if err := os.CopyFS(directory, os.DirFS(downloaded.Dir)); err != nil {
-			panic(err)
-		}
-		componentDirectories[name] = directory
+		t.Fatalf("locate %s: %v", module, err)
 	}
+	directory := filepath.Join(t.TempDir(), "telegram")
+	if err := os.CopyFS(directory, os.DirFS(strings.TrimSpace(string(output)))); err != nil {
+		t.Fatalf("copy %s: %v", module, err)
+	}
+	return directory
 }
 
 // CLI 的公开退出码与临时终端实例身份由端到端断言直接核对。

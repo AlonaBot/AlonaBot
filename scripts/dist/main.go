@@ -31,15 +31,13 @@ const (
 	directoryMode    = 0o755
 )
 
-const webuiDir = "webui"
-
 type component struct {
-	dir, id string
+	dir, id, module string
 }
 
 var components = []component{
-	{"agent", "alonabot-agent-official"},
-	{webuiDir, "alonabot-webui-admin"},
+	{"agent", "alonabot-agent-official", "github.com/AlonaBot/alonabot-agent"},
+	{"webui", "alonabot-webui-admin", "github.com/AlonaBot/alonabot-webui"},
 }
 
 type componentSource struct {
@@ -96,20 +94,16 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(staging)) }()
 
-	// 2. Core 归档独立构建；整合模式才读取组件锁和公开组件资产。
-	var lock map[string]componentSource
+	// 2. 整合构建为每个组件解析一次最新正式发行，让所有目标平台使用同一版本。
+	var sources map[string]componentSource
 	if opt.bundle {
-		rawLock, err := os.ReadFile("components.lock.json")
-		if err != nil {
-			return err
-		}
-		var sources map[string]componentSource
-		if err := json.Unmarshal(rawLock, &sources); err != nil {
-			return err
-		}
-		lock = make(map[string]componentSource)
-		for _, component := range components {
-			lock[component.dir] = sources[component.dir]
+		sources = make(map[string]componentSource)
+		for _, c := range components {
+			version, err := latestReleaseTag(ctx, c.module)
+			if err != nil {
+				return fmt.Errorf("resolve latest release for %s: %w", c.id, err)
+			}
+			sources[c.dir] = componentSource{Module: c.module, Version: version}
 		}
 	}
 	roots := make(map[string]string)
@@ -129,7 +123,7 @@ func run(ctx context.Context, args []string) (err error) {
 			Source     string                     `json:"source"`
 			Version    string                     `json:"version"`
 			Components map[string]componentSource `json:"components,omitempty"`
-		}{"https://github.com/AlonaBot/AlonaBot/tree/v" + opt.version, opt.version, lock}, "", "  ")
+		}{"https://github.com/AlonaBot/AlonaBot/tree/v" + opt.version, opt.version, sources}, "", "  ")
 		if err != nil {
 			return err
 		}
@@ -143,13 +137,9 @@ func run(ctx context.Context, args []string) (err error) {
 	}
 	// 3. 原样收录组件平台包，公开安装和预装使用同一份资产。
 	if opt.bundle {
-		for _, component := range components {
-			source := lock[component.dir]
-			if source.Module == "" || source.Version == "" {
-				return fmt.Errorf("missing component lock for %s", component.dir)
-			}
-			if err := collectComponent(ctx, component, source.Module, source.Version, out, targets, roots); err != nil {
-				return fmt.Errorf("collect %s: %w", component.id, err)
+		for _, c := range components {
+			if err := collectComponent(ctx, c, sources[c.dir].Version, out, targets, roots); err != nil {
+				return fmt.Errorf("collect %s: %w", c.id, err)
 			}
 		}
 	}
@@ -220,8 +210,25 @@ func command(ctx context.Context, dir string, env []string, name string, args ..
 	return output, nil
 }
 
-// collectComponent 核对锁定版本的包内身份与平台，再原样收录到发行树。
-func collectComponent(ctx context.Context, component component, source, version, out string, targets []string, roots map[string]string) error {
+// latestReleaseTag 通过 GitHub 查询最新正式发行；后续下载使用返回的具体 tag。
+func latestReleaseTag(ctx context.Context, module string) (string, error) {
+	repo := strings.TrimPrefix(module, "github.com/")
+	raw, err := download(ctx, "https://api.github.com/repos/"+repo+"/releases/latest")
+	if err != nil {
+		return "", err
+	}
+	var publication release.GitHubRelease
+	if err := json.Unmarshal(raw, &publication); err != nil {
+		return "", fmt.Errorf("parse GitHub release: %w", err)
+	}
+	if err := publication.Validate(repo); err != nil {
+		return "", err
+	}
+	return publication.Tag, nil
+}
+
+// collectComponent 核对指定版本的包内身份与平台，再原样收录到发行树。
+func collectComponent(ctx context.Context, component component, version, out string, targets []string, roots map[string]string) error {
 	directory := filepath.Join(out, "packages", component.id)
 	if err := os.MkdirAll(directory, directoryMode); err != nil {
 		return err
@@ -234,7 +241,7 @@ func collectComponent(ctx context.Context, component component, source, version,
 	for _, target := range targets {
 		goos, goarch, _ := strings.Cut(target, "/")
 		name := fmt.Sprintf("%s-%s-%s-%s.tar.gz", component.id, strings.TrimPrefix(version, "v"), goos, goarch)
-		raw, err := download(ctx, "https://"+source+"/releases/download/"+version+"/"+name)
+		raw, err := download(ctx, "https://"+component.module+"/releases/download/"+version+"/"+name)
 		if err != nil {
 			return err
 		}
@@ -242,7 +249,7 @@ func collectComponent(ctx context.Context, component component, source, version,
 		if err := os.WriteFile(archive, raw, fileMode); err != nil {
 			return err
 		}
-		candidate, err := packages.Preflight(packages.Input{ID: component.id, Version: strings.TrimPrefix(version, "v"), Source: source, OS: goos, Arch: goarch, ArchivePath: archive}, staging, packages.NewLimits(tune.Defaults()))
+		candidate, err := packages.Preflight(packages.Input{ID: component.id, Version: strings.TrimPrefix(version, "v"), Source: component.module, OS: goos, Arch: goarch, ArchivePath: archive}, staging, packages.NewLimits(tune.Defaults()))
 		if err != nil {
 			return err
 		}

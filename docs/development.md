@@ -97,7 +97,7 @@ Component source and Go/npm locks live in their own repositories:
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) |
 | Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) |
 
-Run `alonabot check .`, `alonabot run .` or `alonabot pack .` in a component project. Core/SDK retain an independent module; `components.lock.json` pins component source for bundled builds. Cross-component tests use separate `tests/go.mod`, keeping model SDK/Adapter implementation dependencies there.
+Run `alonabot check .`, `alonabot run .` or `alonabot pack .` in a component project. Core/SDK retain an independent module. Cross-component tests use separate `tests/go.mod`, keeping model SDK/Adapter implementation dependencies there.
 
 ```fish
 uv run --no-project python scripts/integration.py
@@ -105,7 +105,7 @@ uv run --no-project python scripts/integration.py
 uv run --no-project python scripts/integration.py --run '^TestAgentServices$' --race
 ```
 
-The integration entry point first runs `tests/agent`/`tests/e2e`. Agent service tests needing private Core assembly run via temporary modfiles/overlays using the Agent version resolved by `tests/go.mod`, without writing dependencies/tests back into Core's module. Test dependencies may pin real development commits; `components.lock.json` continues to pin published components for release builds. CLI end-to-end tests live in `tests/e2e`; `cmd/alonabot` contains production commands only.
+The integration entry point first runs `tests/agent`/`tests/e2e`. Agent service tests needing private Core assembly run via temporary modfiles/overlays using the Agent version resolved by `tests/go.mod`, without writing dependencies/tests back into Core's module. Test dependencies may pin real development commits; bundled releases resolve the latest published components separately. CLI end-to-end tests live in `tests/e2e`; `cmd/alonabot` contains production commands only.
 
 ## Code generation
 

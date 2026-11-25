@@ -5,9 +5,8 @@ Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core�
 ## 固定源码与发行说明
 
 1. 选择已审查的 Core 提交和发行版本，确认相应检查通过。
-2. 在 `components.lock.json` 固定五个官方组件的 Go module 精确版本。整合构建读取其中的 Agent 和 WebUI；跨组件测试的 Agent 输入由 `tests/go.mod` 固定，可独立使用真实开发提交。组件版本来自各自 `plugin.yaml`，可独立于 Core 版本升级。
-3. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`，按[更新日志格式](../changelog/README.zh-CN.md)写入单版本标题和实际发行日期，执行 `go generate ./internal/core/manage` 更新 Core 管理 API 内嵌的双语原文。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`。
-4. 先将组件 SDK 固定到已验证的 Core 精确提交，待组件发布后再固定整合锁和 Core tag，避免相互引用尚未发布的版本。插件模板随后更新至正式 SDK tag。
+2. 将用户可见变更整理到 `changelog/v<版本>/en.md` 与 `zh-CN.md`，按[更新日志格式](../changelog/README.zh-CN.md)写入单版本标题和实际发行日期，执行 `go generate ./internal/core/manage` 更新 Core 管理 API 内嵌的双语原文。保留真实平台结果、资源实测失败和已批准的延期。日常条目放在 `changelog/unreleased/`。
+3. 如需随 Core 发布组件改动，先将组件 SDK 对准已验证的 Core 提交并发布组件，再创建 Core tag。插件模板随后更新至正式 SDK tag。
 
 生成的 Release 正文按 `English`、`简体中文` 分区，分类使用三级标题。生成器去掉源文件的版本标题与 HTML 编辑注释，版本由 Release 顶部的 `v<版本>` 展示：
 
@@ -23,13 +22,13 @@ go run ./scripts/release-notes --version 0.1.0 > /tmp/alonabot-release-notes.md
 go run ./scripts/dist --version 0.1.0 --out ./dist
 ```
 
-构建需要 Go 和网络。默认只构建当前 checkout 的 Core。镜像使用的内部整合归档显式添加 `--bundle`，按 `components.lock.json` 的正式版本下载 Agent 与 WebUI 的公开 Release，核对包内来源、ID、版本、平台、build-info 与资源，组件归档逐字收录到整合归档；前端在 WebUI 自身发布时构建。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，用 `--platforms linux/amd64,linux/arm64` 选择子集。
+构建需要 Go 和网络。默认只构建当前 checkout 的 Core。镜像使用的内部整合归档显式添加 `--bundle`，构建时分别查询 Agent 与 WebUI 仓库的最新正式 GitHub Release，再按返回的具体 tag 下载，核对包内来源、ID、版本、平台、build-info 与资源，组件归档逐字收录到整合归档；前端在 WebUI 自身发布时构建。默认目标为 `linux/amd64,linux/arm64,windows/amd64,darwin/amd64,darwin/arm64`，用 `--platforms linux/amd64,linux/arm64` 选择子集。
 
 每个平台生成 `alonabot-<version>-<os>-<arch>.tar.gz`，Windows 为 `.zip`；默认归档仅含 Core 可执行文件、MIT 许可证与记录源码版本的 `source.json`。`--bundle` 额外收录 `packages/<组件ID>/`，每个组件目录含本平台组件归档，源码记录列出实际整合的 Agent 与 WebUI。WebUI 包包含后台进程和同一份前端产物。
 
-整合模式的 `<输出目录>/packages/<组件ID>/` 汇集所选平台归档。默认下载 URL 指向该组件仓库的 `releases/download/v<组件版本>`。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
+整合模式的 `<输出目录>/packages/<组件ID>/` 汇集所选平台归档。同次整合构建的所有目标平台使用同一组组件 tag；重新构建时会再次查询正式 Release。需要复用已经验收的内容时，使用原构建归档。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
 
-纯 Core 归档可以先构建；内部整合归档与 Compose 镜像须在锁定的 Agent、WebUI 平台包公开后构建。商店正式验收使用匿名可读的公开索引和已发布的 WebUI；商店接口与收录流程见[商店操作](deployment.zh-CN.md#组件商店)。
+纯 Core 归档可以先构建；内部整合归档与 Compose 镜像需要最新正式 Release 提供 Agent、WebUI 的目标平台归档。商店正式验收使用匿名可读的公开索引和已发布的 WebUI；商店接口与收录流程见[商店操作](deployment.zh-CN.md#组件商店)。
 
 公开 Release 仅上传五个平台归档；源码 zip 与 tar.gz 由 GitHub 自动提供。安装脚本从主仓 `main/deploy/install.sh` 下载，Compose 从对应 tag 的根目录下载。安装器通过 GitHub Release API 的资产摘要校验官方归档。
 
@@ -68,11 +67,11 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 每个组件仓库的同版本 Release 只上传各平台 tar.gz，源码压缩包由 GitHub 自动提供。来源、组件 ID、版本、平台和归档名必须与包内声明一致；用 `alonabot install --source AlonaBot/<组件仓库>` 验证公开下载与后续更新。
 
-正式发布按以下顺序执行：
+需要随 Core 交付组件变更时，先发布这些组件；仅发布 Core 时直接从第 3 步开始：
 
-1. 将组件 SDK 固定到已审查的 Core 精确提交；验证并合并五个组件的源码 PR。
-2. 在五组件仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包并只上传归档，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`，去掉各自的版本标题后按语言分区。
-3. 在主仓 `components.lock.json` 固定已发布组件版本，验证并合并后创建 Core `v<版本>` tag。Release 工作流构建五平台 Core 归档和双 Linux 平台内部整合归档，核对归档、组件身份及许可证并验收两种首次启动，再创建只包含 Core 归档的 Release 草稿。正文读取 `dist/core/release-notes.md`。
+1. 将待发布组件的 SDK 固定到已审查的 Core 提交；验证并合并组件 PR。
+2. 在待发布组件的仓库创建 `v<版本>` tag，触发各自 Release 工作流。工作流从固定源码构建五平台包并只上传归档，正文读取 `changelog/<版本>/en-US.md` 与 `zh-CN.md`，去掉各自的版本标题后按语言分区。
+3. 验证并合并 Core 源码后创建 Core `v<版本>` tag。Release 工作流构建五平台 Core 归档，并以最新正式 Agent 和 WebUI 构建双 Linux 平台内部整合归档，核对归档、组件身份及许可证并验收两种首次启动，再创建只包含 Core 归档的 Release 草稿。正文读取 `dist/core/release-notes.md`。
 4. 原生 amd64、arm64 runner 各自解压本次内部整合归档，通过 Dockerfile 的 `published` target 构建镜像并用发行 Compose 验收登录、默认组件、卷内凭证持久化和退出；通过后推送平台镜像并合并版本 tag 与 `latest`。
 5. 首次发布时，先在组织 Settings → Packages → Package creation 中允许 Public，再将 GHCR 包的 visibility 设置为 public。工作流匿名拉取两架构并验收公开 Compose 后公开 Release；随后更新 README、同步 dev，并将插件模板切到正式 SDK tag。
 
@@ -83,8 +82,8 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 1. 先发布并验证采用归档安装流程的 Core，保留历史组件旁车，使旧部署有升级入口。新 Core 可直接读取历史平台归档；纯 Core 发行可先于组件发行完成。
 2. 发布采用单归档上传和商店读取流程的 WebUI，再发布 Agent、Adapter、插件与模板的工作流变更。组件和模板使用新 Core CLI 打包前，先将 CLI/SDK 固定到已发布的精确版本。通过 CLI 与 WebUI 验证在线安装、更新、来源拒绝以及数据保留。
 3. 新 Core 和 WebUI 均验证通过后，逐个列出五个组件仓库的历史 Release 资产，仅删除 `release.json`、`release.json.sig`、`release.pub`。保留平台归档、源码、Release 正文和 tag。此步骤须在具备发布授权的会话中执行。
-4. 清理完成后逐仓核对资产只含平台归档，并重新验证公开在线安装。旧 Core 在线安装及更新需先升级；已安装组件和用户数据继续保留。整合发行仍按上文固定组件版本和构建镜像。
+4. 清理完成后逐仓核对资产只含平台归档，并重新验证公开在线安装。旧 Core 在线安装及更新需先升级；已安装组件和用户数据继续保留。整合发行仍按上文从正式发行获取组件。
 
 ## Schema 文件名切换的发行准备
 
-本轮插件与 Agent 改用 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。先发行使用新 Schema 文件名的 SDK/Core，再让 Agent 和 WebUI 固定该真实版本并重新构建。Agent 的 Schema 与 WebUI 的 Schema fixtures 须同步。新 SDK 发布前，`test`、`build`、`check` 可通过临时 `go.work` 将组件接到本地 Core。`pack` 会使用临时 `-modfile`；本地打包时复制组件源码到临时目录，在副本的 `go.mod` 添加指向本地 Core 的 `replace`，再执行 `env GOWORK=off alonabot pack <临时副本目录>`。组件源码保留已有真实 module 版本。组件发布后再更新 `components.lock.json`，整合归档沿用公开资产构建流程。用户先停用旧组件、升级 Core，再经管理端更新新包并启用；配置值和数据保留。
+本轮插件与 Agent 改用 `plugin_config_schema.json`；Adapter 保留 `adapter_config_schema.json`。先发行使用新 Schema 文件名的 SDK/Core，再让 Agent 和 WebUI 固定该真实版本并重新构建。Agent 的 Schema 与 WebUI 的 Schema fixtures 须同步。新 SDK 发布前，`test`、`build`、`check` 可通过临时 `go.work` 将组件接到本地 Core。`pack` 会使用临时 `-modfile`；本地打包时复制组件源码到临时目录，在副本的 `go.mod` 添加指向本地 Core 的 `replace`，再执行 `env GOWORK=off alonabot pack <临时副本目录>`。组件源码保留已有真实 module 版本。组件发布后，下一次整合构建会读取最新正式发行的归档。用户先停用旧组件、升级 Core，再经管理端更新新包并启用；配置值和数据保留。

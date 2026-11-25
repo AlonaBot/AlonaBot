@@ -4,8 +4,8 @@ This is the first official AlonaBot release. Run Core to host a bot, then instal
 
 ### Added
 
-- Go developers can use the `v0.1.0` SDK to write independently installable plugins, adapters and agents. The Telegram and OneBot 11 adapters and the help plugin are available separately. All five official components publish signed archives under AGPL-3.0-only in this release.
-- The [deployment guide](https://github.com/AlonaBot/AlonaBot/blob/af4f68550dcef191d5bc9a5e345b48510196ae23/docs/deployment.md) covers native installation and Docker Compose. The `ghcr.io/alonabot/alonabot:0.1.0` image includes Core, WebUI and Agent. Compose enables WebUI on first start. Follow the startup prompt to claim a one-time admin token and sign in at `http://127.0.0.1:7650`. Configure a provider and model before enabling Agent.
+- Go developers can use the `v0.1.0` SDK to write independently installable plugins, adapters and agents.
+- The [deployment guide](https://github.com/AlonaBot/AlonaBot/blob/af4f68550dcef191d5bc9a5e345b48510196ae23/docs/deployment.md) covers native installation and Docker Compose. Compose enables WebUI on first start. Follow the startup prompt to claim a one-time admin token and sign in at `http://127.0.0.1:7650`.
 - Core keeps the component's source, publisher binding and version pin when you update it. Rollback creates a new generation and a database copy. A standard uninstall keeps component data and the source binding for reinstallation from that source. Uninstalling the Core service and program also preserves its data directory.
 
 ### Changed
@@ -15,7 +15,6 @@ This is the first official AlonaBot release. Run Core to host a bot, then instal
 
 ### Known limitations
 
-- OneBot 11 can receive events; sending returns `UNSUPPORTED`. The welcome and rss plugins and the Telegram features listed in the [original release agreement](https://github.com/AlonaBot/AlonaBot/blob/f0382910/spec/CONTRACTS-v0.1.md#152-发行包官方整合包与预装组件) are deferred.
 - Native components run local code trusted by the administrator. In library mode they share Core's process: an unhandled panic ends that process, and a stop timeout cannot forcibly end a goroutine. Components that declare `prepare_effects=external` require maintenance and backup approval and their own recovery procedure for external data.
 - Use a custom image with the relevant runtime if an MCP stdio tool needs a shell, Node or Python.
 

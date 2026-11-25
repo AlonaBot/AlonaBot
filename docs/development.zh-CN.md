@@ -97,7 +97,7 @@ GORM 直接使用上游 `gorm.io/gorm v1.31.2`，版本由各 module 的 `go.mod
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) |
 | Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) |
 
-在组件工程执行 `alonabot check .`、`alonabot run .` 或 `alonabot pack .`。本仓库的 Core 与 SDK 保持独立 module，`components.lock.json` 固定整合构建使用的组件源码；跨组件测试位于独立的 `tests/go.mod`，模型 SDK 与 Adapter 实现依赖留在该测试 module 中。
+在组件工程执行 `alonabot check .`、`alonabot run .` 或 `alonabot pack .`。本仓库的 Core 与 SDK 保持独立 module；跨组件测试位于独立的 `tests/go.mod`，模型 SDK 与 Adapter 实现依赖留在该测试 module 中。
 
 ```fish
 uv run --no-project python scripts/integration.py
@@ -105,7 +105,7 @@ uv run --no-project python scripts/integration.py
 uv run --no-project python scripts/integration.py --run '^TestAgentServices$' --race
 ```
 
-整合入口先运行 `tests/agent` 与 `tests/e2e`；需要 Core 私有装配入口的 Agent 服务测试通过临时 modfile 和 overlay 运行，复用 `tests/go.mod` 实际解析出的 Agent 版本，依赖和测试文件均不写回 Core module。测试依赖可以固定真实开发提交；`components.lock.json` 继续固定发行构建使用的已发布组件。CLI 的端到端测试在 `tests/e2e`，`cmd/alonabot` 只保留正式命令。
+整合入口先运行 `tests/agent` 与 `tests/e2e`；需要 Core 私有装配入口的 Agent 服务测试通过临时 modfile 和 overlay 运行，复用 `tests/go.mod` 实际解析出的 Agent 版本，依赖和测试文件均不写回 Core module。测试依赖可以固定真实开发提交；整合发行单独选用最新正式组件。CLI 的端到端测试在 `tests/e2e`，`cmd/alonabot` 只保留正式命令。
 
 ## 代码生成
 

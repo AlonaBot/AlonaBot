@@ -12,7 +12,7 @@
 
 ### Changed
 
-- Plugin and agent authors should rename their configuration schema to `plugin_config_schema.json` before rebuilding. Adapters still use `adapter_config_schema.json`. Older Agent builds cannot run on this Core release; update standalone Agent installations to v0.3.0 before enabling them. Existing configuration and managed data are retained. The `ghcr.io/alonabot/alonabot:0.3.0` Compose image already includes Agent and WebUI v0.3.0.
+- Plugin and agent authors should rename their configuration schema to `plugin_config_schema.json` before rebuilding. Adapters still use `adapter_config_schema.json`. If you installed Agent separately, replace the old package with a build targeting this Core release before re-enabling it. Configuration and managed data are retained.
 - For a single model call, the SDK now takes a structured request through `llm.Generate`. Replace calls to `llm.Ask` or the old `agent.Generate` with that entry point. Only path command builders expose `Menu`, arguments and aliases ([#308](https://github.com/AlonaBot/AlonaBot/pull/308)).
 - Source builds compile one at a time. The build log warns when memory is low or output stalls. If the compiler is killed, the task reports possible memory exhaustion and suggests alternatives. On Linux, the compiler is targeted first when memory runs out, reducing the risk that Core also exits ([#316](https://github.com/AlonaBot/AlonaBot/pull/316)).
 - The management API includes names and descriptions in the component list and reports the owning component's state for each account instance ([#312](https://github.com/AlonaBot/AlonaBot/pull/312)).

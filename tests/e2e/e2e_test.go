@@ -43,7 +43,6 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binDir = dir
-	loadComponentDirectories()
 	buildCLI := exec.Command("go", "build", "-o", filepath.Join(dir, "alonabot"), "./cmd/alonabot")
 	buildCLI.Dir = "../.."
 	if out, err := buildCLI.CombinedOutput(); err != nil {
