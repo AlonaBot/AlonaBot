@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/alonabot-agent/provider"
 )
 
@@ -212,6 +213,10 @@ func TestAgentTasks(t *testing.T) {
 	loop := newLoop(false, 4096)
 	loop.buttons = true
 	h := startAgent(t, loop, agentConfig(model.URL, provider.OpenAICompatible), nil)
+	// 操作缺省直接执行；本测试覆盖任务的确认流程，先显式设为 confirm。
+	for _, operation := range []string{"agent/schedule_task", "agent/cancel_task"} {
+		setToolPolicy(t, h, operation, pb.ToolPolicy_TOOL_POLICY_CONFIRM)
+	}
 	d := &taskDriver{h: h, script: script}
 	allow := true
 	if result := d.call(t, "member", "schedule_task", map[string]any{"prompt": "background forbidden", "interval_seconds": 60}, nil); result != "error: PERMISSION_DENIED" {

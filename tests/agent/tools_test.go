@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"testing"
 
+	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/sdk"
 	"github.com/AlonaBot/AlonaBot/sdk/errcode"
@@ -183,48 +184,47 @@ func TestAgentTools(t *testing.T) {
 			t.Fatal(err)
 		}
 		h.deliver(t, "/ask effects", "member", "en-US", false)
-		next := 0
+		// 管理员未设置策略时，操作缺省直接执行，不发确认按钮。
+		h.waitText(t, "effects finished")
+		for _, op := range loop.snapshot() {
+			if len(op.buttons) != 0 {
+				t.Fatalf("unexpected confirmation: %+v", op)
+			}
+		}
+		request, err := http.NewRequestWithContext(h.ctx, http.MethodGet, "http://"+address+"/api/v1/tools/policies", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var directory struct {
+			Policies []struct {
+				PluginID                 string `json:"plugin_id"`
+				Service, Effect, Default string
+			}
+		}
+		decodeError := json.NewDecoder(response.Body).Decode(&directory)
+		closeError := response.Body.Close()
+		if response.StatusCode != http.StatusOK || decodeError != nil || closeError != nil {
+			t.Fatalf("policies: status=%d decode=%v close=%v", response.StatusCode, decodeError, closeError)
+		}
 		for _, entry := range cases {
-			confirmation := h.confirmation(t, next)
-			if !strings.Contains(confirmation.text, "mcp/effects/"+entry.name) {
-				t.Fatalf("confirmation = %s", confirmation.text)
-			}
-			request, err := http.NewRequestWithContext(h.ctx, http.MethodGet, "http://"+address+"/api/v1/tools/policies", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
-			response, err := http.DefaultClient.Do(request)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var directory struct {
-				Policies []struct {
-					PluginID                 string `json:"plugin_id"`
-					Service, Effect, Default string
-				}
-			}
-			decodeError := json.NewDecoder(response.Body).Decode(&directory)
-			closeError := response.Body.Close()
-			if response.StatusCode != http.StatusOK || decodeError != nil || closeError != nil {
-				t.Fatalf("policies: status=%d decode=%v close=%v", response.StatusCode, decodeError, closeError)
-			}
 			found := false
 			for _, policy := range directory.Policies {
 				if policy.PluginID == agentID && policy.Service == "mcp/effects/"+entry.name {
 					found = true
-					if policy.Effect != entry.effect || policy.Default != "confirm" {
-						t.Errorf("policy = %+v, want %s/confirm", policy, entry.effect)
+					if policy.Effect != entry.effect || policy.Default != "allow" {
+						t.Errorf("policy = %+v, want %s/allow", policy, entry.effect)
 					}
 				}
 			}
 			if !found {
 				t.Fatalf("missing recorded operation %s", entry.name)
 			}
-			next = len(loop.snapshot())
-			h.click(t, confirmation, true, "member")
 		}
-		h.waitText(t, "effects finished")
 		if calls.Load() != 3 || requests.Load() != 4 {
 			t.Fatalf("calls=%d provider=%d", calls.Load(), requests.Load())
 		}
@@ -311,6 +311,8 @@ func TestAgentTools(t *testing.T) {
 			loop := newLoop(false, 1024)
 			loop.buttons = true
 			h := startAgent(t, loop, configuration, nil, toolPlugin(t, toolapi.DefaultConfirm, &coreCalls))
+			// 操作缺省直接执行；显式设为 confirm 后验证确认、拒绝与参数展示。
+			setToolPolicy(t, h, "mcp/local/echo/tool", pb.ToolPolicy_TOOL_POLICY_CONFIRM)
 			h.deliver(t, "/ask tools", "member", "en-US", false)
 			coreConfirmation := h.confirmation(t, 0)
 			if !strings.Contains(coreConfirmation.text, toolPluginID+"/echo") || !strings.Contains(coreConfirmation.text, "actual parameters") {

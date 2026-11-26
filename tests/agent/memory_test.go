@@ -52,14 +52,15 @@ func storedMemory(t *testing.T, db *sql.DB, target, scope, instance string) []st
 	return result
 }
 
-func setMemoryPolicy(t *testing.T, h *harness, policy pb.ToolPolicy) {
+// setToolPolicy 直接写入管理员对 Agent 工具或操作的策略覆盖；Core 在每次执行时读取生效策略。
+func setToolPolicy(t *testing.T, h *harness, service string, policy pb.ToolPolicy) {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(h.dir, "state.sqlite")+"?mode=rw")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("INSERT INTO tool_policy(plugin_id,service_name,policy) VALUES(?,?,?) ON CONFLICT(plugin_id,service_name) DO UPDATE SET policy=excluded.policy", agentID, "memory", int(policy)); err != nil {
+	if _, err := db.Exec("INSERT INTO tool_policy(plugin_id,service_name,policy) VALUES(?,?,?) ON CONFLICT(plugin_id,service_name) DO UPDATE SET policy=excluded.policy", agentID, service, int(policy)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -133,7 +134,7 @@ func TestAgentMemory(t *testing.T) {
 					}
 					// 目录取得后改变管理员策略，证明执行时仍经 Core 读取生效策略。
 					if scenario.policy != 0 {
-						setMemoryPolicy(t, h, scenario.policy)
+						setToolPolicy(t, h, "memory", scenario.policy)
 					}
 					writeMemoryCall(w, memoryName, json.RawMessage(`{"operations":[{"op":"add","target":"memory","text":"temporary"},{"op":"patch","target":"memory","old_text":"original","text":"updated note"},{"op":"remove","target":"memory","old_text":"temporary"},{"op":"add","target":"user","text":"A preference"}]}`))
 				case 2:
