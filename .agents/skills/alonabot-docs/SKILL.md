@@ -10,6 +10,7 @@ description: 修改 AlonaBot 文档、AGENTS/CLAUDE 或仓库技能时使用；�
 ## 选择唯一所有者
 
 - 协议字段与消息结构：[Protobuf 定义](../../../contracts/proto/alonabot/v1)；文档只解释，不另立契约。
+- 整体设计与设计理由：[设计导读](../../../docs/design.zh-CN.md)，核心机制变化时同步。
 - 模块边界、依赖方向与状态归属：[ARCHITECTURE.md](../../../ARCHITECTURE.md)。
 - Go 风格、注释与测试提交：[编码规范](../../../docs/coding-standards.zh-CN.md)。
 - 工具、命令、验证与 CI：[源码开发](../../../docs/development.zh-CN.md)。

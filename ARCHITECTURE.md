@@ -2,7 +2,7 @@
 
 负责范围：模块职责、允许的 import 方向、状态归属。行为细节见现行指南（见 [插件指南](docs/plugin-guide.zh-CN.md)）。
 更新时机：新增顶层包、改变包之间的依赖或状态归属时，同步修改本文件和 [docs/development.md](docs/development.zh-CN.md) 的检查表。
-组件关系与一条消息经过 Core 的逐步演示见文档站[架构](https://alonabot.github.io/docs/internals/architecture)。
+第一次阅读源码先看[设计导读](docs/design.zh-CN.md)；组件关系与一条消息经过 Core 的逐步演示见文档站[架构](https://alonabot.github.io/docs/internals/architecture)。
 
 实现目录与职责如下；开发入口见[源码开发](docs/development.zh-CN.md)，精确行为见[插件指南](docs/plugin-guide.zh-CN.md)。
 
