@@ -3,7 +3,7 @@
 // 插件通过 [Handler] 将套件静态资源挂载在自身的 HTTP 路由下；
 // 插件页面引用后即可自动与 WebUI postMessage 桥对接，跟随设计令牌、
 // 明暗主题与界面语言切换，并经桥请求插件自身路由。
-// 页面声明与桥的用法见 docs/plugin-guide.md 的 Plugin pages 一节。
+// 页面声明与桥的用法见 https://alonabot.github.io/docs/advanced/http。
 package page
 
 import (

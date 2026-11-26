@@ -10,7 +10,7 @@
 
 已安装 CLI 时，在工程目录直接执行 `alonabot run` 即可。终端输入且设置中没有任何 Adapter 实例时，自动启用终端对话；`--console` 强制启用（支持管道），`--console=false` 关闭。终端用户 `console:local` 在当前运行中具有 Core Admin 权限，实例与管理员保持在内存中。输入 `#1` 点击最近一条带按钮消息的第一个回调按钮，编辑回复显示为 `(edited)` 新段，媒体显示方括号占位。管道结束后 Core 继续运行到收到停止信号。
 
-开发目录缺省开启重载；修改源码、翻译或配置后，下一次输入即可观察新回复。`--reload=false` 关闭。外部工程使用发布版 CLI 时，`init` 自动写入 SDK 版本并执行 `go mod tidy`；失败保留工程并显示恢复命令。开发版 CLI 的 SDK 补齐提示见[开发指南](../../docs/development.zh-CN.md#工程创建与-sdk-选择)。
+开发目录缺省开启重载；修改源码、翻译或配置后，下一次输入即可观察新回复。`--reload=false` 关闭。外部工程使用发布版 CLI 时，`init` 自动写入 SDK 版本并执行 `go mod tidy`；失败保留工程并显示恢复命令。开发版 CLI 的 SDK 补齐提示见[开发指南](https://alonabot.github.io/docs/reference/cli#alonabot-init)。
 
 ## 不经终端：回环 Adapter 与 curl
 
@@ -138,4 +138,4 @@ go run ./cmd/alonabot check examples/devbot/adapter
 go run ./cmd/alonabot test examples/devbot/plugin
 ```
 
-创建外部工程时，目标目录已有 Go module 就复用；否则 module 缺省取目录名，也可用 `--module` 指定，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](../../docs/development.zh-CN.md#工程创建与-sdk-选择)。管理界面的开发配置写回与重启由 T-09.14 承接。
+创建外部工程时，目标目录已有 Go module 就复用；否则 module 缺省取目录名，也可用 `--module` 指定，SDK 版本来源及 `init → build → check → test → pack` 完整步骤见 [开发文档](https://alonabot.github.io/docs/reference/cli#alonabot-init)。管理界面的开发配置写回与重启由 T-09.14 承接。

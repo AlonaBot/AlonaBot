@@ -10,7 +10,7 @@
 // 自动回复型命令返回 [message.Content]，由 Core 在显式发送完成后发送一次。
 // [Context.Stream] 按当前事件实例的能力发送文本增量并节流编辑。
 // HTTP 路由由 SDK 托管 Listener 并校验 Session 凭证；定时任务由 Core Scheduler 触发。
-// 组件生命周期、配置、迁移、路由与参数的用法见 docs/plugin-guide.md。
+// 组件生命周期、配置、迁移、路由与参数的用法见 https://alonabot.github.io/docs/tutorial/project。
 package sdk
 
 import (

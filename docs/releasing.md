@@ -1,6 +1,6 @@
 # 发行维护
 
-Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core；Docker Compose 镜像包含 Core、WebUI 与 Agent。Telegram、OneBot 11 Adapter 和 help 插件在各自仓库发布，用户按需安装。安装步骤见[用户文档](https://alonabot.github.io/docs/usage/install)，组件作者的发布流程见[插件指南](plugin-guide.zh-CN.md#9-发布)。
+Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core；Docker Compose 镜像包含 Core、WebUI 与 Agent。Telegram、OneBot 11 Adapter 和 help 插件在各自仓库发布，用户按需安装。安装步骤见[用户文档](https://alonabot.github.io/docs/usage/install)，组件作者的发布流程见[插件指南](https://alonabot.github.io/docs/advanced/publish)。
 
 ## 固定源码与发行说明
 

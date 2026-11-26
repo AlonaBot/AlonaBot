@@ -3,7 +3,7 @@
 // [Open] 包装当前 Session 的受管连接；[OpenSQLite] 打开由调用方关闭的独立连接。
 // 两者均返回原生的 *gorm.DB，并核对连接上的关键设置确实生效。
 // 插件在 New 中调用 [Migrate] 或 [Migrations] 将迁移登记到插件对象。
-// 数据库的用法见 docs/plugin-guide.md 的 Storage 一节。
+// 数据库的用法见 https://alonabot.github.io/docs/tutorial/storage。
 //
 // 包的组成：[Migrate] 登记自行管理的迁移，[Migrations] 登记逐步迁移；
 // [RunVersioned] 与 [AppliedMigrations] 执行迁移并查询两个数据库入口共用的账本。

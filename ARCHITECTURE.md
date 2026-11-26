@@ -1,10 +1,10 @@
 # AlonaBot 架构地图
 
-负责范围：模块职责、允许的 import 方向、状态归属。行为细节见现行指南（见 [插件指南](docs/plugin-guide.zh-CN.md)）。
+负责范围：模块职责、允许的 import 方向、状态归属。行为细节见现行指南（见 [组件开发文档](https://alonabot.github.io/docs/tutorial/project)）。
 更新时机：新增顶层包、改变包之间的依赖或状态归属时，同步修改本文件和 [docs/development.md](docs/development.zh-CN.md) 的检查表。
 第一次阅读源码先看[设计导读](docs/design.zh-CN.md)；组件关系与一条消息经过 Core 的逐步演示见文档站[架构](https://alonabot.github.io/docs/internals/architecture)。
 
-实现目录与职责如下；开发入口见[源码开发](docs/development.zh-CN.md)，精确行为见[插件指南](docs/plugin-guide.zh-CN.md)。
+实现目录与职责如下；开发入口见[源码开发](docs/development.zh-CN.md)，精确行为见[组件开发文档](https://alonabot.github.io/docs/tutorial/project)。
 
 ## 模块与职责
 
@@ -75,7 +75,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 
 `sdk/page` 属于 SDK：根包在收集插件 `.Page(title)` 或 `adapter.HTTPRoute.Page` 时调用 `page.Handler()`，自动补齐同目录的 GET `kit.css`、`kit.js` 和 `qrcode.js`，以公开静态资源模式 `sdk.AuthStatic` 提供；作者已登记的同方法、同路径路由优先，组件也可手动挂载 `Handler()`。`kit.js` 负责页面端的桥请求、异步翻译、主题与语言订阅和快捷键转发；沙箱、父桥与全局搜索由 WebUI 负责。`examples/plugins/showcase` 演示页面声明与套件使用。
 
-Adapter 账号配置页面以 `RouteDescriptor.page_purpose = "instance_config"` 声明。`host.Prepare` 在提交注册前按安装角色调用 `contracts/validate`，只接纳每个 Adapter 的一条带标题、要求管理会话的 GET 配置页面；`manage` 在组件列表发布 `purpose`。页面跟随组件 Session，账号实例停止时仍可使用。WebUI 经 `config.context` 提供当前表单上下文，接收 `config.complete` 的补丁后沿用现有保存流程（[账号配置页面](docs/plugin-guide.zh-CN.md#adapter-账号配置页面)）。
+Adapter 账号配置页面以 `RouteDescriptor.page_purpose = "instance_config"` 声明。`host.Prepare` 在提交注册前按安装角色调用 `contracts/validate`，只接纳每个 Adapter 的一条带标题、要求管理会话的 GET 配置页面；`manage` 在组件列表发布 `purpose`。页面跟随组件 Session，账号实例停止时仍可使用。WebUI 经 `config.context` 提供当前表单上下文，接收 `config.complete` 的补丁后沿用现有保存流程（[账号配置页面](https://alonabot.github.io/docs/develop/adapter#账号配置页面)）。
 
 [Agent pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/internal/agent/pages.go) 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、记忆、用户任务及嵌入资源，接口见 [管理 API](docs/management-api.zh-CN.md#管理-api)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
 

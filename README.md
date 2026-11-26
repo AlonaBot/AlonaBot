@@ -19,7 +19,7 @@ English · [简体中文](README.zh-CN.md)
 
 <p align="center">
   <a href="https://alonabot.github.io/en/">Documentation</a> ·
-  <a href="docs/plugin-guide.md">Plugin development</a> ·
+  <a href="https://alonabot.github.io/en/docs/tutorial/project">Plugin development</a> ·
   <a href="changelog/README.md">Changelog</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="https://github.com/AlonaBot/AlonaBot/wiki">Wiki</a> ·
@@ -51,7 +51,7 @@ English · [简体中文](README.zh-CN.md)
 | What you want to do | Start here |
 | --- | --- |
 | Install, configure, upgrade or back up a bot | [User documentation](https://alonabot.github.io/en/docs/usage/install) |
-| Write a plugin, Adapter or Agent | [Plugin guide](docs/plugin-guide.md) |
+| Write a plugin, Adapter or Agent | [Plugin guide](https://alonabot.github.io/en/docs/tutorial/project) |
 | Understand how AlonaBot works | [Design guide](docs/design.md) |
 | Change Core, SDK or WebUI | [Development](docs/development.md) · [Architecture](ARCHITECTURE.md) |
 | Report a problem, submit a fix or improve documentation | [Contributing](CONTRIBUTING.md) |

@@ -14,7 +14,7 @@ description: 修改 AlonaBot 文档、AGENTS/CLAUDE 或仓库技能时使用；�
 - 模块边界、依赖方向与状态归属：[ARCHITECTURE.md](../../../ARCHITECTURE.md)。
 - Go 风格、注释与测试提交：[编码规范](../../../docs/coding-standards.zh-CN.md)。
 - 工具、命令、验证与 CI：[源码开发](../../../docs/development.zh-CN.md)。
-- 组件作者的 SDK 用法：[插件指南](../../../docs/plugin-guide.zh-CN.md)；Agent 契约：[Agent API](../../../docs/agent-api.zh-CN.md)。
+- 组件作者的 SDK 用法：[组件开发文档](https://alonabot.github.io/docs/tutorial/project)；Agent 契约：[Agent API](../../../docs/agent-api.zh-CN.md)。
 - 打包与发布：[发行维护](../../../docs/releasing.md)。
 - 贡献流程：[CONTRIBUTING](../../../CONTRIBUTING.zh-CN.md)；版本变化：[changelog](../../../changelog/README.zh-CN.md)。
 - 代理入口：根 [AGENTS.md](../../../AGENTS.md) 只放路由与必要红线，`CLAUDE.md` 保留薄引用；重复的项目流程写成 `.agents/skills/alonabot-*/SKILL.md`。

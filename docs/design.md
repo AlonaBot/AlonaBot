@@ -110,5 +110,5 @@ Retained older generations can be rolled back to together with their data.
 | Protocol fields and message structures | [`contracts/proto/alonabot/v1`](../contracts/proto/alonabot/v1) |
 | Build, generation, verification and CI | [Development](development.md) |
 | Management API, settings, hibernation and download mirrors | [Management reference](management-api.md) |
-| Writing components with the SDK | [Plugin guide](plugin-guide.md), [Agent API](agent-api.md) |
+| Writing components with the SDK | [Component developer docs](https://alonabot.github.io/en/docs/tutorial/project), [Agent API](agent-api.md) |
 | Coding and test rules | [Coding standards](coding-standards.md) |

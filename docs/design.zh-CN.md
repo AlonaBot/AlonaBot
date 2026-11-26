@@ -110,5 +110,5 @@ Core 是唯一的宿主和路由中心。平台接入（Adapter）、功能（�
 | 协议字段与消息结构 | [`contracts/proto/alonabot/v1`](../contracts/proto/alonabot/v1) |
 | 构建、生成、验证与 CI | [源码开发](development.zh-CN.md) |
 | 管理 API、设置、休眠与下载镜像 | [管理参考](management-api.zh-CN.md) |
-| 用 SDK 写组件 | [插件指南](plugin-guide.zh-CN.md)、[Agent API](agent-api.zh-CN.md) |
+| 用 SDK 写组件 | [组件开发文档](https://alonabot.github.io/docs/tutorial/project)、[Agent API](agent-api.zh-CN.md) |
 | 编码与测试规则 | [编码规范](coding-standards.zh-CN.md) |

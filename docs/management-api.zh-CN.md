@@ -8,7 +8,7 @@
 
 `run` 取得 core.lock 后读取 `<data_dir>/core_config.json`，Core 设置统一从这个 JSON 对象读取；文件不存在时以 0600 权限写入缺省内容。JSON 语法、重复键或根节点错误时，以 usage 退出码报告键路径与行列号。未知键保留并忽略，类型或取值错误在运行副本中校正，记录路径与原因。
 
-键与缺省值见 [插件指南](plugin-guide.zh-CN.md)；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 按未知键保留原文并忽略，管理员 prune 时清理。按账号区分前缀时，为该实例指定缺省配置文件，再经平台 API 保存前缀覆盖；旧 `/api/v1/core/command-prefixes` 路由已移除。本地 `run` 按监听、日志、代理与 Base URL 装配。
+键与缺省值见 [插件指南](https://alonabot.github.io/docs/tutorial/project)；`base_url` 缺省为 `http://127.0.0.1:7650`，管理入口与插件路由共用这个地址。`admins`、`command_prefixes`、`reply`、`default_locale`、`log.sources` 与 `adapters` 已支持解析与保存；`command_prefixes_by_instance` 按未知键保留原文并忽略，管理员 prune 时清理。按账号区分前缀时，为该实例指定缺省配置文件，再经平台 API 保存前缀覆盖；旧 `/api/v1/core/command-prefixes` 路由已移除。本地 `run` 按监听、日志、代理与 Base URL 装配。
 
 整个字符串值写成 `${NAME}` 时，读取时展开环境变量；NAME 由 `A-Z`、`a-z`、数字与下划线组成，首字符为字母或下划线。变量缺失时该值按不合法处理，恢复为缺省值并记校正记录。
 
@@ -30,6 +30,8 @@ alonabot run --data-dir ./data --listen 127.0.0.1:8080
 Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口。请求 Host 的主机名须匹配 `base_url`：`/plugins/{id}/...` 转发给该插件当前 Session 的路由，其余路径交给管理处理器；其他 Host 返回 421。缺省设置下，lifecycle 示例的私有页面地址为 `http://127.0.0.1:7650/plugins/demo/page`。listen 为非 loopback 地址时，`base_url` 必须是 https，或者配置非空的 `trusted_proxies`（由可信反代终止 TLS），设置文件与 `--listen` 都按此校验。
 
 插件路由的全部响应（含 Core 的错误响应）统一设置 `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups` 与 `X-Content-Type-Options: nosniff`，覆盖插件的同名头。Core 清除插件设置的全部 `Set-Cookie` 和 `Access-Control-Allow-Credentials`（含 trailer），Cookie 只以 WARN 记录名称；缺失 Content-Type 时补 `application/octet-stream`。HTML 页面按此沙箱策略返回。
+
+Adapter 在 `adapter.Descriptor.HTTP` 中用 `[]adapter.HTTPRoute` 声明路由，对外位于统一端口的 `/plugins/<Adapter 包 ID>/...` 下声明路由，例如 OneBot 11 反向 WebSocket。路由规则与插件相同：私有路由需要 Core 会话，非 GET/HEAD 的 Cookie 请求还要验证 CSRF 与 Origin。`Auth` 的零值要求 Core 会话；公开路由写 `Auth: adapter.AuthPlatformToken`：Core 代理保留入站的 `Authorization` 交给 Adapter，由 Adapter 校验平台凭证，并给出错误时的平台响应。插件路由的 `Authorization` 一律被清除。两者都会清除入站的 Cookie、CSRF、Forwarded 与 X-Forwarded-*，并注入内部代理凭证；SDK 先恒定时间比较该凭证，比较后移除，再进入用户 Handler。WebSocket Upgrade 由代理双向转发，连接寿命不受普通请求期限限制，路由撤销或 Session 失效时由 Core 关闭。
 
 设置了 `proxy` 时，Core 与子进程使用它作为 `HTTP_PROXY`/`HTTPS_PROXY`；为空时原样传递环境中的 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`。
 
@@ -57,7 +59,7 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 `--args` 可重复，放在子命令前后均生效，后出现的覆盖先出现的。直接参数支持逗号分隔的 `KEY=VALUE`；文件每行一项，空行和以 `#` 开头的注释行会被忽略。时长使用 `2s` 等 Go 时长格式；大小使用 `B`、`KiB`、`MiB`、`GiB`，`MB` 等十进制单位会报错。`run` 将最终覆盖值及出处记为 WARN。
 
-`OPTIONS_PAGE` 的默认值和范围见 [插件指南](plugin-guide.zh-CN.md)，可用 `alonabot tune list` 查看；聊天目录每页的上限取当前 Core 生效值的十倍，请求的 `limit` 仍缺省为 50。
+`OPTIONS_PAGE` 的默认值和范围见 [插件指南](https://alonabot.github.io/docs/tutorial/project)，可用 `alonabot tune list` 查看；聊天目录每页的上限取当前 Core 生效值的十倍，请求的 `limit` 仍缺省为 50。
 
 ### 容器内的监听与首次领取
 
@@ -111,7 +113,7 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时秘密用 `{"$secret_set":true}` 遮盖；只在需要修改处提交新明文，勿提交掩码或 Core 秘密引用。reload 建立独立受管 SQLite 候选代次，restart 保持 Active；提交后的 OnReady 失败保留新 Active 并进入 Degraded。`GET /api/v1/plugins/{id}/generations` 列出保留代次。开发组件的 update/rollback/uninstall 为 412。
 
-会话键为 `<会话>@<实例>`，成员独立会话再加 `@<用户>`。将完整键百分号编码为一个路径段，服务端只解码一次，保留斜杠、冒号、反斜杠与点段；键须为 1～256 字节 UTF-8。数据浏览可选择只读保留代次。`/data/clear` 必须带 `{"confirm":true}`，删除可写表行（含 KV）和插件文件，保留表结构、迁移与目录。KV 遵循[存储规则](plugin-guide.zh-CN.md#保存少量状态)，键编码为不透明路径段。文件路径保持相对路径，拒绝穿越和符号链接；清理或编辑文件独立于代次回退。
+会话键为 `<会话>@<实例>`，成员独立会话再加 `@<用户>`。将完整键百分号编码为一个路径段，服务端只解码一次，保留斜杠、冒号、反斜杠与点段；键须为 1～256 字节 UTF-8。数据浏览可选择只读保留代次。`/data/clear` 必须带 `{"confirm":true}`，删除可写表行（含 KV）和插件文件，保留表结构、迁移与目录。KV 遵循[存储规则](https://alonabot.github.io/docs/tutorial/storage#键值存储)，键编码为不透明路径段。文件路径保持相对路径，拒绝穿越和符号链接；清理或编辑文件独立于代次回退。
 
 休眠使用 `GET`/`PUT /api/v1/core/sleep`、`GET`/`PUT`/`DELETE /api/v1/plugins/{id}/sleep-policy` 及 `GET /api/v1/plugins/{id}/runtime`。逐插件 PUT 为 `{"policy":"never"}` 或正时长，DELETE 恢复自动策略；读取保持休眠。缺省值、预算和失败行为见[插件休眠](#插件休眠)。
 
@@ -119,7 +121,7 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 认证后 `GET /api/v1/core/changelog` 返回 `{"locale":"en-US","entries":[{"version":"0.1.0","markdown":"…"}]}`。来源为正式 `changelog/v<SemVer>/{en,zh-CN}.md`，排除 unreleased，en 映射 en-US；按 `Accept-Language` 精确或主语言匹配，缺省或未匹配回退英文。条目按 SemVer 倒序，版本无 `v`，未知日期省略 `date`，保留 Markdown。`GET /api/v1/packages/{id}/changelog` 读取安装包：单文件 CHANGELOG.md 排除 Unreleased，locale 为 en-US；目录形式逐版本按偏好语言精确、规范标签、主语言匹配，最终回退 en-US.md，同级取文件名字典序最小者。未安装或 dev 组件为 404；无正式条目返回 en-US 与空 entries。
 
-认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。包列表的 `Name`、`Description`、`Author` 取自包内 `plugin.yaml`，读不到时省略。组件页面在包的 `pages` 中列出，包含 `path`、`title`，账号配置页面另带 `purpose: "instance_config"`。WebUI 经 `/plugins/{id}` 在沙箱打开页面，账号配置页面在添加或编辑账号的对话框里打开。见[页面套件](plugin-guide.zh-CN.md#插件页面)与[账号配置页面](plugin-guide.zh-CN.md#adapter-账号配置页面)。
+认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。包列表的 `Name`、`Description`、`Author` 取自包内 `plugin.yaml`，读不到时省略。组件页面在包的 `pages` 中列出，包含 `path`、`title`，账号配置页面另带 `purpose: "instance_config"`。WebUI 经 `/plugins/{id}` 在沙箱打开页面，账号配置页面在添加或编辑账号的对话框里打开。见[页面套件](https://alonabot.github.io/docs/advanced/http#插件页面)与[账号配置页面](https://alonabot.github.io/docs/develop/adapter#账号配置页面)。
 
 官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/internal/agent/pages.go)。
 

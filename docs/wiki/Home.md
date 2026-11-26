@@ -7,7 +7,7 @@ A lightweight, cross-platform chatbot framework in Go. / 轻量级、跨平台�
 | Project overview / 项目介绍 | [README](https://github.com/AlonaBot/AlonaBot/blob/main/README.md) | [项目介绍](https://github.com/AlonaBot/AlonaBot/blob/main/README.zh-CN.md) |
 | Install and operate / 安装与运维 | [User documentation](https://alonabot.github.io/en/docs/usage/install) | [用户文档](https://alonabot.github.io/docs/usage/install) |
 | Management API / 管理 API | [Management reference](https://github.com/AlonaBot/AlonaBot/blob/main/docs/management-api.md) | [管理参考](https://github.com/AlonaBot/AlonaBot/blob/main/docs/management-api.zh-CN.md) |
-| Develop components / 开发组件 | [Plugin guide](https://github.com/AlonaBot/AlonaBot/blob/main/docs/plugin-guide.md) | [插件开发指南](https://github.com/AlonaBot/AlonaBot/blob/main/docs/plugin-guide.zh-CN.md) |
+| Develop components / 开发组件 | [Plugin guide](https://alonabot.github.io/en/docs/tutorial/project) | [插件开发指南](https://alonabot.github.io/docs/tutorial/project) |
 | Build and test / 构建与测试 | [Development](https://github.com/AlonaBot/AlonaBot/blob/main/docs/development.md) | [源码开发](https://github.com/AlonaBot/AlonaBot/blob/main/docs/development.zh-CN.md) |
 | Contribute and follow coding rules / 贡献与编码规则 | [Contributing](https://github.com/AlonaBot/AlonaBot/blob/main/CONTRIBUTING.md) | [贡献指南](https://github.com/AlonaBot/AlonaBot/blob/main/CONTRIBUTING.zh-CN.md) |
 

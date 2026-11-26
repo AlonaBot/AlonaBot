@@ -16,7 +16,7 @@
 | 准备或更新 PR、诊断 GitHub Actions | [PR 技能](.agents/skills/alonabot-pr/SKILL.md)、[贡献流程](CONTRIBUTING.zh-CN.md) | 授权、模板、当前 head 的检查及真实未运行项 |
 | 修改文档、AGENTS/CLAUDE 或仓库技能 | [文档技能](.agents/skills/alonabot-docs/SKILL.md) | 权威单一、链接有效、中英同步 |
 | 新增包或跨包 import | [架构地图](ARCHITECTURE.md) | 依赖表允许这条边，或同步修改依赖表 |
-| 编写官方插件、Adapter、Agent 或示例 | [插件指南](docs/plugin-guide.zh-CN.md)、[Agent API](docs/agent-api.zh-CN.md) | 依赖、存储与常驻内存符合指南 |
+| 编写官方插件、Adapter、Agent 或示例 | [组件开发文档](https://alonabot.github.io/docs/tutorial/project)、[Agent API](docs/agent-api.zh-CN.md) | 依赖、存储与常驻内存符合指南 |
 | 构建、依赖、生成代码 | [源码开发](docs/development.zh-CN.md) | 按需运行 `go generate ./...`、`go test`、`go build ./...` |
 | 打包与发布 | [发行维护](docs/releasing.md) | 发布授权与版本记录 |
 
