@@ -2,7 +2,7 @@
 
 [English](development.md)
 
-从源码运行一个插件，再按改动范围进入 Core、SDK、Adapter、Agent 或 WebUI。贡献流程见[贡献指南](../CONTRIBUTING.zh-CN.md)，模块与数据所有者见[架构地图](../ARCHITECTURE.md)。本文维护开发环境、命令和验证方法；部署操作见[安装与部署](deployment.zh-CN.md)。
+从源码运行一个插件，再按改动范围进入 Core、SDK、Adapter、Agent 或 WebUI。贡献流程见[贡献指南](../CONTRIBUTING.zh-CN.md)，模块与数据所有者见[架构地图](../ARCHITECTURE.md)。本文维护开发环境、命令和验证方法；管理端点与运行机制见[管理参考](management-api.zh-CN.md)，安装与运行机器人见[用户文档](https://alonabot.github.io/docs/usage/install)。
 
 ## 准备环境
 
@@ -29,7 +29,7 @@ go build -o bin/alonabot ./cmd/alonabot
 bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 ```
 
-在同一个终端输入 `/ping`，预期回复 `pong`；Ctrl-C 正常停止。要并行运行多个 Core，为每个实例选择独立数据目录与监听端口。首次管理认证和监听设置见[部署指南](deployment.zh-CN.md#core-设置与-http-入口)。
+在同一个终端输入 `/ping`，预期回复 `pong`；Ctrl-C 正常停止。要并行运行多个 Core，为每个实例选择独立数据目录与监听端口。首次管理认证和监听设置见[Core 设置](management-api.zh-CN.md#core-设置与-http-入口)。
 
 示例的 `/ping` 已显式调用 `.Menu()`，支持菜单的 Adapter 自动按聊天发布；未标记命令仍可调用。手动接管见[命令菜单](plugin-guide.zh-CN.md#命令菜单)。
 
@@ -700,7 +700,7 @@ TCP 与 stdio 均使用四字节无符号大端长度，后接 Protobuf Envelope
 
 调用按 `(session_id, initiator_side, call_id)` 匹配。call ID 非零、按方向单调递增，在同一 Session 内不复用。父调用须为同一 Session 中仍在途的 Core 发起调用。deadline 为绝对 UTC 毫秒，子调用沿用或缩短父期限。取消为协作式，已完成的副作用保留。载荷与 ErrorInfo 可同时存在以表示部分结果，调用方须保留两者。请求默认超时为 30 秒。Session 失败时，挂起调用取得真实错误；认证无效时关闭连接，避免暴露凭据。
 
-用 `alonabot tune list` 查看完整的当前调优表，包括名称、单位、默认值、生效值、约束与来源；`--args NAME=value` 使用同样的校验。[internal/tune/params.go](../internal/tune/params.go) 定义数值，[部署指南](deployment.zh-CN.md#插件休眠) 说明唤醒预算，[插件指南](plugin-guide.zh-CN.md) 说明延续、存储与任务。帧上限固定为 4 MiB。阶段预算默认 HELLO 10s、配置 60s、迁移 15m、OnStart 60s、OnReady 30s；停止总预算 10s，其中排空 6s、OnStop 4s。崩溃恢复窗口为五分钟，最多三次。组件自己的 Handler 与后台活动须响应取消。
+用 `alonabot tune list` 查看完整的当前调优表，包括名称、单位、默认值、生效值、约束与来源；`--args NAME=value` 使用同样的校验。[internal/tune/params.go](../internal/tune/params.go) 定义数值，[插件休眠](management-api.zh-CN.md#插件休眠) 说明唤醒预算，[插件指南](plugin-guide.zh-CN.md) 说明延续、存储与任务。帧上限固定为 4 MiB。阶段预算默认 HELLO 10s、配置 60s、迁移 15m、OnStart 60s、OnReady 30s；停止总预算 10s，其中排空 6s、OnStop 4s。崩溃恢复窗口为五分钟，最多三次。组件自己的 Handler 与后台活动须响应取消。
 
 ### 菜单协议新增字段
 

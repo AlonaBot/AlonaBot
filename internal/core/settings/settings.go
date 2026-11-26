@@ -3,7 +3,7 @@
 // 调用 [Load] 前由装配方取得 data_dir 的 core.lock；命令行覆盖由装配方应用。
 // [File] 持有未展开的 [Document] 和有效 [Settings]，副本中的环境变量已展开。
 // Core 设置与 Adapter 实例按声明校正运行副本，原文件只经显式 Update 修改。
-// 设置与日志文件的管理方式见 docs/deployment.md。
+// 设置与日志文件的管理方式见 docs/management-api.md。
 package settings
 
 import (

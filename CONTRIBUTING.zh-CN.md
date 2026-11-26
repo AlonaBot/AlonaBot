@@ -101,7 +101,7 @@ AlonaBot 与官方组件采用 [MIT License](LICENSE)。提交贡献时，请确
 
 ## 日志用默认 Logger，依赖显式传递
 
-Core 进程只有一个日志出口，使用 Go 标准库 `log/slog`，字段、格式和级别见[日志说明](docs/deployment.zh-CN.md#core-设置与-http-入口)。
+Core 进程只有一个日志出口，使用 Go 标准库 `log/slog`，字段、格式和级别见[日志说明](docs/management-api.zh-CN.md#core-设置与-http-入口)。
 
 - 每条日志正文写成可独立读懂的句子，DEBUG 也遵循同一规则：明确组件或路由、动作和结果，失败或状态变化时交代原因。结构化字段用于筛选与 Trace 关联，阅读正文就能理解发生了什么。例如写 `Component rollpig changed from ACTIVE to QUIESCING: idle timeout`，避免只写泛化的状态变化标题再附字段。摘要遵守消息正文、凭据等敏感信息的保护规则。
 - `cmd/alonabot` 在 `logging.Open` 成功后立即调用 `slog.SetDefault(out.Logger())`，然后再构造 Core 组件。`internal/core` 下的包在记录处调用 `slog.Info`、`slog.Warn`、`slog.Error`、`slog.With` 等包函数；不在构造函数、结构字段或包级变量里保存 `slog.Default()` 或它的 `With` 结果。

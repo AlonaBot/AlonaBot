@@ -4,7 +4,8 @@
 
 | Task / 任务 | English | 简体中文 |
 | --- | --- | --- |
-| Install, configure and operate / 安装、配置与运维 | [Deployment](deployment.md) | [安装与部署](deployment.zh-CN.md) |
+| Install, use and operate a bot / 安装、使用与运维 | [User documentation](https://alonabot.github.io/en/docs/usage/install) | [用户文档](https://alonabot.github.io/docs/usage/install) |
+| Management API and runtime behavior / 管理 API 与运行机制 | [Management reference](management-api.md) | [管理参考](management-api.zh-CN.md) |
 | Develop components / 开发组件 | [Plugin guide](plugin-guide.md) | [插件开发指南](plugin-guide.zh-CN.md) |
 | Build, reload and test / 构建、热重载与测试 | [Development](development.md) | [源码开发](development.zh-CN.md) |
 | Run and debug devbot / 运行与调试 devbot | [Tutorial](../examples/devbot/README.md) | [教程](../examples/devbot/README.zh-CN.md) |
