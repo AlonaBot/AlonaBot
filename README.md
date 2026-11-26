@@ -44,7 +44,6 @@ English · [简体中文](README.zh-CN.md)
 | Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | Preinstalled; enable after configuration |
 | Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | Install as needed |
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | Install as needed; currently supports receiving |
-| Builtin | [alonabot-plugin-builtin](https://github.com/AlonaBot/alonabot-plugin-builtin) | Official builtin plugin: image help, built-in commands and Agent tools |
 
 ## Documentation and contributing
 

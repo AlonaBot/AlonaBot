@@ -14,7 +14,7 @@ Core is the only host and routing hub. Platform connectivity (Adapters), feature
 | --- | --- | --- | --- |
 | Core | Starts and stops components; identity and permissions, event dispatch, sending, media, configuration, scheduling, storage generations, management API | This repository | One |
 | Adapter | Connects one platform's accounts to Core, reports events, performs sends and platform actions | Telegram, OneBot 11 | One per Adapter component, hosting all of its account instances |
-| Plugin | Registers commands, events, hooks, services, scheduled tasks and HTTP routes | builtin | One per plugin |
+| Plugin | Registers commands, events, hooks, services, scheduled tasks and HTTP routes | echo, showcase | One per plugin |
 | Agent | Model providers, conversations and tool calls; runs like a plugin | alonabot-agent | One |
 | WebUI | Static management interface assets, optionally with a backend process | alonabot-webui | None when static only |
 

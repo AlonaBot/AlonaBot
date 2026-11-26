@@ -95,7 +95,6 @@ Component source and Go/npm locks live in their own repositories:
 | Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) |
 | Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) |
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) |
-| Official builtin plugin: image help, built-in commands and Agent tools | [alonabot-plugin-builtin](https://github.com/AlonaBot/alonabot-plugin-builtin) |
 
 Run `alonabot check .`, `alonabot run .` or `alonabot pack .` in a component project. Core/SDK retain an independent module. Cross-component tests use separate `tests/go.mod`, keeping model SDK/Adapter implementation dependencies there.
 

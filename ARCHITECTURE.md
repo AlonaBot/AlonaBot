@@ -25,7 +25,6 @@ Core 与 SDK 共用 `github.com/AlonaBot/AlonaBot` module。官方组件使用�
 | `internal/generate/` | 构建期与测试期的扫描器：扫描入口包、检查资源与注册入口，生成经 overlay 编入的资源登记与正式入口；CLI 构建与 plugintest 的现场扫描共用 | 运行时资源读取（归 SDK）、写作者目录 |
 | `internal/generated/` | 组件资源登记表：按入口包导入路径登记、按对象绑定与查找 manifest 原文、配置与实例 Schema、Service Schema、i18n 与 Handler 参数名，并记录插件对象的入口包 | 扫描与生成（归 `internal/generate`） |
 | 根包 `alonabot`（模块根目录的 Go 文件） | 库模式入口：只保留库模式接口，每个都是对 `internal/app` 的薄包装 | Core 装配、开发 CLI 专用能力（归 `internal/app`）、业务逻辑 |
-| [alonabot-plugin-builtin](https://github.com/AlonaBot/alonabot-plugin-builtin) | 官方 builtin 插件：图片帮助、内置命令与 Agent 工具，只经 SDK 与 Core 通信 | 命令目录与权限判断（归 Core） |
 | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | 官方 Agent 组件（`role: agent`，～D-61）：对话循环、Provider、工具与 MCP、记忆、技能、定时任务与 `llm.generate`；只经 SDK 与 Core 通信，可被社区 Agent 替换 | Core 的工具策略、确认与会话存储（归 Core） |
 | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | 官方 Telegram Adapter 程序：接收、标准化、发送计划、能力与平台映射 | Core 策略、命令路由、游标持久化与按钮 token（归 Core） |
 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | 官方 OneBot 11 Adapter 程序：正向与反向（经 Core 统一端口）WebSocket 连接、接收、标准化、发送计划、能力与平台映射，以及本地模拟服务 | Core 策略、命令路由与按钮 token（归 Core） |
@@ -128,7 +127,7 @@ Adapter 账号配置页面以 `RouteDescriptor.page_purpose = "instance_config"`
 | `alonabot-webui -> sdk`、`-> sdk/message`、`-> sdk/sqlitedb`、`-> contracts/manifest`、`-> contracts/pluginindex` | 官方 WebUI 后台通过公共 SDK 观察事件、发送回执与管理会话路由，只读写自身受管 SQLite；契约包解析插件源和包内声明，Core 管理数据由浏览器经 Admin API 操作 |
 | `examples/devbot -> 根包`、`-> sdk/...` | 库模式示例 |
 | `plugintest -> 根包`、`-> sdk/...`、`-> internal/inproc`、`-> contracts`；`examples/plugins/... -> plugintest`（仅测试代码） | 套件经根包的 `Start` 装配 Core，经 `internal/inproc` 接收分发结束通知；示例插件的测试使用套件 |
-| `alonabot-plugin-builtin -> sdk/...`、`-> contracts`；`alonabot-agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`alonabot-agent/provider` 另用 openai-go 与 anthropic-sdk-go |
+| `alonabot-agent/... -> sdk/...`、`-> contracts` | 官方插件与 Agent 组件只走公共 SDK；Agent 另用已批准的 MCP go-sdk，`alonabot-agent/provider` 另用 openai-go 与 anthropic-sdk-go |
 | `alonabot-plugin-*/...`、`alonabot-agent/...`、`examples/plugins/...`、`plugintest -> alonabot-adapter-<adapter_id>/perm`、`-> alonabot-adapter-<adapter_id>/event`、`-> alonabot-adapter-<adapter_id>/action` | 引用 Adapter 声明的权限、扩展事件与平台动作；公开包提供权限/事件声明、载荷类型与动作类型助手，直接依赖见下一行；保持不链接 Adapter 运行时 |
 | `alonabot-adapter-<adapter_id>/perm`、`alonabot-adapter-<adapter_id>/event -> sdk`；`alonabot-adapter-<adapter_id>/action -> sdk`、`-> sdk/action`、`-> sdk/message`、`-> sdk/errcode` | 权限与事件声明使用 SDK builder；动作通过 `action.Caller` 调用，选项、消息句柄、流式正式发送与错误复用 SDK 类型；这些公开包只依赖标准库及所列 SDK 包 |
 

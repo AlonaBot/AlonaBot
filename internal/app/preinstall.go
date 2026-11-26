@@ -17,7 +17,6 @@ import (
 
 const (
 	bundledPackagesDirectory = "packages"
-	officialBuiltin          = "alonabot-plugin-builtin-official"
 	officialWebUI            = "alonabot-webui-admin"
 	officialAdapterPrefix    = "alonabot-adapter-"
 )
@@ -82,7 +81,7 @@ func (c *Core) preinstall(ctx context.Context, management *manage.Service, dir s
 			slog.Error(fmt.Sprintf("Failed to preinstall bundled component %s: %v", id, err), "plugin_id", id, "error", err)
 			continue
 		}
-		if id == officialBuiltin && installed.Role == string(state.RolePlugin) || id == officialWebUI && installed.Role == string(state.RoleWebUI) {
+		if id == officialWebUI && installed.Role == string(state.RoleWebUI) {
 			// 运行循环尚未接收管理回调；持久化意图后沿正常启动路径激活。
 			if err := c.store.SetEnabled(ctx, id, true); err != nil {
 				return err

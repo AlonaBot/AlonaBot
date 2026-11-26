@@ -14,7 +14,7 @@ Core 是唯一的宿主和路由中心。平台接入（Adapter）、功能（�
 | --- | --- | --- | --- |
 | Core | 启停组件、身份与权限、事件派发、发送消息、媒体、配置、调度、存储代次、管理 API | 本仓库 | 一个 |
 | Adapter | 把一个平台的多个账号接入 Core，上报事件、执行发送与平台动作 | Telegram、OneBot 11 | 每个 Adapter 组件一个，进程内承载它的全部账号实例 |
-| 插件（Plugin） | 注册命令、事件、Hook、服务、定时任务和 HTTP 路由 | builtin | 每个插件一个 |
+| 插件（Plugin） | 注册命令、事件、Hook、服务、定时任务和 HTTP 路由 | echo、showcase | 每个插件一个 |
 | Agent | 提供模型接入、会话和工具调用，运行方式与插件相同 | alonabot-agent | 一个 |
 | WebUI | 管理界面的静态资源，可附带一个后台进程 | alonabot-webui | 只有静态资源时没有进程 |
 
