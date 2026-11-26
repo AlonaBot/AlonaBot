@@ -1,7 +1,7 @@
 // Package llm 提供 Agent 文本生成服务的共享声明与调用辅助。
 //
 // [Generate] 完成一次结构化文本生成，[GenerateStream] 接收交付前改写的增量。
-// 服务以 @agent 定位当前安装的 Agent，调用许可与期限见 docs/plugin-guide.md。
+// 服务以 @agent 定位当前安装的 Agent，调用许可与期限见 https://alonabot.github.io/docs/advanced/llm。
 package llm
 
 import (

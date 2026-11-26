@@ -2,7 +2,7 @@
 //
 // [Parse] 检查 i18n/<locale>.json 的 messages、metadata、config、commands 与 pages 结构；
 // [Catalog] 保留已编译的文案，可供 Core 与 SDK 并发只读使用。
-// 语言选择与文件格式见 docs/plugin-guide.md。
+// 语言选择与文件格式见 https://alonabot.github.io/docs/advanced/i18n。
 package i18n
 
 import (

@@ -10,7 +10,7 @@ Build the CLI from the repository root first: `go build -o bin/alonabot ./cmd/al
 
 With an installed CLI, run `alonabot run` from the project directory. Console chat starts automatically when stdin is a terminal and no Adapter instances are configured; `--console` forces it on (including pipes), and `--console=false` disables it. The console user `console:local` has Core Admin permission for this run; the instance and administrator remain in memory. Enter `#1` to click the first callback button on the most recent message with buttons. Edits appear as new `(edited)` segments; media appear as bracketed placeholders. After a pipe ends, Core keeps running until it receives a stop signal.
 
-Development directories enable reload by default. After changing source, translations or configuration, send another message to observe the new reply. Use `--reload=false` to disable it. For external projects with a release CLI, `init` writes the SDK version and runs `go mod tidy`; on failure it keeps the project and prints recovery commands. See the [development guide](../../docs/development.md#project-creation-and-sdk-selection) for SDK setup with a development CLI.
+Development directories enable reload by default. After changing source, translations or configuration, send another message to observe the new reply. Use `--reload=false` to disable it. For external projects with a release CLI, `init` writes the SDK version and runs `go mod tidy`; on failure it keeps the project and prints recovery commands. See the [development guide](https://alonabot.github.io/en/docs/reference/cli#alonabot-init) for SDK setup with a development CLI.
 
 ## Without a terminal: loopback Adapter and curl
 
@@ -138,4 +138,4 @@ go run ./cmd/alonabot check examples/devbot/adapter
 go run ./cmd/alonabot test examples/devbot/plugin
 ```
 
-An external project reuses an existing Go module in the target directory; otherwise the module defaults to the directory name, or can be set with `--module`. See the [development guide](../../docs/development.md#project-creation-and-sdk-selection) for SDK version selection and the full `init → build → check → test → pack` flow. T-09.14 covers development configuration writeback and restarts through the management UI.
+An external project reuses an existing Go module in the target directory; otherwise the module defaults to the directory name, or can be set with `--module`. See the [development guide](https://alonabot.github.io/en/docs/reference/cli#alonabot-init) for SDK version selection and the full `init → build → check → test → pack` flow. T-09.14 covers development configuration writeback and restarts through the management UI.

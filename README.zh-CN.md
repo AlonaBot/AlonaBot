@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="https://alonabot.github.io/">文档</a> ·
-  <a href="docs/plugin-guide.zh-CN.md">插件开发</a> ·
+  <a href="https://alonabot.github.io/docs/tutorial/project">插件开发</a> ·
   <a href="changelog/README.zh-CN.md">更新日志</a> ·
   <a href="CONTRIBUTING.zh-CN.md">参与贡献</a> ·
   <a href="https://github.com/AlonaBot/AlonaBot/wiki">Wiki</a> ·
@@ -51,7 +51,7 @@
 | 你想做什么 | 从这里开始 |
 | --- | --- |
 | 安装、配置、升级或备份机器人 | [用户文档](https://alonabot.github.io/docs/usage/install) |
-| 编写插件、Adapter 或 Agent | [插件开发指南](docs/plugin-guide.zh-CN.md) |
+| 编写插件、Adapter 或 Agent | [插件开发指南](https://alonabot.github.io/docs/tutorial/project) |
 | 了解 AlonaBot 的整体设计 | [设计导读](docs/design.zh-CN.md) |
 | 修改 Core、SDK 或 WebUI | [源码开发](docs/development.zh-CN.md) · [架构地图](ARCHITECTURE.md) |
 | 报告问题、提交修复或改善文档 | [贡献指南](CONTRIBUTING.zh-CN.md) |

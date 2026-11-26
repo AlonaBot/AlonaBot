@@ -6,5 +6,5 @@
 // 包的组成：[Prepare] 使用 contracts/configschema 执行 [Loader] 回调、补值与校正、required 校验，
 // 将保留未知键的完整规范 JSON、校正记录和 Values 写入 [Prepared]。
 // 回调只做纯配置变换；数据库迁移与插件生命周期由 SDK 分阶段执行。
-// 配置声明、准备流程与秘密字段契约见 docs/plugin-guide.md。
+// 配置声明、准备流程与秘密字段契约见 https://alonabot.github.io/docs/tutorial/config。
 package config

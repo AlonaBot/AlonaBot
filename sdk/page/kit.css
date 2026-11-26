@@ -1,4 +1,4 @@
-/* kit.css: AlonaBot 插件页面套件样式表 (docs/plugin-guide.md / DECISIONS D-159) */
+/* kit.css: AlonaBot 插件页面套件样式表，用法见 https://alonabot.github.io/docs/advanced/http */
 
 :root {
   --ab-bg: #F3F6F9;

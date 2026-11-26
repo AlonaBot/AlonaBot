@@ -1,7 +1,7 @@
 // Package i18n 提供 Core 发给聊天用户的内置双语文案目录。
 //
 // [Messages] 返回嵌入的 en-US 与 zh-CN 文案，供调用方按 Actor 与 Core 默认语言选择。
-// 文件格式与语言回落的用法见 docs/plugin-guide.md。
+// 文件格式与语言回落的用法见 https://alonabot.github.io/docs/advanced/i18n。
 package i18n
 
 import (
