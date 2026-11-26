@@ -2,7 +2,7 @@
 
 [English](plugin-guide.md)
 
-本文面向插件、Adapter、Agent 与 WebUI 作者，说明依赖、存储、日志、生命周期与发布规则。官方组件位于各自独立仓库；WebUI 可提供静态文件或附带 Go 后台，进程部分遵循相应 SDK 规则。协议字段以 [Protobuf 定义](../contracts/proto/alonabot/v1) 为准，管理调用见[部署指南](deployment.zh-CN.md#管理-api)。
+本文面向插件、Adapter、Agent 与 WebUI 作者，说明依赖、存储、日志、生命周期与发布规则。官方组件位于各自独立仓库；WebUI 可提供静态文件或附带 Go 后台，进程部分遵循相应 SDK 规则。协议字段以 [Protobuf 定义](../contracts/proto/alonabot/v1) 为准，管理调用见[管理 API](management-api.zh-CN.md#管理-api)。
 更新时机：SDK、组件行为或依赖政策变化时。
 
 ## 从第一个命令开始
@@ -74,7 +74,7 @@ func saveTopic(ctx context.Context, topic string) error {
 
 `page, err := kv.List(ctx, "subscription/", "", 20)` 按键的字节序返回最多 20 个键；后续请求把 `page.Next` 作为 `cursor`，空 `Next` 表示已到末尾，非空 `cursor` 遵守键的约束。前缀按字面字节匹配，`%` 和 `_` 保持原义；空前缀列出全部键，`limit` 须为正数。
 
-官方 WebUI 的插件「数据」页可浏览和编辑数据库表格、KV 与插件文件，并导出或清空数据；数据库保留代次只读。Agent 会话提供摘要与清除入口，接口与数据清理语义见 [管理 API](deployment.zh-CN.md#管理-api) 与 [管理 API](deployment.zh-CN.md#管理-api)。
+官方 WebUI 的插件「数据」页可浏览和编辑数据库表格、KV 与插件文件，并导出或清空数据；数据库保留代次只读。Agent 会话提供摘要与清除入口，接口与数据清理语义见 [管理 API](management-api.zh-CN.md#管理-api) 与 [管理 API](management-api.zh-CN.md#管理-api)。
 
 `examples/plugins/configdb` 的 `/note kvset <key> <value>` 与 `/note kvget <key>` 演示保存和读取，沿用该示例的本地化回复。
 
@@ -245,11 +245,11 @@ Adapter 公开 perm/event 包用 SDK builder 声明权限/事件；公开 action
 
 ### 插件页面
 
-用 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` 将 HTTP 路由列为插件页面。`.Page` 写在 `Handle` 或 `HandleFunc` 前，参数为英文源标题；在 `i18n/zh-CN.json` 写入 `{"pages":{"/subs/":"订阅"}}` 即可覆盖该路径的标题。Core 在路由运行期间通过组件列表返回页面和标题（[管理 API](deployment.zh-CN.md#管理-api)）。
+用 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` 将 HTTP 路由列为插件页面。`.Page` 写在 `Handle` 或 `HandleFunc` 前，参数为英文源标题；在 `i18n/zh-CN.json` 写入 `{"pages":{"/subs/":"订阅"}}` 即可覆盖该路径的标题。Core 在路由运行期间通过组件列表返回页面和标题（[管理 API](management-api.zh-CN.md#管理-api)）。
 
-WebUI 提供沙箱 iframe 与 `postMessage` 桥（[管理 API](deployment.zh-CN.md#管理-api)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css`、`kit.js` 和 `qrcode.js` 的 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
+WebUI 提供沙箱 iframe 与 `postMessage` 桥（[管理 API](management-api.zh-CN.md#管理-api)）。声明 `.Page(title)` 后，SDK 自动在页面所在目录登记 `kit.css`、`kit.js` 和 `qrcode.js` 的 GET 路由，以公开静态资源（`sdk.AuthStatic`）提供；页面通过相对路径引用套件，即可使用与 WebUI 一致的基础样式、跟随明暗与语言切换，并转发 ⌘K/Ctrl+K 打开全局搜索。页面的第一行（插件名、标签与搜索）由 WebUI 绘制，页面里不要再画标题栏或搜索框。
 
-官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、记忆与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[管理 API](deployment.zh-CN.md#管理-api)）。记忆页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [管理 API](deployment.zh-CN.md#管理-api) 的管理入口。
+官方 Agent 的五页实现见 `agent/pages.go` 与 `agent/pages/`：人格、MCP、技能、记忆与用户任务使用组件自带的 HTML/CSS/JS，标题写入 `pages`，文案写入 `messages`，通过桥请求本组件的管理路由（[管理 API](management-api.zh-CN.md#管理-api)）。记忆页逐页读取完整会话正文并管理笔记/档案；Core 的会话摘要与清除沿用 [管理 API](management-api.zh-CN.md#管理-api) 的管理入口。
 
 #### 套件挂载与引入
 
@@ -450,7 +450,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 翻译写在 `i18n/<locale>.json` 的 `config.<字段>.example` 下。沿用源 `example` 的对象或数组形状、源 `reply` 的字符串或片段数组形状；按位置覆盖 `input`、`reply` 字符串、片段的 `text` 或 `alt`。缺项沿用源文案，跳过数组中间一项时填 `{}`。`check`、`build` 和 `pack` 会核对覆盖键、文案类型、源形状、片段位置与占位符引用。
 
-上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `plugin_config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [管理 API](deployment.zh-CN.md#管理-api)。
+上例打包安装并激活后，Core 经管理认证提供 `GET /api/v1/packages/{id}/examples/greeting.png`。端点只提供 Active 包中 `plugin_config_schema.json` 引用的图片，并带与组件图标相同的安全响应头；详见 [管理 API](management-api.zh-CN.md#管理-api)。
 
 ## 8. 测试
 
@@ -461,7 +461,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 
 - 市场 ID 按角色使用 `alonabot-plugin-`、`alonabot-adapter-`、`alonabot-agent-` 或 `alonabot-webui-` 前缀，后缀用单个连字符分词，完整 ID 不含下划线；插件正则为 `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`，其他角色同形，长度上限为 64；本地规则仍为 `^[a-z][a-z0-9_-]{0,63}$`。manifest 可以用 `icon` 声明组件图标（SVG、PNG 或 WebP）。
 - 改名时同步 `plugin.yaml`、依赖、HTTP 路径和 Service 原始名；`pack` 会使用新 ID 生成归档名。已有改名前的开发数据时，按[开发指南](development.zh-CN.md#开发运行与热部署)重建。
-- 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](deployment.zh-CN.md#管理-api)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包。
+- 每次发布可附上 UTF-8 changelog，安装后可经[管理 API](management-api.zh-CN.md#管理-api)读取。二选一：根目录的 `CHANGELOG.md`（每版一节，例如 `## [1.2.1] - 2026-11-17`，日期可省略），或按版本、按语言存放，例如 `changelog/1.2.1/en-US.md` 和 `changelog/1.2.1/zh-CN.md`。目录名使用不带 `v`、且不高于 `plugin.yaml` 中 `version` 的 SemVer；文件名使用规范化的 BCP 47 标签，每个版本都要有 `en-US.md`。运行 `alonabot check` 核对格式，`alonabot pack` 原样打包。
 - 官方 WebUI 预置插件源 `AlonaBot/plugin-store`，支持添加、移除和保留主动清空的源列表。商店读取源仓库默认分支的 `index.json`，从组件仓库最新 Release 的平台归档内 manifest 取得展示信息；发布条目的字段见 [release 定义](../contracts/release)。更新预览读取已绑定来源的 Release 正文，更新后读取包内 changelog；HTML 按文本显示，已读版本由 WebUI 后台按 SemVer 持久化并单调推进。
 - 用户用 `install --source owner/repo` 安装社区组件，之后只从该来源更新；本地归档用 `install <归档>`，官方包用 `install <组件 ID>` 从可执行文件旁 `packages/<组件 ID>/` 读取。不带参数时在当前目录（作者工程为 `bin/`，含直接包子目录）按归档名选择唯一的本机包，静态 WebUI 使用 any/any，零个或多个候选时列出搜索目录和候选并报错；Adapter、Agent 与 WebUI 同类不能并存，替换官方组件需要 `--replace`。
 - 用 `alonabot build` 检查资源并编译独立组件，`alonabot check` 只读核对。`alonabot pack [目录] --target linux/amd64 --target linux/arm64` 仅生成平台 tar.gz；省略目标时取本机平台，静态 WebUI 只生成一个 any 包，带 Go 入口的 WebUI 按平台构建。`--tags` 选择源码，`--out` 默认 `<工程>/bin`。Release 只上传这些归档，源码压缩包由 GitHub 自动提供。进程包包含可解析的 `build-info` 文本，静态 WebUI 包包含 manifest、静态资源和可选 changelog。

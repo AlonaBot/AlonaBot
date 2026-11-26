@@ -18,7 +18,7 @@ English · [简体中文](README.zh-CN.md)
 <p align="center">A lightweight, cross-platform chatbot framework in Go.<br>Install the components you need to build your bot.</p>
 
 <p align="center">
-  <a href="https://alonabot.github.io/docs/en/">Documentation</a> ·
+  <a href="https://alonabot.github.io/en/">Documentation</a> ·
   <a href="docs/plugin-guide.md">Plugin development</a> ·
   <a href="changelog/README.md">Changelog</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
@@ -50,11 +50,11 @@ English · [简体中文](README.zh-CN.md)
 
 | What you want to do | Start here |
 | --- | --- |
-| Install, configure, upgrade or back up a bot | [Deployment](docs/deployment.md) |
+| Install, configure, upgrade or back up a bot | [User documentation](https://alonabot.github.io/en/docs/usage/install) |
 | Write a plugin, Adapter or Agent | [Plugin guide](docs/plugin-guide.md) |
 | Change Core, SDK or WebUI | [Development](docs/development.md) · [Architecture](ARCHITECTURE.md) |
 | Report a problem, submit a fix or improve documentation | [Contributing](CONTRIBUTING.md) |
-| Look up management APIs and protocol behavior | [Management API](docs/deployment.md#management-api) · [Protocol and sessions](docs/development.md#protocol-and-session-behavior) |
+| Look up management APIs and protocol behavior | [Management API](docs/management-api.md#management-api) · [Protocol and sessions](docs/development.md#protocol-and-session-behavior) |
 | Build and verify release artifacts | [Release maintenance](docs/releasing.md) |
 
 Contributions to fixes, platform support, documentation and community components are welcome. Include the version, operating system and reproduction steps when reporting a problem, and redact logs and configuration before sharing them. Discuss larger changes in an Issue first.
