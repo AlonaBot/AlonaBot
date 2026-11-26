@@ -454,7 +454,7 @@ After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/ex
 ## 8. Tests
 
 - plugintest starts real Core/test Adapter in go test; inject messages/check sends. See [plugin tests](development.md#plugin-tests).
-- Repository official plugins also follow [coding standards](../CONTRIBUTING.md) test-submission rules.
+- Repository official plugins also follow [coding standards](coding-standards.md) test-submission rules.
 
 ## 9. Publishing
 

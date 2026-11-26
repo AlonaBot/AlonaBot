@@ -455,7 +455,7 @@ secret 只用于 `string` 与 `text`，声明 `"secret": true`，同时省略 `d
 ## 8. 测试
 
 - 用插件测试套件 `plugintest` 在 `go test` 中启动真实 Core 与测试 Adapter，注入消息并检查发送。
-- 本仓库中的官方插件另遵守 [编码规范](../CONTRIBUTING.zh-CN.md) 的测试提交规则。
+- 本仓库中的官方插件另遵守 [编码规范](coding-standards.zh-CN.md) 的测试提交规则。
 
 ## 9. 发布
 
