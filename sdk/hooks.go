@@ -323,6 +323,7 @@ func invokeHook(ctx context.Context, in *wire.Inbound, route hookRoute) (respons
 func bindOutboundHook(c *Context, invocation *pb.InvocationContext, op pb.SendOperation, target *pb.Target, edited string) {
 	c.actor = invocation.GetActor()
 	c.defaultTarget = invocation.GetDefaultTarget()
+	c.chatType = invocation.GetChatType()
 	if op == pb.SendOperation_SEND_OPERATION_EDIT {
 		c.ctx = context.WithValue(c.ctx, editingContextKey{}, message.Ref(convert.SessionFromProto(target), edited, target.GetAdapterInstanceId()))
 	}

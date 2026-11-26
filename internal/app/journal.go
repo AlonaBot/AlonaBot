@@ -106,6 +106,7 @@ func (c *Core) recoverRuntime(ctx context.Context, installs []state.Install, blo
 // installedSpec 在停机前构造完整启动输入并准备数据目录；调用方决定准备或直接启动。
 // 返回的运行上下文与 Handler/Detach 共用 Caller，启动后由调用方附加 Instance。
 func (c *Core) installedSpec(ctx context.Context, in state.Install, packageDir string, boot *pb.Bootstrap) (supervisor.Spec, *runningComponent, error) {
+	boot.PackageDir = packageDir
 	parsed, err := installedManifest(in, packageDir)
 	if err != nil {
 		return supervisor.Spec{}, nil, err

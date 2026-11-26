@@ -75,6 +75,21 @@ func (r *Router) listCommands(ctx context.Context, _ Caller, in *wire.Inbound) w
 			continue
 		}
 		entry := &pb.CommandInfo{PluginId: route.pluginID, RouteId: route.route.GetRouteId(), Path: names[0]}
+		if r.pluginMetadata != nil {
+			name, description, err := r.pluginMetadata(ctx, route.pluginID)
+			if err != nil {
+				return wire.Response{Err: &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "read command plugin metadata: " + err.Error()}}
+			}
+			if catalog := route.messages(); catalog != nil {
+				locales := []string{actor.GetLocale(), route.defaultLocale()}
+				name = catalog.Metadata(locales, "name", name)
+				description = catalog.Metadata(locales, "description", description)
+			}
+			entry.PluginName, entry.PluginDescription = proto.String(name), proto.String(description)
+		}
+		for _, param := range command.GetParams() {
+			entry.Params = append(entry.Params, &pb.CommandInfo_CommandParam{Name: param.GetName(), Optional: !param.GetRequired(), Variadic: param.GetRaw()})
+		}
 		for _, name := range names[1:] {
 			if winner, _, ok := index.Lookup(name); ok && sameRoute(winner, identity) {
 				entry.Aliases = append(entry.Aliases, &pb.CommandAlias{Path: name})

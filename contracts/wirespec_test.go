@@ -933,7 +933,8 @@ func TestCommandListFieldNumbers(t *testing.T) {
 	}{
 		{message: &pb.CommandListRequest{}},
 		{message: &pb.CommandListResponse{}, names: []protoreflect.Name{"commands"}, kinds: []protoreflect.Kind{protoreflect.MessageKind}, lists: map[int]bool{1: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.CommandInfo"}},
-		{message: &pb.CommandInfo{}, names: []protoreflect.Name{"plugin_id", "route_id", "path", "aliases", "description"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind}, lists: map[int]bool{3: true, 4: true}, optional: map[int]bool{5: true}, messages: map[int]protoreflect.FullName{4: "alonabot.v1.CommandAlias"}},
+		{message: &pb.CommandInfo{}, names: []protoreflect.Name{"plugin_id", "route_id", "path", "aliases", "description", "plugin_name", "plugin_description", "params"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.MessageKind}, lists: map[int]bool{3: true, 4: true, 8: true}, optional: map[int]bool{5: true, 6: true, 7: true}, messages: map[int]protoreflect.FullName{4: "alonabot.v1.CommandAlias", 8: "alonabot.v1.CommandInfo.CommandParam"}},
+		{message: &pb.CommandInfo_CommandParam{}, names: []protoreflect.Name{"name", "optional", "variadic"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.BoolKind, protoreflect.BoolKind}},
 		{message: &pb.CommandAlias{}, names: []protoreflect.Name{"path"}, kinds: []protoreflect.Kind{protoreflect.StringKind}, lists: map[int]bool{1: true}},
 	} {
 		fields := tc.message.ProtoReflect().Descriptor().Fields()
@@ -964,6 +965,42 @@ func TestCommandListFieldNumbers(t *testing.T) {
 	}
 }
 
+// TestPackageServiceFieldNumbers 固定包服务及包目录的协议字段编号。
+func TestPackageServiceFieldNumbers(t *testing.T) {
+	for _, c := range []struct {
+		message  proto.Message
+		names    []protoreflect.Name
+		kinds    []protoreflect.Kind
+		lists    map[int]bool
+		messages map[int]protoreflect.FullName
+	}{
+		{message: &pb.PackageListRequest{}},
+		{message: &pb.PackageInfo{}, names: []protoreflect.Name{"id", "name", "version", "role", "enabled", "source"}, kinds: []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.StringKind}},
+		{message: &pb.PackageListResponse{}, names: []protoreflect.Name{"packages"}, kinds: []protoreflect.Kind{protoreflect.MessageKind}, lists: map[int]bool{1: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.PackageInfo"}},
+		{message: &pb.PackageInstallRequest{}, names: []protoreflect.Name{"source"}, kinds: []protoreflect.Kind{protoreflect.StringKind}},
+		{message: &pb.PackageInstallResponse{}, names: []protoreflect.Name{"package", "affected"}, kinds: []protoreflect.Kind{protoreflect.MessageKind, protoreflect.StringKind}, lists: map[int]bool{2: true}, messages: map[int]protoreflect.FullName{1: "alonabot.v1.PackageInfo"}},
+	} {
+		fields := c.message.ProtoReflect().Descriptor().Fields()
+		if fields.Len() != len(c.names) {
+			t.Fatalf("%T fields=%d want %d", c.message, fields.Len(), len(c.names))
+		}
+		for index, name := range c.names {
+			number := index + 1
+			field := fields.ByNumber(protoreflect.FieldNumber(number))
+			if field == nil || field.Name() != name || field.Kind() != c.kinds[index] || field.IsList() != c.lists[number] {
+				t.Fatalf("%T field %d=%v", c.message, number, field)
+			}
+			if want := c.messages[number]; want != "" && field.Message().FullName() != want {
+				t.Fatalf("%T field %d message=%v", c.message, number, field.Message().FullName())
+			}
+		}
+	}
+	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(15)
+	if field == nil || field.Name() != "package_dir" || field.Kind() != protoreflect.StringKind || field.HasPresence() || field.IsList() {
+		t.Fatalf("Bootstrap field 15=%v", field)
+	}
+}
+
 // TestProfileFieldNumbers 固定配置文件服务载荷和可信上下文的追加编号。
 func TestProfileFieldNumbers(t *testing.T) {
 	for _, c := range []struct {
@@ -971,7 +1008,7 @@ func TestProfileFieldNumbers(t *testing.T) {
 		names   []protoreflect.Name
 		kinds   []protoreflect.Kind
 	}{
-		{&pb.InvocationContext{}, []protoreflect.Name{"actor", "default_target", "scopes", "plugin_chain", "send_forbidden", "command_consumed", "profile_id"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.BoolKind, protoreflect.StringKind}},
+		{&pb.InvocationContext{}, []protoreflect.Name{"actor", "default_target", "scopes", "plugin_chain", "send_forbidden", "command_consumed", "profile_id", "chat_type"}, []protoreflect.Kind{protoreflect.MessageKind, protoreflect.MessageKind, protoreflect.StringKind, protoreflect.StringKind, protoreflect.BoolKind, protoreflect.BoolKind, protoreflect.StringKind, protoreflect.EnumKind}},
 		{&pb.ProfileSummary{}, []protoreflect.Name{"id", "name", "sessions"}, []protoreflect.Kind{protoreflect.StringKind, protoreflect.StringKind, protoreflect.Uint64Kind}},
 		{&pb.ProfileListRequest{}, nil, nil},
 		{&pb.ProfileListResponse{}, []protoreflect.Name{"profiles"}, []protoreflect.Kind{protoreflect.MessageKind}},
@@ -995,7 +1032,11 @@ func TestProfileFieldNumbers(t *testing.T) {
 			}
 		}
 	}
-	field := (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(14)
+	field := (&pb.InvocationContext{}).ProtoReflect().Descriptor().Fields().ByNumber(8)
+	if field.Enum().FullName() != "alonabot.v1.ChatType" || field.HasPresence() || field.IsList() || field.ContainingOneof() != nil {
+		t.Fatalf("InvocationContext field 8 should be singular ChatType chat_type, got %v", field)
+	}
+	field = (&pb.Bootstrap{}).ProtoReflect().Descriptor().Fields().ByNumber(14)
 	if field == nil || field.Name() != "profile_overrides_json" || field.Kind() != protoreflect.StringKind || field.HasPresence() || field.IsList() {
 		t.Fatalf("Bootstrap field 14 = %v", field)
 	}

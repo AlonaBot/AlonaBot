@@ -114,6 +114,12 @@ const ServiceLogSetLevel = "sdk.log.set_level"
 // ServiceCommandList 查询父调用的 Actor 在默认目标中可用的路径命令。
 const ServiceCommandList = "core.command.list"
 
+// ServicePackageList 查询已安装包，要求父调用的 Actor 为管理员。
+const ServicePackageList = "core.package.list"
+
+// ServicePackageInstall 按 GitHub 来源安装包，要求父调用的 Actor 为管理员。
+const ServicePackageInstall = "core.package.install"
+
 // ServiceProfileList 列出全部配置文件。
 const ServiceProfileList = "core.profile.list"
 

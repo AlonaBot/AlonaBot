@@ -21,6 +21,7 @@ const catalogExtension = ".json"
 type Catalog struct {
 	messages map[string]map[string][]fragment
 	commands map[string]map[string]string
+	metadata map[string]map[string]string
 	pages    map[string]map[string]string
 	locales  []string // 按字典序排列，使主语言回落结果确定。
 }
@@ -38,7 +39,7 @@ func Parse(files map[string][]byte) (*Catalog, []Problem) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	catalog := &Catalog{messages: make(map[string]map[string][]fragment), commands: make(map[string]map[string]string), pages: make(map[string]map[string]string)}
+	catalog := &Catalog{messages: make(map[string]map[string][]fragment), commands: make(map[string]map[string]string), metadata: make(map[string]map[string]string), pages: make(map[string]map[string]string)}
 	var problems []Problem
 	needsSource := false
 	// 1. 编译单文件文案，结构问题保留文件名与 JSON 路径。
@@ -92,6 +93,14 @@ func Parse(files map[string][]byte) (*Catalog, []Problem) {
 				}
 			case "metadata":
 				checkMetadata(fields[key], issue)
+				if fields, ok := fields[key].(map[string]any); ok {
+					catalog.metadata[locale] = make(map[string]string)
+					for key, value := range fields {
+						if text, ok := value.(string); ok {
+							catalog.metadata[locale][key] = text
+						}
+					}
+				}
 			case "config":
 				checkFields(fields[key], key, issue)
 			case "messages":

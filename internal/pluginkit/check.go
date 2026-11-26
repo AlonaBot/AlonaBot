@@ -181,7 +181,11 @@ func projectResources(dir string, project *manifest.Manifest, process bool) (map
 				return nil, fmt.Errorf("adapter_config_schema.json:1:1: %w", err)
 			}
 		}
-		for _, name := range []string{"plugin_config_schema.json", "adapter_config_schema.json", "i18n"} {
+		resources := []string{"plugin_config_schema.json", "adapter_config_schema.json", "i18n"}
+		if project.Role != "webui" {
+			resources = append(resources, "assets")
+		}
+		for _, name := range resources {
 			if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
 				continue
 			} else if err != nil {

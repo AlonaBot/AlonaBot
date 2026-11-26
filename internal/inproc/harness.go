@@ -41,6 +41,7 @@ type Harness struct {
 	AfterFunc                       func(time.Duration, func()) Timer
 	NewTimer                        func(time.Duration) Timer
 	AllowedInstances                map[string][]string // 未列出的插件保持全部实例许可；空列表收紧为全部拒绝。
+	PackageDirs                     map[string]string   // 被测插件 ID → 工程目录，仅测试套件填充。
 	Dispatched                      func(Dispatch)      // 整条链及自动回复结束，或 Handler 进入等待后调用。
 	Trigger                         func(ctx context.Context, pluginID, jobID string, completed func(Dispatch)) error
 	TriggerTask                     func(ctx context.Context, pluginID, taskName, key string, completed func(Dispatch)) error

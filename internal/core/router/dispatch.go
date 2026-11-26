@@ -19,7 +19,9 @@ import (
 
 // Options 提供事件分发限额与现有的路由依赖；限额使用 tune.Values 对应值。
 type Options struct {
-	MenuStore *state.Store // 按账号持久化菜单模式、位置与聊天关系。
+	// PluginMetadata 返回组件 manifest 的名称与说明；nil 时目录省略这两个字段。
+	PluginMetadata func(ctx context.Context, pluginID string) (name, description string, err error)
+	MenuStore      *state.Store // 按账号持久化菜单模式、位置与聊天关系。
 	// Profile 按可信默认目标读取会话的配置文件与插件开关；nil 时使用 default。
 	Profile func(ctx context.Context, pluginID string, target *pb.Target) (profileID string, enabled bool, err error)
 

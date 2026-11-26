@@ -63,7 +63,7 @@ func (i *invoker) confirm(ctx context.Context, caller router.Caller, in *wire.In
 	if err == nil && policy == pb.ToolPolicy_TOOL_POLICY_UNSPECIFIED {
 		policy, err = i.catalog.store.GetToolPolicy(ctx, caller.PluginID, request.GetOperation())
 		if errors.Is(err, state.ErrNotFound) {
-			policy, err = pb.ToolPolicy_TOOL_POLICY_CONFIRM, nil
+			policy, err = pb.ToolPolicy_TOOL_POLICY_ALLOW, nil
 		}
 	}
 	if err != nil {

@@ -14,7 +14,7 @@ Core is the only host and routing hub. Platform connectivity (Adapters), feature
 | --- | --- | --- | --- |
 | Core | Starts and stops components; identity and permissions, event dispatch, sending, media, configuration, scheduling, storage generations, management API | This repository | One |
 | Adapter | Connects one platform's accounts to Core, reports events, performs sends and platform actions | Telegram, OneBot 11 | One per Adapter component, hosting all of its account instances |
-| Plugin | Registers commands, events, hooks, services, scheduled tasks and HTTP routes | help | One per plugin |
+| Plugin | Registers commands, events, hooks, services, scheduled tasks and HTTP routes | builtin | One per plugin |
 | Agent | Model providers, conversations and tool calls; runs like a plugin | alonabot-agent | One |
 | WebUI | Static management interface assets, optionally with a backend process | alonabot-webui | None when static only |
 
@@ -71,7 +71,7 @@ The protocol is defined in [`contracts/proto/alonabot/v1`](../contracts/proto/al
 
 **Cross-plugin collaboration**:
 
-- **Service calls**: synchronous calls with results, forwarded by [`internal/core/broker`](../internal/core/broker) to the target plugin's current Session, waking it on demand.
+- **Service calls**: synchronous calls with results, forwarded by [`internal/core/broker`](../internal/core/broker) to the target plugin's current Session, waking it on demand. `InvocationContext` inherits `actor`, `default_target` and `chat_type` from the parent event; Service handlers read them through `c.User()`, `c.Session()` and `c.ChatType()`, while `c.Event()` is nil. Without a real inbound event, `chat_type` is `UNSPECIFIED`.
 - **Event Bus**: publishers use only their own namespace and Core returns as soon as it admits the event; no persistence, acknowledgement or redelivery, so offline subscribers miss it.
 
 **Media**: media never travels inside ordinary calls. Uploads go in 1 MiB chunks and are checked against SHA-256 on commit, producing a `MediaRef` bound to its owner Session and consumer scope; grants can only stay equal or narrow ([`media.proto`](../contracts/proto/alonabot/v1/media.proto)).

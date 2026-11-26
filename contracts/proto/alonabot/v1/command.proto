@@ -20,6 +20,17 @@ message CommandInfo {
   repeated CommandAlias aliases = 4;
   // 按调用者语言选择的说明；未登记说明时 absent。
   optional string description = 5;
+  // 按调用者语言选择的插件名与说明，缺少翻译时使用 manifest 原文。
+  optional string plugin_name = 6;
+  optional string plugin_description = 7;
+  repeated CommandParam params = 8;
+
+  // CommandParam 摘录 REGISTER 中的参数；variadic 对应吞下剩余文本的 raw 参数。
+  message CommandParam {
+    string name = 1;
+    bool optional = 2;
+    bool variadic = 3;
+  }
 }
 
 // CommandListResponse 按主名的 token 以空格连接后的字典序返回命令。

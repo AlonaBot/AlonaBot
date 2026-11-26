@@ -102,7 +102,7 @@ func invokeHandler(ctx context.Context, in *wire.Inbound, request *pb.HandlerReq
 	ctx, cancel := context.WithCancel(ctx)
 	event := request.GetEvent()
 	scope, _ := ctx.Value(pluginContextKey{}).(pluginScope)
-	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups, continuations: functions, continuation: request.ContinuationOf != nil, commandConsumed: request.GetContext().GetCommandConsumed()}
+	c := &Context{plugin: scope.plugin, subID: scope.subID, ctx: ctx, inbound: in, event: event, autoReply: autoReply, match: groups, continuations: functions, continuation: request.ContinuationOf != nil, commandConsumed: request.GetContext().GetCommandConsumed(), chatType: request.GetContext().GetChatType()}
 	c.freezeProfile(request.GetContext())
 	bindServiceContext(c)
 	outcome := &pb.HandlerOutcome{Propagation: pb.Propagation_PROPAGATION_CONTINUE}

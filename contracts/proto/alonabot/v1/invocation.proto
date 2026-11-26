@@ -26,6 +26,8 @@ message InvocationContext {
   bool command_consumed = 6;
   // 本次调用的配置文件；default 编码为空串。
   string profile_id = 7;
+  // 原事件的会话类型；没有真实入站事件时为 UNSPECIFIED。
+  ChatType chat_type = 8;
 }
 
 // HandlerRequest 描述命令、事件、scheduled 与按钮 Handler 的请求。

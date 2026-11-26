@@ -70,9 +70,13 @@ type CommandInfo struct {
 	// 按配置顺序保留的生效别名。
 	Aliases []*CommandAlias `protobuf:"bytes,4,rep,name=aliases,proto3" json:"aliases,omitempty"`
 	// 按调用者语言选择的说明；未登记说明时 absent。
-	Description   *string `protobuf:"bytes,5,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Description *string `protobuf:"bytes,5,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// 按调用者语言选择的插件名与说明，缺少翻译时使用 manifest 原文。
+	PluginName        *string                     `protobuf:"bytes,6,opt,name=plugin_name,json=pluginName,proto3,oneof" json:"plugin_name,omitempty"`
+	PluginDescription *string                     `protobuf:"bytes,7,opt,name=plugin_description,json=pluginDescription,proto3,oneof" json:"plugin_description,omitempty"`
+	Params            []*CommandInfo_CommandParam `protobuf:"bytes,8,rep,name=params,proto3" json:"params,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CommandInfo) Reset() {
@@ -140,6 +144,27 @@ func (x *CommandInfo) GetDescription() string {
 	return ""
 }
 
+func (x *CommandInfo) GetPluginName() string {
+	if x != nil && x.PluginName != nil {
+		return *x.PluginName
+	}
+	return ""
+}
+
+func (x *CommandInfo) GetPluginDescription() string {
+	if x != nil && x.PluginDescription != nil {
+		return *x.PluginDescription
+	}
+	return ""
+}
+
+func (x *CommandInfo) GetParams() []*CommandInfo_CommandParam {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
 // CommandListResponse 按主名的 token 以空格连接后的字典序返回命令。
 type CommandListResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -185,19 +210,90 @@ func (x *CommandListResponse) GetCommands() []*CommandInfo {
 	return nil
 }
 
+// CommandParam 摘录 REGISTER 中的参数；variadic 对应吞下剩余文本的 raw 参数。
+type CommandInfo_CommandParam struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Optional      bool                   `protobuf:"varint,2,opt,name=optional,proto3" json:"optional,omitempty"`
+	Variadic      bool                   `protobuf:"varint,3,opt,name=variadic,proto3" json:"variadic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandInfo_CommandParam) Reset() {
+	*x = CommandInfo_CommandParam{}
+	mi := &file_alonabot_v1_command_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandInfo_CommandParam) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandInfo_CommandParam) ProtoMessage() {}
+
+func (x *CommandInfo_CommandParam) ProtoReflect() protoreflect.Message {
+	mi := &file_alonabot_v1_command_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandInfo_CommandParam.ProtoReflect.Descriptor instead.
+func (*CommandInfo_CommandParam) Descriptor() ([]byte, []int) {
+	return file_alonabot_v1_command_proto_rawDescGZIP(), []int{1, 0}
+}
+
+func (x *CommandInfo_CommandParam) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CommandInfo_CommandParam) GetOptional() bool {
+	if x != nil {
+		return x.Optional
+	}
+	return false
+}
+
+func (x *CommandInfo_CommandParam) GetVariadic() bool {
+	if x != nil {
+		return x.Variadic
+	}
+	return false
+}
+
 var File_alonabot_v1_command_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_command_proto_rawDesc = "" +
 	"\n" +
 	"\x19alonabot/v1/command.proto\x12\valonabot.v1\x1a\x17alonabot/v1/route.proto\"\x14\n" +
-	"\x12CommandListRequest\"\xc5\x01\n" +
+	"\x12CommandListRequest\"\xe1\x03\n" +
 	"\vCommandInfo\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\tR\bpluginId\x12\x19\n" +
 	"\broute_id\x18\x02 \x01(\tR\arouteId\x12\x12\n" +
 	"\x04path\x18\x03 \x03(\tR\x04path\x123\n" +
 	"\aaliases\x18\x04 \x03(\v2\x19.alonabot.v1.CommandAliasR\aaliases\x12%\n" +
-	"\vdescription\x18\x05 \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
-	"\f_description\"K\n" +
+	"\vdescription\x18\x05 \x01(\tH\x00R\vdescription\x88\x01\x01\x12$\n" +
+	"\vplugin_name\x18\x06 \x01(\tH\x01R\n" +
+	"pluginName\x88\x01\x01\x122\n" +
+	"\x12plugin_description\x18\a \x01(\tH\x02R\x11pluginDescription\x88\x01\x01\x12=\n" +
+	"\x06params\x18\b \x03(\v2%.alonabot.v1.CommandInfo.CommandParamR\x06params\x1aZ\n" +
+	"\fCommandParam\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
+	"\boptional\x18\x02 \x01(\bR\boptional\x12\x1a\n" +
+	"\bvariadic\x18\x03 \x01(\bR\bvariadicB\x0e\n" +
+	"\f_descriptionB\x0e\n" +
+	"\f_plugin_nameB\x15\n" +
+	"\x13_plugin_description\"K\n" +
 	"\x13CommandListResponse\x124\n" +
 	"\bcommands\x18\x01 \x03(\v2\x18.alonabot.v1.CommandInfoR\bcommandsB6Z4github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1b\x06proto3"
 
@@ -213,21 +309,23 @@ func file_alonabot_v1_command_proto_rawDescGZIP() []byte {
 	return file_alonabot_v1_command_proto_rawDescData
 }
 
-var file_alonabot_v1_command_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_alonabot_v1_command_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_alonabot_v1_command_proto_goTypes = []any{
-	(*CommandListRequest)(nil),  // 0: alonabot.v1.CommandListRequest
-	(*CommandInfo)(nil),         // 1: alonabot.v1.CommandInfo
-	(*CommandListResponse)(nil), // 2: alonabot.v1.CommandListResponse
-	(*CommandAlias)(nil),        // 3: alonabot.v1.CommandAlias
+	(*CommandListRequest)(nil),       // 0: alonabot.v1.CommandListRequest
+	(*CommandInfo)(nil),              // 1: alonabot.v1.CommandInfo
+	(*CommandListResponse)(nil),      // 2: alonabot.v1.CommandListResponse
+	(*CommandInfo_CommandParam)(nil), // 3: alonabot.v1.CommandInfo.CommandParam
+	(*CommandAlias)(nil),             // 4: alonabot.v1.CommandAlias
 }
 var file_alonabot_v1_command_proto_depIdxs = []int32{
-	3, // 0: alonabot.v1.CommandInfo.aliases:type_name -> alonabot.v1.CommandAlias
-	1, // 1: alonabot.v1.CommandListResponse.commands:type_name -> alonabot.v1.CommandInfo
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4, // 0: alonabot.v1.CommandInfo.aliases:type_name -> alonabot.v1.CommandAlias
+	3, // 1: alonabot.v1.CommandInfo.params:type_name -> alonabot.v1.CommandInfo.CommandParam
+	1, // 2: alonabot.v1.CommandListResponse.commands:type_name -> alonabot.v1.CommandInfo
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_command_proto_init() }
@@ -243,7 +341,7 @@ func file_alonabot_v1_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alonabot_v1_command_proto_rawDesc), len(file_alonabot_v1_command_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

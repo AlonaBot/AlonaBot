@@ -16,10 +16,18 @@ import (
 
 // Entry 保存生效的命令名、所属路由及本地化说明。
 type Entry struct {
-	PluginID, RouteID string
-	Path              []string   // 生效主名的完整 token 路径。
-	Aliases           [][]string // 其余未被遮蔽的名字，保持配置顺序。
-	Description       string     // 空串表示没有登记说明。
+	PluginID, RouteID             string
+	PluginName, PluginDescription string
+	Path                          []string   // 生效主名的完整 token 路径。
+	Aliases                       [][]string // 其余未被遮蔽的名字，保持配置顺序。
+	Description                   string     // 空串表示没有登记说明。
+	Params                        []Param
+}
+
+// Param 保存 REGISTER 声明的参数名、可选性及剩余原文参数标记。
+type Param struct {
+	Name               string
+	Optional, Variadic bool
 }
 
 // List 返回当前 Actor 在默认 Target 中可用的命令，按主名字典序排列。
@@ -34,7 +42,10 @@ func List(ctx context.Context) ([]Entry, error) {
 	}
 	entries := make([]Entry, 0, len(result.GetCommands()))
 	for _, info := range result.GetCommands() {
-		entry := Entry{PluginID: info.GetPluginId(), RouteID: info.GetRouteId(), Path: info.GetPath(), Description: info.GetDescription()}
+		entry := Entry{PluginID: info.GetPluginId(), RouteID: info.GetRouteId(), Path: info.GetPath(), Description: info.GetDescription(), PluginName: info.GetPluginName(), PluginDescription: info.GetPluginDescription()}
+		for _, param := range info.GetParams() {
+			entry.Params = append(entry.Params, Param{Name: param.GetName(), Optional: param.GetOptional(), Variadic: param.GetVariadic()})
+		}
 		for _, alias := range info.GetAliases() {
 			entry.Aliases = append(entry.Aliases, alias.GetPath())
 		}

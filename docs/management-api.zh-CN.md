@@ -99,6 +99,8 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 | 插件数据 | `/api/v1/plugins/{id}/data/` 下的 tables/rows、kv、files、export、clear，见[数据处理器](../internal/core/manage/data_api.go) |
 | 诊断包 | `POST /api/v1/diagnostics`，缺省 `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}`，返回 no-store ZIP |
 
+通过 `tool.Confirm` 提交的操作缺省为 `ALLOW`，直接返回且不发送确认消息，无 Actor 的后台调用同样适用。管理员通过 `/api/v1/tools/policies` 设置的覆盖与配置文件策略继续生效；`CONFIRM` 要求可信 Actor 与目标。
+
 ### 配置文件的会话访问
 
 在配置文件的「平台与消息」中设置会话访问。Core 按会话单独指定、实例缺省、`default` 的顺序选择配置文件，再应用该配置文件的模式：`all`（缺省）允许所有会话；`allow` 只允许列表中的会话，空列表拒绝全部；`deny` 只拒绝列表中的会话，空列表允许全部。被拒绝的会话不会触发命令或进入 Agent、插件事件处理，Core 也会拒绝发送。现有全局禁止名单继续在原有准入路径生效，任一规则拒绝即拒绝。

@@ -110,6 +110,7 @@ type Router struct {
 	policy         CommandPolicy
 	commandState   func(context.Context, string, *pb.RouteDescriptor) (bool, []string, error)
 	commandNames   func(string) map[string][][]string
+	pluginMetadata func(context.Context, string) (string, string, error)
 	commandSyncs   map[string]*commandSync // 当前运行实例身份与任务，由 mu 保护。
 	menuStore      *state.Store
 	matches        map[string][]commandRoute // 在 mu 下替换，路由快照发布后只读
@@ -150,6 +151,7 @@ func New(opt Options) *Router {
 		snapshots: make(map[string]routeSnapshot),
 		inFlight:  make(map[inFlightKey]int), commands: &CommandIndex{},
 		commandState: opt.CommandState, commandNames: opt.CommandNames, commandSyncs: make(map[string]*commandSync), menuStore: opt.MenuStore,
+		pluginMetadata: opt.PluginMetadata,
 	}
 }
 
@@ -565,6 +567,7 @@ func (r *Router) call(ctx context.Context, c *candidate, event *trustedEvent, bi
 	}
 	request := &pb.HandlerRequest{RouteId: c.route.GetRouteId(), Event: prepared, Command: command, Context: &pb.InvocationContext{
 		Actor: proto.CloneOf(event.retained.GetActor()), DefaultTarget: proto.CloneOf(event.retained.GetTarget()),
+		ChatType:        event.retained.GetChatType(),
 		ProfileId:       encodedProfile(profileID),
 		CommandConsumed: c.route.GetKind() == pb.RouteKind_ROUTE_KIND_EVENT && event.commandConsumed,
 	}}

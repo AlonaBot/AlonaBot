@@ -63,6 +63,8 @@ Generate targets `@agent/llm.generate`; GenerateStream targets `@agent/llm.gener
 
 Successful streaming Response.Text equals the concatenation of successfully delivered deltas. Interrupted calls return confirmed partial results together with the error. Returning an error from a callback cancels the generation/Run and returns that error with the partial result. SDK encoding, handlers and calls preserve payload plus error.
 
+Operations submitted through `tool.Confirm` default to `ALLOW` and return without sending a confirmation message, including calls with no Actor. Administrator overrides from `/api/v1/tools/policies` and profile policies remain effective; `CONFIRM` requires a trusted Actor and target. Tool services keep their declared default policies.
+
 ## Eight Agent hook stages
 
 The `sdk/agent/hook` package accepts `sdk.Registrar`, so registration works on Plugin and SubPlugin. Each registration requires a nonempty stable ID within the plugin and supports Priority(int32) and typed Handle. Internally these are ordinary services with reentry enabled and an allowlist for the current `@agent` role. Agent executes them in `(priority, plugin_id, route_id)` order, smaller priorities first.
@@ -142,6 +144,8 @@ declaration.Call(ctx, in, onDelta) (Out, error)
 ```
 
 Service declarations on the provider may use `/service_name` to bind the authenticated plugin identity. Builder.Reentrant() explicitly allows callback reentry; Builder.Priority(int32) controls order. Access and Permission retain their meanings. Ordinary services retain cycle rejection. Reentrant calls still check the direct caller, permission, depth, deadline and valid Session. The `@agent` allowlist alias resolves to the currently installed Agent identity.
+
+Service calls inherit the parent event's `actor`, `default_target` and `chat_type` through `InvocationContext` (`chat_type = 8`). Use `c.User()`, `c.Session()` and `c.ChatType()` in a Service handler; `c.Event()` is nil. Without a real inbound event, `c.ChatType()` returns `message.ChatUnspecified`.
 
 Filter has InputSchemaID string, InputSchemaVersion uint32, OutputSchemaID string and OutputSchemaVersion uint32; empty IDs and zero versions independently mean unrestricted. Discovery returns only effective services accessible to the current caller, including valid snapshots that can be woken on demand. Descriptor contains Target, PluginID, RouteID, Priority, Encoding, InputSchemaID/Version, OutputSchemaID/Version, DeltaSchemaID/Version and Reentrant. Empty delta Schema means an ordinary service. Agent recognizes hook stages through their shared input/output Schema identities.
 

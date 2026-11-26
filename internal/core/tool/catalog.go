@@ -139,7 +139,7 @@ func (c *Catalog) Policies(ctx context.Context) ([]ToolPolicyEntry, error) {
 func (c *Catalog) observe(pluginID, operation string, effect pb.ToolEffect) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.operations[pluginID+"/"+operation] = ToolPolicyEntry{PluginID: pluginID, Service: operation, Default: pb.ToolPolicy_TOOL_POLICY_CONFIRM, Effect: effect}
+	c.operations[pluginID+"/"+operation] = ToolPolicyEntry{PluginID: pluginID, Service: operation, Default: pb.ToolPolicy_TOOL_POLICY_ALLOW, Effect: effect}
 }
 
 func (c *Catalog) overrides(ctx context.Context) (map[string]ToolPolicyEntry, error) {

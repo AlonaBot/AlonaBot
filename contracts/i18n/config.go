@@ -6,6 +6,20 @@ import (
 	"slices"
 )
 
+// Metadata 按候选语言逐键选择插件名或说明，缺少覆盖时返回 manifest 原文。
+func (c *Catalog) Metadata(locales []string, key, source string) string {
+	for _, candidate := range locales {
+		locale := c.matchLocale(candidate)
+		if text, exists := c.metadata[locale][key]; exists {
+			return text
+		}
+		if locale == sourceLocale {
+			return source
+		}
+	}
+	return source
+}
+
 func checkMetadata(value any, issue func(string, string)) {
 	fields, ok := value.(map[string]any)
 	if !ok {
