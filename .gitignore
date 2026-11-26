@@ -3,7 +3,7 @@
 /bin/
 /dist/
 *.test
-# 本地单元测试与临时测试（见 docs/coding-standards.md「测试提交规则」）
+# 本地单元测试与临时测试（见 docs/coding-standards.zh-CN.md「测试提交规则」）
 *_local_test.go
 *.local.test.ts
 *.local.test.tsx
@@ -29,3 +29,10 @@ web/admin/node_modules/
 /.playwright-cli/
 /delegation-skills-workspace/
 /experiments/
+# 本机代理工具与草稿目录（dev 分支的 spec/、docs/adr/ 等只由 CI 拦截，不在此忽略）
+/.pi/
+/.gemini/
+/docs/superpowers/
+/docs/plans/
+.env
+*.env
