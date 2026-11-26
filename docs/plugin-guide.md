@@ -74,7 +74,7 @@ Read with `value, ok, err := kv.Get(ctx, key)`. `err == nil`/`ok == false` means
 
 `page, err := kv.List(ctx, "subscription/", "", 20)` returns at most 20 keys in byte order. Use `page.Next` as subsequent `cursor`; empty means end. Nonempty cursors obey key constraints. Prefixes match literal bytes, including `%`/`_`; empty lists all, and `limit` must be positive.
 
-WebUI plugin Data pages browse/edit DB tables, KV and files, export/clear data; retained DB generations are read-only. Agent conversations offer summaries/clear operations; see [management API](deployment.md#management-api) for interfaces/cleanup semantics.
+WebUI plugin Data pages browse/edit DB tables, KV and files, export/clear data; retained DB generations are read-only. Agent conversations offer summaries/clear operations; see [management API](management-api.md#management-api) for interfaces/cleanup semantics.
 
 `examples/plugins/configdb` commands `/note kvset <key> <value>` and `/note kvget <key>` demonstrate writes/reads with localized replies.
 
@@ -102,7 +102,7 @@ configdb `/note fileset <value>` and `/note fileget` read/write fixed `note.txt`
 
 ## 4. Logs and text
 
-Diagnostics collect component logs/recent errors. Keep plaintext credentials out of logs/errors: export masks only specified credential/address patterns; chat content receives no special handling. See [diagnostics](deployment.md#export-diagnostics).
+Diagnostics collect component logs/recent errors. Keep plaintext credentials out of logs/errors: export masks only specified credential/address patterns; chat content receives no special handling. See [diagnostics](management-api.md#export-diagnostics).
 
 - Use standard `log/slog`; SDK forwards records to Core with source identity. Keep stdout free for the stdio protocol.
 - For corrupt component data or inability to continue requiring immediate action, log CRITICAL with `slog.Log(ctx, sdk.LevelCritical, "component data is corrupt", "error", err)`. SDK still logs Handler panics as ERROR.
@@ -248,7 +248,7 @@ Adapter public perm/event packages declare permissions/events using SDK builders
 `p.Route("GET", "/subs/").Page("Subscriptions").Handle(h)` lists a page. Page precedes Handle/HandleFunc with English title; `{"pages":{"/subs/":"订阅"}}` in i18n/zh-CN.json translates it. Core exposes active pages/titles through component listings.
 WebUI hosts sandboxed iframes and the `postMessage` bridge. `.Page(title)` registers `kit.css`, `kit.js`, and `qrcode.js` beside the page as public AuthStatic GET routes. Relative imports provide shared styles/theme/locale and ⌘K/Ctrl+K global search. WebUI draws the first row (plugin/tabs/search); omit duplicate title/search bars inside pages.
 
-Official Agent's five pages live in [pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) and pages/: personas/MCP/skills/memory/user tasks use component HTML/CSS/JS, titles in pages, text in messages and bridged component management routes. Memory pages paginate full conversations/manage notes/profiles; Core conversation summaries/clear use [management endpoints](deployment.md#management-api).
+Official Agent's five pages live in [pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) and pages/: personas/MCP/skills/memory/user tasks use component HTML/CSS/JS, titles in pages, text in messages and bridged component management routes. Memory pages paginate full conversations/manage notes/profiles; Core conversation summaries/clear use [management endpoints](management-api.md#management-api).
 
 #### Mount and import the kit
 
@@ -449,7 +449,7 @@ Optional condition matches all path/value pairs, e.g. `"condition":{"mode.$key":
 
 Translate under config.<field>.example in i18n/<locale>.json, preserving example object/array and reply string/segment-array shapes. Positionally override input/reply strings/segment text/alt; omitted entries fall back, `{}` skips intermediate array items. check/build/pack validate keys/types/shapes/positions/placeholders.
 
-After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/examples/greeting.png` serves only plugin_config_schema.json-referenced images in Active, with the same security headers as icons. See [management API](deployment.md#management-api).
+After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/examples/greeting.png` serves only plugin_config_schema.json-referenced images in Active, with the same security headers as icons. See [management API](management-api.md#management-api).
 
 ## 8. Tests
 
@@ -460,7 +460,7 @@ After packing/installing/activating, authenticated `GET /api/v1/packages/{id}/ex
 
 - Marketplace role prefixes: alonabot-plugin-, alonabot-adapter-, alonabot-agent-, alonabot-webui-. Suffix words use single hyphens, no underscores. Plugin regex is `^alonabot-plugin-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`; other roles match that shape; maximum length 64. Local rules remain `^[a-z][a-z0-9_-]{0,63}$`. Manifest icon supports SVG/PNG/WebP.
 - Renames update plugin.yaml/dependencies/HTTP paths/raw Service names; pack uses new IDs for archives. Rebuild old development data using [development runs](development.md#development-runs-and-hot-reload).
-- Releases may include UTF-8 changelog exposed by [management API](deployment.md#management-api). Choose root CHANGELOG.md with version headings (e.g. `## [1.2.1] - 2026-11-17`, date optional), or version/locale files such as changelog/1.2.1/en-US.md and zh-CN.md. Directories use SemVer without v, at most manifest version; filenames use canonical BCP 47 tags and every version requires en-US.md. check validates; pack preserves original text.
+- Releases may include UTF-8 changelog exposed by [management API](management-api.md#management-api). Choose root CHANGELOG.md with version headings (e.g. `## [1.2.1] - 2026-11-17`, date optional), or version/locale files such as changelog/1.2.1/en-US.md and zh-CN.md. Directories use SemVer without v, at most manifest version; filenames use canonical BCP 47 tags and every version requires en-US.md. check validates; pack preserves original text.
 - WebUI defaults plugin sources to AlonaBot/plugin-store, supporting add/remove/persistently empty lists. It reads default-branch index.json and the manifest inside component latest-Release platform archives for display. See [contracts/pluginindex](../contracts/pluginindex) and [contracts/release](../contracts/release) for source/release formats. Update previews use bound-source Release bodies; installed updates use packaged changelog. HTML displays as text; backend persists monotonically increasing seen SemVers.
 - Install community components with install --source owner/repo; later updates stay bound there. Local install <archive> reads archives; install <component ID> reads adjacent packages/<component ID>/. No-argument discovery uses current directory (author bin/, including direct package children), archive names to select one host candidate; static WebUI uses any/any. Zero/multiple candidates error/list paths. Same-category Adapter, Agent and WebUI cannot coexist; replacing official components requires --replace.
 - `alonabot build` validates/compiles; `alonabot check` is read-only. `alonabot pack [directory] --target linux/amd64 --target linux/arm64` outputs platform tar.gz archives only. The default target is the host; static WebUI creates one any archive, and Go-entry WebUI builds per platform. `--tags` selects source; `--out` defaults to `<project>/bin`. Upload these archives to Releases; GitHub supplies source archives. Process packages include parseable `build-info`; static WebUI includes manifest, assets and optional changelog.

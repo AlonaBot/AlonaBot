@@ -2,6 +2,7 @@
 
 负责范围：模块职责、允许的 import 方向、状态归属。行为细节见现行指南（见 [插件指南](docs/plugin-guide.zh-CN.md)）。
 更新时机：新增顶层包、改变包之间的依赖或状态归属时，同步修改本文件和 [docs/development.md](docs/development.zh-CN.md) 的检查表。
+组件关系与一条消息经过 Core 的逐步演示见文档站[架构](https://alonabot.github.io/docs/internals/architecture)。
 
 实现目录与职责如下；开发入口见[源码开发](docs/development.zh-CN.md)，精确行为见[插件指南](docs/plugin-guide.zh-CN.md)。
 
@@ -76,7 +77,7 @@ SDK 的文本匹配、Raw 与事件注册在 Plugin、SubPlugin、CommandGroup �
 
 Adapter 账号配置页面以 `RouteDescriptor.page_purpose = "instance_config"` 声明。`host.Prepare` 在提交注册前按安装角色调用 `contracts/validate`，只接纳每个 Adapter 的一条带标题、要求管理会话的 GET 配置页面；`manage` 在组件列表发布 `purpose`。页面跟随组件 Session，账号实例停止时仍可使用。WebUI 经 `config.context` 提供当前表单上下文，接收 `config.complete` 的补丁后沿用现有保存流程（[账号配置页面](docs/plugin-guide.zh-CN.md#adapter-账号配置页面)）。
 
-[Agent pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go) 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、记忆、用户任务及嵌入资源，接口见 [管理 API](docs/deployment.zh-CN.md#管理-api)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
+[Agent pages.go](https://github.com/AlonaBot/alonabot-agent/blob/main/internal/agent/pages.go) 经 `sdk/page` 与普通管理 HTTP 路由提供人格、MCP、技能、记忆、用户任务及嵌入资源，接口见 [管理 API](docs/management-api.zh-CN.md#管理-api)。人格表 `persona` 与会话目录 `conversation_record` 纳入受管库初始迁移 ID:1，记忆保留 ID:2；正文归 Core，Agent 在追加成功后记录完整会话键，目录清理与追加/reset 复用会话锁。普通与定时轮次读取当前人格提示；技能采用轮次快照；MCP gate 协调状态、重连与停止锁存，Session 结束通知按身份隔离并保留最近工具目录。动态任务通过既有 SDK List/Cancel 管理。
 
 `sdk.ProfileOverrides(ctx context.Context) (map[string]map[string]json.RawMessage, error)` 从 ctx 所属 Session 的 Plugin 读取当前有效覆盖集合并返回深拷贝，HTTP 与生命周期共用该所有者，同进程多个插件各自隔离；独立进程沿用默认 Session。数据复用 Bootstrap/通知的原子发布，Agent 将其与基础配置、`core.profile.list` 合并计算人格引用。
 

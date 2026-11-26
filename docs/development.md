@@ -2,7 +2,7 @@
 
 [简体中文](development.zh-CN.md)
 
-Run a plugin from source, then work in Core, SDK, Adapter, Agent or WebUI as needed. See [contributing](../CONTRIBUTING.md) for workflow and [architecture](../ARCHITECTURE.md) for modules/data ownership. This guide maintains environments, commands and verification; operations are in [deployment](deployment.md).
+Run a plugin from source, then work in Core, SDK, Adapter, Agent or WebUI as needed. See [contributing](../CONTRIBUTING.md) for workflow and [architecture](../ARCHITECTURE.md) for modules/data ownership. This guide maintains environments, commands and verification; management endpoints and runtime behavior are in the [management reference](management-api.md); installing and running a bot is in the [user documentation](https://alonabot.github.io/en/docs/usage/install).
 
 ## Prepare the environment
 
@@ -29,7 +29,7 @@ Existing examples reuse the repository's module/resources without an external pr
 bin/alonabot run ./examples/plugins/lifecycle --data-dir ./data
 ```
 
-Enter `/ping` in the same terminal for `pong`; Ctrl-C stops normally. Parallel Core instances need separate data directories/listener ports. See [deployment](deployment.md#core-settings-and-http-entry-point) for first authentication/listener settings.
+Enter `/ping` in the same terminal for `pong`; Ctrl-C stops normally. Parallel Core instances need separate data directories/listener ports. See [Core settings](management-api.md#core-settings-and-http-entry-point) for first authentication/listener settings.
 
 The example marks `/ping` with `.Menu()` for automatic chat menus on supported Adapters; unmarked commands remain callable. See [command menus](plugin-guide.md#command-menus) for manual control.
 
@@ -700,7 +700,7 @@ Activation proceeds through HELLO → HELLO_ACK/Bootstrap → REGISTER → PREPA
 
 Calls match `(session_id, initiator_side, call_id)`. Call IDs are nonzero, monotonically increasing per direction and never reused in a Session. A parent must identify a still-active Core-initiated call in that same Session. Deadlines are absolute UTC milliseconds; children retain the parent's deadline or shorten it. Cancellation is cooperative and leaves completed side effects intact. Payload and ErrorInfo can coexist for partial results: preserve both. Default request timeout is 30 seconds. A Session failure completes pending calls with their actual errors; invalid authentication closes the connection without exposing credentials.
 
-Use `alonabot tune list` for the full current tuning table, including names, units, defaults, effective values, constraints and sources. `--args NAME=value` applies the same validation. [internal/tune/params.go](../internal/tune/params.go) defines the values; [deployment](deployment.md#plugin-hibernation) explains wake budgets and [plugin development](plugin-guide.md) explains continuations, storage and tasks. Frame size remains fixed at 4 MiB. Phase budgets default to HELLO 10s, configuration 60s, migration 15m, OnStart 60s and OnReady 30s; stopping has 10s total, including 6s drain and 4s OnStop. Crash recovery permits three crashes per five-minute window. Components must honor cancellation in their own handlers and background work.
+Use `alonabot tune list` for the full current tuning table, including names, units, defaults, effective values, constraints and sources. `--args NAME=value` applies the same validation. [internal/tune/params.go](../internal/tune/params.go) defines the values; [plugin hibernation](management-api.md#plugin-hibernation) explains wake budgets and [plugin development](plugin-guide.md) explains continuations, storage and tasks. Frame size remains fixed at 4 MiB. Phase budgets default to HELLO 10s, configuration 60s, migration 15m, OnStart 60s and OnReady 30s; stopping has 10s total, including 6s drain and 4s OnStop. Crash recovery permits three crashes per five-minute window. Components must honor cancellation in their own handlers and background work.
 
 ### Command menu wire additions
 

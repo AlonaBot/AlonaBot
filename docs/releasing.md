@@ -1,6 +1,6 @@
 # 发行维护
 
-Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core；Docker Compose 镜像包含 Core、WebUI 与 Agent。Telegram、OneBot 11 Adapter 和 help 插件在各自仓库发布，用户按需安装。安装步骤见[部署指南](deployment.zh-CN.md)，组件作者的发布流程见[插件指南](plugin-guide.zh-CN.md#9-发布)。
+Core 发行与整合镜像保留在主仓。公开五平台归档只包含 Core；Docker Compose 镜像包含 Core、WebUI 与 Agent。Telegram、OneBot 11 Adapter 和 help 插件在各自仓库发布，用户按需安装。安装步骤见[用户文档](https://alonabot.github.io/docs/usage/install)，组件作者的发布流程见[插件指南](plugin-guide.zh-CN.md#9-发布)。
 
 ## 固定源码与发行说明
 
@@ -28,7 +28,7 @@ go run ./scripts/dist --version 0.1.0 --out ./dist
 
 整合模式的 `<输出目录>/packages/<组件ID>/` 汇集所选平台归档。同次整合构建的所有目标平台使用同一组组件 tag；重新构建时会再次查询正式 Release。需要复用已经验收的内容时，使用原构建归档。Core 版本由 `--version` 注入，并通过 `GET /api/v1/core` 读取。
 
-纯 Core 归档可以先构建；内部整合归档与 Compose 镜像需要最新正式 Release 提供 Agent、WebUI 的目标平台归档。商店正式验收使用匿名可读的公开索引和已发布的 WebUI；商店接口与收录流程见[商店操作](deployment.zh-CN.md#组件商店)。
+纯 Core 归档可以先构建；内部整合归档与 Compose 镜像需要最新正式 Release 提供 Agent、WebUI 的目标平台归档。商店正式验收使用匿名可读的公开索引和已发布的 WebUI；商店接口与收录流程见[商店操作](management-api.zh-CN.md#组件商店)。
 
 公开 Release 仅上传五个平台归档；源码 zip 与 tar.gz 由 GitHub 自动提供。安装脚本从主仓 `main/deploy/install.sh` 下载，Compose 从对应 tag 的根目录下载。安装器通过 GitHub Release API 的资产摘要校验官方归档。
 

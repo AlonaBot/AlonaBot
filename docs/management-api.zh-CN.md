@@ -1,154 +1,8 @@
-# 安装与部署
+# Core 管理 API 与运行机制
 
-[English](deployment.md)
+[English](management-api.md)
 
-本文面向运行 AlonaBot 的管理员，说明安装、认证、配置、组件管理与恢复。源码开发见[开发指南](development.zh-CN.md)，构建发行物见[发行维护](releasing.md)。
-
-## 选择安装方式
-
-从 [Core 最新发行页](https://github.com/AlonaBot/AlonaBot/releases/latest)下载正式资产。五平台归档与 `install.sh` 提供纯 Core；Docker Compose 提供 Core、WebUI 与 Agent 整合包。Adapter 和 help 插件按需安装。版本变更见[更新日志](../changelog/README.zh-CN.md)，历史平台实跑结果见[首发记录](../changelog/v0.1.0/zh-CN.md)。
-
-| 方式 | 适用场景 |
-| --- | --- |
-| 发行归档 | 手动运行 Core，适用于五个发行目标 |
-| install.sh | Linux systemd 系统服务与 macOS 当前用户 LaunchAgent |
-| Docker Compose | Linux amd64/arm64 容器，持久化数据卷 |
-
-## 手动运行发行归档
-
-下载对应平台的归档，解压后可见 `alonabot`（Windows 为 `alonabot.exe`）、`LICENSE` 与 `source.json`。在该目录运行：
-```fish
-./alonabot run --data-dir ./data
-```
-
-后文管理命令假定 `alonabot` 已加入 PATH；从解压目录操作时使用 `./alonabot`。Windows 使用 `alonabot.exe`。首次启动的组件清单为空。按[管理认证](#core-设置与-http-入口)领取管理 token，按[管理组件](#管理组件)安装所需组件。安装并启用 WebUI 后可打开 `http://127.0.0.1:7650` 登录；Agent 配置 Provider 与模型后再启用。
-
-## 系统服务安装与升级
-
-在支持 systemd 的 Linux 上以 root 运行；macOS 在当前用户的登录会话运行。支持两种系统的 amd64、arm64。先从主仓下载安装脚本，再安装指定版本（以下命令使用 fish，把 `VERSION` 换成发行版本号，省略前导 `v`）：
-```fish
-set version VERSION
-curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o install.sh https://raw.githubusercontent.com/AlonaBot/AlonaBot/main/deploy/install.sh
-# Linux
-sudo sh install.sh --version $version
-# macOS
-sh install.sh --version $version
-```
-
-省略 `--version` 会先通过 `/latest` 固定一个 Release，再下载该版本的归档，并与 GitHub Release API 的资产 SHA256 摘要核对。`ALONABOT_RELEASE_BASE_URL` 可覆盖 Release 基址；自定义镜像站继续从同一 Release 下载 `SHA256SUMS`。基址和所有重定向均须使用 HTTPS。脚本先检查平台、权限和系统工具，完成下载、校验和临时解压后才停服、替换 Core 程序并清理旧的相邻 `packages/` 安装介质；数据目录中的已安装组件保留。自定义镜像站若仍提供整合归档，脚本同时复制其 `packages/`。
-
-Linux 使用 `/opt/alonabot/`、数据目录 `/var/lib/alonabot` 和系统服务 `alonabot.service`；服务以系统用户 `alonabot` 运行并启用开机启动。macOS 使用 `~/Library/Application Support/AlonaBot/`、其中的 `data/` 和用户 LaunchAgent `io.github.alonabot`，登录后启动。工作目录设为程序目录，启动参数为 `run --data-dir <完整数据路径>`。
-
-脚本在停服后，有控制终端时以服务身份运行 `admin-token init --if-missing`，通过 `/dev/tty` 初始化；无控制终端时交给 Core 首次启动初始化。新 CLI 以 0600 权限持久保存凭据，只输出路径；已有凭据沿用。远程 WebUI 登录时可显式读取：
-```fish
-# Linux，以服务身份读取
-sudo runuser -u alonabot -- /opt/alonabot/alonabot admin-token show --data-dir /var/lib/alonabot
-# macOS，以当前用户读取
-"$HOME/Library/Application Support/AlonaBot/alonabot" admin-token show --data-dir "$HOME/Library/Application Support/AlonaBot/data"
-```
-
-登录及确认均保留持久凭据。再次安装即升级，保留数据、配置、状态库和已安装组件。
-```fish
-# Linux 卸载
-sudo sh install.sh --uninstall
-# macOS 卸载
-sh install.sh --uninstall
-```
-
-卸载停止并解除服务注册，删除服务定义、程序与内置包，输出保留的数据目录位置；macOS 的 `data/` 保留在原位。
-
-## 容器镜像
-
-下载发行的 Compose 文件并启动整合包：
-```fish
-curl --fail --location --proto '=https' --proto-redir '=https' \
-  -o docker-compose.yml https://raw.githubusercontent.com/AlonaBot/AlonaBot/v0.3.3/docker-compose.yml
-docker compose up -d
-```
-
-在宿主机浏览器打开 `http://127.0.0.1:7650`，WebUI 显示一次性管理 token，复制保存后确认即可登录。宿主机没有浏览器时，按下文建立 SSH 隧道，保持端口绑定回环地址并完成确认。需要手动登录时，可用以下命令读取令牌：
-```fish
-docker compose exec alonabot alonabot admin-token show --data-dir /data
-```
-
-登录后在 WebUI 中从商店或[源码](#源码构建)安装插件与 Adapter，创建账号实例，再配置 LLM。受限网络可先配置 [GitHub 下载镜像](#组件下载镜像)；源码构建还可配置 [Go 下载设置](#core-设置与-http-入口)。首次启动无需 TTY，Core 将管理 token 写入 `/data/admin_token`，登录后保留该文件供本机 CLI 使用。镜像支持 `linux/amd64` 与 `linux/arm64`，compose 按宿主平台选择。compose 中固定镜像版本，与所选 Release 的版本保持一致。
-
-镜像以 `10001:10001` 运行，命名卷挂载到 `/data`，首次创建卷时继承镜像中该目录的所有者。改用宿主目录挂载时，先授予 UID/GID 10001 读写和遍历权限；已有卷也需保证这一权限。保留该卷即可保留配置、状态库和组件数据。
-
-端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
-
-先保持宿主端口绑定 `127.0.0.1`，在本机完成首次令牌确认后，再改为绑定 `0.0.0.0` 或其他非回环地址。Docker 的 `userland-proxy` 可能让局域网请求也显示为网关来源；确认前，能访问该端口的人可能领取令牌并取得完整管理权限。
-
-首次领取接口 `POST /api/auth/bootstrap` 接受本机直连。`ALONABOT_CONTAINER=1` 时，也接受经 Docker 网桥访问、来源为 `/proc/net/route` 中 IPv4 默认网关的请求。Host 与 Origin 仍须匹配 `base_url` 的本机地址；带 `Forwarded`、`X-Forwarded-*` 或 `X-Real-IP` 的请求会被拒绝。确认后接口停止返回令牌。
-
-按需安装 Adapter 后，在 compose 服务的 `environment` 中传入 `TELEGRAM_BOT_TOKEN` 后，`/data/core_config.json` 中的实例凭证可写成 `"token": "${TELEGRAM_BOT_TOKEN}"`，设置写回保留这一引用。最终镜像采用 scratch，包含 Core、相邻 `packages/` 与 CA 证书；MCP stdio 服务器需要 shell、Node、Python 等运行时时，请自行构建包含所需运行时的镜像，并保留 UID 10001、可写数据卷与 `--init`。
-
-## 管理组件
-```fish
-alonabot run --data-dir ./data
-```
-
-`run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，从所选 `--data-dir` 自动读取持久凭据并直连本机 listen，Host 沿用 base_url；本机连接地址可用 `--admin-url` 覆盖：
-```fish
-alonabot install pkg.tar.gz --yes             # 直接安装本地归档
-alonabot install alonabot-webui-admin --yes    # 从可执行文件旁 packages/<组件 ID>/ 安装
-alonabot install --yes                        # 在当前目录或工程 bin/ 中选择唯一的本机包
-alonabot install --source owner/repo --yes      # 从 GitHub Release API 选择平台归档
-alonabot install --source AlonaBot/alonabot-webui --yes
-alonabot enable alonabot-webui-admin
-alonabot install --source AlonaBot/alonabot-agent --yes
-alonabot install --source AlonaBot/alonabot-adapter-telegram --yes
-alonabot install --source AlonaBot/alonabot-plugin-help --yes
-alonabot enable alonabot-plugin-help-official
-alonabot enable alonabot-plugin-hello
-alonabot list
-alonabot uninstall alonabot-plugin-hello --purge-data --yes      # 或 --purge；不带选项时只卸载
-alonabot adapter instance create alonabot-adapter-telegram primary --config instance.json
-alonabot admin add telegram:123456
-```
-
-`install` 的位置参数为已存在的普通文件时使用该归档，其他值按组件 ID 查找可执行文件旁的 `packages/<组件 ID>/`；缺失时列出可用的官方组件 ID。不带位置参数时，当前目录为作者工程便搜索 `bin/`，其他情况搜索当前目录；也检查直接包子目录。按归档名选择本机平台资产，静态 WebUI 使用 `any/any`，恰好一个候选才安装；零个或多个时列出搜索目录和候选后退出。发现阶段只读，安装经管理 API 完成。
-
-`--archive` 可显式指定归档。位置参数、`--archive` 和 `--source` 互斥；来源确认、归档预检及 `--yes`、`--replace` 沿用管理服务。浏览器上传安装或更新同样只需归档文件。历史 Release 清理旁车后，旧 Core 的在线安装与更新需要先升级至采用此流程的版本，发布顺序见[发行维护](releasing.md)。
-
-help 插件启用后，在聊天中发送 `/whoami`，把回复中的用户字符串作为 `admin add` 的参数；回复中的实例名用于核对来源。
-
-管理端点与配置读写详见 [管理 API](deployment.zh-CN.md#管理-api)。
-
-### 源码构建
-
-安装请求带 `Build: true` 时，Core 不下载 Release 资产，而是从源码构建，例如 `POST /api/v1/packages/install` 的 `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.3.0","Confirm":true}`：
-
-1. Core 经 `github_api_base` 将 `Ref`（分支、标签或提交；空串为默认分支）解析为提交，下载 `https://github.com/<owner>/<repo>/archive/<提交>.tar.gz`，解压到 `<data_dir>/staging`。配置了 `github_download_prefix` 就经该前缀下载。GitHub 未公开源码 tarball 的摘要；使用前缀时，构建任务日志会警告源码经前缀获取、内容未经摘要校验。请使用可信的下载镜像。
-2. 按需下载与 Core 构建版本相同的 Go 发行版到 `<data_dir>/toolchain/go`：从 `go_download_base` 的 JSON 列表（`?mode=json&include=all`，`go.dev/dl/` 与 `golang.google.cn/dl/` 都提供）读取大小与 SHA-256 并核对。
-3. 按 `alonabot pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验。`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，因此 scratch 镜像也能构建。Go 子进程只从 Core 继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`，Go 设置由构建显式指定（`GOENV=off`、`GOWORK=off`）。
-4. 归档照常经过安装预检、来源信任与同类替换确认，来源绑定为 `github.com/<owner>/<repo>`。`Ref` 是 SemVer 标签时版本取标签，并核对 `plugin.yaml` 的版本；其他提交的版本是 `plugin.yaml` 的版本加 `+<12 位提交>`，例如 `0.3.0+4769d92b0a8f`。
-
-更新使用 `POST /api/v1/packages/update` 的 `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`，省略 `Source` 时构建已绑定的来源。
-
-构建作为后台任务运行，请求立即返回 202 与 `{"task_id":"…"}`。`GET /api/v1/tasks/{id}` 返回 `{"id","action":"install|update","status":"running|succeeded|failed","created_at","finished_at","log","result"}`；`log` 包含各步骤与 go 命令的完整标准错误，成功时 `result` 与同步端点的结果相同。失败时 `http_status` 与 `error` 与同步端点的错误响应一致：需要确认时为 409 与 `{"affected":[…]}`，确认后带 `Confirm: true` 重新提交，构建缓存使重建更快。`GET /api/v1/tasks` 列出任务（不含 `log`），`DELETE /api/v1/tasks/{id}` 取消运行中的任务或删除已结束的记录。同一时间只运行一个构建，其余任务在日志中提示等待；任务只保存在内存中，Core 重启后消失，停机时取消运行中的构建。
-
-`GET /api/v1/core/build-environment` 返回 `{"go_version":"go1.27.1","toolchain_bytes":0,"cache_bytes":0}`，未下载工具链时 `go_version` 为空串。`DELETE /api/v1/core/build-environment?part=toolchain|cache` 删除工具链或缓存，省略 `part` 时两者都删除并返回新的占用；构建运行中返回 412。工具链约占 250 MiB，缓存随构建增长。
-
-只依赖 AlonaBot SDK 的普通插件构建很轻（实测几百 MiB、十几秒）；依赖较大的组件（例如带 LLM SDK 的 Agent）建议预留约 **2 GiB 可用内存**，扣除 Core 和其他负载的占用。Core 串行编译；Linux 上可用内存偏低时，构建日志会提示，任务继续运行。小内存机器优先从 Release 安装，或在另一台机器运行 `alonabot pack --target <os>/<arch>`，再上传适配 Core 平台的归档。
-
-任务日志提示依赖下载可能受阻时，在系统设置中将 `goproxy` 改为可达的镜像，例如 `https://goproxy.cn,direct`，或设置网络代理 `proxy` 后重启 Core。`goproxy` 修改从下一次构建生效，详见 [Go 下载与代理设置](#core-设置与-http-入口)。静默提示只追加日志，构建继续运行。
-
-用 `alonabot tune list` 查看启动调优项：`BUILD_MEMORY_SOFT_LIMIT`（每个 Go 进程 768 MiB）、`BUILD_GOGC`（50）、`BUILD_MEMORY_WARN_BELOW`（1536 MiB，仅 Linux）和 `BUILD_STALL_INTERVAL`（60s）。这些参数仅作用于 Core 的受管工具链。
-
-源码构建不支持 cgo，也不支持私有仓库与私有模块：Core 不向 GitHub 或模块代理发送凭据，也没有 `GOPRIVATE`/`GONOSUMDB` 设置。镜像不含 git，`goproxy` 中的 `direct` 回退在容器内不可用，依赖须能经代理取得。module 须位于仓库根目录，源码不能含符号链接。Windows 主机与以开发版 Go 构建的 Core 尚不支持源码构建。
-
-### 导出诊断包
-```fish
-alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
-```
-
-默认收集近 24 小时的日志、当前设置和 Active 配置、组件与环境信息，并开启脱敏。`--no-logs`、`--no-settings`、`--no-components` 可分别省略一组，至少保留一组。`-o` 也可写作 `--output`；省略时在当前目录生成 `alonabot-diagnostics-<UTC 时间>.zip`。
-
-在线使用管理 API 和 Bearer token，自动读取 `<data_dir>/admin_token`。默认直连本机 listen 并保留 base_url Host；`--admin-url` 覆盖本机连接地址。连接被拒绝后尝试停机导出；原目录的 core.lock 须未被占用。离线导出只读原目录。
-
-缺少可用的 Adapter 实例 schema 时，默认遮盖该组实例配置的全部叶值，保留结构和完整的 `${环境变量}` 表达式。`--no-redact` 会导出凭证明文；日志可能包含聊天内容，提交 issue 前请先检查归档。
+本文面向 WebUI、CLI 与组件开发者及 Core 贡献者，说明管理端点、认证、设置语义、安装与源码构建、休眠、下载镜像和日志。安装、运行与日常管理机器人见[用户文档](https://alonabot.github.io/docs/usage/install)。源码开发见[开发指南](development.zh-CN.md)，构建发行物见[发行维护](releasing.md)。
 
 ## Core 设置与 HTTP 入口
 
@@ -162,7 +16,7 @@ alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
 
 插件由 SDK 先执行 `OnConfigLoad(ctx, raw)`，再补值与校正；`GET /api/v1/plugins/{id}/config` 返回 Active 的 `corrections` 和 `unknown`。`POST /api/v1/plugins/{id}/config/prune` 从 Active 删除无效键并保存为 Pending，随后调用管理 API 的 reload 生效。开发组件也按此顺序清理：reload 时原子更新其编辑文件，成功启动后清除 Pending；之后的 restart 保持清理结果。
 
-Core 设置的记录由 `GET /api/v1/core/settings/corrections` 读取，清理由 `POST /api/v1/core/settings/prune` 写回。Adapter 实例的 GET 响应也带 `corrections` 与 `unknown`，`POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 只删除该实例的无效键，保留其他值与 `${...}` 原文；实例校正与 required 检查独立进行，失败实例保留可修订的配置，其余实例继续启动。端点与生效方式见 [管理 API](deployment.zh-CN.md#管理-api)。
+Core 设置的记录由 `GET /api/v1/core/settings/corrections` 读取，清理由 `POST /api/v1/core/settings/prune` 写回。Adapter 实例的 GET 响应也带 `corrections` 与 `unknown`，`POST /api/v1/adapters/{adapter_id}/instances/{instance_id}/prune` 只删除该实例的无效键，保留其他值与 `${...}` 原文；实例校正与 required 检查独立进行，失败实例保留可修订的配置，其余实例继续启动。端点与生效方式见 [管理 API](#管理-api)。
 
 配置准备沿用 `internal/tune` 的 `PHASE_CONFIG`（缺省 60s），覆盖 OnConfigLoad、补值与校正及 required 校验；`PHASE_MIGRATION`（缺省 15m）用于数据库迁移，参数表见 `alonabot tune list`。
 
@@ -171,7 +25,7 @@ Core 设置的记录由 `GET /api/v1/core/settings/corrections` 读取，清理�
 alonabot run --data-dir ./data --listen 127.0.0.1:8080
 ```
 
-用 `alonabot logs --level critical` 只看严重故障，或用 `alonabot run --log-level critical` 为本次启动提高全局输出阈值。运行中用 `alonabot log-level global critical` 保存全局阈值，用 `alonabot log-level <组件 ID> critical` 单独设置来源。查询筛选与输出设置见 [管理 API](deployment.zh-CN.md#管理-api)。
+用 `alonabot logs --level critical` 只看严重故障，或用 `alonabot run --log-level critical` 为本次启动提高全局输出阈值。运行中用 `alonabot log-level global critical` 保存全局阈值，用 `alonabot log-level <组件 ID> critical` 单独设置来源。查询筛选与输出设置见 [管理 API](#管理-api)。
 
 Core 在 `listen` 地址（缺省 `127.0.0.1:7650`）上提供唯一的公开 HTTP 入口。请求 Host 的主机名须匹配 `base_url`：`/plugins/{id}/...` 转发给该插件当前 Session 的路由，其余路径交给管理处理器；其他 Host 返回 421。缺省设置下，lifecycle 示例的私有页面地址为 `http://127.0.0.1:7650/plugins/demo/page`。listen 为非 loopback 地址时，`base_url` 必须是 https，或者配置非空的 `trusted_proxies`（由可信反代终止 TLS），设置文件与 `--listen` 都按此校验。
 
@@ -205,40 +59,13 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 `OPTIONS_PAGE` 的默认值和范围见 [插件指南](plugin-guide.zh-CN.md)，可用 `alonabot tune list` 查看；聊天目录每页的上限取当前 Core 生效值的十倍，请求的 `limit` 仍缺省为 50。
 
-## 插件休眠
+### 容器内的监听与首次领取
 
-plugin/agent 的 `sleep_capable` 缺省为 true，显式 false 要求常驻。旧版构建器曾把源码中的缺省写成 false；用修复后的构建器重新构建这些包，显式 false 继续保留原义。全局 `always_on`、开发组件、Adapter、WebUI、活动引用与现有路由判断继续生效。HTTP、Hook、Raw、Bus 订阅及持续事件路由在自动策略下返回 `route_requires_resident`；显式逐组件正时长覆盖该路由要求并返回逐路由警告，manifest 的常驻声明继续生效。
+端口只发布到宿主的 `127.0.0.1`。镜像设置 `ALONABOT_CONTAINER=1` 时，缺省监听为 `0.0.0.0:7650`，`base_url` 仍为 `http://127.0.0.1:7650`；显式 `listen` 优先。该容器例外实际生效时，启动日志输出一次 WARN 提醒宿主本机发布规则。远程管理可使用 `ssh -N -L 7650:127.0.0.1:7650 user@host`，再打开本机地址；HTTPS 反代部署按 [Core 设置与 HTTP 入口](#core-设置与-http-入口) 配置 `base_url` 和 `trusted_proxies`。
 
-已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 与 HTTP 请求恢复原代次。Core 唯一 Waker 在 ACTIVATED、摘要核对及全部绑定后开放交付；等待期间沿用接纳时的绝对期限。同代次 RESUME 复用配置与 DB，跳过数据库迁移回调；配置仍执行加载、补值/校正与 required 校验，完整结果须与原快照一致。开发组件沿用当前绑定与原生命周期。
+先保持宿主端口绑定 `127.0.0.1`，在本机完成首次令牌确认后，再改为绑定 `0.0.0.0` 或其他非回环地址。Docker 的 `userland-proxy` 可能让局域网请求也显示为网关来源；确认前，能访问该端口的人可能领取令牌并取得完整管理权限。
 
-`internal/tune` 统一登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 现行指南。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。自动空闲策略：`sleep.mode` 缺省 `always_on`，`sleep.idle_timeout` 缺省 `15m`，`sleep.plugins` 缺省为空；覆盖接受 `never` 或正时长，删除覆盖恢复自动准入。`SLEEP_MIN_UPTIME=5m`（>0）、`SLEEP_COLD_START_WINDOW=1h`（>0）与 `SLEEP_COLD_START_MAX=3`（≥1）统一登记，窗口内冷启动超过上限后固定常驻一个窗口，期间启动保持原冷却截止。 Scheduler 自然到期唤醒，复用同一 Waker 与上述等待预算；payload 按完整 HandlerRequest 的编码字节计入。静态 deadline 为原 scheduled_at 加 `JOB_TIMEOUT=15m`（>0），动态从取得并发名额开始计算，冷启动计入原期限；等待继续占用原运行槽与 `TASK_CONCURRENCY=16` 名额（≥1 且 ≤ SESSION_MAX_INFLIGHT）。
-
-管理 CLI 可直接查询和调整逐插件策略（复用 `--data-dir` 与 `--admin-url`）：
-```fish
-alonabot sleep-policy
-alonabot sleep-policy my-plugin
-alonabot sleep-policy my-plugin never
-alonabot sleep-policy my-plugin 15m
-alonabot sleep-policy my-plugin auto
-```
-
-无参数返回全局设置与全部已安装 plugin/agent 的策略和运行状态；单 ID 返回对应对象。`auto` 删除覆盖，`never` 与正时长立即写回设置并生效。全局模式与时长通过[管理 API](deployment.zh-CN.md#管理-api) 的 `PUT /api/v1/core/sleep` 修改，两项必填。管理读取保持休眠；需要路由而尚无有效已提交快照时，策略查询返回 412 / `FAILED_PRECONDITION`，全局设置与 runtime 可独立读取。保存后的恢复失败保留实际错误；重新 GET 核对已保存设置。
-
-唤醒与调度的实现、测试入口见[架构地图](../ARCHITECTURE.md)；开发验证见[源码开发](development.zh-CN.md#验证改动)。
-
-删除 Adapter 实例时，Core 同步清除它的事件游标、Profile 指定和会话访问名单条目；名单的访问模式及其他实例条目保留。同名重建使用全新游标。普通停用与重启保留这些状态。
-
-## 备份与恢复
-
-整机备份前先停止 Core 和全部插件进程，再复制完整的 `data_dir`。备份须同时覆盖 Core 元数据、程序包、插件配置及各代次的受管 SQLite 数据库。单独备份 `state.sqlite` 只保存 Core 元数据，不包含插件业务数据。
-
-插件自管的外部数据库与框架目录之外的文件，按插件的维护说明单独备份。恢复时保持 Core 和插件停止，还原完整的 `data_dir`，并同步恢复插件自管的外部数据，再启动 Core。恢复旧备份会丢弃备份之后的新写入，执行前须确认要恢复的数据时点。
-
-## 日志摘要与详情
-
-每条日志正文（包括 DEBUG）用自然语言说明发生了什么，直接包含组件或路由、状态变化与失败原因。结构化字段用于筛选和关联。正文已包含的错误在控制台只显示一次。
-
-Core 控制台展示摘要。如需查看完整的结构化字段、Trace、源码位置和错误，可读取日志文件或查询管理 API。新写入的日志以 JSON 行保存完整管理 API Record（`time`、`level`、`source`、`message`、`attrs`、`trace_id`），控制台格式与文件格式独立。历史查询同时读取既有文本记录和新 JSON 记录，保留来源、级别及 Trace 筛选。`--log-format=json` 继续提供完整结构化 stderr。INFO 记录接入、处理、发送及休眠唤醒摘要，内部事务与中间状态为 DEBUG；正文、模型输入输出、工具参数和凭据沿用现有保护规则。运行期 `runtime/reply.sqlite` 只保存本次 Session 的回复修饰关联，启动时清理旧运行数据，Session 结束时删除对应行。
+首次领取接口 `POST /api/auth/bootstrap` 接受本机直连。`ALONABOT_CONTAINER=1` 时，也接受经 Docker 网桥访问、来源为 `/proc/net/route` 中 IPv4 默认网关的请求。Host 与 Origin 仍须匹配 `base_url` 的本机地址；带 `Forwarded`、`X-Forwarded-*` 或 `X-Real-IP` 的请求会被拒绝。确认后接口停止返回令牌。
 
 ## 管理 API
 
@@ -294,7 +121,7 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 
 认证后 `GET /api/v1/packages/{id}/icon` 提供图标，`GET /api/v1/packages/{id}/examples/{path}` 只提供 Active 包引用的配置图片。包列表的 `Name`、`Description`、`Author` 取自包内 `plugin.yaml`，读不到时省略。组件页面在包的 `pages` 中列出，包含 `path`、`title`，账号配置页面另带 `purpose: "instance_config"`。WebUI 经 `/plugins/{id}` 在沙箱打开页面，账号配置页面在添加或编辑账号的对话框里打开。见[页面套件](plugin-guide.zh-CN.md#插件页面)与[账号配置页面](plugin-guide.zh-CN.md#adapter-账号配置页面)。
 
-官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/pages.go)。
+官方 WebUI 组件包含真实后台进程。认证前缀 `/plugins/alonabot-webui-admin` 下有 `/stats?range=24h|7d|30d`、`/users`、`/store`、`/changelog/seen?component=core`。`PUT /changelog/seen` 仅接收 `{"component":"core","version":"0.1.0"}`，按 SemVer 单调持久化；GET 返回 `{"version":null}` 或版本。仅复制静态 `dist` 时这些后台路由不可用。模型、人格、MCP、技能、记忆和任务页面由 Agent 提供，见其 [HTTP 实现](https://github.com/AlonaBot/alonabot-agent/blob/main/internal/agent/pages.go)。
 
 完整现行路由和请求/响应类型由[管理包](../internal/core/manage)维护，[管理集成测试](../tests/e2e/manage_e2e_test.go)通过真实 Core 验证。
 
@@ -315,6 +142,50 @@ Pending 编辑要求当前 `base_generation`，陈旧编辑为 409。读取时�
 源索引为 `{"version":1,"plugins":[{"repo":"owner/repo","role":"plugin","tags":["utility"]}]}`，tags 可省略。检查后，用户填写标签，用检查所得规范 repo，在浏览器打开源仓库 `issues/new`，携带 `template=submit-plugin.yml` 以及经 URL 编码的 `repo`、`role`、`tags`、`release_url`，由浏览器提交 GitHub Issue。
 
 WebUI 商店每个远端 HTTP 请求的期限为 20 秒，覆盖响应体；串行请求的总耗时可更长，刷新响应调用方取消。`/store/check` 读取 GitHub API 与 Release 归档，初始 URL 与每次重定向均检查 HTTPS 主机和路径。安全上限为：商店快照 32 MiB（含内联图标）、元数据 1 MiB、归档 64 MiB、每轮展开 256 MiB（最多两轮）、单文件 128 MiB、每轮 2,048 条、保留的 manifest 256 KiB、保留的图标 1 MiB。超限保留 `exceeds ... bytes/entries` 错误并沿用同样的缓存规则。当前实现见 [WebUI store.go](https://github.com/AlonaBot/alonabot-webui/blob/main/internal/admin/store.go)。
+
+## 组件安装
+
+`run` 与库模式（`alonabot.Start`）共用 `internal/app` 的同一套 Core 装配；CLI 直接调用它，根包提供库模式的薄包装。组件经管理服务安装与启停，CLI 通过 `base_url` 上的管理 API 操作，从所选 `--data-dir` 自动读取持久凭据并直连本机 listen，Host 沿用 base_url；本机连接地址可用 `--admin-url` 覆盖：
+
+`install` 的位置参数为已存在的普通文件时使用该归档，其他值按组件 ID 查找可执行文件旁的 `packages/<组件 ID>/`；缺失时列出可用的官方组件 ID。不带位置参数时，当前目录为作者工程便搜索 `bin/`，其他情况搜索当前目录；也检查直接包子目录。按归档名选择本机平台资产，静态 WebUI 使用 `any/any`，恰好一个候选才安装；零个或多个时列出搜索目录和候选后退出。发现阶段只读，安装经管理 API 完成。
+
+`--archive` 可显式指定归档。位置参数、`--archive` 和 `--source` 互斥；来源确认、归档预检及 `--yes`、`--replace` 沿用管理服务。浏览器上传安装或更新同样只需归档文件。历史 Release 清理旁车后，旧 Core 的在线安装与更新需要先升级至采用此流程的版本，发布顺序见[发行维护](releasing.md)。
+
+管理端点与配置读写详见 [管理 API](#管理-api)。
+
+### 源码构建
+
+安装请求带 `Build: true` 时，Core 不下载 Release 资产，而是从源码构建，例如 `POST /api/v1/packages/install` 的 `{"Source":"AlonaBot/alonabot-adapter-telegram","Build":true,"Ref":"v0.3.0","Confirm":true}`：
+
+1. Core 经 `github_api_base` 将 `Ref`（分支、标签或提交；空串为默认分支）解析为提交，下载 `https://github.com/<owner>/<repo>/archive/<提交>.tar.gz`，解压到 `<data_dir>/staging`。配置了 `github_download_prefix` 就经该前缀下载。GitHub 未公开源码 tarball 的摘要；使用前缀时，构建任务日志会警告源码经前缀获取、内容未经摘要校验。请使用可信的下载镜像。
+2. 按需下载与 Core 构建版本相同的 Go 发行版到 `<data_dir>/toolchain/go`：从 `go_download_base` 的 JSON 列表（`?mode=json&include=all`，`go.dev/dl/` 与 `golang.google.cn/dl/` 都提供）读取大小与 SHA-256 并核对。
+3. 按 `alonabot pack` 的方式为 Core 所在平台打包：`CGO_ENABLED=0`、`GOTOOLCHAIN=auto`，模块经 `goproxy` 下载并按 GOSUMDB（缺省 `sum.golang.org`）校验。`GOCACHE`、`GOMODCACHE`、`GOTMPDIR`、`TMPDIR` 与 `HOME` 都在 `<data_dir>/cache` 下，因此 scratch 镜像也能构建。Go 子进程只从 Core 继承 `PATH`、`HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`，Go 设置由构建显式指定（`GOENV=off`、`GOWORK=off`）。
+4. 归档照常经过安装预检、来源信任与同类替换确认，来源绑定为 `github.com/<owner>/<repo>`。`Ref` 是 SemVer 标签时版本取标签，并核对 `plugin.yaml` 的版本；其他提交的版本是 `plugin.yaml` 的版本加 `+<12 位提交>`，例如 `0.3.0+4769d92b0a8f`。
+
+更新使用 `POST /api/v1/packages/update` 的 `{"id":"…","confirm":true,"install":{"Build":true,"Ref":"…"}}`，省略 `Source` 时构建已绑定的来源。
+
+构建作为后台任务运行，请求立即返回 202 与 `{"task_id":"…"}`。`GET /api/v1/tasks/{id}` 返回 `{"id","action":"install|update","status":"running|succeeded|failed","created_at","finished_at","log","result"}`；`log` 包含各步骤与 go 命令的完整标准错误，成功时 `result` 与同步端点的结果相同。失败时 `http_status` 与 `error` 与同步端点的错误响应一致：需要确认时为 409 与 `{"affected":[…]}`，确认后带 `Confirm: true` 重新提交，构建缓存使重建更快。`GET /api/v1/tasks` 列出任务（不含 `log`），`DELETE /api/v1/tasks/{id}` 取消运行中的任务或删除已结束的记录。同一时间只运行一个构建，其余任务在日志中提示等待；任务只保存在内存中，Core 重启后消失，停机时取消运行中的构建。
+
+`GET /api/v1/core/build-environment` 返回 `{"go_version":"go1.27.1","toolchain_bytes":0,"cache_bytes":0}`，未下载工具链时 `go_version` 为空串。`DELETE /api/v1/core/build-environment?part=toolchain|cache` 删除工具链或缓存，省略 `part` 时两者都删除并返回新的占用；构建运行中返回 412。工具链约占 250 MiB，缓存随构建增长。
+
+只依赖 AlonaBot SDK 的普通插件构建很轻（实测几百 MiB、十几秒）；依赖较大的组件（例如带 LLM SDK 的 Agent）建议预留约 **2 GiB 可用内存**，扣除 Core 和其他负载的占用。Core 串行编译；Linux 上可用内存偏低时，构建日志会提示，任务继续运行。小内存机器优先从 Release 安装，或在另一台机器运行 `alonabot pack --target <os>/<arch>`，再上传适配 Core 平台的归档。
+
+任务日志提示依赖下载可能受阻时，在系统设置中将 `goproxy` 改为可达的镜像，例如 `https://goproxy.cn,direct`，或设置网络代理 `proxy` 后重启 Core。`goproxy` 修改从下一次构建生效，详见 [Go 下载与代理设置](#core-设置与-http-入口)。静默提示只追加日志，构建继续运行。
+
+用 `alonabot tune list` 查看启动调优项：`BUILD_MEMORY_SOFT_LIMIT`（每个 Go 进程 768 MiB）、`BUILD_GOGC`（50）、`BUILD_MEMORY_WARN_BELOW`（1536 MiB，仅 Linux）和 `BUILD_STALL_INTERVAL`（60s）。这些参数仅作用于 Core 的受管工具链。
+
+源码构建不支持 cgo，也不支持私有仓库与私有模块：Core 不向 GitHub 或模块代理发送凭据，也没有 `GOPRIVATE`/`GONOSUMDB` 设置。镜像不含 git，`goproxy` 中的 `direct` 回退在容器内不可用，依赖须能经代理取得。module 须位于仓库根目录，源码不能含符号链接。Windows 主机与以开发版 Go 构建的 Core 尚不支持源码构建。
+
+### 导出诊断包
+```fish
+alonabot diagnose --data-dir ./data --since 24h -o diagnose.zip
+```
+
+默认收集近 24 小时的日志、当前设置和 Active 配置、组件与环境信息，并开启脱敏。`--no-logs`、`--no-settings`、`--no-components` 可分别省略一组，至少保留一组。`-o` 也可写作 `--output`；省略时在当前目录生成 `alonabot-diagnostics-<UTC 时间>.zip`。
+
+在线使用管理 API 和 Bearer token，自动读取 `<data_dir>/admin_token`。默认直连本机 listen 并保留 base_url Host；`--admin-url` 覆盖本机连接地址。连接被拒绝后尝试停机导出；原目录的 core.lock 须未被占用。离线导出只读原目录。
+
+缺少可用的 Adapter 实例 schema 时，默认遮盖该组实例配置的全部叶值，保留结构和完整的 `${环境变量}` 表达式。`--no-redact` 会导出凭证明文；日志可能包含聊天内容，提交 issue 前请先检查归档。
 
 ## 组件下载镜像
 
@@ -345,3 +216,32 @@ alonabot update alonabot-agent-official --github-download-prefix '' --yes
 `INSTALL_DOWNLOAD_TIMEOUT` 默认每个 GitHub 请求 5 分钟，覆盖重定向和响应体读取；`INSTALL_MAX_RELEASE_JSON` 默认限制 GitHub API 响应为 4 MiB，也适用于源码引用解析；`INSTALL_MAX_ARCHIVE` 同时限制 Release 资产与源码 tarball；`INSTALL_MAX_HTTP_ERROR` 默认保留非 200 响应体的前 4 KiB。用 `alonabot tune list` 查看生效值。
 
 商店的索引发现与收录检查仍使用所选源的 GitHub 索引及展示快照，其独立抓取规则见上文；首次浏览商店需要索引源可达。按仓库直接安装、已安装组件的更新检查及确认预览直接调用 Core，随后安装或更新也使用同一份镜像设置。
+
+## 插件休眠
+
+plugin/agent 的 `sleep_capable` 缺省为 true，显式 false 要求常驻。旧版构建器曾把源码中的缺省写成 false；用修复后的构建器重新构建这些包，显式 false 继续保留原义。全局 `always_on`、开发组件、Adapter、WebUI、活动引用与现有路由判断继续生效。HTTP、Hook、Raw、Bus 订阅及持续事件路由在自动策略下返回 `route_requires_resident`；显式逐组件正时长覆盖该路由要求并返回逐路由警告，manifest 的常驻声明继续生效。
+
+已安装 plugin/agent 从 SUSPENDED 按命令/事件、Service 与 HTTP 请求恢复原代次。Core 唯一 Waker 在 ACTIVATED、摘要核对及全部绑定后开放交付；等待期间沿用接纳时的绝对期限。同代次 RESUME 复用配置与 DB，跳过数据库迁移回调；配置仍执行加载、补值/校正与 required 校验，完整结果须与原快照一致。开发组件沿用当前绑定与原生命周期。
+
+`internal/tune` 统一登记 `WAKE_QUEUE_REQUESTS=256`（≥1）与 `WAKE_QUEUE_BYTES=16MiB`（4MiB～`CORE_MAX_PAYLOAD`）；等待 payload 同时占用 Core 总预算。可经 `--args` 覆盖，名称、单位、上下界及来源错误沿用 现行指南。HTTP 等待只占条数，正文在交付后流式读取；唤醒失败分别映射为 429（预算满）、504（期限到达）或 503（其他失败）。自动空闲策略：`sleep.mode` 缺省 `always_on`，`sleep.idle_timeout` 缺省 `15m`，`sleep.plugins` 缺省为空；覆盖接受 `never` 或正时长，删除覆盖恢复自动准入。`SLEEP_MIN_UPTIME=5m`（>0）、`SLEEP_COLD_START_WINDOW=1h`（>0）与 `SLEEP_COLD_START_MAX=3`（≥1）统一登记，窗口内冷启动超过上限后固定常驻一个窗口，期间启动保持原冷却截止。 Scheduler 自然到期唤醒，复用同一 Waker 与上述等待预算；payload 按完整 HandlerRequest 的编码字节计入。静态 deadline 为原 scheduled_at 加 `JOB_TIMEOUT=15m`（>0），动态从取得并发名额开始计算，冷启动计入原期限；等待继续占用原运行槽与 `TASK_CONCURRENCY=16` 名额（≥1 且 ≤ SESSION_MAX_INFLIGHT）。
+
+管理 CLI 可直接查询和调整逐插件策略（复用 `--data-dir` 与 `--admin-url`）：
+```fish
+alonabot sleep-policy
+alonabot sleep-policy my-plugin
+alonabot sleep-policy my-plugin never
+alonabot sleep-policy my-plugin 15m
+alonabot sleep-policy my-plugin auto
+```
+
+无参数返回全局设置与全部已安装 plugin/agent 的策略和运行状态；单 ID 返回对应对象。`auto` 删除覆盖，`never` 与正时长立即写回设置并生效。全局模式与时长通过[管理 API](#管理-api) 的 `PUT /api/v1/core/sleep` 修改，两项必填。管理读取保持休眠；需要路由而尚无有效已提交快照时，策略查询返回 412 / `FAILED_PRECONDITION`，全局设置与 runtime 可独立读取。保存后的恢复失败保留实际错误；重新 GET 核对已保存设置。
+
+唤醒与调度的实现、测试入口见[架构地图](../ARCHITECTURE.md)；开发验证见[源码开发](development.zh-CN.md#验证改动)。
+
+删除 Adapter 实例时，Core 同步清除它的事件游标、Profile 指定和会话访问名单条目；名单的访问模式及其他实例条目保留。同名重建使用全新游标。普通停用与重启保留这些状态。
+
+## 日志摘要与详情
+
+每条日志正文（包括 DEBUG）用自然语言说明发生了什么，直接包含组件或路由、状态变化与失败原因。结构化字段用于筛选和关联。正文已包含的错误在控制台只显示一次。
+
+Core 控制台展示摘要。如需查看完整的结构化字段、Trace、源码位置和错误，可读取日志文件或查询管理 API。新写入的日志以 JSON 行保存完整管理 API Record（`time`、`level`、`source`、`message`、`attrs`、`trace_id`），控制台格式与文件格式独立。历史查询同时读取既有文本记录和新 JSON 记录，保留来源、级别及 Trace 筛选。`--log-format=json` 继续提供完整结构化 stderr。INFO 记录接入、处理、发送及休眠唤醒摘要，内部事务与中间状态为 DEBUG；正文、模型输入输出、工具参数和凭据沿用现有保护规则。运行期 `runtime/reply.sqlite` 只保存本次 Session 的回复修饰关联，启动时清理旧运行数据，Session 结束时删除对应行。
