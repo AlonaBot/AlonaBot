@@ -52,6 +52,7 @@ English · [简体中文](README.zh-CN.md)
 | --- | --- |
 | Install, configure, upgrade or back up a bot | [User documentation](https://alonabot.github.io/en/docs/usage/install) |
 | Write a plugin, Adapter or Agent | [Plugin guide](docs/plugin-guide.md) |
+| Understand how AlonaBot works | [Design guide](docs/design.md) |
 | Change Core, SDK or WebUI | [Development](docs/development.md) · [Architecture](ARCHITECTURE.md) |
 | Report a problem, submit a fix or improve documentation | [Contributing](CONTRIBUTING.md) |
 | Look up management APIs and protocol behavior | [Management API](docs/management-api.md#management-api) · [Protocol and sessions](docs/development.md#protocol-and-session-behavior) |

@@ -8,6 +8,7 @@
 
 | 任务 | 先读 | 完成前检查 |
 | --- | --- | --- |
+| 第一次了解项目或整体设计 | [设计导读](docs/design.zh-CN.md)、[架构地图](ARCHITECTURE.md) | 能说清改动落在哪个组件、哪段协议或哪类状态 |
 | 实现、诊断、重构或设计 Go 代码 | [开发技能](.agents/skills/alonabot-develop/SKILL.md)、[架构地图](ARCHITECTURE.md)、[编码规范](docs/coding-standards.zh-CN.md) | 所有者、调用者、允许的依赖边与必要相邻修改完整 |
 | 新增或修改代码注释 | [注释技能](.agents/skills/alonabot-code-commenting/SKILL.md) | 包文档、文档注释、字段与 step 注释符合现状 |
 | 选择测试、复现失败或记录验证 | [测试技能](.agents/skills/alonabot-test/SKILL.md)、[源码开发](docs/development.zh-CN.md#验证改动) | 只提交集成测试与协议编号检查；本地测试写在 `*_local_test.go` |
