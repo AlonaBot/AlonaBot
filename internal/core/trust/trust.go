@@ -10,8 +10,8 @@ func Source(id string) string {
 		return "github.com/AlonaBot/alonabot-agent"
 	case "alonabot-webui-admin":
 		return "github.com/AlonaBot/alonabot-webui"
-	case "alonabot-plugin-help-official":
-		return "github.com/AlonaBot/alonabot-plugin-help"
+	case "alonabot-plugin-builtin-official":
+		return "github.com/AlonaBot/alonabot-plugin-builtin"
 	case "alonabot-adapter-telegram":
 		return "github.com/AlonaBot/alonabot-adapter-telegram"
 	case "alonabot-adapter-onebot11":

@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	pb "github.com/AlonaBot/AlonaBot/contracts/pb/alonabotv1"
 	"github.com/AlonaBot/AlonaBot/contracts/release"
@@ -34,8 +35,9 @@ type InstallRequest struct {
 	Build                bool   // 从 Source 的源码构建，而不是下载最新 Release 资产。
 	Ref                  string // 构建的分支、标签或提交；空串为默认分支。仅用于 Build。
 
-	built *builtSource // Install 与 Update 在取得目录锁之前完成的构建产物。
-	log   io.Writer    // 源码构建日志；nil 时丢弃。
+	built      *builtSource // Install 与 Update 在取得目录锁之前完成的构建产物。
+	log        io.Writer    // 源码构建日志；nil 时丢弃。
+	invocation bool         // 固定服务立即尝试管理锁，避免与调用方排空互等。
 }
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -50,7 +52,9 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		}
 		defer func() { err = errors.Join(err, req.built.remove()) }()
 	}
-	s.catalog.Lock()
+	if !req.lock(&s.catalog) {
+		return result, precondition("component management is in progress")
+	}
 	defer s.catalog.Unlock()
 	candidate, err := s.prepare(ctx, req)
 	if err != nil {
@@ -61,10 +65,15 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	if err := checkWebUIVersion(m); err != nil {
 		return result, err
 	}
-	s.instances.Lock()
+	if !req.lock(&s.instances) {
+		return result, precondition("adapter instance management is in progress")
+	}
 	defer s.instances.Unlock()
-	unlock := s.lock(m.ID)
-	defer unlock()
+	mutex := s.packageLock(m.ID)
+	if !req.lock(mutex) {
+		return result, precondition("component management is in progress: " + m.ID)
+	}
+	defer mutex.Unlock()
 	in := state.Install{PluginID: m.ID, Role: state.Role(m.Role), AdapterID: m.AdapterID, Source: m.Source,
 		Version: m.Version, Entrypoint: m.Entrypoint, BuildDigest: candidate.Digest}
 	if in.Source == "dev" {
@@ -132,6 +141,7 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	if !trusted {
 		confirmation = append(confirmation, "trust source: "+in.Source)
 	}
+	result.Affected = confirmation
 	if len(confirmation) != 0 && !req.Confirm {
 		return result, &ErrNeedsConfirm{Affected: confirmation}
 	}
@@ -140,12 +150,15 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 	}
 	wasEnabled := false
 	for _, id := range replaced {
-		oldUnlock := s.lock(id)
+		oldMutex := s.packageLock(id)
+		if !req.lock(oldMutex) {
+			return result, precondition("component management is in progress: " + id)
+		}
 		enabled, readErr := s.opt.Store.Enabled(ctx, id)
 		if readErr == nil {
 			readErr = s.uninstall(ctx, id, PurgeNone, true)
 		}
-		oldUnlock()
+		oldMutex.Unlock()
 		if readErr != nil {
 			return result, readErr
 		}
@@ -164,8 +177,17 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (result Packa
 		}
 	}
 	result, err = s.describe(ctx, m.ID)
+	result.Affected = confirmation
 	result.Warnings = candidate.Warnings
 	return result, err
+}
+
+func (req InstallRequest) lock(mutex *sync.Mutex) bool {
+	if req.invocation {
+		return mutex.TryLock()
+	}
+	mutex.Lock()
+	return true
 }
 
 func (req InstallRequest) buildLog() io.Writer {

@@ -427,6 +427,9 @@ func t11Matrix(t *testing.T, stdio bool) {
 		h := t11Harness(t, stdio, tune.Defaults(), "t11-adapter")
 		const operation = "mcp/x/y"
 		const summary = "Write {\"path\":\"示例.txt\",\"value\":7}"
+		if err := h.assembly.tools.SetPolicy(t.Context(), state.ToolPolicy{PluginID: t11Caller, Service: operation, Policy: pb.ToolPolicy_TOOL_POLICY_CONFIRM}); err != nil {
+			t.Fatal(err)
+		}
 		key, start := t11Begin(h, t11Command{Action: "operation", Name: operation, Summary: summary})
 		prompt := t11Prompt(h, start)
 		t11AssertPrompt(t, prompt, operation, summary, false)

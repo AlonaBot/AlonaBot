@@ -7,6 +7,7 @@
 package plugintest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -173,8 +174,23 @@ func Start(t testing.TB, opts ...Option) *Harness {
 		return parsed.Manifest.ID
 	}
 	rootOptions := []alonabot.Option{alonabot.DataDir(dir), alonabot.Listen(loopbackListen)}
+	packageDirs := make(map[string]string)
 	for _, p := range o.plugins {
-		pluginID(p)
+		id := pluginID(p)
+		pkgPath, _ := generated.Entry(p)
+		var stderr bytes.Buffer
+		options := scanOptions("", pkgPath)
+		args := []string{"list", "-f", "{{.Dir}}"}
+		if len(options.Tags) != 0 {
+			args = append(args, "-tags", strings.Join(options.Tags, ","))
+		}
+		args = append(args, pkgPath)
+		command := options.Toolchain.Command(context.Background(), options.Dir, &stderr, args...)
+		project, err := command.Output()
+		if err != nil {
+			t.Fatalf("locate plugin project %q: %v: %s", pkgPath, err, stderr.String())
+		}
+		packageDirs[id] = strings.TrimSpace(string(project))
 		rootOptions = append(rootOptions, alonabot.Plugin(p))
 	}
 	for p, config := range o.configs {
@@ -277,7 +293,7 @@ func Start(t testing.TB, opts ...Option) *Harness {
 	for _, p := range o.plugins {
 		h.plugins[p] = pluginID(p)
 	}
-	h.bridge = &inproc.Harness{AllowedInstances: allowed, Dispatched: h.dispatched, Scheduled: func(runID, traceID string, explicit bool) {
+	h.bridge = &inproc.Harness{PackageDirs: packageDirs, AllowedInstances: allowed, Dispatched: h.dispatched, Scheduled: func(runID, traceID string, explicit bool) {
 		if explicit {
 			h.mu.Lock()
 			h.traceOwners[traceID] = scheduledSourcePrefix + runID
@@ -488,19 +504,7 @@ func scanResources(t testing.TB, p *sdk.Plugin) generated.Resources {
 	if err != nil {
 		t.Fatal(err)
 	}
-	options := generate.Options{Dir: dir, Package: pkgPath}
-	if build, ok := debug.ReadBuildInfo(); ok {
-		for _, setting := range build.Settings {
-			switch setting.Key {
-			case "GOOS":
-				options.GOOS = setting.Value
-			case "GOARCH":
-				options.GOARCH = setting.Value
-			case "-tags":
-				options.Tags = strings.FieldsFunc(setting.Value, func(c rune) bool { return c == ',' || c == ' ' })
-			}
-		}
-	}
+	options := scanOptions(dir, pkgPath)
 	result, err := generate.Scan(context.Background(), options)
 	if err != nil {
 		t.Fatalf("scan entry package %q: %v", pkgPath, err)
@@ -514,6 +518,23 @@ func scanResources(t testing.TB, p *sdk.Plugin) generated.Resources {
 	}
 	generated.Register(pkgPath, result.Generated)
 	return result.Generated
+}
+
+func scanOptions(dir, pkgPath string) generate.Options {
+	options := generate.Options{Dir: dir, Package: pkgPath}
+	if build, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range build.Settings {
+			switch setting.Key {
+			case "GOOS":
+				options.GOOS = setting.Value
+			case "GOARCH":
+				options.GOARCH = setting.Value
+			case "-tags":
+				options.Tags = strings.FieldsFunc(setting.Value, func(c rune) bool { return c == ',' || c == ' ' })
+			}
+		}
+	}
+	return options
 }
 
 func (h *Harness) selectInstance(chat Chat) InstanceConfig {

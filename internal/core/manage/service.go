@@ -117,10 +117,14 @@ func New(opt Options) *Service {
 }
 
 func (s *Service) lock(id string) func() {
-	value, _ := s.packages.LoadOrStore(id, &sync.Mutex{})
-	mutex := value.(*sync.Mutex)
+	mutex := s.packageLock(id)
 	mutex.Lock()
 	return mutex.Unlock
+}
+
+func (s *Service) packageLock(id string) *sync.Mutex {
+	value, _ := s.packages.LoadOrStore(id, &sync.Mutex{})
+	return value.(*sync.Mutex)
 }
 
 func (s *Service) directory(in state.Install) string {
@@ -155,6 +159,7 @@ type Package struct {
 	AvailableUpdate                                           string   `json:"available_update,omitempty"`
 	RuntimeState                                              string   `json:",omitempty"` // 仅插件和 Agent 持久化实际运行状态。
 	Warnings                                                  []string `json:",omitempty"` // 仅安装结果携带清单警告。
+	Affected                                                  []string `json:",omitempty"` // 安装时确认的来源信任与同类替换对象。
 	Pages                                                     []page   `json:"pages"`
 }
 

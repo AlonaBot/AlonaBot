@@ -88,7 +88,7 @@ func TestToolPolicyIdentities(t *testing.T) {
 			Target: wire.ServiceToolConfirm, ParentCallID: 1, ParentAttach: &router.Invocation{},
 			Payload: wire.Payload{Encoding: pb.PayloadEncoding_PAYLOAD_ENCODING_PROTOBUF, SchemaID: validate.SchemaID(message), SchemaVersion: 1, Bytes: encoded},
 		})
-		if result.Err.GetCode() != pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED || result.Err.GetSafeMessage() != "confirmation requires a trusted actor and default target" {
+		if result.Err != nil {
 			t.Fatalf("confirmation: %v", result.Err)
 		}
 	}
@@ -118,7 +118,7 @@ func TestToolPolicyIdentities(t *testing.T) {
 	}
 	want := []policyRow{
 		{"demo", "echo", []string{"tool"}, "allow", "inherit", "read_only"},
-		{"demo", "mcp/fs/write", []string{"operation"}, "confirm", "deny", "destructive"},
+		{"demo", "mcp/fs/write", []string{"operation"}, "allow", "deny", "destructive"},
 		{"demo", "shared", []string{"tool", "operation"}, "allow", "deny", "write"},
 		{"demo", "stale", []string{}, "inherit", "allow", "unspecified"},
 	}
@@ -132,7 +132,7 @@ func TestToolPolicyIdentities(t *testing.T) {
 	routes.Detach("demo")
 	want = want[1:]
 	want[1].Identities = []string{"operation"}
-	want[1].Default = "confirm"
+	want[1].Default = "allow"
 	check(want)
 	handler = manage.New(manage.Options{Store: store, Router: routes, Tools: tool.New(store, routes)}).Handler(auth)
 	for index := range want {

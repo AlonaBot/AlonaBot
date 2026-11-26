@@ -259,6 +259,7 @@ func invocationContext(parent *router.Invocation, forbidden bool) *pb.Invocation
 		}
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
+		trusted.ChatType = parent.Event.GetChatType()
 		trusted.Scopes = slices.Clone(parent.Scopes)
 		if parent.PluginID != "" {
 			trusted.PluginChain = append(slices.Clone(parent.Chain), parent.PluginID)

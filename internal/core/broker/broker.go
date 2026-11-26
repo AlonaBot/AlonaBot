@@ -201,6 +201,7 @@ func (b *Broker) call(ctx context.Context, c router.Caller, in *wire.Inbound, ta
 	if parent, ok := in.ParentAttach.(*router.Invocation); ok {
 		trusted.Actor = parent.Event.GetActor()
 		trusted.DefaultTarget = parent.DefaultTarget
+		trusted.ChatType = parent.Event.GetChatType()
 		invocation.Chain = slices.Clone(parent.Chain)
 		invocation.Scopes = slices.Clone(parent.Scopes)
 		invocation.SendForbidden = parent.SendForbidden

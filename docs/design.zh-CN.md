@@ -14,7 +14,7 @@ Core 是唯一的宿主和路由中心。平台接入（Adapter）、功能（�
 | --- | --- | --- | --- |
 | Core | 启停组件、身份与权限、事件派发、发送消息、媒体、配置、调度、存储代次、管理 API | 本仓库 | 一个 |
 | Adapter | 把一个平台的多个账号接入 Core，上报事件、执行发送与平台动作 | Telegram、OneBot 11 | 每个 Adapter 组件一个，进程内承载它的全部账号实例 |
-| 插件（Plugin） | 注册命令、事件、Hook、服务、定时任务和 HTTP 路由 | help | 每个插件一个 |
+| 插件（Plugin） | 注册命令、事件、Hook、服务、定时任务和 HTTP 路由 | echo、showcase | 每个插件一个 |
 | Agent | 提供模型接入、会话和工具调用，运行方式与插件相同 | alonabot-agent | 一个 |
 | WebUI | 管理界面的静态资源，可附带一个后台进程 | alonabot-webui | 只有静态资源时没有进程 |
 
@@ -71,7 +71,7 @@ Core 是唯一的宿主和路由中心。平台接入（Adapter）、功能（�
 
 **跨插件协作**：
 
-- **服务调用**：带结果的同步调用，经 [`internal/core/broker`](../internal/core/broker) 转发到目标插件当前的 Session，目标休眠时按需唤醒。
+- **服务调用**：带结果的同步调用，经 [`internal/core/broker`](../internal/core/broker) 转发到目标插件当前的 Session，目标休眠时按需唤醒。`InvocationContext` 继承父事件的 `actor`、`default_target` 和 `chat_type`；Service Handler 通过 `c.User()`、`c.Session()` 和 `c.ChatType()` 读取，`c.Event()` 为空。没有真实入站事件时，`chat_type` 为 `UNSPECIFIED`。
 - **Event Bus**：发布者只能用自己的命名空间，Core 接纳即返回；不持久化、不确认、不补发，离线的订阅者收不到。
 
 **媒体**：媒体不塞进普通调用。上传按 1 MiB 分块并在提交时校验 SHA-256，得到绑定所有者 Session 和消费范围的 `MediaRef`；授权只能等同或收窄（[`media.proto`](../contracts/proto/alonabot/v1/media.proto)）。

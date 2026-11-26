@@ -39,6 +39,10 @@ func testCommand(code *int, values *tune.Values) *cobra.Command {
 }
 
 func testComponent(ctx context.Context, dir string, values tune.Values, stdout, stderr io.Writer) (err error) {
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
 	// 1. 测试目录、状态库、配置与 runtime.lock 全部归本次调用所有。
 	temporary, err := os.MkdirTemp("", "alonabot-test-*")
 	if err != nil {
@@ -114,7 +118,7 @@ func testComponent(ctx context.Context, dir string, values tune.Values, stdout, 
 	if err := os.MkdirAll(pluginDataDir, 0o700); err != nil {
 		return err
 	}
-	boot := &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: offlineGeneration, CandidateConfigJson: "{}", DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir}
+	boot := &pb.Bootstrap{ProfileOverridesJson: "{}", GenerationId: offlineGeneration, CandidateConfigJson: "{}", DatabaseDescriptor: database, LogLevel: pb.LogLevel_LOG_LEVEL_DEBUG, PluginDataDir: pluginDataDir, PackageDir: dir}
 	if len(resources.ConfigSchema) > 0 {
 		schema, problems := configschema.Parse(resources.ConfigSchema)
 		if len(problems) > 0 {

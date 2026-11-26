@@ -76,6 +76,7 @@ type Component struct {
 	manifest        *manifest.Manifest
 	resources       genresources.Resources
 	executable      string
+	packageDir      string // 独立开发进程的工程目录。
 	packageManifest []byte
 	digest          []byte
 	stdio           bool
@@ -92,8 +93,8 @@ func AdapterComponent(a adapter.Adapter) Component {
 }
 
 // ExecutableComponent 复制包 manifest，启动时按 manifest 确定开发组件的角色。
-func ExecutableComponent(path string, packageManifest []byte) Component {
-	return Component{executable: path, packageManifest: append([]byte(nil), packageManifest...)}
+func ExecutableComponent(path string, packageManifest []byte, packageDir string) Component {
+	return Component{executable: path, packageManifest: append([]byte(nil), packageManifest...), packageDir: packageDir}
 }
 
 func validateComponents(components []Component, installs []state.Install) error {
@@ -309,7 +310,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	}
 	a.router = router.New(router.Options{Dispatched: dispatched, MessageConfig: messageConfig, Profile: a.resolveProfile, EnsureActive: a.ensureActive, RequestTimeout: v.RequestTimeout, Concurrency: v.DispatchConcurrency, QueueEvents: v.DispatchQueueEvents, QueueBytes: v.DispatchQueueBytes,
 		Global: a.global, Adapters: a.adapters, Prepare: a.media.PrepareIncoming, Buttons: a.buttons.Resolve, Intercept: a.buttons.InterceptConfirm, Policy: p, CommandState: p.CommandState, Prefixes: a.commandPrefixes, CommandNames: p.CommandNames,
-		Continuations: continuations, Metrics: a.metrics, MenuStore: a.store,
+		Continuations: continuations, Metrics: a.metrics, MenuStore: a.store, PluginMetadata: a.commandMetadata,
 		Send: func(ctx context.Context, c router.Caller, in *wire.Inbound) wire.Response {
 			return messages.Send(ctx, c, in)
 		},
@@ -707,6 +708,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 		}
 	}()
 	if harness := inproc.HarnessFor(dir); harness != nil {
+		boot.PackageDir = harness.PackageDirs[id]
 		if instances, restricted := harness.AllowedInstances[id]; restricted {
 			if err := c.store.SetAdapterInstanceAccess(ctx, id, false, instances); err != nil {
 				return err
@@ -741,6 +743,7 @@ func (c *Core) startDevelopment(ctx context.Context, dir string, entry *Componen
 	}
 	// 3. 独立进程与同进程共用开发配置、数据库和固定代次。
 	if entry.executable != "" {
+		boot.PackageDir = entry.packageDir
 		boot.DatabaseDescriptor.MigrationMode = pb.MigrationMode_MIGRATION_MODE_NONE
 		switch entry.manifest.MigrationMode {
 		case manifest.MigrationSelf:

@@ -113,7 +113,7 @@ func invokeService(ctx context.Context, in *wire.Inbound, service serviceRoute) 
 	// 2. 将父请求绑定到 Handler 有效期；恢复 panic 时记录完整堆栈。
 	ctx = registry.WithStreamID(ctx, request.GetStreamId())
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Context{plugin: service.Plugin.(*Plugin), subID: service.SubID, ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget()}
+	c := &Context{plugin: service.Plugin.(*Plugin), subID: service.SubID, ctx: ctx, inbound: in, actor: request.GetContext().GetActor(), defaultTarget: request.GetContext().GetDefaultTarget(), chatType: request.GetContext().GetChatType()}
 	c.freezeProfile(request.GetContext())
 	chain := request.GetContext().GetPluginChain()
 	if len(chain) > 0 {

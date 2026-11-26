@@ -99,6 +99,8 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 | Plugin data | `/api/v1/plugins/{id}/data/`: tables/rows, kv, files, export and clear; see [data handlers](../internal/core/manage/data_api.go) |
 | Diagnostics | `POST /api/v1/diagnostics`, `{"since":"24h","logs":true,"settings":true,"components":true,"redact":true}` defaults; returns ZIP with no-store |
 
+Operations submitted through `tool.Confirm` default to `ALLOW`, so they return immediately without a confirmation message, including background calls with no Actor. Administrator overrides from `/api/v1/tools/policies` and profile policies continue to apply; `CONFIRM` requires a trusted Actor and target.
+
 ### Profile session access
 
 Set session access under the profile's Platform and Messages settings. Core selects the session's assigned profile, the instance default, or `default`, in that order. `all` (the default) allows every session. `allow` admits only listed sessions; an empty list denies all. `deny` blocks only listed sessions; an empty list allows all. Blocked sessions skip command, Agent, and plugin event handling, and Core rejects sends to them. Existing global deny rules continue to apply at their usual checks; either policy can reject an operation.

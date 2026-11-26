@@ -139,7 +139,9 @@ type InvocationContext struct {
 	// Core 命令层已消费本条消息；只由 Core 设置，事件路由据此过滤命令。
 	CommandConsumed bool `protobuf:"varint,6,opt,name=command_consumed,json=commandConsumed,proto3" json:"command_consumed,omitempty"`
 	// 本次调用的配置文件；default 编码为空串。
-	ProfileId     string `protobuf:"bytes,7,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	ProfileId string `protobuf:"bytes,7,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	// 原事件的会话类型；没有真实入站事件时为 UNSPECIFIED。
+	ChatType      ChatType `protobuf:"varint,8,opt,name=chat_type,json=chatType,proto3,enum=alonabot.v1.ChatType" json:"chat_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -221,6 +223,13 @@ func (x *InvocationContext) GetProfileId() string {
 		return x.ProfileId
 	}
 	return ""
+}
+
+func (x *InvocationContext) GetChatType() ChatType {
+	if x != nil {
+		return x.ChatType
+	}
+	return ChatType_CHAT_TYPE_UNSPECIFIED
 }
 
 // HandlerRequest 描述命令、事件、scheduled 与按钮 Handler 的请求。
@@ -1295,7 +1304,7 @@ var File_alonabot_v1_invocation_proto protoreflect.FileDescriptor
 
 const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\n" +
-	"\x1calonabot/v1/invocation.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/envelope.proto\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\"\xa5\x02\n" +
+	"\x1calonabot/v1/invocation.proto\x12\valonabot.v1\x1a\x1aalonabot/v1/envelope.proto\x1a\x18alonabot/v1/errors.proto\x1a\x1aalonabot/v1/identity.proto\x1a\x19alonabot/v1/message.proto\"\xd9\x02\n" +
 	"\x11InvocationContext\x12(\n" +
 	"\x05actor\x18\x01 \x01(\v2\x12.alonabot.v1.ActorR\x05actor\x12:\n" +
 	"\x0edefault_target\x18\x02 \x01(\v2\x13.alonabot.v1.TargetR\rdefaultTarget\x12\x16\n" +
@@ -1304,7 +1313,8 @@ const file_alonabot_v1_invocation_proto_rawDesc = "" +
 	"\x0esend_forbidden\x18\x05 \x01(\bR\rsendForbidden\x12)\n" +
 	"\x10command_consumed\x18\x06 \x01(\bR\x0fcommandConsumed\x12\x1d\n" +
 	"\n" +
-	"profile_id\x18\a \x01(\tR\tprofileId\"\x8b\x02\n" +
+	"profile_id\x18\a \x01(\tR\tprofileId\x122\n" +
+	"\tchat_type\x18\b \x01(\x0e2\x15.alonabot.v1.ChatTypeR\bchatType\"\x8b\x02\n" +
 	"\x0eHandlerRequest\x12\x19\n" +
 	"\broute_id\x18\x01 \x01(\tR\arouteId\x128\n" +
 	"\acontext\x18\x02 \x01(\v2\x1e.alonabot.v1.InvocationContextR\acontext\x12(\n" +
@@ -1421,48 +1431,50 @@ var file_alonabot_v1_invocation_proto_goTypes = []any{
 	(*AfterSendResult)(nil),           // 17: alonabot.v1.AfterSendResult
 	(*Actor)(nil),                     // 18: alonabot.v1.Actor
 	(*Target)(nil),                    // 19: alonabot.v1.Target
-	(*Event)(nil),                     // 20: alonabot.v1.Event
-	(*ImageSegment)(nil),              // 21: alonabot.v1.ImageSegment
-	(*MessageChain)(nil),              // 22: alonabot.v1.MessageChain
-	(PayloadEncoding)(0),              // 23: alonabot.v1.PayloadEncoding
-	(*EventPayload)(nil),              // 24: alonabot.v1.EventPayload
-	(*SendResult)(nil),                // 25: alonabot.v1.SendResult
-	(*ErrorInfo)(nil),                 // 26: alonabot.v1.ErrorInfo
+	(ChatType)(0),                     // 20: alonabot.v1.ChatType
+	(*Event)(nil),                     // 21: alonabot.v1.Event
+	(*ImageSegment)(nil),              // 22: alonabot.v1.ImageSegment
+	(*MessageChain)(nil),              // 23: alonabot.v1.MessageChain
+	(PayloadEncoding)(0),              // 24: alonabot.v1.PayloadEncoding
+	(*EventPayload)(nil),              // 25: alonabot.v1.EventPayload
+	(*SendResult)(nil),                // 26: alonabot.v1.SendResult
+	(*ErrorInfo)(nil),                 // 27: alonabot.v1.ErrorInfo
 }
 var file_alonabot_v1_invocation_proto_depIdxs = []int32{
 	18, // 0: alonabot.v1.InvocationContext.actor:type_name -> alonabot.v1.Actor
 	19, // 1: alonabot.v1.InvocationContext.default_target:type_name -> alonabot.v1.Target
-	2,  // 2: alonabot.v1.HandlerRequest.context:type_name -> alonabot.v1.InvocationContext
-	20, // 3: alonabot.v1.HandlerRequest.event:type_name -> alonabot.v1.Event
-	8,  // 4: alonabot.v1.HandlerRequest.command:type_name -> alonabot.v1.CommandInvocation
-	20, // 5: alonabot.v1.WaitResponse.event:type_name -> alonabot.v1.Event
-	9,  // 6: alonabot.v1.CommandInvocation.args:type_name -> alonabot.v1.ArgValue
-	21, // 7: alonabot.v1.ArgValue.image:type_name -> alonabot.v1.ImageSegment
-	22, // 8: alonabot.v1.ArgValue.message:type_name -> alonabot.v1.MessageChain
-	2,  // 9: alonabot.v1.ServiceInvocation.context:type_name -> alonabot.v1.InvocationContext
-	23, // 10: alonabot.v1.ServiceInvocation.encoding:type_name -> alonabot.v1.PayloadEncoding
-	0,  // 11: alonabot.v1.HandlerOutcome.propagation:type_name -> alonabot.v1.Propagation
-	22, // 12: alonabot.v1.HandlerOutcome.chain:type_name -> alonabot.v1.MessageChain
-	2,  // 13: alonabot.v1.PreEventRequest.context:type_name -> alonabot.v1.InvocationContext
-	20, // 14: alonabot.v1.PreEventRequest.event:type_name -> alonabot.v1.Event
-	24, // 15: alonabot.v1.PreEventResult.event_payload:type_name -> alonabot.v1.EventPayload
-	0,  // 16: alonabot.v1.PreEventResult.propagation:type_name -> alonabot.v1.Propagation
-	2,  // 17: alonabot.v1.BeforeSendRequest.context:type_name -> alonabot.v1.InvocationContext
-	19, // 18: alonabot.v1.BeforeSendRequest.target:type_name -> alonabot.v1.Target
-	22, // 19: alonabot.v1.BeforeSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	1,  // 20: alonabot.v1.BeforeSendRequest.operation:type_name -> alonabot.v1.SendOperation
-	22, // 21: alonabot.v1.BeforeSendResult.chain:type_name -> alonabot.v1.MessageChain
-	2,  // 22: alonabot.v1.AfterSendRequest.context:type_name -> alonabot.v1.InvocationContext
-	19, // 23: alonabot.v1.AfterSendRequest.target:type_name -> alonabot.v1.Target
-	22, // 24: alonabot.v1.AfterSendRequest.chain:type_name -> alonabot.v1.MessageChain
-	25, // 25: alonabot.v1.AfterSendRequest.result:type_name -> alonabot.v1.SendResult
-	26, // 26: alonabot.v1.AfterSendRequest.error:type_name -> alonabot.v1.ErrorInfo
-	1,  // 27: alonabot.v1.AfterSendRequest.operation:type_name -> alonabot.v1.SendOperation
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	20, // 2: alonabot.v1.InvocationContext.chat_type:type_name -> alonabot.v1.ChatType
+	2,  // 3: alonabot.v1.HandlerRequest.context:type_name -> alonabot.v1.InvocationContext
+	21, // 4: alonabot.v1.HandlerRequest.event:type_name -> alonabot.v1.Event
+	8,  // 5: alonabot.v1.HandlerRequest.command:type_name -> alonabot.v1.CommandInvocation
+	21, // 6: alonabot.v1.WaitResponse.event:type_name -> alonabot.v1.Event
+	9,  // 7: alonabot.v1.CommandInvocation.args:type_name -> alonabot.v1.ArgValue
+	22, // 8: alonabot.v1.ArgValue.image:type_name -> alonabot.v1.ImageSegment
+	23, // 9: alonabot.v1.ArgValue.message:type_name -> alonabot.v1.MessageChain
+	2,  // 10: alonabot.v1.ServiceInvocation.context:type_name -> alonabot.v1.InvocationContext
+	24, // 11: alonabot.v1.ServiceInvocation.encoding:type_name -> alonabot.v1.PayloadEncoding
+	0,  // 12: alonabot.v1.HandlerOutcome.propagation:type_name -> alonabot.v1.Propagation
+	23, // 13: alonabot.v1.HandlerOutcome.chain:type_name -> alonabot.v1.MessageChain
+	2,  // 14: alonabot.v1.PreEventRequest.context:type_name -> alonabot.v1.InvocationContext
+	21, // 15: alonabot.v1.PreEventRequest.event:type_name -> alonabot.v1.Event
+	25, // 16: alonabot.v1.PreEventResult.event_payload:type_name -> alonabot.v1.EventPayload
+	0,  // 17: alonabot.v1.PreEventResult.propagation:type_name -> alonabot.v1.Propagation
+	2,  // 18: alonabot.v1.BeforeSendRequest.context:type_name -> alonabot.v1.InvocationContext
+	19, // 19: alonabot.v1.BeforeSendRequest.target:type_name -> alonabot.v1.Target
+	23, // 20: alonabot.v1.BeforeSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	1,  // 21: alonabot.v1.BeforeSendRequest.operation:type_name -> alonabot.v1.SendOperation
+	23, // 22: alonabot.v1.BeforeSendResult.chain:type_name -> alonabot.v1.MessageChain
+	2,  // 23: alonabot.v1.AfterSendRequest.context:type_name -> alonabot.v1.InvocationContext
+	19, // 24: alonabot.v1.AfterSendRequest.target:type_name -> alonabot.v1.Target
+	23, // 25: alonabot.v1.AfterSendRequest.chain:type_name -> alonabot.v1.MessageChain
+	26, // 26: alonabot.v1.AfterSendRequest.result:type_name -> alonabot.v1.SendResult
+	27, // 27: alonabot.v1.AfterSendRequest.error:type_name -> alonabot.v1.ErrorInfo
+	1,  // 28: alonabot.v1.AfterSendRequest.operation:type_name -> alonabot.v1.SendOperation
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_alonabot_v1_invocation_proto_init() }

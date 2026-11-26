@@ -95,7 +95,6 @@ GORM 直接使用上游 `gorm.io/gorm v1.31.2`，版本由各 module 的 `go.mod
 | Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) |
 | Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) |
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) |
-| Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) |
 
 在组件工程执行 `alonabot check .`、`alonabot run .` 或 `alonabot pack .`。本仓库的 Core 与 SDK 保持独立 module；跨组件测试位于独立的 `tests/go.mod`，模型 SDK 与 Adapter 实现依赖留在该测试 module 中。
 

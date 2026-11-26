@@ -16,3 +16,18 @@ func PluginDataDir(ctx context.Context) string {
 	}
 	return active.ack.GetBootstrap().GetPluginDataDir()
 }
+
+// PackageDir 返回 ctx 所属插件 Session 的包目录绝对路径，可读取随包的 assets/ 文件。
+// 传入 Handler 或生命周期回调的 ctx 及其派生 context；独立进程可使用默认 Session。
+// Session 就绪前调用会 panic；库模式返回空串，调用方需自行降级。
+func PackageDir(ctx context.Context) string {
+	session := componentFor(ctx)
+	if session == nil {
+		panic("plugin session is not ready")
+	}
+	active := session.active.Load()
+	if active == nil || !active.ready.Load() {
+		panic("plugin session is not ready")
+	}
+	return active.ack.GetBootstrap().GetPackageDir()
+}

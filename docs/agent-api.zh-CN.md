@@ -122,6 +122,8 @@ Run 的工作上下文保存在当前版本调用内。聊天历史的读取与�
 
 调用回调返回错误时取消当前版本生成／Run，错误随部分结果返回。SDK 的相关编解码路径须保留协议已有的 `payload + error` 语义。
 
+通过 `tool.Confirm` 提交的操作缺省为 `ALLOW`，直接返回且不发送确认消息，无 Actor 的调用同样适用。管理员通过 `/api/v1/tools/policies` 设置的覆盖与配置文件策略继续生效；`CONFIRM` 要求可信 Actor 与目标。工具服务继续采用自身声明的缺省策略。
+
 ## AI 钩子、提示词与响应修改
 
 公共注册入口放在 `sdk/agent/hook`，接受 `sdk.Registrar`，适用于插件与子插件。
@@ -335,6 +337,8 @@ goal.Cancel(ctx, id string) (Goal, error)
 | `sdk/service` | `Discover` → `core.service.discover`；流式初始调用 → `core.service.stream.call`；提供方增量 → `core.service.stream.emit`；接收方回调 → `sdk.service.stream.delta` |
 
 `service.JSON` 与 `StreamJSON` 的 target 使用 `plugin_id/service_name`；服务端以 `/service_name` 声明本插件自有服务，身份由 Core 的认证 Session 决定。稳定 ID 必须非空并使最终服务名满足既有命名规则。完整与流式模式分别登记目标；LLM 与 Run 的流式服务名追加 `.stream`。`ServeStream` 的 Handler 需要流式调用上下文。
+
+Service 调用通过 `InvocationContext` 继承父事件的 `actor`、`default_target` 和 `chat_type`（编号为 8）。Service Handler 通过 `c.User()`、`c.Session()` 和 `c.ChatType()` 读取这些字段，`c.Event()` 为空。没有真实入站事件时，`c.ChatType()` 返回 `message.ChatUnspecified`。
 
 JSON Schema ID 为包导入路径加 `.` 加类型名，版本固定为 1。例如 `github.com/AlonaBot/AlonaBot/sdk/agent.RunRequest`、`sdk/agent/hook.RequestInput`（后者也使用完整模块前缀）。生成器识别 `JSON`、`StreamJSON`、公开 Agent 封装、`json.RawMessage` 与 `time.Time`。RawMessage 表示原始 JSON 值，工具 Arguments 进一步要求对象；time.Time 编码为 RFC3339 字符串。其余自定义编解码仍遵循已有生成规则。
 

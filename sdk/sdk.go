@@ -57,10 +57,11 @@ type Context struct {
 	stopped         bool            // 由 propagationMu 保护，只在有效调用内锁存。
 	active          atomic.Bool     // Handler 返回时关闭，阻止继续使用父调用
 	inbound         *wire.Inbound
-	caller          string     // Core 下发的服务直接调用方
-	actor           *pb.Actor  // Service 继承的可信 Actor；事件调用从 event 读取。
-	defaultTarget   *pb.Target // Service 继承的可信默认目标；事件调用从 event 读取。
-	commandConsumed bool       // Core 下发的本条消息命令消费结果。
+	caller          string      // Core 下发的服务直接调用方
+	actor           *pb.Actor   // Service 继承的可信 Actor；事件调用从 event 读取。
+	defaultTarget   *pb.Target  // Service 继承的可信默认目标；事件调用从 event 读取。
+	chatType        pb.ChatType // 无事件时继承的可信会话类型。
+	commandConsumed bool        // Core 下发的本条消息命令消费结果。
 	event           *pb.Event
 	eventOnce       sync.Once
 	publicEvent     *message.Event

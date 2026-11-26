@@ -44,7 +44,6 @@
 | Agent | [alonabot-agent](https://github.com/AlonaBot/alonabot-agent) | 预装，配置后启用 |
 | Telegram | [alonabot-adapter-telegram](https://github.com/AlonaBot/alonabot-adapter-telegram) | 按需安装 |
 | OneBot 11 | [alonabot-adapter-onebot11](https://github.com/AlonaBot/alonabot-adapter-onebot11) | 按需安装，当前支持接收 |
-| Help | [alonabot-plugin-help](https://github.com/AlonaBot/alonabot-plugin-help) | 按需安装 |
 
 ## 文档与贡献
 

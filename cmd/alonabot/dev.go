@@ -86,7 +86,7 @@ func runDevelopment(dirs []string, dataDir string, reload, stdio bool, interval 
 		if project.assets != "" {
 			options.WebUIs = append(options.WebUIs, os.DirFS(project.assets))
 		} else {
-			options.Components = append(options.Components, app.ExecutableComponent(project.build.Executable, project.build.PackageManifest))
+			options.Components = append(options.Components, app.ExecutableComponent(project.build.Executable, project.build.PackageManifest, project.dir))
 		}
 	}
 	if len(projects) > 0 {

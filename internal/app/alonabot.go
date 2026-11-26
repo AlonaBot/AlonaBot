@@ -476,6 +476,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	})
 	c.management = management
 	management.RegisterProfiles(c.assembly.mux)
+	management.RegisterPackages(c.assembly.mux)
 	if err := c.preinstall(ctx, management, bundles); err != nil {
 		return fail(err)
 	}
