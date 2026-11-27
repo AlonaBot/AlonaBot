@@ -450,6 +450,7 @@ func TestAdapterFieldNumbers(t *testing.T) {
 		"MessageCombination":           {"name", "formats", "description", "example_json"},
 		"MessageDescription":           {"formats", "extensions", "combinations"},
 		"DescribeMessageRequest":       {"to"},
+		"SendRequest":                  {"to", "chain", "require_original_segment_indexes"},
 		"CheckMessageRequest":          {"to", "chain"},
 		"CheckMessageResponse":         {"status"},
 		"TextLimit":                    {"max", "unit"},
@@ -1139,5 +1140,13 @@ func TestAdapterOperationCatalogFieldNumber(t *testing.T) {
 	field := (&pb.AdapterOperationsResponse{}).ProtoReflect().Descriptor().Fields().ByNumber(1)
 	if field == nil || field.Name() != "operations" || !field.IsList() || field.Kind() != protoreflect.MessageKind || field.Message().FullName() != "alonabot.v1.ActionDeclaration" {
 		t.Fatalf("unexpected operation catalog field: %v", field)
+	}
+}
+
+// TestOriginalSegmentIndexesFieldNumber 固定严格原片段回执请求的字段号、类型和零值兼容性。
+func TestOriginalSegmentIndexesFieldNumber(t *testing.T) {
+	field := (&pb.SendRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(3)
+	if field == nil || field.Name() != "require_original_segment_indexes" || field.Kind() != protoreflect.BoolKind || field.HasPresence() || field.IsList() {
+		t.Fatalf("SendRequest field 3 = %v", field)
 	}
 }

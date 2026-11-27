@@ -3007,9 +3007,11 @@ type SendRequest struct {
 	// 显式目标；缺省使用默认 Target。
 	To *Target `protobuf:"bytes,1,opt,name=to,proto3" json:"to,omitempty"`
 	// 要发送的消息链。
-	Chain         *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Chain *MessageChain `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`
+	// 要求回执关联调用方原始片段；BeforeSend 非等值改链时在平台副作用前拒绝。
+	RequireOriginalSegmentIndexes bool `protobuf:"varint,3,opt,name=require_original_segment_indexes,json=requireOriginalSegmentIndexes,proto3" json:"require_original_segment_indexes,omitempty"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *SendRequest) Reset() {
@@ -3054,6 +3056,13 @@ func (x *SendRequest) GetChain() *MessageChain {
 		return x.Chain
 	}
 	return nil
+}
+
+func (x *SendRequest) GetRequireOriginalSegmentIndexes() bool {
+	if x != nil {
+		return x.RequireOriginalSegmentIndexes
+	}
+	return false
 }
 
 // SendResult 描述一次逻辑发送的结果；出错时仍保留已确认的部分。
@@ -4396,10 +4405,11 @@ const file_alonabot_v1_message_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x01 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12-\n" +
 	"\x10external_user_id\x18\x02 \x01(\tH\x01R\x0eexternalUserId\x88\x01\x01B\x0f\n" +
 	"\r_display_nameB\x13\n" +
-	"\x11_external_user_id\"c\n" +
+	"\x11_external_user_id\"\xac\x01\n" +
 	"\vSendRequest\x12#\n" +
 	"\x02to\x18\x01 \x01(\v2\x13.alonabot.v1.TargetR\x02to\x12/\n" +
-	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\"\xee\x03\n" +
+	"\x05chain\x18\x02 \x01(\v2\x19.alonabot.v1.MessageChainR\x05chain\x12G\n" +
+	" require_original_segment_indexes\x18\x03 \x01(\bR\x1drequireOriginalSegmentIndexes\"\xee\x03\n" +
 	"\n" +
 	"SendResult\x12/\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x17.alonabot.v1.SendStatusR\x06status\x12+\n" +

@@ -433,6 +433,8 @@ message SendRequest {
   Target to = 1;
   // 要发送的消息链。
   MessageChain chain = 2;
+  // 要求回执关联调用方原始片段；BeforeSend 非等值改链时在平台副作用前拒绝。
+  bool require_original_segment_indexes = 3;
 }
 
 // SendStatus 列出一次逻辑发送的整体状态。

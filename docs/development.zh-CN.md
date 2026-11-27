@@ -200,6 +200,8 @@ Core→Adapter 的 `adapter.command.menu` 执行 set/get/delete；插件→Core 
 
 可选 `adapter.message.check` 复用 `AdapterSendRequest` 的实例、目标、消息链和代次，返回 CheckMessageResponse；实例真实实现 `sdk/adapter.MessageChecker` 时，`adapter.operations` 公布 `sdk/message.check`。Core 先核对当前目录及 Session/代次，再调用 RPC。媒体 Store 的 `PrepareCheckSource` 只读授权元数据，保留原来源和 token，错误与预检状态可同时返回。
 
+`SendRequest.require_original_segment_indexes=3` 为 bool，由 `sdk.RequireOriginalSegmentIndexes()` 设置。默认 false 保留既有发送与 Hook 行为；true 时跟踪调用方原片段，逐 Hook 回传发现非等值改链即在平台副作用前返回 FAILED_PRECONDITION 和 REJECTED 回执。该检查复用现有 BeforeSend 的逐次校验回调，Hook 协议与 Edit 接口保持原样。
+
 `ToolConfirmRequest.require_confirmation=4` 为 bool。`sdk/tool.ConfirmRequired` 设置该字段，使 allow 策略同样进入可信 Actor 的确认链；deny 仍优先。既有 Confirm 不设置该字段，沿原策略执行。
 
 ## Agent、流式服务与生命周期 API

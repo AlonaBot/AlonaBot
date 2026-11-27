@@ -59,6 +59,9 @@ func messageTarget(to string, opts []SendOption) (*pb.Target, error) {
 	for _, option := range opts {
 		option(options)
 	}
+	if options.requireOriginalSegmentIndexes {
+		return nil, errcode.InvalidArgument.New("message queries only accept Via")
+	}
 	return convert.TargetToProto(to, options.via)
 }
 func callDescribeMessage(ctx context.Context, target *pb.Target, parent *wire.Inbound) (*message.OutboundDescription, error) {

@@ -200,6 +200,8 @@ AdapterDescriptor appends message_formats=7 and message_combinations=8; Extensio
 
 Optional `adapter.message.check` reuses AdapterSendRequest's instance, target, chain and generation and returns CheckMessageResponse. `adapter.operations` advertises `sdk/message.check` when the actual instance implements `sdk/adapter.MessageChecker`. Core checks the current catalog and Session/generation before the RPC. Media Store's PrepareCheckSource reads authorized metadata while preserving source kinds and tokens. A check status and error can be returned together.
 
+SendRequest.require_original_segment_indexes=3 is bool, set by `sdk.RequireOriginalSegmentIndexes()`. The default false retains existing send and Hook behavior. When true, Core tracks caller-input segments and rejects the first non-equal Hook response with FAILED_PRECONDITION and a REJECTED receipt before platform side effects. This uses the existing per-Hook validation callback; the Hook protocol and Edit interface remain unchanged.
+
 ToolConfirmRequest.require_confirmation=4 is bool. `sdk/tool.ConfirmRequired` sets it to enter the trusted Actor confirmation flow even under allow; deny takes precedence. Existing Confirm leaves it unset and follows the existing policy.
 
 ## Agent, streaming services and lifecycle API

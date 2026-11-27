@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Send 通过已激活的 Session 独立发送到指定会话，opts 只接受 Via。
+// Send 通过已激活的 Session 独立发送到指定会话，opts 接受 Via 和 RequireOriginalSegmentIndexes。
 func Send(ctx context.Context, sid string, m message.Content, opts ...SendOption) (*message.SendResult, error) {
 	options := &sendOptions{}
 	for _, option := range opts {
@@ -22,7 +22,7 @@ func Send(ctx context.Context, sid string, m message.Content, opts ...SendOption
 	if err != nil {
 		return nil, err
 	}
-	return callSend(ctx, target, m, nil, nil)
+	return callSend(ctx, target, m, nil, nil, options.requireOriginalSegmentIndexes)
 }
 
 // SendText 独立发送一段文本，并丢弃发送回执。
@@ -30,7 +30,7 @@ func SendText(ctx context.Context, sid, text string, opts ...SendOption) error {
 	_, err := Send(ctx, sid, message.Text(text), opts...)
 	return err
 }
-func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wire.Inbound, defaultTarget *pb.Target) (*message.SendResult, error) {
+func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wire.Inbound, defaultTarget *pb.Target, requireOriginalSegmentIndexes bool) (*message.SendResult, error) {
 	target := to
 	if target == nil {
 		target = defaultTarget
@@ -39,7 +39,7 @@ func callSend(ctx context.Context, to *pb.Target, m message.Content, parent *wir
 	if err != nil {
 		return nil, err
 	}
-	request := &pb.SendRequest{To: to, Chain: chain}
+	request := &pb.SendRequest{To: to, Chain: chain, RequireOriginalSegmentIndexes: requireOriginalSegmentIndexes}
 	return callMessage(ctx, wire.ServiceSend, request, parent)
 }
 func callMessage(ctx context.Context, target string, request proto.Message, parent *wire.Inbound) (*message.SendResult, error) {

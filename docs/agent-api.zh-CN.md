@@ -420,6 +420,10 @@ Adapter 在 `Descriptor.Formats` 和 `Descriptor.Combinations` 声明当前规�
 
 预检先执行与发送一致的目标准入、基础结构与扩展 Schema 检查，再从媒体 Store 查询授权元数据。插件提交的 `MediaSource.MIME` 仍被拒绝；Store 核对 Session、期限与完整目标 Grant 后，读取已上传或已登记的 MIME，保留原 MediaRef/Incoming 和 token。预检不打开媒体文件、取件、执行出站 Hook、签发按钮、创建租约或发送平台请求。Checker 接收尚未签发 CoreToken 的按钮。缺少决定组合的元数据或缺少可选接口时返回 unknown；确定违反规则时返回 unsupported 及具体错误，权限、取消、目录和 RPC 错误完整返回。最终 Send 继续执行其完整校验与副作用链。
 
-Core 自动添加引用、提及、前缀或按阈值封装合并转发时，返回调用方的物理回执映射到原始输入片段下标；自动插入片段没有调用方来源，封装的 forward 关联全部被封装的原始片段。AfterSend、调试观察与回复修饰记账继续接收实际发送链及其原始平台下标。BeforeSend 返回与修饰后链等值的结果时保留该映射；返回非等值整链时，现行 Hook 协议缺少来源信息，回执沿用 Hook 改写后实际发送链的下标。每项物理结果、状态和错误均保留。
+需要将物理回执关联回原始 parts 时，交互发送调用 `c.Send(content, sdk.RequireOriginalSegmentIndexes())` 或 `c.SendTo(to, content, sdk.Via(instance), sdk.RequireOriginalSegmentIndexes())`，定时发送调用 `sdk.Send(ctx, to, content, sdk.Via(instance), sdk.RequireOriginalSegmentIndexes())`。选项只适用于发送；DescribeMessage、CheckMessage、ReadNodes 和平台动作只接受 Via，传入该选项返回 INVALID_ARGUMENT。
+
+启用 `RequireOriginalSegmentIndexes` 后，Core 为交互与无父调用的根级发送都跟踪原始片段下标。Core 自动添加的引用、提及和独立前缀没有调用方来源；修改已有文本保留其来源，按阈值封装的 forward 关联全部被封装的原始片段。每项物理结果、状态和错误完整保留。AfterSend、调试观察与回复修饰记账继续接收实际发送链及其内部平台下标。
+
+Core 对每个 BeforeSend 回传立即比较消息链。等值回传与无 Hook 路径保留原下标映射；首次非等值改链（包括仅改 caption）返回 FAILED_PRECONDITION：`rich receipt attribution unavailable after BeforeSend rewrite`，在按钮签发、媒体租约和平台投递前终止，并返回 REJECTED 回执。多个 Hook 中首个改链即拒绝，后续恢复原内容的 Hook 不再执行。普通 Send、SendTo、SendText 和 Stream 保持现有调用前提和 Hook 改链行为；需要原始 parts 回执的富消息发送须显式传入此选项。
 
 读取需要用户确认的本地文件前，调用 `tool.ConfirmRequired(ctx, operation, summary, effect)`，完整展示路径与目标。它在策略 allow 时仍运行现有确认流程，deny 优先拒绝；缺少可信交互 Actor 时失败。摘要沿用 1024 字节上限，超长摘要返回错误。`tool.Confirm` 保持按现有策略决定是否确认。

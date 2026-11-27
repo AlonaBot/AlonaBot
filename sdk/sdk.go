@@ -141,16 +141,23 @@ func (c *Context) StopPropagation() {
 	}
 }
 
-// SendOption 调整一次消息发送或平台动作的机器人实例。
+// SendOption 调整消息发送；平台动作和只读消息查询只接受 Via。
 type SendOption func(*sendOptions)
 
 type sendOptions struct {
-	via                 string
-	actionDefaultTarget bool // 仅绑定客户端按声明选择 Handler 的默认目标。
+	via                           string
+	requireOriginalSegmentIndexes bool
+	actionDefaultTarget           bool // 仅绑定客户端按声明选择 Handler 的默认目标。
 }
 
 // Via 指定消息发送或平台动作的机器人实例。
 func Via(instanceID string) SendOption { return func(o *sendOptions) { o.via = instanceID } }
+
+// RequireOriginalSegmentIndexes 要求回执关联调用方原始片段。
+// 仅适用于 Send、SendTo 和 SendText；任一 BeforeSend 非等值改链时，Core 在平台副作用前拒绝。
+func RequireOriginalSegmentIndexes() SendOption {
+	return func(o *sendOptions) { o.requireOriginalSegmentIndexes = true }
+}
 
 // Send 向当前事件的默认会话发送内容，保留已确认的部分结果。
 func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResult, error) {
@@ -172,7 +179,7 @@ func (c *Context) Send(m message.Content, opts ...SendOption) (*message.SendResu
 			return nil, err
 		}
 	}
-	return callSend(c.ctx, target, m, c.inbound, c.target())
+	return callSend(c.ctx, target, m, c.inbound, c.target(), options.requireOriginalSegmentIndexes)
 }
 
 // SendTo 向指定会话发送内容，关联当前 Handler 的父调用并保留部分结果。
@@ -188,7 +195,7 @@ func (c *Context) SendTo(sid string, m message.Content, opts ...SendOption) (*me
 	if err != nil {
 		return nil, err
 	}
-	return callSend(c.ctx, target, m, c.inbound, c.target())
+	return callSend(c.ctx, target, m, c.inbound, c.target(), options.requireOriginalSegmentIndexes)
 }
 
 // Run 作为插件 main 的入口：连接 Core、完成握手并处理请求，直到停止。
