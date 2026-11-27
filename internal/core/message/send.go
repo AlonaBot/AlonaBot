@@ -141,14 +141,17 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			beforeHook = proto.CloneOf(request.Chain)
 		}
 		check := func(chain *pb.MessageChain) *pb.ErrorInfo {
-			// Runner 对每个 Hook 回传单独检查；首次非等值改写就结束，避免终态改回掩盖来源丢失。
-			if request.RequireOriginalSegmentIndexes && !proto.Equal(beforeHook, chain) {
-				return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "rich receipt attribution unavailable after BeforeSend rewrite"}
-			}
 			if safe := s.checkChain(chain, target); safe != nil {
 				return safe
 			}
-			return checkExtensions(instance, chain)
+			if safe := checkExtensions(instance, chain); safe != nil {
+				return safe
+			}
+			// SDK 往返会省略引用账号等可补齐字段；逐 Hook 归一化后比较，首次真实改链就拒绝。
+			if request.RequireOriginalSegmentIndexes && !proto.Equal(beforeHook, chain) {
+				return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "rich receipt attribution unavailable after BeforeSend rewrite"}
+			}
+			return nil
 		}
 		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation, check)
 		if safe != nil {

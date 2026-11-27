@@ -10,5 +10,7 @@
 
 ### Fixed
 
+- Strict receipt checks compare Hook responses after completing reference targets, allowing equal SDK round trips while continuing to reject actual rewrites.
+
 - Send receipts retain caller-input segment indexes after Core adds reply quotes, mentions, prefixes or a forward wrapper, preserving the correct parts for partial-delivery recovery.
 - Outbound format queries use the instance's `message.reference` capability to update quote support.

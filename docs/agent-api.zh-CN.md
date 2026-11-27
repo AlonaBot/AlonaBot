@@ -424,6 +424,6 @@ Adapter 在 `Descriptor.Formats` 和 `Descriptor.Combinations` 声明当前规�
 
 启用 `RequireOriginalSegmentIndexes` 后，Core 为交互与无父调用的根级发送都跟踪原始片段下标。Core 自动添加的引用、提及和独立前缀没有调用方来源；修改已有文本保留其来源，按阈值封装的 forward 关联全部被封装的原始片段。每项物理结果、状态和错误完整保留。AfterSend、调试观察与回复修饰记账继续接收实际发送链及其内部平台下标。
 
-Core 对每个 BeforeSend 回传立即比较消息链。等值回传与无 Hook 路径保留原下标映射；首次非等值改链（包括仅改 caption）返回 FAILED_PRECONDITION：`rich receipt attribution unavailable after BeforeSend rewrite`，在按钮签发、媒体租约和平台投递前终止，并返回 REJECTED 回执。多个 Hook 中首个改链即拒绝，后续恢复原内容的 Hook 不再执行。普通 Send、SendTo、SendText 和 Stream 保持现有调用前提和 Hook 改链行为；需要原始 parts 回执的富消息发送须显式传入此选项。
+Core 对每个 BeforeSend 回传先执行既有的无副作用归一化与校验，再立即比较消息链。等值回传与无 Hook 路径保留原下标映射；首次非等值改链（包括仅改 caption）返回 FAILED_PRECONDITION：`rich receipt attribution unavailable after BeforeSend rewrite`，在按钮签发、媒体租约和平台投递前终止，并返回 REJECTED 回执。多个 Hook 中首个改链即拒绝，后续恢复原内容的 Hook 不再执行。普通 Send、SendTo、SendText 和 Stream 保持现有调用前提和 Hook 改链行为；需要原始 parts 回执的富消息发送须显式传入此选项。
 
 读取需要用户确认的本地文件前，调用 `tool.ConfirmRequired(ctx, operation, summary, effect)`，完整展示路径与目标。它在策略 allow 时仍运行现有确认流程，deny 优先拒绝；缺少可信交互 Actor 时失败。摘要沿用 1024 字节上限，超长摘要返回错误。`tool.Confirm` 保持按现有策略决定是否确认。
