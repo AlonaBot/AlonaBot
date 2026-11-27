@@ -1,6 +1,7 @@
 // Package message 实现 Core 消息发送与编辑服务的目标准入和回执转发。
 //
-// [Service] 根据可信父调用的原目标或持久化的实例许可准入，先校验载荷、目标和消息链，
+// [Service] 提供出站描述及只读预检，并根据可信父调用的原目标或持久化的实例许可准入。
+// 发送先校验载荷、目标和消息链，
 // 再执行出站 Hook、准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留。
 // 编辑仅接受文本及可选按钮，实例须声明能力并实现 adapter.Editor；
 // 撤回逐项返回结果，实例须声明能力并实现 adapter.Deleter。
@@ -38,6 +39,7 @@ type Hooks interface {
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
 type Service struct {
 	observe         func([]byte, string, *pb.Target, *pb.MessageChain, *pb.SendResult, *pb.ErrorInfo)
+	checkSource     func(context.Context, router.Caller, *pb.Target, *pb.MediaSource) (*pb.MediaSource, error)
 	prepareIncoming func(*pb.MessageChain, router.Caller, *pb.Target) (*pb.MessageChain, error)
 	replyMu         sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
 	resolveReply    func(context.Context, *pb.Target) (settings.Reply, error)
@@ -52,7 +54,8 @@ type Service struct {
 	lease           func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error)
 }
 
-// New 创建消息服务；装配处登记 Send、Edit 与 ReadNodes，并通过 SetIncomingChain 绑定查询媒体授权。
+// New 创建消息服务；装配处登记发送、描述、预检等入口，
+// 通过 SetIncomingChain 和 SetCheckSource 分别绑定查询结果授权及只读来源元数据。
 // lease 由媒体 Store 提供，准备平台文件标识或绑定目标 Adapter Session 的只读令牌；
 // issue 在媒体租约前签发按钮；nil 仅供无按钮的测试。
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。

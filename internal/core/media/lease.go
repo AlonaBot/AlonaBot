@@ -61,14 +61,10 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	if incoming {
 		s.mu.Lock()
 		s.sweep()
-		access, err := s.incomingAccess(original, c.SessionKey)
+		access, err := s.sendIncoming(original, c, target)
 		if err != nil {
 			s.mu.Unlock()
 			return nil, nil, err
-		}
-		if !allowsTarget(access.targets, target) {
-			s.mu.Unlock()
-			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
 		}
 		if instance, ok := s.readers.Resolve(ctx, target.GetAdapterInstanceId()); ok && instance == access.object.source.instance {
 			lease := &mediaLease{token: token(), incoming: access.object, activity: activity, caller: c}
@@ -102,7 +98,7 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 	lease := &mediaLease{token: token(), activity: activity, caller: c}
 	var file File
 	if incoming {
-		access, err := s.incomingAccess(original, c.SessionKey)
+		access, err := s.sendIncoming(original, c, target)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -110,19 +106,11 @@ func (s *Store) LeaseForSend(ctx context.Context, c router.Caller, readerSession
 		lease.incoming.leases++
 		file = access.object.file
 	} else {
-		upload := s.refs[original]
-		if upload == nil || upload.owner != c.SessionKey {
-			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_NOT_FOUND, "media reference not found")
+		upload, err := s.sendUpload(original, c, target)
+		if err != nil {
+			return nil, nil, err
 		}
-		if upload.lease != nil {
-			return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "read-only media token cannot be delegated")
-		}
-		if upload.grant != nil {
-			if !allowsTarget(upload.targets, target) {
-				return nil, nil, mediaCallError(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "media token does not allow target")
-			}
-			upload = upload.grant
-		}
+
 		lease.upload = upload
 		upload.leases++
 		file = upload.file

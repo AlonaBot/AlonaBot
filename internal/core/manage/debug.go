@@ -154,6 +154,10 @@ func (s *Service) debugCall(ctx context.Context, request debugapi.Call) (debugap
 		case *pb.AdapterSendRequest:
 			service = wire.ServiceSend
 			message = &pb.SendRequest{To: target, Chain: p.Chain}
+			if standard.RPC == wire.ServiceAdapterCheckMessage {
+				service = wire.ServiceCheckMessage
+				message = &pb.CheckMessageRequest{To: target, Chain: p.Chain}
+			}
 		case *pb.AdapterEditRequest:
 			service = wire.ServiceEdit
 			message = &pb.EditRequest{To: target, PlatformMessageId: p.PlatformMessageId, Chain: p.Chain}

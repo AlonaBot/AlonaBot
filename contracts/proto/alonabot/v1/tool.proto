@@ -69,6 +69,8 @@ message ToolConfirmRequest {
   string operation = 1;
   string summary = 2;
   ToolEffect effect = 3;
+  // 即使策略为 allow 也要求可信交互用户确认；deny 仍优先。
+  bool require_confirmation = 4;
 }
 
 // ToolConfirmResponse 表示用户允许本次操作。

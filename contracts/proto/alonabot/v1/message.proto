@@ -561,3 +561,55 @@ message ReadNodesRequest {
 message ReadNodesResponse {
   repeated ForwardItem items = 1;
 }
+
+// SupportStatus 区分已知支持、明确拒绝与缺少声明或元数据。
+enum SupportStatus {
+  SUPPORT_STATUS_UNSPECIFIED = 0;
+  SUPPORT_STATUS_SUPPORTED = 1;
+  SUPPORT_STATUS_UNSUPPORTED = 2;
+}
+
+// MessageFormat 描述一种标准格式或版本化扩展载荷。
+message MessageFormat {
+  string name = 1;
+  uint32 version = 2;
+  SupportStatus status = 3;
+  string description = 4;
+  string schema_json = 5;
+  string example_json = 6;
+  repeated string sources = 7;
+  TextLimit text_limit = 8;
+  TextLimit button_label_limit = 9;
+  string adapter_id = 10;
+}
+
+// MessageCombination 描述格式的编排约束及完整发送例子。
+message MessageCombination {
+  string name = 1;
+  repeated string formats = 2;
+  string description = 3;
+  string example_json = 4;
+}
+
+// MessageDescription 返回当前实例的出站格式、扩展与组合声明。
+message MessageDescription {
+  repeated MessageFormat formats = 1;
+  repeated MessageFormat extensions = 2;
+  repeated MessageCombination combinations = 3;
+}
+
+// DescribeMessageRequest 按目标查询出站描述；省略 to 时使用可信父目标。
+message DescribeMessageRequest {
+  Target to = 1;
+}
+
+// CheckMessageRequest 提交只读预检；省略 to 时使用可信父目标。
+message CheckMessageRequest {
+  Target to = 1;
+  MessageChain chain = 2;
+}
+
+// CheckMessageResponse 保留预检状态，可以与具体错误同时返回。
+message CheckMessageResponse {
+  SupportStatus status = 1;
+}

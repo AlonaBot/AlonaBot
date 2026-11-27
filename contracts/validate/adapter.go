@@ -61,8 +61,18 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 		if err := json.Unmarshal([]byte(extension.GetSchemaJson()), &schema); err != nil {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "parse adapter extension %q schema: %v", key.name, err)
 		}
-		if _, err := schema.Resolve(nil); err != nil {
+		resolved, err := schema.Resolve(nil)
+		if err != nil {
 			return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "resolve adapter extension %q schema: %v", key.name, err)
+		}
+		if extension.GetExampleJson() != "" {
+			var example any
+			if err := json.Unmarshal([]byte(extension.GetExampleJson()), &example); err != nil {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "decode adapter extension %q example: %v", key.name, err)
+			}
+			if err := resolved.Validate(example); err != nil {
+				return errf(pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "validate adapter extension %q example: %v", key.name, err)
+			}
 		}
 		extensions[key] = true
 	}
@@ -122,7 +132,7 @@ func AdapterRegister(r *pb.Register, adapterID string) error {
 			}
 		}
 	}
-	return nil
+	return messageDeclarations(descriptor)
 }
 
 func adapterPermissions(descriptor *pb.AdapterDescriptor) error {

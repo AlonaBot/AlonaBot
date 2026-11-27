@@ -59,6 +59,8 @@ type HTTPRoute struct {
 // Descriptor 保存 Adapter 的能力、片段、权限、事件与动作声明。
 type Descriptor struct {
 	AdapterID    string
+	Formats      []message.MessageFormat
+	Combinations []message.CombinationRule
 	Capabilities []message.Capability
 	Extensions   []ExtensionDeclaration
 	Permissions  []PermissionDeclaration

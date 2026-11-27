@@ -465,11 +465,13 @@ func (x *ToolInvokeResponse) GetResultJson() string {
 type ToolConfirmRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 调用插件内稳定的操作名，例如 mcp/<server>/<tool>。
-	Operation     string     `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
-	Summary       string     `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	Effect        ToolEffect `protobuf:"varint,3,opt,name=effect,proto3,enum=alonabot.v1.ToolEffect" json:"effect,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Operation string     `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	Summary   string     `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	Effect    ToolEffect `protobuf:"varint,3,opt,name=effect,proto3,enum=alonabot.v1.ToolEffect" json:"effect,omitempty"`
+	// 即使策略为 allow 也要求可信交互用户确认；deny 仍优先。
+	RequireConfirmation bool `protobuf:"varint,4,opt,name=require_confirmation,json=requireConfirmation,proto3" json:"require_confirmation,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ToolConfirmRequest) Reset() {
@@ -521,6 +523,13 @@ func (x *ToolConfirmRequest) GetEffect() ToolEffect {
 		return x.Effect
 	}
 	return ToolEffect_TOOL_EFFECT_UNSPECIFIED
+}
+
+func (x *ToolConfirmRequest) GetRequireConfirmation() bool {
+	if x != nil {
+		return x.RequireConfirmation
+	}
+	return false
 }
 
 // ToolConfirmResponse 表示用户允许本次操作。
@@ -584,11 +593,12 @@ const file_alonabot_v1_tool_proto_rawDesc = "" +
 	"\x0earguments_json\x18\x02 \x01(\tR\rargumentsJson\"5\n" +
 	"\x12ToolInvokeResponse\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\tR\n" +
-	"resultJson\"}\n" +
+	"resultJson\"\xb0\x01\n" +
 	"\x12ToolConfirmRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12/\n" +
-	"\x06effect\x18\x03 \x01(\x0e2\x17.alonabot.v1.ToolEffectR\x06effect\"\x15\n" +
+	"\x06effect\x18\x03 \x01(\x0e2\x17.alonabot.v1.ToolEffectR\x06effect\x121\n" +
+	"\x14require_confirmation\x18\x04 \x01(\bR\x13requireConfirmation\"\x15\n" +
 	"\x13ToolConfirmResponse*o\n" +
 	"\n" +
 	"ToolPolicy\x12\x1b\n" +

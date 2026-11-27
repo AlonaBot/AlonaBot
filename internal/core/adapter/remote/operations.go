@@ -17,7 +17,15 @@ func (i *instance) Operations(ctx context.Context) (*pb.AdapterOperationsRespons
 		return nil, failure(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, "adapter instance is unavailable")
 	}
 	out := &pb.AdapterOperationsResponse{}
-	if err := call(ctx, i.session, wire.ServiceAdapterOperations, &pb.AdapterOperationsRequest{InstanceId: i.id, InstanceGeneration: i.generation}, out); err != nil {
+	request, err := payload(&pb.AdapterOperationsRequest{InstanceId: i.id, InstanceGeneration: i.generation})
+	if err != nil {
+		return nil, err
+	}
+	response, err := i.session.Call(ctx, wire.Request{Target: wire.ServiceAdapterOperations, Payload: request})
+	if err != nil {
+		return nil, err
+	}
+	if err := decode(response.Payload, out); err != nil {
 		return nil, err
 	}
 	p.mu.Lock()

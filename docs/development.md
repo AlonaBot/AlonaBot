@@ -192,6 +192,16 @@ The shared messages are `CommandMenuRequest{instance_id=1, operation=2, menu=3}`
 
 `EventPayload.kind` adds command_menu_ready=13, with string fields adapter_id=1, adapter_instance_id=2, account_id=3 and chat_id=4. Core targets `bot.command_menu_ready`; an empty chat_id indicates instance manual readiness, otherwise chat availability. Adapter-reported standard events retain the existing allowlist. See the [Adapter protocol](../contracts/proto/alonabot/v1/adapter.proto), [routes](../contracts/proto/alonabot/v1/route.proto) and [messages](../contracts/proto/alonabot/v1/message.proto) for definitions, and [command menus](https://alonabot.github.io/en/docs/tutorial/commands#platform-command-menus) for lifecycle and permission rules.
 
+### Message description and read-only check protocol
+
+`core.message.describe` takes `DescribeMessageRequest{to=1}` and returns `MessageDescription{formats=1, extensions=2, combinations=3}`. `core.message.check` takes `CheckMessageRequest{to=1, chain=2}` and returns `CheckMessageResponse{status=1}`. Both use protobuf schema version 1. An omitted to uses the trusted parent target; admission follows current send rules. See the [outbound message API](agent-api.md#query-and-check-outbound-messages-by-target) for interactive and scheduled SDK usage.
+
+AdapterDescriptor appends message_formats=7 and message_combinations=8; ExtensionDeclaration appends description=4 and example_json=5. MessageFormat fields are name, version, status, description, schema_json, example_json, sources, text_limit, button_label_limit and adapter_id (numbers 1–10). MessageCombination uses name=1, formats=2, description=3 and example_json=4. SupportStatus values 0/1/2 mean unknown/supported/unsupported. Definitions live in [message.proto](../contracts/proto/alonabot/v1/message.proto).
+
+Optional `adapter.message.check` reuses AdapterSendRequest's instance, target, chain and generation and returns CheckMessageResponse. `adapter.operations` advertises `sdk/message.check` when the actual instance implements `sdk/adapter.MessageChecker`. Core checks the current catalog and Session/generation before the RPC. Media Store's PrepareCheckSource reads authorized metadata while preserving source kinds and tokens. A check status and error can be returned together.
+
+ToolConfirmRequest.require_confirmation=4 is bool. `sdk/tool.ConfirmRequired` sets it to enter the trusted Actor confirmation flow even under allow; deny takes precedence. Existing Confirm leaves it unset and follows the existing policy.
+
 ## Agent, streaming services and lifecycle API
 
 [Complete parameters, capability status, eight hook stages and Goal recovery](agent-api.md).

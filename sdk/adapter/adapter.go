@@ -1,7 +1,8 @@
 // Package adapter 定义独立 Adapter 进程的平台接入接口。
 //
 // [Adapter] 创建账号实例，[Instance] 提供发送和停止，[MediaSource] 提供可选的平台文件读取。
-// [Editor] 提供可选的消息编辑入口，[CommandSynchronizer] 提供命令菜单同步。
+// [Editor] 提供可选的消息编辑入口，[CommandSynchronizer] 提供命令菜单同步，
+// [MessageChecker] 只读检查出站格式与组合。
 // [Core] 将事件与游标交给宿主，并读取出站媒体。
 // 实例配置只在启动请求中传递；生命周期由 sdk.RunAdapter 管理。
 // 包级 HTTP 路由在 [Descriptor.HTTP] 中声明，Listener 随 Session 托管。
@@ -72,4 +73,10 @@ type Adapter interface {
 // NodesReader 读取合并转发资源或同会话消息引用，返回完整递归节点及部分错误。
 type NodesReader interface {
 	ReadNodes(ctx context.Context, to string, segment message.ForwardSegment) ([]message.ForwardItem, *errcode.Error)
+}
+
+// MessageChecker 检查格式、来源及组合；只读取消息和 Core 授权的元数据。
+// 不取媒体、请求平台、签发按钮或创建租约；缺少决定组合的元数据返回 unknown。
+type MessageChecker interface {
+	CheckMessage(ctx context.Context, to string, chain message.Chain) (message.SupportStatus, *errcode.Error)
 }

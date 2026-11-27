@@ -72,7 +72,7 @@ func (i *invoker) confirm(ctx context.Context, caller router.Caller, in *wire.In
 	if policy == pb.ToolPolicy_TOOL_POLICY_DENY {
 		return failure(pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED, "operation policy denies confirmation")
 	}
-	if policy == pb.ToolPolicy_TOOL_POLICY_CONFIRM {
+	if policy == pb.ToolPolicy_TOOL_POLICY_CONFIRM || request.GetRequireConfirmation() {
 		if err := i.ask(ctx, caller, in.ParentAttach.(*router.Invocation), request.GetOperation(), request.GetSummary(), false); err != nil {
 			return wire.Response{Err: err}
 		}
