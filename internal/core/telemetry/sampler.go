@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	// DefaultInterval 是后台遥测的默认采样间隔。
+	// DefaultInterval 定义后台遥测的默认采样间隔。
 	DefaultInterval = 5 * time.Second
-	// DefaultHistoryCapacity 保存最近 30 分钟（5 秒间隔 × 360 点）的内存历史样本。
+	// DefaultHistoryCapacity 定义内存环形缓冲保留的样本上限（5 秒间隔 × 360 点，对应 30 分钟）。
 	DefaultHistoryCapacity = 360
 	// cpuScaleHostNormalized 标明所有 cpu_percent 字段均按整机核心数归一化到 0..100%。
 	cpuScaleHostNormalized = "host_normalized_percent"
@@ -37,8 +37,11 @@ const (
 type Window string
 
 const (
-	Window5m  Window = "5m"
+	// Window5m 查询最近 5 分钟的历史样本。
+	Window5m Window = "5m"
+	// Window15m 查询最近 15 分钟的历史样本。
 	Window15m Window = "15m"
+	// Window30m 查询最近 30 分钟的历史样本。
 	Window30m Window = "30m"
 )
 
@@ -138,7 +141,7 @@ type HistoryPoint struct {
 	WebUIRSSBytes   uint64  `json:"webui_rss_bytes"`
 }
 
-// Report 是 GET /api/v1/core/telemetry 的完整响应结构。
+// Report 封装 GET /api/v1/core/telemetry 的响应载荷，包含宿主机基线、进程汇总与历史趋势。
 type Report struct {
 	SampledAt       string                 `json:"sampled_at"`
 	IntervalSeconds int                    `json:"interval_seconds"`
@@ -151,17 +154,13 @@ type Report struct {
 	History         []HistoryPoint         `json:"history"`
 }
 
-// Options 配置 [Sampler] 的采样回调与周期参数；未设置的字段使用生产默认值。
+// Options 配置 [Sampler] 的目标回调、启动时刻与采样周期；未设置的周期与容量使用生产默认值。
 type Options struct {
-	StartedAt  time.Time
-	Targets    func(context.Context) ([]Target, error)
-	Sample     func([]*process.Process) (process.TreeUsage, map[*process.Process]process.TreeUsage, error)
-	HostMemory func() uint64
-	Now        func() time.Time
-	Interval   time.Duration
-	Capacity   int
-	NumCPU     int
-	PID        int
+	StartedAt time.Time
+	Targets   func(context.Context) ([]Target, error)
+	Now       func() time.Time
+	Interval  time.Duration
+	Capacity  int
 }
 
 type cpuSample struct {
@@ -172,21 +171,21 @@ type cpuSample struct {
 
 // Sampler 负责定时采集 Core 与组件进程树资源并在内存中保存环形历史。
 type Sampler struct {
-	startedAt  time.Time
-	targets    func(context.Context) ([]Target, error)
-	sample     func([]*process.Process) (process.TreeUsage, map[*process.Process]process.TreeUsage, error)
-	hostMemory func() uint64
-	now        func() time.Time
-	interval   time.Duration
-	capacity   int
-	numCPU     int
-	pid        int
-	hostMem    uint64
+	startedAt       time.Time
+	targets         func(context.Context) ([]Target, error)
+	sample          func(context.Context, []*process.Process) (process.TreeUsage, map[*process.Process]process.TreeUsage, error)
+	hostMemory      func() uint64
+	now             func() time.Time
+	interval        time.Duration
+	capacity        int
+	numCPU          int
+	pid             int
+	hostMemoryBytes uint64
 
 	// sampleMu 串行化采样与前值状态更新，避免并发即时采样与后台定时采样交叉。
-	sampleMu   sync.Mutex
-	prevSelf   *cpuSample
-	prevByComp map[string]cpuSample
+	sampleMu            sync.Mutex
+	previousSelf        *cpuSample
+	previousByComponent map[string]cpuSample
 
 	// mu 保护最新快照与环形缓冲的并发读写。
 	mu        sync.RWMutex
@@ -215,35 +214,19 @@ func New(opt Options) *Sampler {
 	if capacity <= 0 {
 		capacity = DefaultHistoryCapacity
 	}
-	numCPU := opt.NumCPU
-	if numCPU <= 0 {
-		numCPU = max(1, runtime.NumCPU())
-	}
-	pid := opt.PID
-	if pid <= 0 {
-		pid = os.Getpid()
-	}
-	sampleFn := opt.Sample
-	if sampleFn == nil {
-		sampleFn = process.SampleTrees
-	}
-	hostMemoryFn := opt.HostMemory
-	if hostMemoryFn == nil {
-		hostMemoryFn = process.HostMemoryBytes
-	}
 	return &Sampler{
-		startedAt:  startedAt.UTC(),
-		targets:    opt.Targets,
-		sample:     sampleFn,
-		hostMemory: hostMemoryFn,
-		now:        nowFn,
-		interval:   interval,
-		capacity:   capacity,
-		numCPU:     numCPU,
-		pid:        pid,
-		hostMem:    hostMemoryFn(),
-		prevByComp: make(map[string]cpuSample),
-		ring:       make([]HistoryPoint, capacity),
+		startedAt:           startedAt.UTC(),
+		targets:             opt.Targets,
+		sample:              process.SampleTrees,
+		hostMemory:          process.HostMemoryBytes,
+		now:                 nowFn,
+		interval:            interval,
+		capacity:            capacity,
+		numCPU:              max(1, runtime.NumCPU()),
+		pid:                 os.Getpid(),
+		hostMemoryBytes:     process.HostMemoryBytes(),
+		previousByComponent: make(map[string]cpuSample),
+		ring:                make([]HistoryPoint, capacity),
 	}
 }
 
@@ -280,29 +263,29 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 		}
 		targets = list
 	}
-	procs := make([]*process.Process, 0, len(targets))
+	processes := make([]*process.Process, 0, len(targets))
 	for _, target := range targets {
 		if target.Running && !target.InProcess && target.Process != nil {
-			procs = append(procs, target.Process)
+			processes = append(processes, target.Process)
 		}
 	}
 
 	// 2. 一次性采集 Core 自身与全部独立组件进程树的累计 CPU 时长与常驻内存。
 	sampledAt := s.now().UTC()
-	selfUsage, treeUsages, err := s.sample(procs)
+	selfUsage, treeUsages, err := s.sample(ctx, processes)
 	if err != nil {
 		return fmt.Errorf("sample process trees: %w", err)
 	}
-	if s.hostMem == 0 {
-		s.hostMem = s.hostMemory()
+	if s.hostMemoryBytes == 0 {
+		s.hostMemoryBytes = s.hostMemory()
 	}
 
 	// 3. 计算 Core 自身的整机归一化 CPU% 与运行时长。
 	coreCPU := 0.0
-	if s.prevSelf != nil && s.prevSelf.pid == s.pid {
-		coreCPU = normalizedCPUPercent(selfUsage.CPUTime-s.prevSelf.cpu, sampledAt.Sub(s.prevSelf.at), s.numCPU)
+	if s.previousSelf != nil && s.previousSelf.pid == s.pid {
+		coreCPU = normalizedCPUPercent(selfUsage.CPUTime-s.previousSelf.cpu, sampledAt.Sub(s.previousSelf.at), s.numCPU)
 	}
-	s.prevSelf = &cpuSample{pid: s.pid, cpu: selfUsage.CPUTime, at: sampledAt}
+	s.previousSelf = &cpuSample{pid: s.pid, cpu: selfUsage.CPUTime, at: sampledAt}
 
 	coreUptime := uptimeSeconds(sampledAt, s.startedAt)
 	coreProcess := CoreProcess{
@@ -323,7 +306,7 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 	}
 	totalCPU := coreCPU
 	totalRSS := selfUsage.RSSBytes
-	totalProcs := max(1, selfUsage.ProcessCount)
+	totalProcesses := max(1, selfUsage.ProcessCount)
 
 	components := make([]Component, 0, len(targets))
 	activeIDs := make(map[string]struct{}, len(targets))
@@ -346,32 +329,32 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 			if !target.InProcess && target.Process != nil {
 				pid := target.Process.Pid()
 				usage := treeUsages[target.Process]
-				compCPU := 0.0
-				if prev, ok := s.prevByComp[target.ID]; ok && prev.pid == pid {
-					compCPU = normalizedCPUPercent(usage.CPUTime-prev.cpu, sampledAt.Sub(prev.at), s.numCPU)
+				componentCPU := 0.0
+				if prev, ok := s.previousByComponent[target.ID]; ok && prev.pid == pid {
+					componentCPU = normalizedCPUPercent(usage.CPUTime-prev.cpu, sampledAt.Sub(prev.at), s.numCPU)
 				}
-				s.prevByComp[target.ID] = cpuSample{pid: pid, cpu: usage.CPUTime, at: sampledAt}
+				s.previousByComponent[target.ID] = cpuSample{pid: pid, cpu: usage.CPUTime, at: sampledAt}
 				activeIDs[target.ID] = struct{}{}
 
 				entry.PID = pid
 				entry.ProcessCount = usage.ProcessCount
-				entry.CPUPercent = roundPercent(compCPU)
+				entry.CPUPercent = roundPercent(componentCPU)
 				entry.RSSBytes = usage.RSSBytes
 
-				summary.CPUPercent += compCPU
+				summary.CPUPercent += componentCPU
 				summary.RSSBytes += usage.RSSBytes
-				totalCPU += compCPU
+				totalCPU += componentCPU
 				totalRSS += usage.RSSBytes
-				totalProcs += usage.ProcessCount
+				totalProcesses += usage.ProcessCount
 			}
 		}
 		byRole[target.Role] = summary
 		components = append(components, entry)
 	}
 	// 清理已停止或卸载组件的前次 CPU 样本，避免同名重启误用旧基线。
-	for id := range s.prevByComp {
+	for id := range s.previousByComponent {
 		if _, alive := activeIDs[id]; !alive {
-			delete(s.prevByComp, id)
+			delete(s.previousByComponent, id)
 		}
 	}
 	for role, summary := range byRole {
@@ -397,13 +380,13 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 		CPUScale:        cpuScaleHostNormalized,
 		Host: Host{
 			CPUCores:         s.numCPU,
-			MemoryTotalBytes: s.hostMem,
+			MemoryTotalBytes: s.hostMemoryBytes,
 			Platform:         runtime.GOOS + "/" + runtime.GOARCH,
 		},
 		Total: Aggregate{
 			CPUPercent:   roundPercent(totalCPU),
 			RSSBytes:     totalRSS,
-			ProcessCount: totalProcs,
+			ProcessCount: totalProcesses,
 		},
 		Core:       coreProcess,
 		ByRole:     byRole,
@@ -442,7 +425,9 @@ func (s *Sampler) Snapshot(ctx context.Context, window Window) (Report, error) {
 	for k, v := range s.latest.ByRole {
 		report.ByRole[k] = v
 	}
-	report.Components = append([]Component(nil), s.latest.Components...)
+	components := make([]Component, len(s.latest.Components))
+	copy(components, s.latest.Components)
+	report.Components = components
 
 	maxPoints := max(1, int(window.duration()/s.interval))
 	take := min(s.ringCount, maxPoints)

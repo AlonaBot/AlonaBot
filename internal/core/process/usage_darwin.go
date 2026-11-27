@@ -27,7 +27,7 @@ func hostMemoryBytesPlatform() uint64 {
 	return total
 }
 
-func sampleTreesPlatform(processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
+func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
 	result := make(map[*Process]TreeUsage, len(processes))
 	byPGID := make(map[int]*Process, len(processes))
 	for _, proc := range processes {
@@ -37,9 +37,12 @@ func sampleTreesPlatform(processes []*Process) (TreeUsage, map[*Process]TreeUsag
 		result[proc] = TreeUsage{}
 		byPGID[proc.tree.pgid] = proc
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), darwinPSTimeout)
+	if err := ctx.Err(); err != nil {
+		return TreeUsage{}, result, err
+	}
+	execCtx, cancel := context.WithTimeout(ctx, darwinPSTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, darwinPSPath, "-axo", "pid=,pgid=,rss=,time=").Output()
+	out, err := exec.CommandContext(execCtx, darwinPSPath, "-axo", "pid=,pgid=,rss=,time=").Output()
 	if err != nil {
 		return TreeUsage{}, result, err
 	}

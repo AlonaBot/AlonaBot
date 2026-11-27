@@ -3,6 +3,7 @@
 package process
 
 import (
+	"context"
 	"encoding/binary"
 	"os"
 	"path/filepath"
@@ -61,7 +62,7 @@ func hostMemoryBytesPlatform() uint64 {
 	return parseLinuxMemTotal(raw)
 }
 
-func sampleTreesPlatform(processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
+func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
 	result := make(map[*Process]TreeUsage, len(processes))
 	byPGID := make(map[int]*Process, len(processes))
 	for _, proc := range processes {
@@ -71,6 +72,9 @@ func sampleTreesPlatform(processes []*Process) (TreeUsage, map[*Process]TreeUsag
 		result[proc] = TreeUsage{}
 		byPGID[proc.tree.pgid] = proc
 	}
+	if err := ctx.Err(); err != nil {
+		return TreeUsage{}, result, err
+	}
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return TreeUsage{}, result, err
@@ -79,6 +83,9 @@ func sampleTreesPlatform(processes []*Process) (TreeUsage, map[*Process]TreeUsag
 	hz := readLinuxClkTck()
 	var self TreeUsage
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return self, result, err
+		}
 		if !entry.IsDir() {
 			continue
 		}

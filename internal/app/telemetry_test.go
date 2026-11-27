@@ -38,5 +38,8 @@ func TestCoreTelemetryEndpoint(t *testing.T) {
 		if len(report.History) == 0 {
 			t.Fatalf("expected at least one history sample for query %q", query)
 		}
+		if report.Components == nil {
+			t.Fatalf("expected non-nil components array for query %q, body=%s", query, body)
+		}
 	}
 }

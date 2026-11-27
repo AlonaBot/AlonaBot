@@ -2,6 +2,7 @@ package process
 
 import (
 	"bytes"
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +15,10 @@ type TreeUsage struct {
 	ProcessCount int           // 归属该树的活跃进程数。
 }
 
-// SampleTrees 一次性采集 Core 自身与指定插件进程树的资源快照。
-// 已退出或不再存在的进程树在返回的 map 中保留零值条目，不视作整体失败。
-func SampleTrees(processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
-	return sampleTreesPlatform(processes)
+// SampleTrees 一次性采集 Core 自身与指定插件进程树的资源快照，并沿用调用方的取消上下文。
+// 已正常退出的进程树在返回的 map 中保留零值条目；发生部分读取失败时，将已采集的有效读数与原始错误一起返回。
+func SampleTrees(ctx context.Context, processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
+	return sampleTreesPlatform(ctx, processes)
 }
 
 // HostMemoryBytes 返回宿主机物理内存总字节数；当前平台不支持或读取失败时返回 0。
