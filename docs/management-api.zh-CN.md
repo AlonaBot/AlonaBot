@@ -77,7 +77,8 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 | 操作 | 端点与请求 |
 | --- | --- |
-| Core 身份与组件 | `GET /api/v1/core`、`GET /api/v1/packages` |
+| Core 身份与组件 | `GET /api/v1/core`（含 `version`、`listen`、`started_at`、`web_ui`）、`GET /api/v1/packages` |
+| 资源与运行遥测 | `GET /api/v1/core/telemetry?window=5m\|15m\|30m`，默认 `30m`；返回宿主机摘要、全局与 Core 进程 CPU%（宿主机归一化 0–100%）/RSS/Uptime、按角色汇总、逐组件进程树指标与内存环形历史，非法窗口返回 400 |
 | 安装 | `POST /api/v1/packages/install`，使用导出 `InstallRequest` 字段 `Archive`、`Source`、`ID`、`Confirm`、`Replace`、`Build`、`Ref`，见[管理类型](../internal/core/manage/install.go)；`Build` 返回 202 与任务 ID，见[源码构建](#源码构建) |
 | 后台任务 | `GET /api/v1/tasks`、`GET`/`DELETE /api/v1/tasks/{id}` |
 | 构建环境 | `GET`/`DELETE /api/v1/core/build-environment`，DELETE 可带 `?part=toolchain\|cache` |

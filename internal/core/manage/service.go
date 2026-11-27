@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/contracts/configschema"
 	"github.com/AlonaBot/AlonaBot/contracts/debugapi"
@@ -32,6 +33,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/scheduler"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/telemetry"
 	"github.com/AlonaBot/AlonaBot/internal/core/tool"
 	"github.com/AlonaBot/AlonaBot/internal/tune"
 	"github.com/AlonaBot/AlonaBot/internal/wire"
@@ -74,8 +76,9 @@ type Options struct {
 	Descriptor             func(string) *pb.AdapterDescriptor          // 返回当前运行 Session 的 Adapter 声明。
 	Candidates             Candidates
 
-	DevelopmentWebUI fs.FS                           // 本次运行的静态根目录；nil 时选择已启用的安装包。
-	CoreInfo         func() (version, listen string) // 总览在请求时读取同一个 Core 的构建版本与实际监听地址。
+	DevelopmentWebUI fs.FS                                                // 本次运行的静态根目录；nil 时选择已启用的安装包。
+	CoreInfo         func() (version, listen string, startedAt time.Time) // 总览在请求时读取同一个 Core 的构建版本、监听地址与启动时刻。
+	Telemetry        *telemetry.Sampler                                   // 可选；Core 进程与组件资源遥测采样器。
 
 	Scheduler             *scheduler.Scheduler
 	InstanceStatus        func(ctx context.Context, packageID, instanceID string) (state, safeError string, err error) // 远端实例的运行状态；直接装配 Registry 时可省略。

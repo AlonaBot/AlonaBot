@@ -77,7 +77,8 @@ Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTT
 
 | Operation | Endpoint and request |
 | --- | --- |
-| Core identity and components | `GET /api/v1/core`, `GET /api/v1/packages` |
+| Core identity and components | `GET /api/v1/core` (`version`, `listen`, `started_at`, `web_ui`), `GET /api/v1/packages` |
+| Resource telemetry | `GET /api/v1/core/telemetry?window=5m\|15m\|30m` (default `30m`); returns host summary, total and Core CPU% (host-normalized 0–100%)/RSS/uptime, role aggregates, per-component process-tree metrics, and in-memory history; invalid windows return 400 |
 | Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`, `Build`, `Ref`); see [management types](../internal/core/manage/install.go). `Build` returns 202 with a task ID, see [Source builds](#source-builds) |
 | Background tasks | `GET /api/v1/tasks`, `GET`/`DELETE /api/v1/tasks/{id}` |
 | Build environment | `GET`/`DELETE /api/v1/core/build-environment`; DELETE accepts `?part=toolchain\|cache` |

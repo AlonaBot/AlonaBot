@@ -64,6 +64,8 @@ S-06.1 的 `manage.Options.SleepPolicy` 由 app 注入只读策略：复用 `idl
 
 `internal/core/diagnostics` 负责诊断数据收集、脱敏与 zip 写入。`internal/core/manage` 的诊断端点与 `cmd/alonabot` 的 `diagnose` 共用 `Write(ctx context.Context, w io.Writer, src Source, opts Options) error`。`Running` 复用当前 `state.Store`、运行状态与 schema 回调；`Directory` 对已有 `core.lock` 的只读句柄用 `x/sys` 取得与 Core 相同的 flock / LockFileEx 独占锁，用现有 GORM/SQLite 只读查询主库及已有 WAL 的临时副本。诊断包复用 `state` 的记录类型、`contracts/configschema` 的迁移与秘密路径及 `internal/core/secret` 的引用格式；认证、HTTP 响应与 CLI 输出替换由各入口负责。
 
+`internal/core/telemetry` 负责后台周期采集 Core 主进程及各独立组件进程树（经 `internal/core/process.SampleTrees` 纯 Go 跨平台采集）的整机归一化 CPU%、常驻内存（RSS）与运行时间，并在内存中维护固定容量环形历史缓冲（零 SQLite 写入开销）。`internal/app` 装配采样器并注入 `manage.Options.Telemetry`，管理 API 经 `GET /api/v1/core/telemetry` 提供只读快照，同时 `GET /api/v1/core` 返回 Core 启动时刻 `started_at`。
+
 组件 changelog由 `internal/pluginkit` 在 `check`、`build`、`pack` 的资源扫描中校验，`pack` 保留文件原文；`internal/core/packages` 在安装包解压后复核。`internal/core/manage` 通过 `GET /api/v1/packages/{id}/changelog` 读取当前安装包，通过 `GET /api/v1/core/changelog` 读取由 `changelog/v<SemVer>/{en,zh-CN}.md` 生成并编入 Core 的 `changelog_core.go`。
 
 `sdk/service.Builder.Effect` 随 REGISTER 上报工具类别；`sdk/tool.List` 通过 `Info.Effect` 读回声明类别，Agent 将 MCP 注解换算后的类别交给 `sdk/tool.Confirm`。`internal/core/tool` 合并声明、确认记录与策略覆盖；管理层批量写入时先持有 catalog 锁，再按组件 ID 顺序取锁，与安装替换使用同一锁层级。`Catalog.SetPolicy(ctx, rows ...state.ToolPolicy)` 调用 `Store.SetToolPolicy(ctx, rows ...ToolPolicy)`，由状态库在同一事务内保存或删除覆盖。

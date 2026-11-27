@@ -20,6 +20,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlonaBot/AlonaBot/internal/core/manage"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
@@ -72,7 +73,11 @@ func TestAdminSessionAndUploads(t *testing.T) {
 	if err := json.Unmarshal(raw, &core); err != nil {
 		t.Fatal(err)
 	}
-	if response.StatusCode != 200 || len(core) != 3 || core["listen"] != h.core.http.Addr || strings.HasSuffix(core["listen"].(string), ":0") || core["version"] != Version() || core["admin_api_major"] != float64(1) {
+	startedAt, ok := core["started_at"].(string)
+	if _, err := time.Parse(time.RFC3339, startedAt); !ok || err != nil {
+		t.Fatalf("invalid started_at in core=%s", raw)
+	}
+	if response.StatusCode != 200 || len(core) != 4 || core["listen"] != h.core.http.Addr || strings.HasSuffix(core["listen"].(string), ":0") || core["version"] != Version() || core["admin_api_major"] != float64(1) {
 		t.Fatalf("core=%d %s", response.StatusCode, raw)
 	}
 	first := adminBundle(t, h, "1.0.0")

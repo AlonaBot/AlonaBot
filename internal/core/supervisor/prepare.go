@@ -194,7 +194,7 @@ func (p *Prepared) activationFailed(ctx context.Context, in *host.Instance, caus
 
 func (p *Prepared) running(in *host.Instance) *Running {
 	spec := p.spec
-	return &Running{Instance: in, Process: p.process, store: p.store, pluginID: spec.PluginID, listener: p.listener, timing: spec.Stop,
+	return &Running{Instance: in, Process: p.process, StartedAt: p.startedAt.UTC(), store: p.store, pluginID: spec.PluginID, listener: p.listener, timing: spec.Stop,
 		scheduler: spec.Scheduler, http: spec.HTTP, commandsChanged: spec.CommandsChanged, onDetach: spec.Detach, runtime: p.runtime, waker: spec.Waker}
 }
 

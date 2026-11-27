@@ -99,8 +99,9 @@ type PluginLog interface {
 
 // Running 持有已提交插件的实例与进程，负责 Activated 或 Degraded 实例的停止与清理。
 type Running struct {
-	Instance *host.Instance   // 已提交的 Core 侧实例，激活失败时为 Degraded。
-	Process  *process.Process // 插件进程及其进程树
+	Instance  *host.Instance   // 已提交的 Core 侧实例，激活失败时为 Degraded。
+	Process   *process.Process // 插件进程及其进程树
+	StartedAt time.Time        // 进程启动的墙钟时刻（UTC），供运行时间与遥测展示。
 	// store 提供逐插件管理锁。
 	store    *state.Store
 	pluginID string
