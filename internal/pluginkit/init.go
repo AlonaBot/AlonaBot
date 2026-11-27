@@ -1,15 +1,20 @@
 package pluginkit
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"go/format"
+	"io/fs"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 
 	"github.com/AlonaBot/AlonaBot/contracts/manifest"
 	"github.com/AlonaBot/AlonaBot/internal/generate"
@@ -70,17 +75,11 @@ func Init(ctx context.Context, dir, id, role, adapterID, module, version string)
 	if !within && module == "" {
 		module = filepath.Base(dir)
 	}
-	files := map[string][]byte{projectFile: raw, ".gitignore": []byte("data/\nbin/\n")}
-	switch role {
-	case "plugin", "agent":
-		files["plugin.go"] = []byte(pluginTemplate)
-		files["plugin_config_schema.json"] = []byte("{}\n")
-	case "adapter":
-		files["adapter.go"] = []byte(fmt.Sprintf(adapterTemplate, adapterID))
-		files["adapter_config_schema.json"] = []byte("{}\n")
-	case "webui":
-		files["assets/index.html"] = []byte("<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>AlonaBot WebUI</title><main><h1>AlonaBot WebUI</h1></main></html>\n")
+	files, err := templateFiles(role, templateData{ID: id, AdapterID: adapterID})
+	if err != nil {
+		return false, err
 	}
+	files[projectFile] = raw
 	// 2. 在目标目录内暂存模板与 Go module，确保发布时 Rename 位于同一文件系统。
 	if err := os.MkdirAll(dir, privateMode); err != nil {
 		return false, err
@@ -184,32 +183,59 @@ func sdkVersion(version string) string {
 	return "v" + normalized
 }
 
-const pluginTemplate = `package plugin
+// templates 是 alonabot init 的工程骨架，文件规则见 templates/README.md。
+//
+//go:embed all:templates/common templates/plugin templates/adapter templates/webui
+var templates embed.FS
 
-import "github.com/AlonaBot/AlonaBot/sdk"
-
-func New() *sdk.Plugin {
- p := sdk.NewPlugin()
- p.Command("hello").Menu().Description("Show a greeting").Handle(func(c *sdk.Context) error {
-  return c.Reply("Hello AlonaBot")
- })
- return p
+// templateData 是 .tmpl 模板可用的字段。
+type templateData struct {
+	ID        string
+	AdapterID string
 }
-`
 
-const adapterTemplate = `package component
-
-import (
- "context"
- "github.com/AlonaBot/AlonaBot/sdk/adapter"
- "github.com/AlonaBot/AlonaBot/sdk/errcode"
-)
-
-type platform struct{}
-
-func New() adapter.Adapter {return &platform{}}
-func (*platform) Descriptor() *adapter.Descriptor {return &adapter.Descriptor{AdapterID:%q}}
-func (*platform) Start(context.Context,adapter.StartRequest,adapter.Core)(adapter.Instance,error){
- return nil,errcode.Unsupported.New("implement platform instance startup")
+// templateFiles 返回角色对应的模板文件，键为工程内的相对路径。
+func templateFiles(role string, data templateData) (map[string][]byte, error) {
+	dirs := []string{"templates/common"}
+	switch role {
+	case "plugin", "agent":
+		dirs = append(dirs, "templates/plugin")
+	case "adapter", "webui":
+		dirs = append(dirs, "templates/"+role)
+	}
+	files := map[string][]byte{}
+	for _, root := range dirs {
+		err := fs.WalkDir(templates, root, func(name string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			content, err := templates.ReadFile(name)
+			if err != nil {
+				return err
+			}
+			relative := strings.TrimPrefix(name, root+"/")
+			dir, base := path.Split(relative)
+			if rest, ok := strings.CutPrefix(base, "_"); ok {
+				base = "." + rest
+			}
+			if rest, ok := strings.CutSuffix(base, ".tmpl"); ok {
+				base = rest
+				parsed, err := template.New(name).Option("missingkey=error").Parse(string(content))
+				if err != nil {
+					return err
+				}
+				var rendered bytes.Buffer
+				if err := parsed.Execute(&rendered, data); err != nil {
+					return err
+				}
+				content = rendered.Bytes()
+			}
+			files[dir+base] = content
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return files, nil
 }
-`
