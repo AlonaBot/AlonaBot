@@ -119,7 +119,7 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if target.GetAdapterId() != instance.AdapterID() || target.GetAccountId() != instance.AccountID() {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
 	}
-	chain, decoration, session, err := s.prepareReply(ctx, caller, invocation, target, instance, request.Chain)
+	chain, decoration, session, replyIndexes, err := s.prepareReply(ctx, caller, invocation, target, instance, request.Chain)
 	if err != nil {
 		return rejectError(target, err)
 	}
@@ -139,11 +139,19 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			}
 			return checkExtensions(instance, chain)
 		}
+		var beforeHook *pb.MessageChain
+		if replyIndexes != nil {
+			beforeHook = proto.CloneOf(request.Chain)
+		}
 		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation, check)
 		if safe != nil {
 			return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 		}
 		if chain != nil {
+			// Hook 协议只返回整链；非等值改写沿用实际平台链下标，不猜测已丢失的来源。
+			if replyIndexes != nil && !proto.Equal(beforeHook, chain) {
+				replyIndexes = nil
+			}
 			request.Chain = chain
 		}
 	}
@@ -213,7 +221,16 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			sendError = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "platform send completed; save reply decoration: " + err.Error()}
 		}
 	}
-	return response(result, sendError)
+	mapped, err := replyIndexes.result(result)
+	if err != nil {
+		if sendError == nil {
+			sendError = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+		} else {
+			sendError = proto.CloneOf(sendError)
+			sendError.SafeMessage += "; " + err.Error()
+		}
+	}
+	return response(mapped, sendError)
 }
 
 func (s *Service) checkChain(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {

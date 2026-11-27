@@ -26,8 +26,11 @@ func (i *instance) DescribeMessage(ctx context.Context) (*pb.MessageDescription,
 	for _, f := range descriptor.GetMessageFormats() {
 		format := proto.CloneOf(f)
 		capabilityName := "message." + format.Name
-		if format.Name == "text" {
+		switch format.Name {
+		case "text":
 			capabilityName = "message.send"
+		case "quote":
+			capabilityName = "message.reference"
 		}
 		for _, capability := range i.capabilities {
 			if capability.Name == capabilityName && !capability.Supported {
