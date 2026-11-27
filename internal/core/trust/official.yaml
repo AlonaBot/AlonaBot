@@ -1,0 +1,12 @@
+# 官方组件清单：组件 ID 与其独立仓库的规范来源。
+# 只有 ID 与来源同时匹配的组件才视为官方组件；新增官方组件时在此追加一项。
+- id: alonabot-agent-official
+  source: github.com/AlonaBot/alonabot-agent
+- id: alonabot-webui-admin
+  source: github.com/AlonaBot/alonabot-webui
+- id: alonabot-plugin-builtin-official
+  source: github.com/AlonaBot/alonabot-plugin-builtin
+- id: alonabot-adapter-telegram
+  source: github.com/AlonaBot/alonabot-adapter-telegram
+- id: alonabot-adapter-onebot11
+  source: github.com/AlonaBot/alonabot-adapter-onebot11

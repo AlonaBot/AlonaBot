@@ -1,0 +1,20 @@
+package component
+
+import (
+	"context"
+
+	"github.com/AlonaBot/AlonaBot/sdk/adapter"
+	"github.com/AlonaBot/AlonaBot/sdk/errcode"
+)
+
+type platform struct{}
+
+func New() adapter.Adapter { return &platform{} }
+
+func (*platform) Descriptor() *adapter.Descriptor {
+	return &adapter.Descriptor{AdapterID: {{printf "%q" .AdapterID}}}
+}
+
+func (*platform) Start(context.Context, adapter.StartRequest, adapter.Core) (adapter.Instance, error) {
+	return nil, errcode.Unsupported.New("implement platform instance startup")
+}
