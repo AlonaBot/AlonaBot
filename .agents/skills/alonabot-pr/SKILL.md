@@ -11,7 +11,7 @@ description: 准备、创建或更新 AlonaBot PR，或诊断其 GitHub Actions 
 
 核对仓库、base、head、独立 worktree 与最终 diff，确认只包含该任务和必要的相邻调整。用户未明确要求时不 commit 或 push；创建 PR 的要求授权该 PR 必需的提交与推送，但不授权 merge、tag、release、分支保护或生产 secret。
 
-标题使用 `type/scope: 中文摘要`。按 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md)填写实际变更、验证与兼容性风险，只勾选事实成立的确认项。临时正文与本地测试放在被忽略的位置，不夹带到提交中。CI 会拒绝个人维护资料路径（`.claude/`、`spec/`、`docs/goals/` 等），这些资料在 dev 分支维护。
+标题使用 `type/scope: 中文摘要`。按 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md)填写实际变更、验证与兼容性风险，只勾选事实成立的确认项。临时正文与本地测试放在被忽略的位置，不夹带到提交中。CI 会拒绝个人维护资料路径（`.claude/`、`spec/`、`docs/specs/`、`docs/adr/`、`docs/goals/` 等），这些资料在 dev 分支维护。
 
 ## 创建并读取当前检查
 
