@@ -29,7 +29,7 @@ web/admin/node_modules/
 /.playwright-cli/
 /delegation-skills-workspace/
 /experiments/
-# 本机代理工具与草稿目录（dev 分支的 spec/、docs/adr/ 等只由 CI 拦截，不在此忽略）
+# 本机代理工具与草稿目录（dev 分支的 docs/specs/、docs/adr/ 等只由 CI 拦截，不在此忽略）
 /.pi/
 /.gemini/
 /docs/superpowers/
