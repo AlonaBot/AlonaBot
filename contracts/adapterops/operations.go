@@ -13,6 +13,10 @@ import (
 const (
 	// SendRPC 发送消息链。
 	SendRPC = "adapter.send"
+	// CheckMessageName 标识只读消息预检的标准操作。
+	CheckMessageName = "sdk/message.check"
+	// CheckMessageRPC 只读检查消息组合。
+	CheckMessageRPC = "adapter.message.check"
 	// EditRPC 编辑一条平台消息。
 	EditRPC = "adapter.edit"
 	// DeleteRPC 按顺序撤回消息。
@@ -42,6 +46,7 @@ type Operation struct {
 func All() []Operation {
 	return []Operation{
 		{SendRPC, "sdk/message.send", "", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterSendRequest{} }, func() proto.Message { return &pb.SendResult{} }},
+		{CheckMessageRPC, CheckMessageName, "", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterSendRequest{} }, func() proto.Message { return &pb.CheckMessageResponse{} }},
 		{EditRPC, "sdk/message.edit", "message.edit", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterEditRequest{} }, func() proto.Message { return &pb.SendResult{} }},
 		{DeleteRPC, "sdk/message.delete", "message.delete", pb.ActionScope_ACTION_SCOPE_CHAT, func() proto.Message { return &pb.AdapterDeleteRequest{} }, func() proto.Message { return &pb.DeleteResult{} }},
 		{MediaReadRPC, "sdk/media.read", "", pb.ActionScope_ACTION_SCOPE_ACCOUNT, func() proto.Message { return &pb.AdapterMediaReadRequest{} }, func() proto.Message { return &pb.ReadResponse{} }},

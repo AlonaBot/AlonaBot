@@ -36,6 +36,8 @@ func (r *adapterRuntime) operations(_ context.Context, in *wire.Inbound) wire.Re
 			_, supported = instance.(adapter.Deleter)
 		case wire.ServiceAdapterMediaRead:
 			_, supported = instance.(adapter.MediaSource)
+		case wire.ServiceAdapterCheckMessage:
+			_, supported = instance.(adapter.MessageChecker)
 		case wire.ServiceAdapterReadNodes:
 			_, supported = instance.(adapter.NodesReader)
 		case wire.ServiceAdapterCommandsSync:

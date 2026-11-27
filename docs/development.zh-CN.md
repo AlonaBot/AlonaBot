@@ -192,6 +192,18 @@ Core→Adapter 的 `adapter.command.menu` 执行 set/get/delete；插件→Core 
 
 `EventPayload.kind` 追加 command_menu_ready=13，string 字段为 adapter_id=1、adapter_instance_id=2、account_id=3、chat_id=4。Core 定向发送 `bot.command_menu_ready`，空 chat_id 表示实例手动就绪，非空表示聊天可用。Adapter 上报标准事件仍沿用原白名单。定义见 [Adapter 协议](../contracts/proto/alonabot/v1/adapter.proto)、[路由](../contracts/proto/alonabot/v1/route.proto)与[消息](../contracts/proto/alonabot/v1/message.proto)，生命周期与准入见[命令菜单](https://alonabot.github.io/docs/tutorial/commands#平台命令菜单)。
 
+### 消息描述与只读预检协议
+
+`core.message.describe` 接收 `DescribeMessageRequest{to=1}`，返回 `MessageDescription{formats=1, extensions=2, combinations=3}`；`core.message.check` 接收 `CheckMessageRequest{to=1, chain=2}`，返回 `CheckMessageResponse{status=1}`，均使用 protobuf schema version 1。`to` 缺省时按可信父目标补齐，目标与发送共用当前准入规则。SDK 的交互与定时用法见[出站消息 API](agent-api.zh-CN.md#按目标查询与预检出站消息)。
+
+`AdapterDescriptor` 追加 message_formats=7、message_combinations=8；`ExtensionDeclaration` 追加 description=4、example_json=5。`MessageFormat` 字段顺序为 name、version、status、description、schema_json、example_json、sources、text_limit、button_label_limit、adapter_id（编号 1～10）；`MessageCombination` 为 name=1、formats=2、description=3、example_json=4。SupportStatus 的 0/1/2 分别表示 unknown/supported/unsupported。消息定义见 [message.proto](../contracts/proto/alonabot/v1/message.proto)。
+
+可选 `adapter.message.check` 复用 `AdapterSendRequest` 的实例、目标、消息链和代次，返回 CheckMessageResponse；实例真实实现 `sdk/adapter.MessageChecker` 时，`adapter.operations` 公布 `sdk/message.check`。Core 先核对当前目录及 Session/代次，再调用 RPC。媒体 Store 的 `PrepareCheckSource` 只读授权元数据，保留原来源和 token，错误与预检状态可同时返回。
+
+`SendRequest.require_original_segment_indexes=3` 为 bool，由 `sdk.RequireOriginalSegmentIndexes()` 设置。默认 false 保留既有发送与 Hook 行为；true 时跟踪调用方原片段，逐 Hook 回传发现非等值改链即在平台副作用前返回 FAILED_PRECONDITION 和 REJECTED 回执。该检查复用现有 BeforeSend 的逐次校验回调，Hook 协议与 Edit 接口保持原样。
+
+`ToolConfirmRequest.require_confirmation=4` 为 bool。`sdk/tool.ConfirmRequired` 设置该字段，使 allow 策略同样进入可信 Actor 的确认链；deny 仍优先。既有 Confirm 不设置该字段，沿原策略执行。
+
 ## Agent、流式服务与生命周期 API
 
 [完整参数、能力状态、八阶段钩子与 Goal 恢复契约](agent-api.zh-CN.md)。

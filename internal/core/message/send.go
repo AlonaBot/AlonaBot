@@ -1,6 +1,7 @@
 // Package message 实现 Core 消息发送与编辑服务的目标准入和回执转发。
 //
-// [Service] 根据可信父调用的原目标或持久化的实例许可准入，先校验载荷、目标和消息链，
+// [Service] 提供出站描述及只读预检，并根据可信父调用的原目标或持久化的实例许可准入。
+// 发送先校验载荷、目标和消息链，
 // 再执行出站 Hook、准备媒体消费租约并由注册的 Adapter 实例执行发送；结果与错误同时保留。
 // 编辑仅接受文本及可选按钮，实例须声明能力并实现 adapter.Editor；
 // 撤回逐项返回结果，实例须声明能力并实现 adapter.Deleter。
@@ -38,6 +39,7 @@ type Hooks interface {
 // Service 按插件发信许可准入目标，再由注册的 Adapter 实例执行发送或编辑。
 type Service struct {
 	observe         func([]byte, string, *pb.Target, *pb.MessageChain, *pb.SendResult, *pb.ErrorInfo)
+	checkSource     func(context.Context, router.Caller, *pb.Target, *pb.MediaSource) (*pb.MediaSource, error)
 	prepareIncoming func(*pb.MessageChain, router.Caller, *pb.Target) (*pb.MessageChain, error)
 	replyMu         sync.Mutex // 保护根首条标记与 Session 回执关联，不跨配置读取和平台调用持锁。
 	resolveReply    func(context.Context, *pb.Target) (settings.Reply, error)
@@ -52,7 +54,8 @@ type Service struct {
 	lease           func(context.Context, router.Caller, string, *pb.Target, *pb.MediaSource, time.Time) (*pb.MediaSource, func(), error)
 }
 
-// New 创建消息服务；装配处登记 Send、Edit 与 ReadNodes，并通过 SetIncomingChain 绑定查询媒体授权。
+// New 创建消息服务；装配处登记发送、描述、预检等入口，
+// 通过 SetIncomingChain 和 SetCheckSource 分别绑定查询结果授权及只读来源元数据。
 // lease 由媒体 Store 提供，准备平台文件标识或绑定目标 Adapter Session 的只读令牌；
 // issue 在媒体租约前签发按钮；nil 仅供无按钮的测试。
 // requestTimeout 使用生效配置，在调用没有期限时提供媒体请求预算。
@@ -116,11 +119,14 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	if target.GetAdapterId() != instance.AdapterID() || target.GetAccountId() != instance.AccountID() {
 		return reject(target, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "target adapter or account does not match instance")
 	}
-	chain, decoration, session, err := s.prepareReply(ctx, caller, invocation, target, instance, request.Chain)
+	chain, decoration, session, replyIndexes, err := s.prepareReply(ctx, caller, invocation, target, instance, request.Chain)
 	if err != nil {
 		return rejectError(target, err)
 	}
 	request.Chain = chain
+	if request.RequireOriginalSegmentIndexes && replyIndexes == nil {
+		replyIndexes = newReplySources(chain)
+	}
 	if safe := s.checkChain(request.Chain, target); safe != nil {
 		return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 	}
@@ -130,17 +136,32 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 	}
 	// 6. Hook 只能改写消息链；复检通过后才允许按钮签发和媒体租约。
 	if s.hooks != nil {
+		var beforeHook *pb.MessageChain
+		if replyIndexes != nil {
+			beforeHook = proto.CloneOf(request.Chain)
+		}
 		check := func(chain *pb.MessageChain) *pb.ErrorInfo {
 			if safe := s.checkChain(chain, target); safe != nil {
 				return safe
 			}
-			return checkExtensions(instance, chain)
+			if safe := checkExtensions(instance, chain); safe != nil {
+				return safe
+			}
+			// SDK 往返会省略引用账号等可补齐字段；逐 Hook 归一化后比较，首次真实改链就拒绝。
+			if request.RequireOriginalSegmentIndexes && !proto.Equal(beforeHook, chain) {
+				return &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, SafeMessage: "rich receipt attribution unavailable after BeforeSend rewrite"}
+			}
+			return nil
 		}
 		chain, safe := s.hooks.BeforeSend(ctx, pb.SendOperation_SEND_OPERATION_SEND, "", target, request.Chain, invocation, check)
 		if safe != nil {
 			return response(&pb.SendResult{Status: pb.SendStatus_SEND_STATUS_REJECTED, Target: target}, safe)
 		}
 		if chain != nil {
+			// 普通发送保留既有整链改写；严格请求已在逐 Hook 检查中拒绝非等值结果。
+			if replyIndexes != nil && !proto.Equal(beforeHook, chain) {
+				replyIndexes = nil
+			}
 			request.Chain = chain
 		}
 	}
@@ -210,7 +231,16 @@ func (s *Service) Send(ctx context.Context, caller router.Caller, in *wire.Inbou
 			sendError = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: "platform send completed; save reply decoration: " + err.Error()}
 		}
 	}
-	return response(result, sendError)
+	mapped, err := replyIndexes.result(result)
+	if err != nil {
+		if sendError == nil {
+			sendError = &pb.ErrorInfo{Code: pb.ErrorCode_ERROR_CODE_INTERNAL, SafeMessage: err.Error()}
+		} else {
+			sendError = proto.CloneOf(sendError)
+			sendError.SafeMessage += "; " + err.Error()
+		}
+	}
+	return response(mapped, sendError)
 }
 
 func (s *Service) checkChain(chain *pb.MessageChain, target *pb.Target) *pb.ErrorInfo {

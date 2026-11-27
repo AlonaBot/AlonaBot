@@ -157,7 +157,7 @@ func prepareAdapter(conn *wire.Conn, l launch, ack *pb.HelloAck, d *adapter.Desc
 	}
 	stop := withWatchdog(conn, time.Until(time.UnixMilli(boot.GetPreparationDeadlineUnixMs())))
 	defer stop()
-	descriptor, err := convert.DescriptorToProto(&convert.Descriptor{AdapterID: d.AdapterID, Capabilities: d.Capabilities, Extensions: d.Extensions, Permissions: d.Permissions, Events: d.Events, Actions: d.Actions})
+	descriptor, err := convert.DescriptorToProto(&convert.Descriptor{AdapterID: d.AdapterID, Formats: d.Formats, Combinations: d.Combinations, Capabilities: d.Capabilities, Extensions: d.Extensions, Permissions: d.Permissions, Events: d.Events, Actions: d.Actions})
 	if err != nil {
 		return err
 	}
@@ -285,6 +285,8 @@ func adapterResponse(message proto.Message, safe *pb.ErrorInfo) wire.Response {
 
 func (r *adapterRuntime) handle(ctx context.Context, in *wire.Inbound) wire.Response {
 	switch in.Target {
+	case wire.ServiceAdapterCheckMessage:
+		return r.checkMessage(ctx, in)
 	case wire.ServiceAdapterOperations:
 		return r.operations(ctx, in)
 	case wire.ServiceAdapterInstanceStart:

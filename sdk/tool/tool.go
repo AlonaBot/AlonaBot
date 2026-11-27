@@ -76,6 +76,14 @@ func Confirm(ctx context.Context, operation, summary string, effect Effect) erro
 	return callTool(ctx, wire.ServiceToolConfirm, &pb.ToolConfirmRequest{Operation: operation, Summary: summary, Effect: pb.ToolEffect(effect)}, &pb.ToolConfirmResponse{})
 }
 
+// ConfirmRequired 要求可信交互用户确认，即使当前操作策略为 allow；deny 仍优先拒绝。
+func ConfirmRequired(ctx context.Context, operation, summary string, effect Effect) error {
+	if effect < Unspecified || effect > Destructive {
+		return errcode.InvalidArgument.Errorf("unknown tool effect %d", effect)
+	}
+	return callTool(ctx, wire.ServiceToolConfirm, &pb.ToolConfirmRequest{Operation: operation, Summary: summary, Effect: pb.ToolEffect(effect), RequireConfirmation: true}, &pb.ToolConfirmResponse{})
+}
+
 func callTool(ctx context.Context, target string, request, result proto.Message) error {
 	// 1. 工具操作须关联活跃父调用；后台调用在 SDK 边界直接拒绝。
 	parent, active := registry.Parent(ctx)

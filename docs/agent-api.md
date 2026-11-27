@@ -202,3 +202,54 @@ return err
 ```
 
 If cancellation prevents the terminal response from arriving, GenerateStream retains successfully delivered text. RunStream retains the confirmed RunID, model text and ToolFinished records; unavailable model identity and usage stay empty. Successful terminal text must match delivered text.
+
+## Query and check outbound messages by target
+
+Interactive rounds query through their current Handler and send through that Context. Scheduled tasks query and send through root functions using their saved session and instance. Queries apply current session/send admission. Context methods preserve the trusted parent call, Actor and original-target reply permission.
+
+```go
+description, err := c.DescribeMessage(c.Session(), sdk.Via(c.Instance()))
+if err != nil {
+    return err
+}
+// Use description.Formats, Extensions and Combinations for this round's tools.
+status, err := c.CheckMessage(c.Session(), content, sdk.Via(c.Instance()))
+if err != nil {
+    return err
+}
+if status == message.SupportUnsupported {
+    return errcode.Unsupported.New("message is unsupported")
+}
+_, err = c.Send(content)
+return err
+```
+
+Root signatures are `sdk.DescribeMessage(ctx, to, opts...) (*message.OutboundDescription, error)` and `sdk.CheckMessage(ctx, to, content, opts...) (message.SupportStatus, error)`. Options use the existing `sdk.Via(instanceID)`. `to` is a session SID; Via selects the instance. Root functions retain `sdk.Send`'s independent-call permission behavior; interactive replies use Context methods.
+
+`message.StandardFormats()` defines field Schemas and complete `send_message` examples for text, markdown, image, video, voice, file, mention, quote, forward and buttons. Standard part fields are `text/entities`, `content`, `source/caption` (plus `filename/mime` for files), `user_id/display`, `message_ref`, `nodes` and `rows`. SDK results provide the complete Schemas and recursive nodes. Entity offsets and lengths count UTF-16 code units; entity types retain SDK numeric enum values. A forward node selects bot-authored `parts` or a confirmed `message_ref` from the same target/instance. Choice buttons expose only `label`.
+
+Description JSON uses snake_case. Standard formats have version 1. Undeclared formats have status `unknown`; declared `supported`/`unsupported` values are preserved. An older Adapter's existing instance `message.send.TextLimit` is still returned for text/markdown with unknown status. `Sources` uses `https_url`, `media_ref`, `incoming`, `inline_base64` and `platform_file`. Agent presents incoming as attachment and offers local_path under its administrator policy. Missing Sources means unknown source support. Missing TextLimit/ButtonLabelLimit means no declared limit; present limits retain SDK measurement units.
+
+Extensions retain their full declared names, versions, purposes, payload Schemas/examples and AdapterID. Agent wraps a payload example as `{"parts":[{"type":"<name>","version":1,"payload":{...}}]}`. Combination rules carry a name, relevant formats, description and complete send example. The optional Adapter interface makes the actual platform decision.
+
+```go
+// sdk/adapter
+func Extension[T any](name string, version uint32) ExtensionDeclaration
+func (d ExtensionDeclaration) Describe(description string, example any) ExtensionDeclaration
+
+type MessageChecker interface {
+    CheckMessage(ctx context.Context, to string, chain message.Chain) (message.SupportStatus, *errcode.Error)
+}
+```
+
+Adapters declare current rules in Descriptor.Formats and Descriptor.Combinations. REGISTER validates extension examples against the same payload Schema. Existing `Extension[T](name, version)` declarations remain valid. Core reads descriptions from the current instance's Session/generation and advertises `sdk/message.check` only for instances implementing MessageChecker.
+
+Checks apply send-equivalent target admission, basic structure and extension Schema validation before querying authorized media metadata. Caller-supplied MediaSource.MIME is rejected. Store checks Session ownership, expiry and full-target Grants, reads uploaded/registered MIME, and preserves MediaRef/Incoming kinds and tokens. Checks do not open media files, fetch content, execute outbound Hooks, issue buttons, create leases or send platform requests. Checker receives buttons before CoreToken issuance. Missing decisive metadata or an absent optional interface returns unknown. A definite rule violation returns unsupported with the concrete error. Permission, cancellation, catalog and RPC errors are preserved. Final Send retains its complete validation and execution chain.
+
+To associate physical receipts with the original parts, use `c.Send(content, sdk.RequireOriginalSegmentIndexes())` or `c.SendTo(to, content, sdk.Via(instance), sdk.RequireOriginalSegmentIndexes())` for interactive sends, and `sdk.Send(ctx, to, content, sdk.Via(instance), sdk.RequireOriginalSegmentIndexes())` for scheduled sends. This option applies only to sends. DescribeMessage, CheckMessage, ReadNodes and platform actions accept only Via; passing this option returns INVALID_ARGUMENT.
+
+With RequireOriginalSegmentIndexes enabled, Core tracks caller-input indexes for both interactive and root sends without a parent call. Core-inserted quotes, mentions and standalone prefixes have no caller source. Changes to existing text retain its source; a threshold-based forward wrapper maps to all wrapped original segments. Every physical result, status and error is preserved. AfterSend, debug observation and reply-decoration bookkeeping continue to receive the actual sent chain and internal platform indexes.
+
+After each BeforeSend response, Core applies existing side-effect-free normalization and validation, then immediately compares the chain. Equal responses and sends without Hooks retain the original-index mapping. The first non-equal rewrite, including a caption-only change, returns FAILED_PRECONDITION with `rich receipt attribution unavailable after BeforeSend rewrite` and a REJECTED receipt, before button issuance, media leases or platform delivery. Later Hooks that would restore the content are not executed. Ordinary Send, SendTo, SendText and Stream retain their existing calling conditions and Hook rewriting behavior. Rich sends requiring attribution to original parts explicitly pass this option.
+
+Before reading a local file that needs user confirmation, call `tool.ConfirmRequired(ctx, operation, summary, effect)` with full paths and target. It runs the existing confirmation flow even under allow; deny takes precedence. A missing trusted interactive Actor fails. The existing 1024-byte summary limit applies and oversized summaries return an error. `tool.Confirm` continues to follow the existing operation policy.

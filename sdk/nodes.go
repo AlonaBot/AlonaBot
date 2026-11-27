@@ -24,11 +24,7 @@ func (c *Context) ReadNodes(segment message.ForwardSegment) ([]message.ForwardIt
 
 // ReadNodes 经已激活 Session 查询指定会话，Via 选择实例。
 func ReadNodes(ctx context.Context, sid string, segment message.ForwardSegment, opts ...SendOption) ([]message.ForwardItem, error) {
-	options := &sendOptions{}
-	for _, option := range opts {
-		option(options)
-	}
-	target, err := convert.TargetToProto(sid, options.via)
+	target, err := messageTarget(sid, opts)
 	if err != nil {
 		return nil, err
 	}

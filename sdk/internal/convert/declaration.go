@@ -3,6 +3,7 @@ package convert
 import (
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -24,7 +25,27 @@ type declaration struct {
 }
 
 // ExtensionDeclaration 保存类型推导的 extension 声明，字段只由构造入口设置。
-type ExtensionDeclaration struct{ declaration }
+type ExtensionDeclaration struct {
+	declaration
+	description string
+	example     string
+}
+
+// Describe 附加用途和载荷例子；编码错误在 REGISTER 构造时报告。
+func (d ExtensionDeclaration) Describe(description string, example any) ExtensionDeclaration {
+	d.description = description
+	if example == nil {
+		d.example = ""
+		return d
+	}
+	raw, err := json.Marshal(example)
+	if err != nil {
+		d.err = errors.Join(d.err, fmt.Errorf("extension %q example: %w", d.name, err))
+	} else {
+		d.example = string(raw)
+	}
+	return d
+}
 
 // EventDeclaration 保存类型推导的 Adapter 事件声明。
 type EventDeclaration struct{ declaration }
@@ -46,6 +67,8 @@ type PermissionDeclaration struct {
 // Descriptor 保存 Adapter 的公共声明，供 adapter 包复用。
 type Descriptor struct {
 	AdapterID    string
+	Formats      []message.MessageFormat
+	Combinations []message.CombinationRule
 	Capabilities []message.Capability
 	Extensions   []ExtensionDeclaration
 	Permissions  []PermissionDeclaration
@@ -75,7 +98,7 @@ func declare[T any](name string, version uint32) declaration {
 
 // DeclareExtension 推导 extension 载荷的 JSON Schema。
 func DeclareExtension[T any](name string, version uint32) ExtensionDeclaration {
-	return ExtensionDeclaration{declare[T](name, version)}
+	return ExtensionDeclaration{declaration: declare[T](name, version)}
 }
 
 // DeclareEvent 推导扩展事件载荷的 JSON Schema。
@@ -194,12 +217,12 @@ func allowResultProperties(schema *jsonschema.Schema) {
 
 // DescriptorToProto 在 REGISTER 前报告声明错误并编码 Schema。
 func DescriptorToProto(d *Descriptor) (*pb.AdapterDescriptor, error) {
-	out := &pb.AdapterDescriptor{AdapterId: d.AdapterID, Capabilities: CapabilitiesToProto(d.Capabilities)}
+	out := &pb.AdapterDescriptor{AdapterId: d.AdapterID, Capabilities: CapabilitiesToProto(d.Capabilities), MessageFormats: MessageFormatsToProto(d.Formats), MessageCombinations: CombinationsToProto(d.Combinations)}
 	for _, e := range d.Extensions {
 		if e.err != nil {
 			return nil, e.err
 		}
-		out.Extensions = append(out.Extensions, &pb.ExtensionDeclaration{Name: e.name, Version: e.version, SchemaJson: e.schema})
+		out.Extensions = append(out.Extensions, &pb.ExtensionDeclaration{Name: e.name, Version: e.version, SchemaJson: e.schema, Description: e.description, ExampleJson: e.example})
 	}
 	for _, e := range d.Events {
 		if e.err != nil {

@@ -149,3 +149,12 @@ const ServiceCommandMenu = "core.command.menu"
 
 // ServiceAdapterOperations 查询实例当前实现的标准接口与平台动作。
 const ServiceAdapterOperations = "adapter.operations"
+
+// ServiceDescribeMessage 查询目标实例的出站消息描述。
+const ServiceDescribeMessage = "core.message.describe"
+
+// ServiceCheckMessage 对目标消息执行只读预检。
+const ServiceCheckMessage = "core.message.check"
+
+// ServiceAdapterCheckMessage 调用实例可选的只读组合预检。
+const ServiceAdapterCheckMessage = adapterops.CheckMessageRPC

@@ -24,6 +24,9 @@ func callAction(ctx context.Context, parent *wire.Inbound, to string, name strin
 	for _, option := range opts {
 		option(options)
 	}
+	if options.requireOriginalSegmentIndexes {
+		return nil, errcode.InvalidArgument.New("platform actions only accept Via")
+	}
 	request, err := convert.ActionRequestToProto(to, name, version, params, options.via)
 	if err != nil {
 		return nil, err

@@ -324,6 +324,7 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	messages.SetObserver(a.router.ObserveReply)
 	messages.SetReply(a.replySettings)
 	messages.SetIncomingChain(a.media.PrepareIncomingChain)
+	messages.SetCheckSource(a.media.PrepareCheckSource)
 	a.messages = messages
 	p.SetCommandsChanged(a.router.CommandsChanged)
 	continuations.Register(a.mux)
@@ -332,6 +333,8 @@ func assembleWithMessageConfig(store *state.Store, dir string, v tune.Values, fi
 	a.mux.Handle(wire.ServiceDelete, messages.Delete)
 	a.mux.Handle(wire.ServiceAction, messages.Action)
 	a.mux.Handle(wire.ServiceReadNodes, messages.ReadNodes)
+	a.mux.Handle(wire.ServiceDescribeMessage, messages.DescribeMessage)
+	a.mux.Handle(wire.ServiceCheckMessage, messages.CheckMessage)
 	a.media.AddServices(a.mux)
 	a.media.AddReadServices(a.mux, a.adapters, a.router, store.AdapterInstanceAllowed)
 	conversation.New(store).Register(a.mux)

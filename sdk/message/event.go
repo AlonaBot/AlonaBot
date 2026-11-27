@@ -31,8 +31,8 @@ const (
 
 // TextLimit 声明单条文本的正整数上限与计量单位。
 type TextLimit struct {
-	Max  uint64
-	Unit TextUnit
+	Max  uint64   `json:"max"`
+	Unit TextUnit `json:"unit"`
 }
 
 // SourceKind 指定事件的来源类别。

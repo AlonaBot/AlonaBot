@@ -62,16 +62,16 @@ func replyRoot(inv *router.Invocation, target *pb.Target) *router.Invocation {
 	return root
 }
 
-func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *router.Invocation, target *pb.Target, instance adapter.Instance, chain *pb.MessageChain) (*pb.MessageChain, replyDecoration, *replySession, error) {
+func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *router.Invocation, target *pb.Target, instance adapter.Instance, chain *pb.MessageChain) (*pb.MessageChain, replyDecoration, *replySession, replySources, error) {
 	root := replyRoot(inv, target)
 	if root == nil {
-		return chain, replyDecoration{}, nil, nil
+		return chain, replyDecoration{}, nil, nil, nil
 	}
 	s.replyMu.Lock()
 	resolve := s.resolveReply
 	if resolve == nil {
 		s.replyMu.Unlock()
-		return chain, replyDecoration{}, nil, nil
+		return chain, replyDecoration{}, nil, nil, nil
 	}
 	// 配置读取前固定对象，Release 或新绑定都使本次准备失效。
 	if s.replySessions == nil {
@@ -85,13 +85,13 @@ func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *r
 	s.replyMu.Unlock()
 	reply, err := resolve(ctx, target)
 	if err != nil {
-		return nil, replyDecoration{}, nil, err
+		return nil, replyDecoration{}, nil, nil, err
 	}
 	// 首条占用只锁内存表；配置读取、根结束通知和平台 I/O 都在锁外。
 	s.replyMu.Lock()
 	if s.replySessions[caller] != session {
 		s.replyMu.Unlock()
-		return chain, replyDecoration{}, nil, nil
+		return chain, replyDecoration{}, nil, nil, nil
 	}
 	if s.replyRoots == nil {
 		s.replyRoots = make(map[*router.Invocation]struct{})
@@ -104,6 +104,7 @@ func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *r
 	}
 	s.replyMu.Unlock()
 	var decoration replyDecoration
+	sources := newReplySources(chain)
 	if !claimed {
 		root.AfterFinished(func() {
 			s.replyMu.Lock()
@@ -120,16 +121,22 @@ func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *r
 			decoration.mention = &pb.MentionSegment{ExternalUserId: actor.GetExternalUserId(), Display: proto.String(display)}
 		}
 		modified := proto.CloneOf(chain)
-		applyReplyPrefix(modified, decoration.prefix)
+		modifiedSources := slices.Clone(sources)
+		if index := applyReplyPrefix(modified, decoration.prefix); index >= 0 {
+			modifiedSources = modifiedSources.insert(index)
+		}
 		if decoration.mention != nil {
+			modifiedSources = modifiedSources.insert(0)
 			modified.Segments = append([]*pb.Segment{{Data: &pb.Segment_Mention{Mention: proto.CloneOf(decoration.mention)}}}, modified.Segments...)
 		}
 		if replyTooLong(instance, modified) {
 			decoration = replyDecoration{}
 		} else {
 			chain = modified
+			sources = modifiedSources
 		}
 		if reply.Quote && !hasReference(chain) {
+			sources = sources.insert(0)
 			chain.Segments = append([]*pb.Segment{{Data: &pb.Segment_Reference{Reference: &pb.ReferenceSegment{OriginalPlatformMessageId: root.Event.GetEventPayload().GetMessageCreated().GetPlatformMessageId(), Target: proto.CloneOf(target)}}}}, chain.Segments...)
 		}
 	}
@@ -139,29 +146,32 @@ func (s *Service) prepareReply(ctx context.Context, caller router.Caller, inv *r
 			count += utf8.RuneCountInString(segment.GetText().GetText())
 		}
 		if count > reply.ForwardThreshold {
+			sources = sources.forward()
 			chain = &pb.MessageChain{Segments: []*pb.Segment{{Data: &pb.Segment_Forward{Forward: &pb.ForwardSegment{Items: []*pb.ForwardItem{{Source: &pb.ForwardSource{ExternalUserId: proto.String(target.GetAccountId())}, Chain: chain}}}}}}}
 		}
 	}
-	return chain, decoration, session, nil
+	return chain, decoration, session, sources, nil
 }
 
-func applyReplyPrefix(chain *pb.MessageChain, prefix string) {
+// applyReplyPrefix 返回新增片段的位置；只改已有文本或未加前缀时返回 -1。
+func applyReplyPrefix(chain *pb.MessageChain, prefix string) int {
 	if prefix == "" {
-		return
+		return -1
 	}
 	for i, segment := range chain.Segments {
 		if text := segment.GetText(); text != nil {
 			if text.GetFormat() == pb.TextFormat_TEXT_FORMAT_MARKDOWN {
 				// plain 片段由平台渲染器转义，避免前缀参与 Markdown 解析。
 				chain.Segments = slices.Insert(chain.Segments, i, &pb.Segment{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: prefix}}})
-				return
+				return i
 			}
 			text.Text = prefix + text.Text
 			shiftEntities(text, uint32(utf16Units(prefix)))
-			return
+			return -1
 		}
 	}
 	chain.Segments = append([]*pb.Segment{{Data: &pb.Segment_Text{Text: &pb.TextSegment{Text: prefix}}}}, chain.Segments...)
+	return 0
 }
 
 func shiftEntities(text *pb.TextSegment, units uint32) {
