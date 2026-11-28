@@ -75,6 +75,8 @@ alonabot run --data-dir ./data --args REQUEST_TIMEOUT=2s --args ./tuning.txt
 
 管理错误格式为 `{"code":"FAILED_PRECONDITION","safe_message":"…"}`。HTTP 对应 400 INVALID_ARGUMENT、403 PERMISSION_DENIED、404 NOT_FOUND、409 ALREADY_EXISTS 或陈旧配置、412 FAILED_PRECONDITION、501 UNSUPPORTED、503 UNAVAILABLE、500 INTERNAL/其他错误码。认证错误为纯文本。未知管理路由先认证：无凭据为 401，认证后为 JSON 404。需确认的操作返回 409 与 `{"affected":["…"]}`：展示全部对象，管理员同意后重发原请求，install 写 `Confirm: true`，动作与实例创建写 `confirm: true`。解析前核对实际状态和 Content-Type。
 
+遥测响应及历史点的可选 `error` 字段保留采样错误。部分采样失败时仍返回已取得的读数；带 `error` 的总计与曲线点包含未完整采集的指标，缺项以零值占位。目标列表读取失败时保留上一份快照并附错误；取消采样不发布新快照。
+
 | 操作 | 端点与请求 |
 | --- | --- |
 | Core 身份与组件 | `GET /api/v1/core`（含 `version`、`listen`、`started_at`、`web_ui`）、`GET /api/v1/packages` |

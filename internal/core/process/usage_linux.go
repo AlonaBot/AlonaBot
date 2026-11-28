@@ -5,6 +5,8 @@ package process
 import (
 	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,51 +15,39 @@ import (
 	"unsafe"
 )
 
-const (
-	// linuxAuxvClkTck 是 ELF 辅助向量中 AT_CLKTCK 的固定键，用于读取系统每秒时钟滴答数。
-	linuxAuxvClkTck = 17
-	// defaultLinuxClkTck 是绝大多数 Linux 发行版的默认 USER_HZ。
-	defaultLinuxClkTck = 100
-)
+// linuxAuxvClkTck 对应 ELF 辅助向量中的 AT_CLKTCK。
+const linuxAuxvClkTck = 17
 
-var (
-	clkTckOnce  sync.Once
-	linuxClkTck uint64 = defaultLinuxClkTck
-)
-
-func readLinuxClkTck() uint64 {
-	clkTckOnce.Do(func() {
-		raw, err := os.ReadFile("/proc/self/auxv")
-		if err != nil {
-			return
+// 系统时钟频率在进程生命周期中不变，缓存实际值与读取错误。
+var linuxClockTicks = sync.OnceValues(func() (uint64, error) {
+	raw, err := os.ReadFile("/proc/self/auxv")
+	if err != nil {
+		return 0, fmt.Errorf("read clock ticks: %w", err)
+	}
+	word := int(unsafe.Sizeof(uintptr(0)))
+	for offset := 0; offset+word*2 <= len(raw); offset += word * 2 {
+		var key, value uint64
+		if word == 8 {
+			key = binary.NativeEndian.Uint64(raw[offset : offset+8])
+			value = binary.NativeEndian.Uint64(raw[offset+8 : offset+16])
+		} else {
+			key = uint64(binary.NativeEndian.Uint32(raw[offset : offset+4]))
+			value = uint64(binary.NativeEndian.Uint32(raw[offset+4 : offset+8]))
 		}
-		word := int(unsafe.Sizeof(uintptr(0)))
-		entry := word * 2
-		for offset := 0; offset+entry <= len(raw); offset += entry {
-			var key, value uint64
-			if word == 8 {
-				key = binary.NativeEndian.Uint64(raw[offset : offset+8])
-				value = binary.NativeEndian.Uint64(raw[offset+8 : offset+16])
-			} else {
-				key = uint64(binary.NativeEndian.Uint32(raw[offset : offset+4]))
-				value = uint64(binary.NativeEndian.Uint32(raw[offset+4 : offset+8]))
-			}
-			if key == 0 {
-				break
-			}
-			if key == linuxAuxvClkTck && value > 0 {
-				linuxClkTck = value
-				return
-			}
+		if key == 0 {
+			break
 		}
-	})
-	return linuxClkTck
-}
+		if key == linuxAuxvClkTck && value > 0 {
+			return value, nil
+		}
+	}
+	return 0, fmt.Errorf("AT_CLKTCK is missing from /proc/self/auxv")
+})
 
-func hostMemoryBytesPlatform() uint64 {
+func hostMemoryBytesPlatform() (uint64, error) {
 	raw, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	return parseLinuxMemTotal(raw)
 }
@@ -80,11 +70,15 @@ func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, 
 		return TreeUsage{}, result, err
 	}
 	selfPID := os.Getpid()
-	hz := readLinuxClkTck()
+	hz, clockErr := linuxClockTicks()
+	var errs []error
+	if clockErr != nil {
+		errs = append(errs, clockErr)
+	}
 	var self TreeUsage
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
-			return self, result, err
+			return self, result, errors.Join(append(errs, err)...)
 		}
 		if !entry.IsDir() {
 			continue
@@ -95,7 +89,11 @@ func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, 
 		}
 		statRaw, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "stat"))
 		if err != nil {
-			continue // 进程在两次读取之间退出时跳过。
+			// 退出与其他读取错误分别处理；未知归属的系统进程留给下一次枚举。
+			if (pid == selfPID || byPGID[pid] != nil) && !errors.Is(err, os.ErrNotExist) {
+				errs = append(errs, fmt.Errorf("read process %d stat: %w", pid, err))
+			}
+			continue
 		}
 		pgrp, ticks, ok := parseLinuxProcStat(statRaw)
 		if !ok {
@@ -107,10 +105,17 @@ func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, 
 		}
 		statusRaw, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "status"))
 		if err != nil {
-			continue
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			errs = append(errs, fmt.Errorf("read process %d status: %w", pid, err))
 		}
 		rss, _ := parseLinuxVmRSS(statusRaw)
-		cpuDuration := time.Duration(ticks) * time.Second / time.Duration(hz)
+		var cpuDuration time.Duration
+		if clockErr == nil {
+			// 先拆分整秒，避免长时间运行进程的累计 ticks 在乘纳秒时溢出。
+			cpuDuration = time.Duration(ticks/hz)*time.Second + time.Duration(ticks%hz)*time.Second/time.Duration(hz)
+		}
 		if pid == selfPID {
 			self = TreeUsage{CPUTime: cpuDuration, RSSBytes: rss, ProcessCount: 1}
 		}
@@ -122,5 +127,5 @@ func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, 
 			result[target] = usage
 		}
 	}
-	return self, result, nil
+	return self, result, errors.Join(errs...)
 }

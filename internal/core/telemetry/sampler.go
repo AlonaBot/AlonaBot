@@ -13,6 +13,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -131,6 +132,7 @@ type Component struct {
 // HistoryPoint 记录单个采样时刻的总览与各角色内存切片，用于前端趋势图。
 type HistoryPoint struct {
 	TS              string  `json:"ts"`
+	Error           string  `json:"error,omitempty"` // 非空表示该点包含未完整采集的指标。
 	TotalCPUPercent float64 `json:"total_cpu_percent"`
 	TotalRSSBytes   uint64  `json:"total_rss_bytes"`
 	CoreCPUPercent  float64 `json:"core_cpu_percent"`
@@ -144,6 +146,7 @@ type HistoryPoint struct {
 // Report 封装 GET /api/v1/core/telemetry 的响应载荷，包含宿主机基线、进程汇总与历史趋势。
 type Report struct {
 	SampledAt       string                 `json:"sampled_at"`
+	Error           string                 `json:"error,omitempty"` // 当前采样错误；其余字段保留已采集的读数。
 	IntervalSeconds int                    `json:"interval_seconds"`
 	CPUScale        string                 `json:"cpu_scale"`
 	Host            Host                   `json:"host"`
@@ -174,7 +177,7 @@ type Sampler struct {
 	startedAt       time.Time
 	targets         func(context.Context) ([]Target, error)
 	sample          func(context.Context, []*process.Process) (process.TreeUsage, map[*process.Process]process.TreeUsage, error)
-	hostMemory      func() uint64
+	hostMemory      func() (uint64, error)
 	now             func() time.Time
 	interval        time.Duration
 	capacity        int
@@ -224,7 +227,6 @@ func New(opt Options) *Sampler {
 		capacity:            capacity,
 		numCPU:              max(1, runtime.NumCPU()),
 		pid:                 os.Getpid(),
-		hostMemoryBytes:     process.HostMemoryBytes(),
 		previousByComponent: make(map[string]cpuSample),
 		ring:                make([]HistoryPoint, capacity),
 	}
@@ -249,10 +251,18 @@ func (s *Sampler) Run(ctx context.Context) {
 	}
 }
 
-// SampleOnce 执行单次全量采样并更新内存快照与环形历史缓冲。
-func (s *Sampler) SampleOnce(ctx context.Context) error {
+// SampleOnce 更新快照与历史；部分失败仍发布有效读数，错误同时写入 Report.Error 并返回。
+func (s *Sampler) SampleOnce(ctx context.Context) (sampleErr error) {
 	s.sampleMu.Lock()
 	defer s.sampleMu.Unlock()
+	// 目标查询失败时保留旧样本，同时将失败原因交给查询方。
+	defer func() {
+		if sampleErr != nil && ctx.Err() == nil {
+			s.mu.Lock()
+			s.latest.Error = sampleErr.Error()
+			s.mu.Unlock()
+		}
+	}()
 
 	// 1. 拉取当前已登记组件与运行句柄快照，提取独立进程集合。
 	var targets []Target
@@ -273,11 +283,18 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 	// 2. 一次性采集 Core 自身与全部独立组件进程树的累计 CPU 时长与常驻内存。
 	sampledAt := s.now().UTC()
 	selfUsage, treeUsages, err := s.sample(ctx, processes)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil {
-		return fmt.Errorf("sample process trees: %w", err)
+		sampleErr = fmt.Errorf("sample process trees: %w", err)
 	}
 	if s.hostMemoryBytes == 0 {
-		s.hostMemoryBytes = s.hostMemory()
+		var memoryErr error
+		s.hostMemoryBytes, memoryErr = s.hostMemory()
+		if memoryErr != nil {
+			sampleErr = errors.Join(sampleErr, fmt.Errorf("read host memory: %w", memoryErr))
+		}
 	}
 
 	// 3. 计算 Core 自身的整机归一化 CPU% 与运行时长。
@@ -285,7 +302,9 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 	if s.previousSelf != nil && s.previousSelf.pid == s.pid {
 		coreCPU = normalizedCPUPercent(selfUsage.CPUTime-s.previousSelf.cpu, sampledAt.Sub(s.previousSelf.at), s.numCPU)
 	}
-	s.previousSelf = &cpuSample{pid: s.pid, cpu: selfUsage.CPUTime, at: sampledAt}
+	if err == nil {
+		s.previousSelf = &cpuSample{pid: s.pid, cpu: selfUsage.CPUTime, at: sampledAt}
+	}
 
 	coreUptime := uptimeSeconds(sampledAt, s.startedAt)
 	coreProcess := CoreProcess{
@@ -333,7 +352,9 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 				if prev, ok := s.previousByComponent[target.ID]; ok && prev.pid == pid {
 					componentCPU = normalizedCPUPercent(usage.CPUTime-prev.cpu, sampledAt.Sub(prev.at), s.numCPU)
 				}
-				s.previousByComponent[target.ID] = cpuSample{pid: pid, cpu: usage.CPUTime, at: sampledAt}
+				if err == nil {
+					s.previousByComponent[target.ID] = cpuSample{pid: pid, cpu: usage.CPUTime, at: sampledAt}
+				}
 				activeIDs[target.ID] = struct{}{}
 
 				entry.PID = pid
@@ -393,6 +414,10 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 		Components: components,
 	}
 
+	if sampleErr != nil {
+		report.Error = sampleErr.Error()
+		point.Error = report.Error
+	}
 	// 5. 发布最新快照并写入固定容量环形历史缓冲。
 	s.mu.Lock()
 	s.latest = report
@@ -403,18 +428,23 @@ func (s *Sampler) SampleOnce(ctx context.Context) error {
 		s.ringCount++
 	}
 	s.mu.Unlock()
-	return nil
+	return sampleErr
 }
 
 // Snapshot 返回最新快照以及指定窗口内按时间正序排列的历史样本切片。
-// 若后台尚未完成首采，将同步执行一次即时采样。
+// 若后台尚未完成首采，将同步采样；已发布的部分结果通过 Report.Error 携带失败原因。
 func (s *Sampler) Snapshot(ctx context.Context, window Window) (Report, error) {
 	s.mu.RLock()
 	ready := s.hasSample
 	s.mu.RUnlock()
 	if !ready {
 		if err := s.SampleOnce(ctx); err != nil {
-			return Report{}, err
+			s.mu.RLock()
+			ready = s.hasSample
+			s.mu.RUnlock()
+			if !ready {
+				return Report{}, err
+			}
 		}
 	}
 
@@ -429,12 +459,15 @@ func (s *Sampler) Snapshot(ctx context.Context, window Window) (Report, error) {
 	copy(components, s.latest.Components)
 	report.Components = components
 
-	maxPoints := max(1, int(window.duration()/s.interval))
-	take := min(s.ringCount, maxPoints)
-	history := make([]HistoryPoint, take)
-	start := (s.ringHead - take + s.capacity) % s.capacity
-	for i := 0; i < take; i++ {
-		history[i] = s.ring[(start+i)%s.capacity]
+	cutoff := s.now().UTC().Add(-window.duration()).Format(time.RFC3339)
+	history := make([]HistoryPoint, 0, s.ringCount)
+	start := (s.ringHead - s.ringCount + s.capacity) % s.capacity
+	for i := 0; i < s.ringCount; i++ {
+		point := s.ring[(start+i)%s.capacity]
+		// 时间戳统一为 UTC RFC3339，直接比较即可剔除采样延迟后超出窗口的旧点。
+		if point.TS >= cutoff {
+			history = append(history, point)
+		}
 	}
 	report.History = history
 	return report, nil

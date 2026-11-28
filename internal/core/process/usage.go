@@ -3,6 +3,7 @@ package process
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -21,8 +22,8 @@ func SampleTrees(ctx context.Context, processes []*Process) (TreeUsage, map[*Pro
 	return sampleTreesPlatform(ctx, processes)
 }
 
-// HostMemoryBytes 返回宿主机物理内存总字节数；当前平台不支持或读取失败时返回 0。
-func HostMemoryBytes() uint64 {
+// HostMemoryBytes 返回宿主机物理内存总字节数；读取失败时保留原始错误。
+func HostMemoryBytes() (uint64, error) {
 	return hostMemoryBytesPlatform()
 }
 
@@ -74,7 +75,7 @@ func parseLinuxVmRSS(raw []byte) (uint64, bool) {
 }
 
 // parseLinuxMemTotal 从 /proc/meminfo 解析 MemTotal 并转换为字节。
-func parseLinuxMemTotal(raw []byte) uint64 {
+func parseLinuxMemTotal(raw []byte) (uint64, error) {
 	for line := range strings.Lines(string(raw)) {
 		value, found := strings.CutPrefix(line, "MemTotal:")
 		if !found {
@@ -82,15 +83,15 @@ func parseLinuxMemTotal(raw []byte) uint64 {
 		}
 		fields := strings.Fields(value)
 		if len(fields) == 0 {
-			return 0
+			return 0, fmt.Errorf("missing MemTotal value")
 		}
 		kb, err := strconv.ParseUint(fields[0], 10, 64)
 		if err != nil {
-			return 0
+			return 0, fmt.Errorf("parse MemTotal: %w", err)
 		}
-		return kb << 10
+		return kb << 10, nil
 	}
-	return 0
+	return 0, fmt.Errorf("missing MemTotal field")
 }
 
 // parsePSDuration 解析 macOS/BSD `ps -o time=` 输出的累计 CPU 时长。

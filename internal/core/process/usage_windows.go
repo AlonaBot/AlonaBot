@@ -46,14 +46,14 @@ type processMemoryCounters struct {
 	PeakPagefileUsage          uintptr
 }
 
-func hostMemoryBytesPlatform() uint64 {
+func hostMemoryBytesPlatform() (uint64, error) {
 	var status memoryStatusEx
 	status.Length = uint32(unsafe.Sizeof(status))
-	r1, _, _ := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&status)))
+	r1, _, callErr := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&status)))
 	if r1 == 0 {
-		return 0
+		return 0, fmt.Errorf("GlobalMemoryStatusEx failed: %w", callErr)
 	}
-	return status.TotalPhys
+	return status.TotalPhys, nil
 }
 
 func processMemoryBytes(handle windows.Handle) (uint64, error) {

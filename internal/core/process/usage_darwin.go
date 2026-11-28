@@ -19,12 +19,8 @@ const (
 	darwinPSTimeout = 3 * time.Second
 )
 
-func hostMemoryBytesPlatform() uint64 {
-	total, err := unix.SysctlUint64("hw.memsize")
-	if err != nil {
-		return 0
-	}
-	return total
+func hostMemoryBytesPlatform() (uint64, error) {
+	return unix.SysctlUint64("hw.memsize")
 }
 
 func sampleTreesPlatform(ctx context.Context, processes []*Process) (TreeUsage, map[*Process]TreeUsage, error) {
