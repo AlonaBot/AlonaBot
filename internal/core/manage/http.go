@@ -47,6 +47,7 @@ func (s *Service) Handler(auth *adminauth.Auth) http.Handler {
 	s.profileRoutes(mux)
 	mux.HandleFunc("POST /api/v1/diagnostics", s.diagnostics)
 	mux.HandleFunc("GET /api/v1/core", s.coreInfo)
+	mux.HandleFunc("GET /api/v1/core/telemetry", s.coreTelemetry)
 	mux.HandleFunc("GET /api/v1/core/changelog", s.coreChangelog)
 	mux.HandleFunc("GET /api/v1/packages/{id}/changelog", s.packageChangelog)
 	mux.HandleFunc("GET /api/v1/packages/{id}/icon", s.icon)

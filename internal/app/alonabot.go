@@ -42,6 +42,7 @@ import (
 	"github.com/AlonaBot/AlonaBot/internal/core/secret"
 	"github.com/AlonaBot/AlonaBot/internal/core/settings"
 	"github.com/AlonaBot/AlonaBot/internal/core/state"
+	"github.com/AlonaBot/AlonaBot/internal/core/telemetry"
 	"github.com/AlonaBot/AlonaBot/internal/core/webhost"
 	genresources "github.com/AlonaBot/AlonaBot/internal/generated"
 	"github.com/AlonaBot/AlonaBot/internal/inproc"
@@ -83,9 +84,11 @@ type Core struct {
 	environment     map[string]string
 	http            *http.Server
 	httpErrors      chan error
-	management      *manage.Service // 停机时等待其后台任务结束后再停止组件与关闭状态库。
-	monitors        sync.WaitGroup  // 停止后等待退出观察者交还清理权，再关闭共享资源。
-	done            chan struct{}   // err 写入后关闭，允许多个 Wait 读取同一结果。
+	management      *manage.Service    // 停机时等待其后台任务结束后再停止组件与关闭状态库。
+	startedAt       time.Time          // Core 启动的 UTC 墙钟时刻。
+	telemetry       *telemetry.Sampler // 后台周期采样 Core 与各组件进程树的资源开销。
+	monitors        sync.WaitGroup     // 停止后等待退出观察者交还清理权，再关闭共享资源。
+	done            chan struct{}      // err 写入后关闭，允许多个 Wait 读取同一结果。
 	err             error
 	lifetime        context.Context // Core 启动、业务唤醒与运行循环共用的生命周期。
 	runtimeAdapters map[string]settings.AdapterSettings
@@ -142,7 +145,7 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		return nil, err
 	}
 	c := &Core{store: store, output: output, values: values, dir: dir, logLevel: o.LogLevel, done: make(chan struct{}), stopping: make(chan struct{}), operations: make(chan coreOperation), lifetime: ctx,
-		runtimeAdapters: o.RuntimeAdapters, stdio: o.Stdio}
+		startedAt: time.Now().UTC(), runtimeAdapters: o.RuntimeAdapters, stdio: o.Stdio}
 	fail := func(err error) (*Core, error) {
 		c.err = err
 		if ctx.Err() == context.Canceled && startupCleanupError(err) == nil {
@@ -346,6 +349,10 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	if err != nil {
 		return fail(err)
 	}
+	c.telemetry = telemetry.New(telemetry.Options{
+		StartedAt: c.startedAt,
+		Targets:   c.telemetryTargets,
+	})
 	management := manage.New(manage.Options{DebugEvent: c.assembly.router.DebugEvent, DebugCall: func(ctx context.Context, caller router.Caller, in *wire.Inbound) wire.Response {
 		return c.assembly.mux.For(caller)(ctx, in)
 	}, DebugRelease: func(caller router.Caller) {
@@ -383,8 +390,9 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 		SleepPolicy: func(ctx context.Context, in state.Install) (manage.SleepPolicy, error) {
 			return c.managementSleepPolicy(ctx, in, development[in.PluginID])
 		},
-		CoreInfo: func() (string, string) { return version, c.http.Addr },
-		Adapters: c.assembly.adapters, Scheduler: c.assembly.scheduler, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
+		CoreInfo:  func() (string, string, time.Time) { return version, c.http.Addr, c.startedAt },
+		Telemetry: c.telemetry,
+		Adapters:  c.assembly.adapters, Scheduler: c.assembly.scheduler, State: c.assembly.componentState, InstanceSchema: c.instanceSchema(components),
 		InstanceStatus: func(ctx context.Context, id, instance string) (string, string, error) {
 			state, message := "stopped", ""
 			err := c.operation(ctx, func(context.Context) error {
@@ -660,6 +668,16 @@ func Start(ctx context.Context, o Options) (*Core, error) {
 	c.assembly.router.Start()
 	close(managementReady) // 发布启动完成，使管理写入与启动回收互斥。
 	// 3. 一个所有者处理取消与异常，全部组件共用一次停止起点。
+	if c.telemetry != nil {
+		telemetryCtx, cancelTelemetry := context.WithCancel(context.WithoutCancel(ctx))
+		go func() {
+			<-c.stopping
+			cancelTelemetry()
+		}()
+		c.monitors.Go(func() {
+			c.telemetry.Run(telemetryCtx)
+		})
+	}
 	go c.run(ctx)
 	return c, nil
 }

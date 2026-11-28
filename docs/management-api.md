@@ -75,9 +75,12 @@ Use the same controlled `base_url` and authentication described above. Core API 
 
 Management errors use `{"code":"FAILED_PRECONDITION","safe_message":"…"}`. HTTP mappings are 400 INVALID_ARGUMENT, 403 PERMISSION_DENIED, 404 NOT_FOUND, 409 ALREADY_EXISTS or stale configuration, 412 FAILED_PRECONDITION, 501 UNSUPPORTED, 503 UNAVAILABLE and 500 INTERNAL/other codes. Authentication errors are plain text. Unknown management routes authenticate first (401 without credentials, JSON 404 afterward). Confirmation-required operations return 409 with `{"affected":["…"]}`: display every affected object and resend the same request after administrator approval using `Confirm: true` for install or `confirm: true` for actions/instance creation. Check actual status and Content-Type before parsing.
 
+The optional `error` field on a telemetry response or history point preserves sampling failures. Partial samples retain the readings collected so far; totals and history points carrying `error` contain incomplete metrics, with zero placeholders for unavailable values. Target-list failures retain the previous snapshot with the error attached; canceled samples do not publish a new snapshot.
+
 | Operation | Endpoint and request |
 | --- | --- |
-| Core identity and components | `GET /api/v1/core`, `GET /api/v1/packages` |
+| Core identity and components | `GET /api/v1/core` (`version`, `listen`, `started_at`, `web_ui`), `GET /api/v1/packages` |
+| Resource telemetry | `GET /api/v1/core/telemetry?window=5m\|15m\|30m` (default `30m`); returns host summary, total and Core CPU% (host-normalized 0–100%)/RSS/uptime, role aggregates, per-component process-tree metrics, and in-memory history; invalid windows return 400 |
 | Install | `POST /api/v1/packages/install`, using exported `InstallRequest` fields (`Archive`, `Source`, `ID`, `Confirm`, `Replace`, `Build`, `Ref`); see [management types](../internal/core/manage/install.go). `Build` returns 202 with a task ID, see [Source builds](#source-builds) |
 | Background tasks | `GET /api/v1/tasks`, `GET`/`DELETE /api/v1/tasks/{id}` |
 | Build environment | `GET`/`DELETE /api/v1/core/build-environment`; DELETE accepts `?part=toolchain\|cache` |

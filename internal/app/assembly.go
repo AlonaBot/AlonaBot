@@ -222,6 +222,7 @@ type assembly struct {
 	store        *state.Store
 	policy       *policy.Policy
 	components   sync.Map // 运行状态查询借用 host.Instance，激活失败时保留 Degraded 诊断。
+	running      sync.Map // 组件 ID → *runningComponent，供遥测无锁读取活跃进程与启动时刻。
 	options      *coreoptions.Service
 	tools        *tool.Catalog
 	settings     *settings.File
@@ -605,6 +606,7 @@ func (a *assembly) attach(ctx context.Context, r *runningComponent) (err error) 
 		}
 	}()
 	a.components.Store(r.id, r.instance)
+	a.running.Store(r.id, r)
 	plugin := router.FromInstance(r.instance)
 	if r.activity {
 		a.wakeSessions.Store(r.caller, r.instance.Session)
@@ -887,6 +889,7 @@ func bootstrap(generation string) *pb.Bootstrap {
 func (a *assembly) detach(r *runningComponent) {
 	a.wakeSessions.Delete(r.caller)
 	// STOPPING 和退出收尾都可能到达；旧 Session 的迟到清理保留新绑定。
+	a.running.CompareAndDelete(r.id, r)
 	if a.components.CompareAndDelete(r.id, r.instance) {
 		if r.instance.State() == host.StateDegraded {
 			// 撤销业务绑定时保留管理诊断，迟到清理不得覆盖新 Session。

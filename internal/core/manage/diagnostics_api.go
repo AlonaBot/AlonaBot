@@ -39,7 +39,7 @@ func (s *Service) diagnostics(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, invalid("select at least one diagnostic group"))
 		return
 	}
-	version, _ := s.opt.CoreInfo()
+	version, _, _ := s.opt.CoreInfo()
 	source := diagnostics.Running{
 		Directory: diagnostics.Directory{DataDir: filepath.Dir(s.opt.Packages), Version: version},
 		Store:     s.opt.Store,

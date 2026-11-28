@@ -4,6 +4,7 @@ package process
 
 import (
 	"os/exec"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -13,6 +14,7 @@ import (
 // tree 持有一个由 Core 独占的 Job Object；设置了 KILL_ON_JOB_CLOSE，句柄关闭时终止其中所有进程。
 // shortcut: 进程在 Start 之后才加入 Job，加入前创建的孙进程不在管理范围；需要时改为挂起创建再加入。
 type tree struct {
+	mu sync.RWMutex // 保护 job 句柄，避免后台资源采样与 release 并发关闭。
 	// Core 独占持有的 Job Object 句柄，release 时关闭。
 	job windows.Handle
 }
@@ -49,12 +51,19 @@ func attachTree(cmd *exec.Cmd) (*tree, error) {
 }
 
 // kill 终止 Job 内的全部进程；不等待它们退出。
-func (t *tree) kill() error { return windows.TerminateJobObject(t.job, 1) }
+func (t *tree) kill() error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.job == 0 {
+		return nil
+	}
+	return windows.TerminateJobObject(t.job, 1)
+}
 
 // basicAccounting 对应 Win32 JOBOBJECT_BASIC_ACCOUNTING_INFORMATION（x/sys/windows 未提供该结构）。
 type basicAccounting struct {
-	TotalUserTime             int64  // 累计用户态 CPU 时间（100ns 单位），此处只为保持内存布局
-	TotalKernelTime           int64  // 累计内核态 CPU 时间（100ns 单位），此处不用
+	TotalUserTime             int64  // 累计用户态 CPU 时间（100ns 单位），含已退出子进程
+	TotalKernelTime           int64  // 累计内核态 CPU 时间（100ns 单位），含已退出子进程
 	ThisPeriodTotalUserTime   int64  // 本计费周期的用户态 CPU 时间，此处不用
 	ThisPeriodTotalKernelTime int64  // 本计费周期的内核态 CPU 时间，此处不用
 	TotalPageFaultCount       uint32 // Job 内进程的累计缺页数，此处不用
@@ -65,6 +74,11 @@ type basicAccounting struct {
 
 // empty 报告 Job 内是否已没有仍在运行的进程。
 func (t *tree) empty() (bool, error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.job == 0 {
+		return true, nil
+	}
 	var info basicAccounting
 	if err := windows.QueryInformationJobObject(t.job, windows.JobObjectBasicAccountingInformation,
 		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
@@ -78,6 +92,8 @@ func (t *tree) reap() {}
 
 // release 关闭 Job 句柄；KILL_ON_JOB_CLOSE 使仍在 Job 中的进程随之终止。重复调用无副作用。
 func (t *tree) release() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.job == 0 {
 		return nil
 	}
